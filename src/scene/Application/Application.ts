@@ -4,6 +4,7 @@ import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera'
 import type { Hotspot } from '../hotspots';
 import { RoomAudio, type ClickKind } from './Audio';
 import { Effects } from './Effects';
+import { HoverReactions } from './Hover';
 import { Interaction } from './Interaction';
 import { MonitorScreen } from './MonitorScreen';
 import { DPR_CAP, Quality, type QualityTier } from './Quality';
@@ -60,6 +61,10 @@ export interface RoomProbe {
   readonly drifting: boolean;
   /** How far the free look has turned the view from its framing (radians). */
   readonly look: { yaw: number; pitch: number };
+  /** The visible meshes each proxy lifts on hover. */
+  readonly claims: Record<string, string[]>;
+  /** How far the object behind a proxy is lifted now (millimetres). */
+  lift(proxy: string): number;
   point(name: string): { x: number; y: number } | null;
   goto(station: StationName): void;
   readonly reel: { state: ReelState; time: number; inView: boolean } | null;
@@ -93,6 +98,7 @@ export class Application implements RoomHandle {
   private reel: Reel | null = null;
   private interaction!: Interaction;
   private navigation!: Navigation;
+  private hover!: HoverReactions;
   private started = false;
   private intro = false;
   private paused = false;
@@ -144,13 +150,14 @@ export class Application implements RoomHandle {
     if (this.nodes.projection) {
       this.reel = new Reel(this.nodes.projection, this.nodes.screenSurface, this.scene, this.options.films);
     }
+    this.hover = new HoverReactions(root, this.nodes.proxies, this.camera.instance, Boolean(this.options.reducedMotion));
     this.navigation = new Navigation(this.container, this.camera, this.nodes, {
       fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
       canSteer: () => this.started,
       takeOver: () => this.takeOver(),
     });
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
-      hotspot: (hotspot) => this.onHotspot(hotspot),
+      hotspot: (hotspot, proxy) => this.onHotspot(hotspot, proxy),
       toggle: () => this.toggle(),
       enterMonitor: () => this.enterMonitor(),
       leaveMonitor: () => this.leaveMonitor(),
@@ -231,6 +238,7 @@ export class Application implements RoomHandle {
     for (const observer of this.observers) observer.disconnect();
     this.navigation?.dispose();
     this.interaction?.dispose();
+    this.hover?.dispose();
     this.monitor?.dispose();
     this.audio?.dispose();
     this.reel?.dispose();
@@ -250,7 +258,8 @@ export class Application implements RoomHandle {
     this.navigation.stopDrift();
   }
 
-  private onHotspot(hotspot: Hotspot) {
+  private onHotspot(hotspot: Hotspot, proxy: THREE.Object3D) {
+    this.hover.pulse(proxy);
     if (hotspot.fly && this.camera.destination !== hotspot.fly && this.camera.has(hotspot.fly)) this.fly(hotspot.fly);
     else if (hotspot.target) this.openWindow(hotspot.target);
     else if (!hotspot.fly) this.enterMonitor();
@@ -341,6 +350,8 @@ export class Application implements RoomHandle {
 
     this.camera.update(dt, this.clock, this.interaction.pointer);
     this.interaction.update();
+    this.hover.set(this.interaction.hoveredProxy);
+    if (this.hover.update(dt, now)) this.dirty = true;
     if (!this.paused) this.effects.update(this.clock, this.renderer.gl.getPixelRatio());
     this.monitor.update(this.clock, this.camera.instance);
     this.reel?.update(this.camera.instance, this.started && !this.paused, dt);
@@ -384,6 +395,8 @@ export class Application implements RoomHandle {
       get look() {
         return app.camera.lookAngles;
       },
+      claims: this.hover.claims,
+      lift: (proxy) => this.hover.liftOf(proxy),
       point(name) {
         const rect = app.container.getBoundingClientRect();
         let world: THREE.Vector3;

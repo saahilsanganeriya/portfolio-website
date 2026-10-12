@@ -4,8 +4,8 @@ import type { ClickKind } from './Audio';
 import type { MonitorEvent } from './MonitorScreen';
 
 export interface InteractionHandlers {
-  /** A prop was clicked. */
-  hotspot(hotspot: Hotspot): void;
+  /** A prop was clicked (or tapped); `proxy` is the box that was hit. */
+  hotspot(hotspot: Hotspot, proxy: THREE.Object3D): void;
   /** Empty space was clicked: Henry's toggle between the wide view and the desk. */
   toggle(): void;
   enterMonitor(): void;
@@ -25,6 +25,8 @@ export class Interaction {
   /** Pointer position in [-1, 1], +y up; drives the desk parallax. */
   readonly pointer = new THREE.Vector2();
   hovered: Hotspot | null = null;
+  /** The proxy box under the pointer, for the hover reactions. */
+  hoveredProxy: THREE.Object3D | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private readonly clientPointer = { x: 0, y: 0, inside: false };
   private pressedInMonitor = false;
@@ -82,7 +84,9 @@ export class Interaction {
 
   /** Hit-tests the props under the pointer once a frame and places the hover label. */
   update() {
-    const hit = this.clientPointer.inside && !this.overMonitor && this.handlers.canHover() ? this.pick() : null;
+    const pick = this.clientPointer.inside && !this.overMonitor && this.handlers.canHover() ? this.pick() : null;
+    const hit = pick?.hotspot ?? null;
+    this.hoveredProxy = pick?.proxy ?? null;
     if (hit !== this.hovered) {
       this.hovered = hit;
       this.stage.style.cursor = hit ? 'pointer' : '';
@@ -100,11 +104,11 @@ export class Interaction {
     this.pointer.set((this.clientPointer.x / rect.width) * 2 - 1, -(this.clientPointer.y / rect.height) * 2 + 1);
   }
 
-  private pick(): Hotspot | null {
+  private pick(): { hotspot: Hotspot; proxy: THREE.Object3D } | null {
     this.raycaster.setFromCamera(this.pointer, this.camera);
     for (const hit of this.raycaster.intersectObjects(this.proxies, false)) {
       const hotspot = hotspotForProxy(hit.object.name);
-      if (hotspot) return hotspot;
+      if (hotspot) return { hotspot, proxy: hit.object };
     }
     return null;
   }
@@ -113,7 +117,7 @@ export class Interaction {
     if ((event.target as Element).closest('a, button, input, [data-room-ui]') || this.handlers.endedDrag()) return;
     this.movePointer(event.clientX, event.clientY);
     const hit = this.handlers.canHover() ? this.pick() : null;
-    if (hit) this.handlers.hotspot(hit);
+    if (hit) this.handlers.hotspot(hit.hotspot, hit.proxy);
     else this.handlers.toggle();
     // A finger leaves the glass after a tap; nothing stays hovered under where it was.
     if (this.touch) this.clientPointer.inside = false;
