@@ -208,6 +208,9 @@ def add_pivots(meshes):
         bpy.context.scene.collection.objects.link(pivot)
         pivot.matrix_world = Matrix.LocRotScale(loc, rot, None)
         pivot["turn_axis"] = "+Y"
+        if name == "projector_dial":
+            # Turn about +Y by these degrees to point the knob at each program's mark (it rests on Photographs).
+            pivot["program_angles_deg"] = {"reel": 50, "photographs": 0, "short_films": -50}
         obj.parent = pivot
         obj.matrix_parent_inverse = Matrix.Identity(4)
         obj.matrix_world = world

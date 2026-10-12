@@ -32,6 +32,8 @@ blender -b blender/room.blend -P blender/scripts/export.py
 
 Renders the stills, writes the view's four KTX2 files (ETC1S with mipmaps, `ktx create`), exports the glb, then runs
 gltf-transform 4.5.1 (via `npx`): dedup, prune (empties and attributes kept), KTX2 ETC1S atlases, meshopt geometry.
+The atlases ship resampled from their 4096² bakes (`EXPORT_SIZES`: desk 3584, props 2944, env 2560), which keeps
+the glb inside 4.3 MB.
 It then points each view half's material at its day texture by URI. It fails if `room.glb` is over 4.3 MB, the two
 day textures are over 400 KB together, or a node from the contract below is missing. Needs Node (`npx`), `ktx`
 from KTX-Software 4.x and `ffmpeg` with libaom on `PATH`. `-- --no-stills` exports only the glb and textures;
