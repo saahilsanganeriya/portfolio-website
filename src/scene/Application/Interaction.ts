@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { hotspotForProxy, type Hotspot } from '../hotspots';
-import type { ClickKind } from './Audio';
+import type { ClickKind } from '../audio/RoomAudio';
 import type { MonitorEvent } from './MonitorScreen';
 
 export interface InteractionHandlers {

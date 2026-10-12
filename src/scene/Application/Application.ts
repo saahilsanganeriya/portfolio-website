@@ -1,8 +1,8 @@
 import * as THREE from 'three';
+import { RoomAudio, type AudioHandle, type OfflineOptions } from '../audio/RoomAudio';
 import { Navigation } from '../Camera/Navigation';
 import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
 import type { Hotspot } from '../hotspots';
-import { RoomAudio, type ClickKind } from './Audio';
 import { Effects } from './Effects';
 import { HoverReactions } from './Hover';
 import { Interaction } from './Interaction';
@@ -47,9 +47,8 @@ export interface RoomHandle {
   fly(station: StationName): boolean;
   /** Lands the intro glide now and ends the first drift; later glides are left alone. */
   skipIntro(): void;
-  /** Starts the room's sound. Browsers only allow it inside a user gesture (a click, tap or key). */
-  unlockAudio(): void;
-  setMuted(muted: boolean): void;
+  /** The room's sound: unlock() on the first gesture, mute, volume, setState(state), sfx(name, position?). */
+  readonly audio: AudioHandle;
   setPaused(paused: boolean): void;
   /** The median frame rate over the next `ms` (the second half of it), drawing every frame meanwhile. */
   measureFps(ms: number): Promise<number>;
@@ -90,10 +89,9 @@ export interface RoomProbe {
   /** Plays the reel whenever the room runs, in view or not (worst-case frame rate). */
   forceReel(on: boolean): void;
   /** Renders the room's sound offline as heard from a framing; see RoomAudio.renderOffline. */
-  renderSound(
-    seconds: number,
-    options: { view: 'idle' | 'desk' | 'monitor'; filmsOpen?: boolean; clicks?: { at: number; kind: ClickKind }[] },
-  ): Promise<Float32Array[]>;
+  renderSound(seconds: number, options: OfflineOptions & { view: string }): Promise<Float32Array[]>;
+  /** The sound's graph state (music stems, filter, beds, master) and its controls. */
+  readonly audio: Pick<RoomAudio, 'graph' | 'setState' | 'sfx'> | null;
 }
 
 declare global {
@@ -114,7 +112,7 @@ export class Application implements RoomHandle {
   private camera!: RoomCamera;
   private monitor!: MonitorScreen;
   private effects!: Effects;
-  private audio!: RoomAudio;
+  audio!: RoomAudio;
   private reel: Reel | null = null;
   private interaction!: Interaction;
   private navigation!: Navigation;
@@ -178,11 +176,10 @@ export class Application implements RoomHandle {
     if (this.light) this.addMonitorProxy();
     this.effects = new Effects(this.nodes, this.scene);
     this.effects.setTier(this.quality.tier);
-    this.audio = new RoomAudio({
-      crt: this.nodes.monitor.position,
-      projector: this.nodes.projector?.lens ?? null,
-      desk: this.nodes.framings.desk.target,
-    });
+    this.audio = new RoomAudio(
+      { crt: this.nodes.monitor.position, projector: this.nodes.projector?.lens ?? null, desk: this.nodes.framings.desk.target },
+      root,
+    );
     // The light tier keeps the baked still on the projector screen: no reel to download and decode on a phone.
     if (this.nodes.projection && !this.light) {
       this.reel = new Reel(this.nodes.projection, this.nodes.screenSurface, this.scene, this.options.films);
@@ -256,14 +253,6 @@ export class Application implements RoomHandle {
     this.takeOver();
   }
 
-  unlockAudio() {
-    this.audio.unlock();
-  }
-
-  setMuted(muted: boolean) {
-    this.audio.setMuted(muted);
-  }
-
   /** Stops every motion that runs by itself (sway, dust, LEDs, grain, the first drift); the camera still answers clicks. */
   setPaused(paused: boolean) {
     this.paused = paused;
@@ -315,6 +304,7 @@ export class Application implements RoomHandle {
 
   private onHotspot(hotspot: Hotspot, proxy: THREE.Object3D) {
     this.hover.pulse(proxy);
+    this.audio.hotspot({ proxies: [proxy.name] });
     if (hotspot.fly && this.camera.destination !== hotspot.fly && this.camera.has(hotspot.fly)) this.fly(hotspot.fly);
     else if (hotspot.target) this.openWindow(hotspot.target);
     else if (!hotspot.fly) this.enterMonitor();
@@ -456,7 +446,7 @@ export class Application implements RoomHandle {
     if (!this.paused) this.effects.update(this.clock, this.renderer.gl.getPixelRatio());
     this.monitor.update(this.clock, this.camera.instance);
     this.reel?.update(this.camera.instance, this.started && !this.paused, dt);
-    this.audio.update(this.camera.instance, now, this.monitor.frontWindow.startsWith('films'));
+    this.audio.update(this.camera.instance, now, this.camera.destination, this.monitor.frontWindow);
 
     // While paused, a still camera means a still frame: skip the work entirely.
     const viewChanged = !this.lastView.equals(this.camera.instance.matrixWorld);
@@ -531,13 +521,17 @@ export class Application implements RoomHandle {
       forceReel(on) {
         app.reel?.force(on);
       },
-      renderSound(seconds, { view, filmsOpen, clicks }) {
-        const framing = app.nodes.framings[view];
+      renderSound(seconds, { view, ...options }) {
+        const framing = app.nodes.framings[view as keyof RoomNodes['framings']];
+        if (!framing) throw new Error(`room audio: the room has no ${view} framing`);
         const listener = new THREE.PerspectiveCamera();
         listener.position.copy(framing.position);
         listener.lookAt(framing.target);
         listener.updateMatrixWorld();
-        return app.audio.renderOffline(seconds, listener, { filmsOpen, clicks });
+        return app.audio.renderOffline(seconds, listener, options);
+      },
+      get audio() {
+        return app.audio ?? null;
       },
     };
   }

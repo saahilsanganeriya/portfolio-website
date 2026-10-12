@@ -67,6 +67,10 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     <MonitorFrame />
     <div class="room-controls">
       <button type="button" aria-pressed="false" data-room-sound>Sound</button>
+      <label class="room-volume">
+        <span class="visually-hidden">Volume</span>
+        <input type="range" min="0" max="100" step="5" value="100" data-room-volume />
+      </label>
       <button type="button" aria-pressed="false" data-room-pause>Pause motion</button>
     </div>
     <p class="visually-hidden" role="status" data-room-status></p>
@@ -74,6 +78,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 </Base>
 
 <script>
+  import { mountSoundControls } from '../scene/audio/controls';
   import type { RoomHandle } from '../scene/main';
 
   // The window the skip link opens when the address names none.
@@ -177,10 +182,10 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     let entered = false;
     let skipped = false;
     let osRequested = false;
-    let unlocked = false;
-    let muted = false;
     let paused = reduced;
     pause.setAttribute('aria-pressed', String(paused));
+    // The Sound toggle and the volume, remembered across visits; sound itself starts only inside a click, tap or key.
+    const soundControls = mountSoundControls(sound, stage.querySelector<HTMLInputElement>('[data-room-volume]')!);
 
     const monitor = () => world.querySelector('iframe');
 
@@ -208,16 +213,6 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       room = null;
       showDrawnMonitor();
     };
-    const showSound = () => sound.setAttribute('aria-pressed', String(unlocked && !muted));
-
-    // Browsers let sound start only inside a click, tap or key press; userActivation says whether this is one.
-    const unlock = () => {
-      if (!room || unlocked) return;
-      if (navigator.userActivation && !navigator.userActivation.isActive) return;
-      room.unlockAudio();
-      unlocked = true;
-      showSound();
-    };
 
     const enter = () => {
       if (!room || probing || entered) return;
@@ -238,7 +233,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       enter();
       room?.skipIntro();
       // The Sound button decides for itself, so its first press turns the sound on rather than on and off again.
-      if (!onToggle) unlock();
+      if (!onToggle) room?.audio.unlock();
     };
     const fromPage = (event: Event) =>
       onInput(event instanceof KeyboardEvent ? event.key : null, Boolean((event.target as Element | null)?.closest?.('[data-room-sound]')));
@@ -251,14 +246,6 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       else if (data?.type === 'keydown' && typeof data.key === 'string') onInput(data.key, false);
     });
 
-    sound.addEventListener('click', () => {
-      if (!unlocked) unlock();
-      else {
-        muted = !muted;
-        room?.setMuted(muted);
-      }
-      showSound();
-    });
     pause.addEventListener('click', () => {
       paused = !paused;
       pause.setAttribute('aria-pressed', String(paused));
@@ -298,6 +285,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
         if (!room) return;
       }
       room.setPaused(paused);
+      soundControls.attach(room.audio);
       boot.dataset.ready = '';
       if (target !== null || skipped || reduced) enter();
       else setTimeout(enter, BOOT_HOLD_MS);
@@ -455,6 +443,20 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 
   .room-controls button:hover {
     border-color: var(--paper);
+  }
+
+  .room-volume {
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    background: var(--ink);
+  }
+
+  .room-volume input {
+    width: 5.5rem;
+    accent-color: var(--paper);
+    cursor: pointer;
   }
 
   .room-controls button[aria-pressed='true'] {
