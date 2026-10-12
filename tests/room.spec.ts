@@ -118,21 +118,33 @@ test('hovering the mango plant labels it, and clicking it opens About in SaahilO
   await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
 });
 
-/** Catches the projector screen, which has no proxy in room.glb, not opening Films like the projector does. */
-test('clicking the projector screen opens Films in SaahilOS', async ({ page }) => {
+/**
+ * Catches the projector screen (no proxy in room.glb) not answering like the projector, and a projector hotspot that
+ * opens Films straight away instead of flying to its screen first (owner 07:56Z).
+ */
+test('clicking the projector screen glides to it; clicked there, it opens Films in SaahilOS', async ({ page }) => {
   await page.goto('/');
+  await settled(page, 'idle');
+  await page.evaluate(() => window.__room!.goto('idle'));
   await settled(page, 'idle');
   const screen = await screenPoint(page, 'hit_projector_screen');
   await page.mouse.move(screen.x, screen.y);
   await expect(page.locator('.room-label')).toHaveText('Films');
   await page.mouse.click(screen.x, screen.y);
-  await page.waitForFunction(() => window.__room?.phase === 'monitor', null, { timeout: 15_000 });
+  await page.waitForFunction(() => window.__room?.phase === 'projector' && !window.__room.moving, null, { timeout: 30_000 });
+  await expect(os(page).getByRole('dialog', { name: 'Films' })).toHaveCount(0);
+  const there = await screenPoint(page, 'hit_projector_screen');
+  await page.mouse.click(there.x, there.y);
+  await settled(page, 'monitor', 30_000);
   await expect(os(page).getByRole('dialog', { name: 'Films' })).toBeVisible();
 });
 
 /** Catches a reel that never plays on the projector screen, or one that keeps playing in a hidden tab or out of view. */
 test('the projector reel plays while its screen is in view, and pauses in a hidden tab and out of view', async ({ page }) => {
   await page.goto('/');
+  await settled(page, 'idle');
+  // Hold the wide view: the first drift would carry the screen in and out of view.
+  await page.evaluate(() => window.__room!.goto('idle'));
   await settled(page, 'idle');
   const reel = () => page.evaluate(() => window.__room!.reel!);
   await page.waitForFunction(() => window.__room?.reel?.state === 'playing', null, { timeout: 30_000 });

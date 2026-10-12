@@ -83,6 +83,8 @@ export interface RoomProbe {
   /** How far the object behind a proxy is lifted now (millimetres). */
   lift(proxy: string): number;
   point(name: string): { x: number; y: number } | null;
+  /** The proxy under a client point, or null for empty space. */
+  hit(x: number, y: number): string | null;
   goto(station: StationName): void;
   readonly reel: { state: ReelState; time: number; inView: boolean } | null;
   /** Plays the reel whenever the room runs, in view or not (worst-case frame rate). */
@@ -511,6 +513,13 @@ export class Application implements RoomHandle {
         const p = world.project(app.camera.instance);
         if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1 || p.z > 1) return null;
         return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+      },
+      hit(x, y) {
+        const rect = app.container.getBoundingClientRect();
+        const pointer = new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(pointer, app.camera.instance);
+        return raycaster.intersectObjects(app.nodes.proxies, false)[0]?.object.name ?? null;
       },
       goto(station) {
         app.fly(station);

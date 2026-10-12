@@ -60,8 +60,20 @@ test('any key ends the first drift, and the camera rests where it was heading', 
 test('a click on empty space ends the first drift and does nothing else', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.__room?.drifting && window.__room.destination === 'shelf', null, { timeout: 120_000 });
-  // The bottom-left corner is bare wall or floor in every framing the drift passes.
-  await page.mouse.click(5, 895);
+  // Find a point with no prop under it and click it in the same task, so the drifting camera cannot move in between.
+  const clicked = await page.evaluate(() => {
+    const corners = [[5, 5], [1435, 5], [5, 895], [1435, 895], [720, 5], [720, 895]];
+    const empty = corners.find(([x, y]) => window.__room!.hit(x, y) === null);
+    if (!empty) return null;
+    const [clientX, clientY] = empty;
+    const stage = document.querySelector('[data-room-world]')!;
+    const init = { clientX, clientY, bubbles: true, cancelable: true, isPrimary: true, pointerType: 'mouse' };
+    stage.dispatchEvent(new PointerEvent('pointerdown', init));
+    stage.dispatchEvent(new PointerEvent('pointerup', init));
+    stage.dispatchEvent(new MouseEvent('click', init));
+    return empty;
+  });
+  expect(clicked, 'a corner with no prop under it').not.toBeNull();
   expect(await room(page)).toMatchObject({ destination: 'shelf', drifting: false });
   await settledAt(page, 'shelf');
 });
@@ -92,15 +104,6 @@ test('arrow keys and the scroll wheel step between framings, one per press or ge
   await settledAt(page, stations[at + 1]);
   await flick(-120, 1);
   await settledAt(page, 'idle');
-});
-
-/** Catches a hotspot that opens its window straight away instead of flying the camera to its framing first. */
-test('the projector flies the camera to its screen instead of opening the OS', async ({ page }) => {
-  await inRoom(page);
-  const projector = await page.evaluate(() => window.__room!.point('hit_projector'));
-  await page.mouse.click(projector!.x, projector!.y);
-  await settledAt(page, 'projector');
-  await expect(page.frameLocator('.room-monitor iframe').getByRole('dialog', { name: 'Films' })).toHaveCount(0);
 });
 
 /** Catches a prop that does not answer the pointer, or one that stays lifted after the pointer leaves. */
@@ -168,6 +171,25 @@ test.describe('on a phone', () => {
     const glass = await page.evaluate(() => window.__room!.point('hit_monitor'));
     await page.touchscreen.tap(glass!.x, glass!.y);
     await expect(page.locator('html')).toHaveClass(/room-os/, { timeout: 30_000 });
+  });
+
+  /** Catches a phone page that pans or zooms under a finger instead of turning the view, or that goes into the monitor anyway. */
+  test('a finger drags the view on a phone, and the room then stays out of the monitor', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => window.__room?.moving, null, { timeout: 120_000 });
+    // Touches through the browser's input pipeline, so touch-action and pointer events are what a phone gets.
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: x === undefined ? [] : [{ x, y: 420 }] });
+    await touch('touchStart', 40);
+    for (let x = 70; x <= 340; x += 30) await touch('touchMove', x);
+    await touch('touchEnd');
+    await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.1);
+    expect(await page.evaluate(() => scrollX + scrollY)).toBe(0);
+    // Past the 1.6 s the phone would hold the wide view before going in by itself.
+    await page.waitForTimeout(3000);
+    expect(await room(page)).toMatchObject({ phase: 'idle', destination: 'idle' });
+    await expect(page.locator('html')).not.toHaveClass(/room-os/);
   });
 
   /** Catches an address on a phone that loses its window on the way into the monitor. */
