@@ -14,37 +14,98 @@ cover: "../../assets/projects/projectionist.jpg"
 coverAlt: "A four-bay NAS labelled projectionist, modelled and rendered in Blender for this site's room."
 ---
 
-In an old cinema the projectionist sits in the booth at the back. When the show runs well, nobody in the
-audience thinks about them. That is the job I wanted from the software behind my film library.
 
-The library lives on a four-bay Synology NAS with a low-power Celeron. For a long time it ran on Python
-scripts, some on a timer and some I started by hand. One renamed files, one fetched subtitles, one picked
-posters, and none of them knew what the others were doing.
+Move a film while someone is watching it, and Plex loses it mid-stream. It re-opens the file's path for
+every chunk it reads, the path is gone, and it gets a 404. The TV app then falls back to transcoding the
+rest of the film on the NAS's small processor.
 
-## What it does
+My film library used to be run by Python scripts. One renamed new
+arrivals, one fetched subtitles, one picked posters. Some ran on a timer and some I started by hand. None
+of them knew what the others were doing, or whether anyone was watching.
 
-projectionist replaces those scripts, one at a time, with one Go service in one container. Each job is a
-stage with its own schedule and, where it matters, a night-time window. State lives in SQLite, and the
-service answers `/health` and `/metrics`. There are 15 stages now, covering renaming new arrivals against
-TMDB, subtitles, posters and collections, watch history across Plex and Jellyfin, a library audit,
-backups of the apps' data, and health checks that can restart a stuck service.
+projectionist replaces them with one Go service in one container on the NAS. The name is the main rule.
+In an old cinema the projectionist runs the show from the booth and stays out of the audience's way.
+[The essay on this site](/blog/projectionist-home-lab) tells that story. This page is about how it works.
 
-The name is the main rule. Every disruptive job pauses while anyone but me is watching. A gate counts the
-Plex and Jellyfin sessions that are not mine. Before it moves a file it waits for zero, and during a long
-encode it sends SIGSTOP and SIGCONT. If it cannot read the count, it assumes someone is watching.
+## What it runs on
 
-Each stage has to be safe to rerun after a crash: it finishes the work and never repeats a side effect.
-Every file move is a single system call that cannot overwrite anything, and I tested that call on the NAS
-itself before trusting it. A Python script goes away only when its Go stage matches it on a recorded
-gate. The rename planner agreed with the old script on 21,333 of 21,334 rows, and the one difference was
-intended.
+A four-bay Synology NAS with a low-power, four-core Celeron, the same box that streams the films. The
+backlog is large for a box that size: on 5 October, 6,171 videos had no English subtitle file beside them.
+Any job that reads whole files competes with Plex for the same disks and the same four cores.
+
+So every job has to be safe to stop at any moment, and has to get out of the way when someone presses
+play.
+
+## The rules every stage follows
+
+Each job is a stage with its own schedule and, where it matters, a night-time window. State lives in
+SQLite, so a restart never reruns a stage early. There are 15 stages now: renaming new arrivals against
+TMDB, subtitles, posters and collections, watch history across Plex and Jellyfin, a library audit, backups
+of the apps' data, and health checks that can restart a stuck service.
+
+**Pause while anyone else is watching.** A gate counts the Plex and Jellyfin sessions that are not mine.
+
+<figure class="os-figure">
+
+```text
+ time ------------------------------------------------>
+ others watching    0     1     1     1     0     0
+ a long encode      runs  STOP  .     .     CONT  runs
+ a file move              asks  waits waits moves
+ count unreadable   treated as busy, the same as 1
+```
+
+<figcaption>The pause rule: a long encode is frozen while anyone but me is watching, a file move waits for an empty room, and a count the gate cannot read counts as someone watching.</figcaption>
+</figure>
+
+During a long encode it sends SIGSTOP and SIGCONT. Before it moves a file it waits for zero. If it cannot
+read the count, it assumes someone is watching.
+
+**Safe to rerun.** A stage that a crash cuts off finishes its work on the next run and never repeats a side
+effect. Every file move is one system call that cannot overwrite anything, `renameat2` with
+`RENAME_NOREPLACE`. I tested that call on the NAS's own 4.4 kernel before trusting it.
+
+**Retire a script only when its replacement matches it.** A Python script goes away only when its Go stage
+gives the same answers on the script's own recorded input.
+
+<figure class="os-figure">
+
+```text
+    recorded input: 21,334 rows of renames
+                       |
+           +-----------+-----------+
+           v                       v
+   old Python script         new Go stage
+           |                       |
+           +-------> diff <--------+
+                       |
+       21,333 equal, 1 different on purpose
+                       |
+                       v
+ one cutover: deploy the stage, delete the script
+ and its scheduled task in the same step
+```
+
+<figcaption>How the rename planner replaced its script: both ran on the same recorded input, and the one difference was intended.</figcaption>
+</figure>
+
+The script and its scheduled task are deleted in the same cutover, so there is never a window where both
+act on the library.
+
+## What it costs
+
+Treating an unreadable count as busy means that when Plex is down, the jobs that move files wait too.
+That is on purpose: a job that cannot tell whether the room is empty should act as if it is full.
+
+The container gets a quarter of the usual CPU weight and a 1 GB memory cap, so Plex and Jellyfin win any
+fight for the processor, and the heavy jobs simply take longer.
 
 ## What broke
 
 **Quick subtitles.** An early mode wrote any subtitle that passed a cheap length check. A spot check found
-4 of 5 such files 1.3 to 55 seconds out of sync, and nothing ever revisits a subtitle once it is written.
-I deleted the mode. Every subtitle is now fitted to its video first, from 4 windows of 90 s each, and on
-the gate every sampled fit sat within 134 ms of a whole-file reference.
+4 of 5 such files 1.3 to 55 seconds out of sync, and nothing ever revisits a subtitle once it is written. I
+deleted the mode. Every subtitle is now fitted to its video first, from 4 windows of 90 s each, and on the
+gate every sampled fit sat within 134 ms of a whole-file reference.
 
 **A restart that was half a restart.** Docker's one-call restart killed Jellyfin while it was still
 cancelling a scan, then never ran the start half. Restarts are now three steps: stop with a grace period,
@@ -58,20 +119,18 @@ schedules the optimise itself, at night, while nobody but me is watching.
 clean run and emailed me every 15 minutes. Now a run that has gone 30 minutes without raising anything
 clears it.
 
-## Small things I like
+## The numbers
+
+The repository holds 610 commits and about 62,000 lines of Go across 172 files, 66 of them tests, and ships
+as a 12 MB static binary. Coding agents wrote a lot of the Go, and 286 of those
+commits carry an agent's co-author line. My part was deciding what each stage had to prove before it could
+replace anything.
 
 Posters are picked by a vision model under a hard budget of $12, and it never replaces a poster I chose by
-hand. My own picks are often deliberately odd art, which the judge marks down, so it does not get a vote
-on them.
+hand. My Letterboxd diary flows into the watch history through Letterboxd's public RSS feed and pages, at
+most one request every 2 seconds for the whole service.
 
-My Letterboxd diary flows into the watch history from Letterboxd's public RSS feed and pages, and the
-whole service sends Letterboxd at most one request every 2 seconds. The Films page on this site reads the
-same feed at the same polite pace.
+## What's next
 
-The repository holds 610 commits and about 62,000 lines of Go across 172 files, 66 of them tests. It
-ships as a 12 MB static binary.
-
-## What I would change
-
-Quick mode is the lesson. Anything that writes into the library has to prove itself before it writes,
-because nobody checks a file twice.
+Two jobs still run as old scripts: backing up Plex, and taking in new arrivals. Each becomes a stage the
+same way the others did, checked against the script's own output, and then the script is deleted.
