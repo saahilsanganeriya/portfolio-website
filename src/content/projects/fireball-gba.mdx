@@ -13,19 +13,39 @@ cover: "../../assets/projects/fireball-gba.png"
 coverAlt: "The game's start screen: the word FIREBALL above a smiling square sprite among small fireballs, with the keys for easy, medium and hard."
 ---
 
-The Game Boy Advance has no operating system to hide behind. You write pixels straight into video memory
-and read the buttons from a hardware register. That was the point of this project, which I built in spring
-2022 for Georgia Tech's CS 2110, a course on computer organisation in C.
+Hard mode promises 8 fireballs. Only 7 ever fly. The eighth is due at second 42, and you win at second 40.
 
-In Fireball Dodge you move a small sprite around the screen while fireballs bounce at random speeds and
-angles, with a new one every 6 seconds. Survive long enough and you win. Easy mode has 2 fireballs and a
-10-second goal, medium has 5 and 25 seconds, and hard has 8 and 40 seconds.
+I built Fireball Dodge in spring 2022 for Georgia Tech’s CS 2110, a course on computer organisation in C. The Game Boy Advance has no operating system to hide behind. You write pixels straight into video memory and read the buttons from a hardware register. That was the point: the homework asked for a Mode 3 program that draws with DMA, waits for the screen’s blank interval, reads the buttons and detects collisions.
 
-The game runs in Mode 3, the console's plain bitmap mode, and uses DMA to copy images into video memory,
-because drawing them pixel by pixel from the CPU is too slow. The game loop and its state machine, from the
-start screen to game over, live in a 193-line `main.c`.
+You move a small sprite around a 240 by 160 pixel screen while fireballs bounce off the walls. Easy mode has 2 fireballs and a 10-second goal, medium has 5 and 25 seconds, and hard has 8 and 40 seconds. Fireballs move 1 pixel a frame on each axis in easy, up to 2 in medium and up to 4 in hard.
 
-## What I would change
+## One frame at a time
 
-In bitmap mode every moving thing is redrawn by hand, every frame. The console has hardware sprites that
-would do that work, and they are what I would reach for now.
+The game has no clock. It counts the screen’s refreshes and treats 60 of them as a second.
+
+<figure class="os-figure">
+
+```text
+ every frame (the code counts 60 frames to a second)
+
+   wait for the screen's blank interval
+   DMA: fill all 240 x 160 pixels black
+   for each fireball:
+     move it, bounce it off the walls
+     if awake: draw it, check it against the player
+   DMA: draw the player, print the clock
+   every 360 frames: wake the next fireball
+```
+
+<figcaption>The game loop in main.c: the whole screen is cleared and redrawn every frame, every fireball moves, and sleeping fireballs wake one at a time on a frame count.</figcaption>
+</figure>
+
+Mode 3 is the console’s plain bitmap mode, where every pixel is a two-byte value in video memory. Each of the game’s three full-screen pictures takes 76,800 bytes, and together they are most of its data. DMA, the console’s copy hardware, clears the screen and copies each image in, row by row, so the processor does not move every pixel itself. The loop and its five states, from the start menu to game over, live in a 193-line `main.c`.
+
+That frame count is also where hard mode loses its eighth fireball. A new one wakes every 360 frames, six seconds, so the eighth is due at 42 seconds. The win comes at 40.
+
+## What it cost, and what I would change
+
+Mode 3 was the assignment, and it costs a full redraw of everything that moves, every frame. Outside a homework, the console has hardware sprites that do that work, and they are what I would reach for now.
+
+The fireballs are also less random than they look. The code calls `rand()` but never seeds it, so at a given difficulty the first game after you switch the console on is the same game every time. I would seed it from the frame count when the player first presses a button, and space the fireballs from each mode’s goal so all of them get to fly.
