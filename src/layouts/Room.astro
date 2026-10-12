@@ -20,8 +20,9 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 <Base {title} {description} {ogType} {publishedTime} bare skipLabel="Open SaahilOS">
   {/*
     Every page of the site is this one room. The head script picks how it is shown before anything renders: the 3D
-    room on a desktop with WebGL; SaahilOS on a drawn monitor for phones, touch-first or small screens, Save-Data and
-    browsers without WebGL. Without JavaScript the drawn monitor shows and says why it is dark.
+    room on a desktop with WebGL; on phones, touch-first or small screens the same room at a light tier, which goes
+    into the monitor and hands over to SaahilOS on the drawn monitor; the drawn monitor alone for Save-Data, little
+    memory and browsers without WebGL. Without JavaScript the drawn monitor shows and says why it is dark.
   */}
   <script is:inline slot="head">
     (function () {
@@ -35,7 +36,9 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       var root = document.documentElement;
       var media = function (q) { return window.matchMedia && window.matchMedia(q).matches; };
       var saveData = (navigator.connection && navigator.connection.saveData) || media('(prefers-reduced-data: reduce)');
-      var flat = saveData || media('(pointer: coarse)') || media('(max-width: 767.98px)');
+      // Chrome reports the device's memory in GB (rounded, at most 8); under 2 GB the room does not fit beside the OS.
+      var memory = navigator.deviceMemory;
+      var flat = saveData || (typeof memory === 'number' && memory < 2);
       if (!flat) {
         var gl = null;
         try {
@@ -51,6 +54,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       if (flat) root.classList.add('room-2d');
       else {
         root.classList.add('room');
+        if (media('(pointer: coarse)') || media('(max-width: 767.98px)')) root.classList.add('room-light');
         if (media('(prefers-reduced-motion: reduce)')) root.classList.add('room-reduced', 'room-paused');
       }
     })();
@@ -79,6 +83,9 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
   // The finished boot log stays on screen this long before the room takes over by itself.
   const BOOT_HOLD_MS = 700;
   const LOG_LINES = 8;
+  // The light tier measures itself behind the boot screen; below this frame rate the drawn monitor takes over.
+  const LIGHT_PROBE_MS = 2000;
+  const LIGHT_MIN_FPS = 30;
   // Moving focus around the page is not input to the room: these keys neither skip the intro nor start the sound.
   const NAVIGATION_KEYS = new Set(['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'Escape', 'CapsLock']);
 
@@ -108,14 +115,21 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     return open || null;
   }
 
-  function showDrawnMonitor() {
-    root.classList.remove('room');
-    root.classList.add('room-2d');
-    if (glass.querySelector('iframe')) return;
+  /** SaahilOS in the drawn monitor's glass, unembedded, so a phone gets its phone layout. */
+  function drawnScreen() {
+    const existing = glass.querySelector('iframe');
+    if (existing) return existing;
     const screen = document.createElement('iframe');
     screen.title = 'SaahilOS, on the monitor';
     screen.src = `/os${target ? `#${target}` : ''}`;
     glass.append(screen);
+    return screen;
+  }
+
+  function showDrawnMonitor() {
+    root.classList.remove('room', 'room-light', 'room-os');
+    root.classList.add('room-2d');
+    drawnScreen();
   }
 
   function bootUi(bootEl: HTMLElement) {
@@ -155,6 +169,8 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     const pause = stage.querySelector<HTMLButtonElement>('[data-room-pause]')!;
     const skipLink = document.querySelector<HTMLAnchorElement>('.skip-link');
     const reduced = root.classList.contains('room-reduced');
+    const light = root.classList.contains('room-light');
+    const back = stage.querySelector<HTMLButtonElement>('[data-monitor-back]')!;
     let room: RoomHandle | null = null;
     let entered = false;
     let skipped = false;
@@ -165,6 +181,31 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     pause.setAttribute('aria-pressed', String(paused));
 
     const monitor = () => world.querySelector('iframe');
+
+    // Light tier: the camera reached the glass, so SaahilOS takes the whole screen in the drawn monitor.
+    const showPhoneOs = (opening: string | null) => {
+      const screen = drawnScreen();
+      const frameWindow = screen.contentWindow;
+      if (opening && frameWindow && frameWindow.location.href !== 'about:blank') {
+        // A new hash in the same document: SaahilOS opens that window without reloading or adding history.
+        const { pathname, search } = frameWindow.location;
+        frameWindow.location.replace(`${pathname}${search}#${opening}`);
+      } else if (opening) screen.src = `/os#${opening}`;
+      root.classList.add('room-os');
+      if (osRequested) screen.focus({ preventScroll: true });
+    };
+    back.addEventListener('click', () => {
+      root.classList.remove('room-os');
+      room?.fly('idle');
+      stage.focus({ preventScroll: true });
+    });
+    // Too slow, or the browser took the GPU memory back: the drawn monitor alone, for good.
+    const fallBack = (why: string) => {
+      console.warn(`room: ${why}; showing the drawn monitor`);
+      room?.dispose();
+      room = null;
+      showDrawnMonitor();
+    };
     const showSound = () => sound.setAttribute('aria-pressed', String(unlocked && !muted));
 
     // Browsers let sound start only inside a click, tap or key press; userActivation says whether this is one.
@@ -237,7 +278,26 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     try {
       const { startRoom } = await import('../scene/main');
       const films = JSON.parse(world.dataset.roomFilms ?? '[]');
-      room = await startRoom(world, { osUrl: '/os?embed=1', onProgress: ui.progress, reducedMotion: reduced, films });
+      const handle = await startRoom(world, {
+        osUrl: '/os?embed=1',
+        onProgress: ui.progress,
+        reducedMotion: reduced,
+        films,
+        light,
+        onMonitor: showPhoneOs,
+        onLost: () => fallBack('the GL context was lost'),
+      });
+      if (light) {
+        // Load the phone's SaahilOS behind the boot screen, so it is ready when the camera reaches the glass.
+        drawnScreen();
+        const fps = await handle.measureFps(LIGHT_PROBE_MS);
+        if (fps < LIGHT_MIN_FPS) {
+          room = handle;
+          fallBack(`${fps.toFixed(0)} fps on the light tier`);
+          return;
+        }
+      }
+      room = handle;
       room.setPaused(paused);
       boot.dataset.ready = '';
       if (target !== null || skipped || reduced) enter();
@@ -315,9 +375,34 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     display: none;
   }
 
+  /* Light tier: the camera reached the glass and SaahilOS takes the screen, in the drawn monitor over the room. */
+  :global(html.room.room-os) .room-stage :global(.monitor-frame) {
+    display: block;
+    z-index: 5;
+    animation: os-in 260ms ease-out;
+  }
+
+  :global(html.room.room-os) .room-controls {
+    display: none;
+  }
+
+  @keyframes os-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(html.room.room-os) .room-stage :global(.monitor-frame) {
+      animation: none;
+    }
+  }
+
   .room-world {
     position: absolute;
     inset: 0;
+    /* A finger on the room drags the view; the browser must not pan or zoom the page instead. */
+    touch-action: none;
   }
 
   .room-world :global(.room-css),

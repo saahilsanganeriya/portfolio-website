@@ -2,6 +2,7 @@
 // The room's monitor drawn in 2D, for visitors who do not get the 3D room (no WebGL, phones, Save-Data, a failed
 // load): SaahilOS still runs on the screen of the cream CRT on the walnut desk. The page script puts the OS's iframe
 // into the glass only in this mode; nothing is drawn over the screen, so the OS reads as it does on the 3D monitor.
+// On the phone's light tier the same monitor takes over once the 3D camera reaches the glass, with a way back.
 ---
 
 <div class="monitor-frame" data-monitor-frame>
@@ -9,9 +10,10 @@
     <div class="monitor-glass" data-monitor-glass>
       <noscript><p class="monitor-off">SaahilOS runs on JavaScript, which this browser has turned off.</p></noscript>
     </div>
-    <div class="monitor-chin" aria-hidden="true">
-      <span class="monitor-badge">Saahil</span>
-      <span class="monitor-led"></span>
+    <div class="monitor-chin">
+      <span class="monitor-badge" aria-hidden="true">Saahil</span>
+      <button type="button" class="monitor-back" data-monitor-back>Back to the room</button>
+      <span class="monitor-led" aria-hidden="true"></span>
     </div>
   </div>
   <div class="monitor-desk" aria-hidden="true"></div>
@@ -100,6 +102,28 @@
     font-style: italic;
     letter-spacing: 0.04em;
     text-shadow: 0 1px 0 var(--plastic-lit);
+  }
+
+  /* Only on the light tier, while SaahilOS is up: a moulded push button on the chin. */
+  .monitor-back {
+    display: none;
+    padding: 0.25rem 0.7rem;
+    border: 1px solid var(--plastic-shade);
+    border-radius: 0.25rem;
+    background: var(--plastic-lit);
+    box-shadow: inset 0 -2px 0 var(--plastic-shade);
+    color: #3b3328;
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    cursor: pointer;
+  }
+
+  .monitor-back:active {
+    box-shadow: inset 0 1px 0 var(--plastic-shade);
+  }
+
+  :global(html.room-os) .monitor-back {
+    display: inline-block;
   }
 
   .monitor-led {
