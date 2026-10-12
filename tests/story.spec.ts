@@ -16,7 +16,7 @@ async function expectFrameShown(page: Page, index: number): Promise<void> {
 
 /** Catches scrolling that stops advancing frames, which leaves the later chapters unreachable by scroll. */
 test('every chapter is reachable by scrolling, one frame per step', async ({ page }) => {
-  await page.goto('/story');
+  await page.goto('/story?embed=1');
   const count = await frames(page).count();
   const step = await page.locator('[data-step]').first().evaluate((el) => (el as HTMLElement).offsetHeight);
   await page.mouse.move(400, 300);
@@ -28,7 +28,7 @@ test('every chapter is reachable by scrolling, one frame per step', async ({ pag
 
 /** Catches arrow keys that scroll the page without moving the reel, which strands keyboard visitors on one frame. */
 test('every chapter is reachable by keyboard, and the scene list jumps to a chapter', async ({ page }) => {
-  await page.goto('/story');
+  await page.goto('/story?embed=1');
   const count = await frames(page).count();
   await page.locator('#content').focus();
   for (let i = 1; i < count; i++) {
@@ -46,7 +46,7 @@ test('every chapter is reachable by keyboard, and the scene list jumps to a chap
 
 /** Catches the browser's own scroll to a fragment overriding the reel, so a shared chapter link opens the wrong frame. */
 test('a link to a chapter opens the reel on that chapter', async ({ page }) => {
-  await page.goto('/story#chapter-4');
+  await page.goto('/story?embed=1#chapter-4');
   await expectFrameShown(page, 7);
   await page.keyboard.press('ArrowDown');
   await expectFrameShown(page, 8);
@@ -55,7 +55,7 @@ test('a link to a chapter opens the reel on that chapter', async ({ page }) => {
 /** Catches reduced motion leaving words clipped inside the reel's gate instead of a static sequence of frames. */
 test('with reduced motion every frame is a static, readable sequence', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/story');
+  await page.goto('/story?embed=1');
   await expect(page.locator('html')).not.toHaveAttribute('data-reel', 'live');
   await expect(page.locator('canvas').first()).toBeHidden();
   const words = page.locator('.title-name, .card-text, .scene-title, .scene-body p, .end-title');
@@ -68,7 +68,7 @@ test('with reduced motion every frame is a static, readable sequence', async ({ 
 
 /** Catches a background photo, the closing portrait or a chapter's photo of the owner shipped without alt text. */
 test('every image has alt text', async ({ page }) => {
-  await page.goto('/story');
+  await page.goto('/story?embed=1');
   const alts = await page.locator('main img').evaluateAll((imgs) => imgs.map((img) => img.getAttribute('alt') ?? ''));
   const ownerPhotos = await page.locator('main figure.me-photo img').count();
   expect(ownerPhotos, 'the owner allows a photo of him in at most three chapters').toBeLessThanOrEqual(3);
@@ -98,7 +98,7 @@ test('?embed=1#autoplay drops the chrome, plays by itself and pauses', async ({ 
 test('the reel has no axe violations, live or with reduced motion', async ({ page }) => {
   for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     await page.emulateMedia({ reducedMotion });
-    await page.goto('/story');
+    await page.goto('/story?embed=1');
     const { violations } = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
       .analyze();
