@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { collectFilms, createFilmsSource, fetchFeed } from '../src/lib/films/live.ts';
 import { buildFilmsData, mergeEntries, type FilmEntry } from '../src/lib/films/merge.ts';
 import { createPacer, FLOOR_MS } from '../src/lib/films/pace.ts';
-import { parseArchive, parseFeed } from '../src/lib/films/parse.ts';
+import { parseArchive, parseCsv, parseFeed } from '../src/lib/films/parse.ts';
 import { renderFilmCard } from '../src/os/apps/films/cards.ts';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -47,7 +47,10 @@ describe('parsing', () => {
     expect(entries.every((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.watchedDate) && e.year > 1880)).toBe(true);
     const oppenheimer = entries.find((e) => e.title === 'Oppenheimer' && e.review);
     expect(oppenheimer?.review?.split('\n\n').length).toBeGreaterThan(3);
-    expect(entries.find((e) => e.title === 'About Time')?.review).toBeNull();
+    const [header, ...rows] = parseCsv(reviews);
+    const [uri, text] = [header.indexOf('Letterboxd URI'), header.indexOf('Review')];
+    const withheld = ['https://boxd.it/37lLaL', 'https://boxd.it/6vuonZ', 'https://boxd.it/3D1ji1'];
+    expect(rows.filter((row) => withheld.includes(row[uri])).map((row) => row[text])).toEqual(['', '', '']);
   });
 });
 
