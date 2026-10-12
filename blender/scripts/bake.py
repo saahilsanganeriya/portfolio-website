@@ -1,12 +1,18 @@
-"""Bake the room's lighting (Cycles, CPU) into the four atlases and save room.blend with the bake UVs.
+"""Bake the room's lighting (Cycles, CPU) into its atlases, and the window view by day and by night; save
+room.blend with the bake UVs.
 
     blender -b blender/room.blend -P blender/scripts/bake.py                     # final: full size, 512 samples
     blender -b blender/room.blend -P blender/scripts/bake.py -- --scale 0.25 --samples 32 --atlas desk   # test
+    blender -b blender/room.blend -P blender/scripts/bake.py -- --atlas window_sf,window_delhi            # view only
 
 Each atlas gets a second UV map "bake" (an object's own clean UVs or a smart projection, scaled by area and
-packed together with an 8-16 px margin at the final size), one Combined bake (diffuse and glossy, direct and
+packed together with an 6-16 px margin at the final size), one Combined bake (diffuse and glossy, direct and
 indirect, emission; AO comes from the global illumination), then OIDN denoising and the scene's AgX view transform,
 so the PNG in blender/.cache/bake/<atlas>.png already looks like the Cycles render and is shown unlit on the site.
+
+The room atlases bake without the window view (the camera-invisible env_sky card lights the room through the
+window). The view's halves (window_sf, window_delhi) bake alone, once per state, into <atlas>_<state>.png plus a
+linear <atlas>_<state>.exr that export.py shows in the stills.
 """
 
 import argparse
@@ -18,14 +24,21 @@ from pathlib import Path
 import bpy
 import numpy as np
 
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import window_view  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
 BAKE_DIR = REPO / "blender" / ".cache" / "bake"
 BLEND = REPO / "blender" / "room.blend"
 
-ATLAS_SIZES = {"env": 4096, "desk": 4096, "props": 2048, "posters": 2048}
+ATLAS_SIZES = {"env": 4096, "desk": 4096, "props": 4096, "window_sf": 1024, "window_delhi": 1024}
 # Island margin in pixels at the final size: the plan's floor is 8 px; the props atlas needs the floor because its
-# scanned and modelled props bring about 3,700 islands into 2048 px.
-MARGIN_PX = {"env": 16, "desk": 16, "props": 8, "posters": 16}
+# scanned and modelled props bring thousands of islands into it. The view's atlases are small and seen from afar.
+MARGIN_PX = {"env": 16, "desk": 16, "props": 8, "window_sf": 6, "window_delhi": 6}
+STATES = ("day", "night")
+# The world seen through the open front of the view while it bakes: a pale sky by day, a dark one by night.
+VIEW_WORLD = {"day": ((0.62, 0.70, 0.82, 1.0), 0.35), "night": ((0.010, 0.012, 0.022, 1.0), 0.35)}
 
 MAX_THREADS = 24
 TARGET_NODE = "bake_target"
@@ -35,6 +48,7 @@ def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(prog="bake.py")
     parser.add_argument("--atlas", default=",".join(ATLAS_SIZES), help="comma-separated atlas names")
+    parser.add_argument("--states", default=",".join(STATES), help="view states to bake (window atlases)")
     parser.add_argument("--scale", type=float, default=1.0, help="fraction of the final atlas size (tests)")
     parser.add_argument("--samples", type=int, default=512)
     parser.add_argument("--threads", type=int, default=MAX_THREADS)
@@ -210,8 +224,9 @@ def fill_gaps(image):
     image.update()
 
 
-def denoise_and_save(image, path: Path):
-    """OIDN-denoise a float bake through the compositor and write it with the scene's view transform."""
+def denoise_and_save(image, path: Path, exr: Path | None = None):
+    """OIDN-denoise a float bake through the compositor and write it with the scene's view transform (and, when
+    asked, the same denoised result as linear half-float EXR)."""
     scene = bpy.context.scene
     saved = (scene.render.engine, scene.render.resolution_x, scene.render.resolution_y,
              scene.render.resolution_percentage, scene.render.filepath, scene.render.film_transparent,
@@ -242,6 +257,14 @@ def denoise_and_save(image, path: Path):
         for o in hidden:
             o.hide_render = True
         bpy.ops.render.render(write_still=True)
+        if exr is not None:
+            scene.render.image_settings.file_format = "OPEN_EXR"
+            scene.render.image_settings.color_depth = "16"
+            scene.render.image_settings.color_mode = "RGB"
+            scene.render.filepath = str(exr)
+            bpy.ops.render.render(write_still=True)
+            scene.render.image_settings.file_format = "PNG"
+            scene.render.image_settings.color_depth = "8"
         for o in hidden:
             o.hide_render = False
     finally:
@@ -252,15 +275,17 @@ def denoise_and_save(image, path: Path):
         bpy.data.node_groups.remove(tree)
 
 
-def bake_atlas(atlas: str, size: int, samples: int):
+def bake_atlas(atlas: str, size: int, samples: int, out_name: str | None = None, make_uvs=True, exr=False):
     objs = atlas_objects(atlas)
     if not objs:
         print(f"bake: no objects for atlas {atlas}")
         return
+    out_name = out_name or atlas
     started = time.monotonic()
-    make_bake_uvs(objs, ATLAS_SIZES[atlas], MARGIN_PX[atlas])
+    if make_uvs or any("bake" not in o.data.uv_layers for o in objs):
+        make_bake_uvs(objs, ATLAS_SIZES[atlas], MARGIN_PX[atlas])
     t_uv = time.monotonic()
-    name = f"bake_{atlas}"
+    name = f"bake_{out_name}"
     if name in bpy.data.images:
         bpy.data.images.remove(bpy.data.images[name])
     image = bpy.data.images.new(name, size, size, float_buffer=True, alpha=True)
@@ -282,15 +307,69 @@ def bake_atlas(atlas: str, size: int, samples: int):
     fill_gaps(image)
     t_bake = time.monotonic()
     BAKE_DIR.mkdir(parents=True, exist_ok=True)
-    out = BAKE_DIR / f"{atlas}.png"
-    denoise_and_save(image, out)
+    out = BAKE_DIR / f"{out_name}.png"
+    denoise_and_save(image, out, BAKE_DIR / f"{out_name}.exr" if exr else None)
     # Swap the float buffer for the saved, display-ready PNG so room.blend references the file.
     bpy.data.images.remove(image)
     saved_image = bpy.data.images.load(str(out), check_existing=False)
     saved_image.name = name
     attach_target(objs, saved_image)
-    print(f"bake: {atlas} {size}px {samples} spp {len(objs)} objects in {time.monotonic() - started:.0f} s "
+    print(f"bake: {out_name} {size}px {samples} spp {len(objs)} objects in {time.monotonic() - started:.0f} s "
           f"(uv {t_uv - started:.0f} s, bake {t_bake - t_uv:.0f} s) -> {out}")
+
+
+def is_view(obj) -> bool:
+    return str(obj.get("atlas", "")).startswith("window_")
+
+
+def set_light_probes(value: float):
+    """Poster and photo prints carry a light_probe switch: 1 turns their art into white paper, so the bake records
+    only the light falling on them (the site draws the art over it)."""
+    for mat in bpy.data.materials:
+        if mat.node_tree and "light_probe" in mat.node_tree.nodes:
+            mat.node_tree.nodes["light_probe"].outputs[0].default_value = value
+
+
+def bake_room(atlases, scale, samples):
+    hidden = [o for o in bpy.context.scene.objects if is_view(o) and not o.hide_render]
+    for o in hidden:
+        o.hide_render = True
+    set_light_probes(1.0)
+    try:
+        for atlas in atlases:
+            bake_atlas(atlas, max(256, int(ATLAS_SIZES[atlas] * scale)), samples)
+    finally:
+        set_light_probes(0.0)
+        for o in hidden:
+            o.hide_render = False
+
+
+def bake_view(atlases, states, scale, samples):
+    """Bake the window view alone: everything else and every room light hidden, the view's own lights for the
+    state on, its materials switched by window_view.set_night."""
+    scene = bpy.context.scene
+    view_lights = set(bpy.data.collections["window_lights"].objects)
+    others = [o for o in scene.objects if not is_view(o) and o not in view_lights and not o.hide_render]
+    bg = scene.world.node_tree.nodes["Background"]
+    saved_bg = (tuple(bg.inputs["Color"].default_value), bg.inputs["Strength"].default_value)
+    for o in others:
+        o.hide_render = True
+    try:
+        for i, state in enumerate(states):
+            window_view.set_night(1.0 if state == "night" else 0.0)
+            for light in view_lights:
+                light.hide_render = light["window_mode"] != state
+            bg.inputs["Color"].default_value, bg.inputs["Strength"].default_value = VIEW_WORLD[state]
+            for atlas in atlases:
+                bake_atlas(atlas, max(128, int(ATLAS_SIZES[atlas] * scale)), samples, out_name=f"{atlas}_{state}",
+                           make_uvs=i == 0, exr=True)
+    finally:
+        window_view.set_night(0.0)
+        for light in view_lights:
+            light.hide_render = True
+        bg.inputs["Color"].default_value, bg.inputs["Strength"].default_value = saved_bg
+        for o in others:
+            o.hide_render = False
 
 
 def main():
@@ -301,9 +380,13 @@ def main():
     scene.cycles.device = "CPU"
     scene.render.threads_mode = "FIXED"
     scene.render.threads = min(args.threads, MAX_THREADS)
-    for atlas in args.atlas.split(","):
-        size = max(256, int(ATLAS_SIZES[atlas] * args.scale))
-        bake_atlas(atlas, size, args.samples)
+    atlases = args.atlas.split(",")
+    room = [a for a in atlases if not a.startswith("window_")]
+    view = [a for a in atlases if a.startswith("window_")]
+    if room:
+        bake_room(room, args.scale, args.samples)
+    if view:
+        bake_view(view, args.states.split(","), args.scale, args.samples)
     scene.cycles.samples, scene.cycles.use_denoising, scene.render.threads = saved
     if not args.no_save:
         for img in bpy.data.images:
