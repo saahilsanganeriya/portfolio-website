@@ -26,10 +26,7 @@ ATLAS_SIZES = {"env": 4096, "desk": 4096, "props": 2048, "posters": 2048}
 # Island margin in pixels at the final size: the plan's floor is 8 px; the props atlas needs the floor because its
 # scanned and modelled props bring about 3,700 islands into 2048 px.
 MARGIN_PX = {"env": 16, "desk": 16, "props": 8, "posters": 16}
-# How far the bake extends each island into the empty atlas around it, in pixels at the final size. It must fill
-# the gaps between islands: the site samples small mip levels from afar, and black gaps there bled into the
-# projector screen and a poster.
-FILL_PX = 64
+
 MAX_THREADS = 24
 TARGET_NODE = "bake_target"
 
@@ -185,6 +182,34 @@ def attach_target(objs, image):
         nodes.active = node
 
 
+def fill_gaps(image):
+    """Fill every texel the bake left empty (alpha 0) from the nearest baked texels, by push-pull.
+
+    The site samples small mip levels from afar; empty black texels between islands bled into the projector
+    screen and a poster there. Each level halves the image with alpha-weighted averages; going back up, a texel
+    with no baked texel under it takes its parent's colour.
+    """
+    w, h = image.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    image.pixels.foreach_get(px)
+    px = px.reshape(h, w, 4)
+    known = px[..., 3] > 0.5
+    levels = [(px[..., :3] * known[..., None], known.astype(np.float32))]
+    while min(levels[-1][1].shape) > 1:
+        c, m = levels[-1]
+        ch, cw = c.shape[0] // 2, c.shape[1] // 2
+        levels.append((c.reshape(ch, 2, cw, 2, 3).sum(axis=(1, 3)), m.reshape(ch, 2, cw, 2).sum(axis=(1, 3))))
+    c, m = levels[-1]
+    colour = c / np.maximum(m, 1e-8)[..., None]
+    for c, m in reversed(levels[:-1]):
+        parent = np.repeat(np.repeat(colour, 2, axis=0), 2, axis=1)
+        colour = np.where((m > 0)[..., None], c / np.maximum(m, 1e-8)[..., None], parent)
+    px[..., :3] = np.where(known[..., None], px[..., :3], colour)
+    px[..., 3] = 1.0
+    image.pixels.foreach_set(px.ravel())
+    image.update()
+
+
 def denoise_and_save(image, path: Path):
     """OIDN-denoise a float bake through the compositor and write it with the scene's view transform."""
     scene = bpy.context.scene
@@ -238,19 +263,23 @@ def bake_atlas(atlas: str, size: int, samples: int):
     name = f"bake_{atlas}"
     if name in bpy.data.images:
         bpy.data.images.remove(bpy.data.images[name])
-    image = bpy.data.images.new(name, size, size, float_buffer=True, alpha=False)
+    image = bpy.data.images.new(name, size, size, float_buffer=True, alpha=True)
     image.colorspace_settings.name = "Linear Rec.709"
+    image.pixels.foreach_set(np.zeros(size * size * 4, dtype=np.float32))
     attach_target(objs, image)
     select_only(objs)
     scene = bpy.context.scene
     scene.cycles.samples = samples
     scene.cycles.use_denoising = False
+    # Cycles bakes object by object and dilates each one on its own, so its margin must stay under half the gap
+    # between islands or it paints over a neighbour; fill_gaps() fills the rest of the atlas afterwards.
+    margin = max(1, MARGIN_PX[atlas] * size // ATLAS_SIZES[atlas] // 2)
     bake = scene.render.bake
-    bake.margin, bake.margin_type = max(4, FILL_PX * size // ATLAS_SIZES[atlas]), "EXTEND"
-    bake.use_clear = True
+    bake.margin, bake.margin_type, bake.use_clear = margin, "EXTEND", False
     bpy.ops.object.bake(type="COMBINED", pass_filter={"EMIT", "DIRECT", "INDIRECT", "DIFFUSE", "GLOSSY"},
-                        margin=bake.margin, margin_type="EXTEND", use_clear=True, target="IMAGE_TEXTURES",
+                        margin=margin, margin_type="EXTEND", use_clear=False, target="IMAGE_TEXTURES",
                         uv_layer="bake")
+    fill_gaps(image)
     t_bake = time.monotonic()
     BAKE_DIR.mkdir(parents=True, exist_ok=True)
     out = BAKE_DIR / f"{atlas}.png"
