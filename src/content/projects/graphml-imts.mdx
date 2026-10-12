@@ -3,8 +3,8 @@ title: "Graph ML for irregular ICU time series"
 summary: "Forecasting ICU patients' vital signs with graph neural networks, when most of the measurements are missing."
 year: 2025
 status: "research"
-role: "Team member: repository setup, data exploration and the RainDrop forecasting baseline"
-team: "team of 4; I set up the repository, explored the data and adapted RainDrop for forecasting"
+role: "Team member: the shared data pipeline, data exploration and the RainDrop forecaster"
+team: "team of 4; I built the shared data pipeline and metrics, explored the data and adapted RainDrop for forecasting"
 stack: ["Python", "PyTorch"]
 featured: false
 links:
@@ -13,24 +13,41 @@ cover: "../../assets/projects/graphml-imts.png"
 coverAlt: "Heatmap of missing values: rows are patient records, columns are the physiological variables, and most cells are dark red, which means mostly missing."
 ---
 
-An ICU chart is not a neat table. Heart rate might be logged every few minutes, a lab value twice a day,
-and some variables never. In the PhysioNet 2012 challenge data, about 86% of the possible measurements
-are missing.
+In an ICU record every variable runs on its own clock. Heart rate is charted all through a stay. A troponin test happens only when a doctor orders one.
 
-For a graph machine learning course, four of us asked whether graph neural networks could forecast a
-patient's vitals and labs 6 to 24 hours ahead from 24 hours of history, using the irregular data as it is
-instead of filling the gaps first. Each patient becomes a graph. Every measurement is a node, with edges
-to the same variable nearby in time and to other variables taken at the same moment.
+The PhysioNet 2012 challenge data has 12,000 ICU stays, the first 48 hours of each, with 36 variables measured over time. Lay that out as a table of variables by time and 85.7% of the slots are empty. For a graph machine learning course in fall 2025, four of us tried to forecast what a patient’s numbers do next.
 
-The data covers 12,000 patients, 48-hour windows and 41 variables. We kept extreme values, such as a heart
-rate of 300, instead of throwing them out, since in an ICU they can be real.
+## Do not fill the gaps
 
-My part was the repository and the data exploration, and adapting RainDrop, a published graph model for
-irregular sensor data, from classifying patients to forecasting. It reached an RMSE of 0.561 on validation
-and 0.596 on test. The targets are z-scored, so that is about six-tenths of a standard deviation off.
+The usual first move is to fill the gaps, then hand a neat table to an ordinary forecaster. With most of the table filled in by us, a model would learn mostly from our guesses. So every model in the project took the sparse record as it is.
+
+I built the shared pipeline that every model read from. It splits the patients the same way for everyone, normalises with training data only, and keeps extreme values, such as a heart rate of 300, because in an ICU they can be real. It also turns each patient into a graph of their measurements.
+
+<figure class="os-figure">
+
+```text
+ hour            10:00      11:30      13:15
+ heart rate        o----------o----------o
+                   |                     |
+ blood pressure    o                     |
+ troponin                                o
+
+ o  one measurement
+ -  same variable, at most 2 hours apart
+ |  different variables, same time
+```
+
+<figcaption>An observation graph: every measurement is a node, joined to the same variable nearby in time and to other variables measured at the same moment. A real patient has about 150 nodes and 500 edges.</figcaption>
+</figure>
+
+My model was RainDrop, a published graph network for irregular sensor data, which learns a second graph of its own between the variables. It was built to classify patients, and I adapted it to forecast: given the first 24 hours, predict hours 24 to 30.
+
+## A number that flatters me
+
+RainDrop reached an RMSE of 0.561 on validation and 0.596 on test. The targets are z-scored, so that is about six-tenths of a standard deviation off. Teammates’ models scored 0.643 (T-PatchGNN) and 0.724 (GRU-D) on test after tuning, so RainDrop looks best.
+
+It is not a fair race. My scoring code compares one mean per patient and variable over those six hours, a much smoother target than the single values the other models predict. The table shares a split and a normalisation, but it does not rank the models. Across all of them, variables measured often, like heart rate, were forecast better than sparse labs, and extreme values came out too small.
 
 ## What I would change
 
-That number is on normalised values and says nothing yet about the bedside. Six-tenths of a standard
-deviation of heart rate might matter a great deal or not at all. I would report errors in clinical units
-next to the normalised ones.
+I would score every model on the same target before comparing anything. Then I would report errors in clinical units next to the normalised ones. Six-tenths of a standard deviation of heart rate might matter a great deal at the bedside, or not at all.
