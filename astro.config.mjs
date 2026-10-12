@@ -22,4 +22,15 @@ export default defineConfig({
     shikiConfig: { theme: darkroom },
   },
   devToolbar: { enabled: false },
+  vite: {
+    build: {
+      rolldownOptions: {
+        // The adapter's function entry imports its build-time module for a few constants, which leaves bare imports
+        // of rolldown and @vercel/routing-utils; the function cannot load rolldown (no native binding) and crashed.
+        treeshake: {
+          moduleSideEffects: [{ test: /^(rolldown|@vercel\/routing-utils)$/, external: true, sideEffects: false }],
+        },
+      },
+    },
+  },
 });
