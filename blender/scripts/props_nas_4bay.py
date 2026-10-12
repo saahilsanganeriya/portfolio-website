@@ -1,7 +1,7 @@
 """nas_4bay: a small four-bay home NAS (199 x 166 x 223 mm, the size of common four-bay units), unbranded.
 
-Front: control strip (power button with ring light, status and LAN lights, four drive lights, USB) and four
-drive trays with vent slots and latches. Back: two fans and ports. A label-maker strip on top reads
+Front: control strip (power button with ring light, status and LAN lights, USB) and four drive trays with vent
+slots, latches and a light bar each (the drive lights). Back: two fans and ports. A label-maker strip on top reads
 "projectionist". Objects: nas_4bay and its children nas_led_0 .. nas_led_3 (one emissive material each, so the
 scene can blink them). Faces -Y, origin at the base.
 """
@@ -20,6 +20,7 @@ NAME = "nas_4bay"
 W, H, D = 0.199, 0.166, 0.223
 FRONT = -D / 2
 LED_GREEN = (0.30, 1.0, 0.42)
+LED_Z = 0.1445
 
 
 def slot_material(name, base):
@@ -129,13 +130,16 @@ def main():
 
     nas = b.finish(col, smooth_angle=30)
     nas["source"] = "made for this site"
-    led_z = (0.110, 0.100, 0.090, 0.080)
-    for i, z in enumerate(led_z):
+    # One drive light per bay: a wide light bar across the top of each tray, large enough to read (and blink)
+    # from the room's wide framing.
+    for i in range(4):
+        x = tray_x0 + tray_w / 2 + i * (tray_w + 0.0015)
+        centre = (x, FRONT - 0.0028, LED_Z)
         led = pl.Builder(f"nas_led_{i}")
-        led.box((0.0042, 0.0014, 0.0016), loc=(strip_cx, FRONT - 0.0012, z), mat=led_material(f"nas_led_{i}", LED_GREEN, 3.0),
-                bevel=0.0003, bevel_seg=1)
+        led.box((tray_w * 0.66, 0.0018, 0.0048), loc=centre, mat=led_material(f"nas_led_{i}", LED_GREEN, 3.0),
+                bevel=0.0006, bevel_seg=1)
         ob = led.finish(col, weighted=False)
-        set_origin(ob, (strip_cx, FRONT - 0.0012, z))
+        set_origin(ob, centre)
         ob["source"] = "made for this site"
         pl.parent_keep_transform(ob, nas)
     pl.report(NAME, col, 15000)
