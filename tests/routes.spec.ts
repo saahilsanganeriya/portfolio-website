@@ -51,9 +51,10 @@ test('the 404 page has no axe violations', async ({ page }) => {
 });
 
 test.describe('the framed documents, opened on their own', () => {
-  // A phone gets the drawn monitor, so these run without the 3D room.
+  // A phone reporting 1 GB of memory gets the drawn monitor at once, so these run without the 3D room.
   const { defaultBrowserType: _browser, ...iPhone13 } = devices['iPhone 13'];
   test.use(iPhone13);
+  test.beforeEach(({ page }) => page.addInitScript(() => Object.defineProperty(navigator, 'deviceMemory', { value: 1 })));
 
   /** Catches /os opening as a bare page of its own instead of on the monitor. */
   test('/os#<window> becomes the room with that window open', async ({ page }) => {
