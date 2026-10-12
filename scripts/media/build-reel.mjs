@@ -3,17 +3,17 @@
 // draws its intertitle cards over them at runtime (one is the newest Letterboxd diary entry). The clips are
 // denoised and grey, because the room adds its own grain, flicker and gate weave. Sources are in blender/ASSETS.md.
 //
-//   node scripts/media/build-reel.mjs [--crf 30]
+//   node scripts/media/build-reel.mjs [--crf 28]
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { CACHE, download, ffmpeg } from '../lib/media.mjs';
 
 const OUT = new URL('../../public/room/reel.mp4', import.meta.url).pathname;
 const timeline = JSON.parse(await readFile(new URL('../../src/scene/reel.json', import.meta.url), 'utf8'));
 const args = process.argv.slice(2);
-const crf = args.includes('--crf') ? args[args.indexOf('--crf') + 1] : '30';
+const crf = args.includes('--crf') ? args[args.indexOf('--crf') + 1] : '28';
 
-const WIDTH = 320;
-const HEIGHT = 240;
+const WIDTH = 256;
+const HEIGHT = 192;
 const FPS = 18;
 const FADE_S = 0.25;
 const COMMONS = 'https://upload.wikimedia.org/wikipedia/commons/';
