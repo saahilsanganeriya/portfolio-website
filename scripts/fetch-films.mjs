@@ -20,11 +20,14 @@ const base = buildFilmsData(mergeEntries(archive, cached?.entries ?? []), cached
 
 const { data, failure } = await collectFilms(base, { privateNames: privateNamesFrom(process.env.FILMS_PRIVATE_NAMES) });
 if (failure) console.warn(`films: using cached films.json (${failure})`);
-await writeFile(new URL(OUT, root), `${JSON.stringify(data, null, 2)}\n`);
+// Written only when the diary changed, so a build without a new watch leaves the committed file as it is (worker
+// branches would otherwise each commit a new fetchedAt and collide).
+const changed = JSON.stringify(data.entries) !== JSON.stringify(cached?.entries);
+if (changed) await writeFile(new URL(OUT, root), `${JSON.stringify(data, null, 2)}\n`);
 
 const reviewed = data.entries.filter((entry) => entry.review).length;
 console.log(
-  `films: wrote ${OUT}: ${data.entries.length} entries (${archive.length} from the archive), ` +
-    `newest ${data.entries[0]?.watchedDate}, ${reviewed} with reviews, fetchedAt ${data.fetchedAt}` +
+  `films: ${changed ? 'wrote' : 'kept (diary unchanged)'} ${OUT}: ${data.entries.length} entries ` +
+    `(${archive.length} from the archive), newest ${data.entries[0]?.watchedDate}, ${reviewed} with reviews` +
     (failure ? ' [feed not read]' : ' [feed merged]'),
 );
