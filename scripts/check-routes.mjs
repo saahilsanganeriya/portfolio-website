@@ -1,6 +1,7 @@
-// Builds the site, then checks the output: every content entry has its page and JSON body, every page carries the
-// tags a shared link needs (title, description, og:title, og:image) and one <h1>, no internal link or anchor is broken,
-// and no link is glued to the word next to it.
+// Builds the site, then checks the output: every content entry has an address that is the room opening its SaahilOS
+// window on the monitor, and its JSON body; no other page exists beyond the documents framed inside the room and the
+// 404 page; every page carries the tags a shared link needs (title, description, og:title, og:image) and one <h1>;
+// no internal link or anchor is broken, and no link is glued to the word next to it.
 // Usage: node scripts/check-routes.mjs [--samples] [--no-build]   (--samples builds with SAMPLES=1: draft posts too)
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -13,9 +14,6 @@ const DIST = join(ROOT, 'dist', 'client');
 const CONTENT = join(ROOT, 'src/content');
 const withSamples = process.argv.includes('--samples');
 
-// Pages linked from the text index but built separately; a link to one passes while its page is absent.
-const PENDING_ROUTES = ['/os', '/story'];
-
 if (!process.argv.includes('--no-build')) {
   const env = { ...process.env, ...(withSamples ? { SAMPLES: '1' } : {}) };
   const build = spawnSync('npx', ['astro', 'build'], { cwd: ROOT, env, encoding: 'utf8' });
@@ -27,9 +25,8 @@ if (!process.argv.includes('--no-build')) {
 }
 
 const problems = [];
-const pending = new Set();
 
-// ---- content entries → expected files ----
+// ---- content entries → their room page (route → the window it opens; '' for none) and JSON body ----
 
 const entryIds = (collection) => {
   const dir = join(CONTENT, collection);
@@ -46,16 +43,23 @@ const expectFile = (path, why) => {
   if (!existsSync(join(DIST, path))) problems.push(`missing ${path} (${why})`);
 };
 
+const ROOM_PAGES = new Map([
+  ['/', ''],
+  ['/projects/', 'projects'],
+  ['/blog/', 'blog'],
+  ['/films/', 'films'],
+  ['/credits/', 'credits'],
+]);
 for (const id of entryIds('projects')) {
-  expectFile(`projects/${id}/index.html`, `project ${id}`);
+  ROOM_PAGES.set(`/projects/${id}/`, `projects/${id}`);
   expectFile(`content/projects/${id}.json`, `project ${id}`);
 }
 for (const id of entryIds('blog')) {
-  expectFile(`blog/${id}/index.html`, `post ${id}`);
+  ROOM_PAGES.set(`/blog/${id}/`, `blog/${id}`);
   expectFile(`content/blog/${id}.json`, `post ${id}`);
 }
 for (const id of entryIds('pages')) {
-  expectFile(`${id}/index.html`, `page ${id}`);
+  ROOM_PAGES.set(`/${id}/`, id);
   expectFile(`content/pages/${id}.json`, `page ${id}`);
 }
 for (const id of entryIds('story')) {
@@ -64,9 +68,13 @@ for (const id of entryIds('story')) {
 
 // ---- SaahilOS window routes ----
 
-// SaahilOS opens windows from client-side hashes (/os#terminal, /os#projects/<slug>, /os#films/<poster>), so such a
-// fragment names an app and an entry, not an HTML id.
-const OS_APPS = ['projects', 'blog', 'films', 'story', 'terminal', 'about', 'resume', 'credits'];
+// SaahilOS opens windows from client-side hashes (/os#terminal, /os#projects/<slug>, /os#films/<poster>) and from a
+// room page's data-open, so such a name is an app and an entry, not an HTML id.
+const OS_APPS = JSON.parse(
+  readFileSync(join(ROOT, 'src/os/types.ts'), 'utf8')
+    .match(/APP_IDS = (\[[^\]]*\])/)[1]
+    .replaceAll("'", '"'),
+);
 const OS_SLUGS = {
   projects: new Set(entryIds('projects')),
   blog: new Set(entryIds('blog')),
@@ -80,6 +88,11 @@ const osRouteProblem = (fragment) => {
 };
 
 // ---- every built page ----
+
+// Framed inside the room (/os?embed=1 on the monitor, /story?embed=1 in the Story window); opened on their own they
+// replace themselves with the room. The 404 page is the only other page.
+const FRAMED_PAGES = new Set(['/os/', '/story/']);
+const ERROR_PAGE = '/404.html';
 
 const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((d) =>
@@ -106,9 +119,24 @@ const resolveTarget = (pathname) => {
 };
 
 const pages = walk(DIST);
+const roomPagesSeen = new Set();
 for (const file of pages) {
   const page = '/' + relative(DIST, file);
+  const route = page.replace(/index\.html$/, '');
   const html = readHtml(file);
+
+  if (ROOM_PAGES.has(route)) {
+    roomPagesSeen.add(route);
+    const open = html.match(/<main\b[^>]*\sdata-room\b[^>]*>/)?.[0].match(/\sdata-open(?:="([^"]*)")?/);
+    const expected = ROOM_PAGES.get(route);
+    if (!open) problems.push(`${page}: not the room (no <main data-room data-open>)`);
+    else if ((open[1] ?? '') !== expected) problems.push(`${page}: opens "${open[1] ?? ''}", expected "${expected}"`);
+    else if (expected && osRouteProblem(expected)) problems.push(`${page}: data-open "${expected}" ${osRouteProblem(expected)}`);
+  } else if (FRAMED_PAGES.has(route)) {
+    if (!/window\.top === window\.self[^\n]*has\('embed'\)/.test(html)) problems.push(`${page}: opened on its own, it does not send the visitor to the room`);
+  } else if (route !== ERROR_PAGE) {
+    problems.push(`${page}: a plain page; every address is the room`);
+  }
 
   if (!/<title>[^<\s][^<]*<\/title>/.test(html)) problems.push(`${page}: no <title>`);
   if (!metaContent(html, 'name', 'description')) problems.push(`${page}: no meta description`);
@@ -128,9 +156,7 @@ for (const file of pages) {
     const pathname = decodeURIComponent(beforeHash.split('?')[0]);
     const target = pathname === '' ? file : resolveTarget(pathname);
     if (!target) {
-      const route = pathname.replace(/\/$/, '');
-      if (PENDING_ROUTES.includes(route)) pending.add(route);
-      else problems.push(`${page}: broken link ${href}`);
+      problems.push(`${page}: broken link ${href}`);
       continue;
     }
     if (fragment && pathname.replace(/\/$/, '') === '/os') {
@@ -144,10 +170,13 @@ for (const file of pages) {
   }
 }
 
+for (const route of ROOM_PAGES.keys()) {
+  if (!roomPagesSeen.has(route)) problems.push(`missing ${route} (the room opening ${ROOM_PAGES.get(route) || 'no window'})`);
+}
+
 if (problems.length) {
   console.error(problems.map((p) => `  ${p}`).join('\n'));
   console.error(`check-routes: ${problems.length} problem(s) in ${pages.length} pages`);
   process.exit(1);
 }
-for (const route of pending) console.log(`pending: ${route} is linked but not built yet`);
 console.log('ok');
