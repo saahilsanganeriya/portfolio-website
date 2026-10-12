@@ -74,4 +74,5 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | alanagoyal | ideas: window URLs, phone layout | https://github.com/alanagoyal/alanagoyal | Alana Goyal | MIT | ideas only |
 | three.js r186 | 3D rendering, glTF loading, the CSS3D monitor | https://github.com/mrdoob/three.js | three.js authors | MIT | npm dependency, unmodified |
 | meshoptimizer decoder (meshopt_decoder.module.js, shipped with three.js) | decoding the room's compressed geometry | https://github.com/zeux/meshoptimizer | Arseny Kapoulkine | MIT | bundled unmodified |
+| Basis Universal transcoder (basis_transcoder.js and .wasm, shipped with three.js) | decoding the room's KTX2 textures | https://github.com/BinomialLLC/basis_universal | Binomial LLC | Apache 2.0 | copied unmodified to public/room/basis/ |
 | Hash without Sine (hash12, hash13) | film grain, CRT noise and the projector beam's air in the room's shaders | https://www.shadertoy.com/view/4djSRW | Dave Hoskins | MIT | two functions, copied into the shaders |
