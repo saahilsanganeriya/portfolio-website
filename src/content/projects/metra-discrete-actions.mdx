@@ -10,32 +10,42 @@ featured: false
 links: {}
 ---
 
-METRA teaches an agent a set of distinct skills with no reward at all. Each skill should carry the agent
-somewhere different, measured in a learned representation of the states it visits. The original paper
-worked on continuous control, robots with joints. We wanted to know whether it carried over to a game
-played with a joystick: discrete actions and raw pixels.
+Every skill our agent learned did the same thing. A few epochs in, it pressed the same button whatever skill we asked for.
 
-The original code was hard to adapt, so the team rewrote METRA from scratch and swapped its policy learner
-for SAC-Discrete, the version of soft actor-critic built for a fixed set of actions. The test bed was Ms.
-Pac-Man.
+METRA teaches an agent a set of distinct skills with no reward at all. Each skill should carry the agent somewhere different, measured in a learned representation of the states it visits. The original paper worked on continuous control, robots with joints. For a deep reinforcement learning course, six of us wanted to know whether it carried over to Ms. Pac-Man: 9 joystick actions and raw 210 by 160 pixel frames.
 
-It mostly did not work, and the reason was the interesting part. The skills collapsed into the same
-behaviour. t-SNE plots of the representation showed no structure, and silhouette scores against the skill
-labels stayed at or below 0.2. The representation barely moved from one frame to the next: in the team's
-logged runs, the mean step between consecutive states was 2.9e-8 to 6.4e-8. With almost no change to
-measure, the intrinsic reward was almost zero, and the policy fell back to choosing one action.
+## Rebuilding it
 
-A warm-up phase that trained the encoder alone collapsed again as soon as policy training resumed. A
-deeper pixel encoder, a ResNet-18, raised the step to between 1.1e-3 and 1.0e-2, about five orders of
-magnitude. That was the change that mattered, though even then the skills did not separate: silhouette
-scores stayed between -0.10 and 0.05.
+The original code was hard to adapt, so the team rewrote METRA from scratch and swapped its policy learner for SAC-Discrete, the version of soft actor-critic built for a fixed set of actions. I worked on that adaptation and on finding out why it failed.
+
+<figure class="os-figure">
+
+```text
+ frame s   --encoder-->  phi(s)
+                            |   step: how far phi moved
+ frame s'  --encoder-->  phi(s')
+                            |
+ skill z  ---------------> reward: how far that step
+ (fixed for the episode)    went in z's direction
+
+ step ~ 3e-8 to 6e-8  ->  reward ~ 0  ->  nothing to learn
+```
+
+<figcaption>Where METRA's reward comes from, and why ours vanished: the representation barely moved between frames, so no skill earned any reward.</figcaption>
+</figure>
+
+## Why the skills collapsed
+
+The representation barely moved from one frame to the next. In the team’s logged runs, the mean step between consecutive states was 2.9e-8 to 6.4e-8. With almost no change to measure, the reward was almost zero, and with a fixed temperature the policy’s randomness fell to nothing and it settled on one action. t-SNE plots of the representation showed no structure, and silhouette scores against the skill labels stayed at or below 0.2.
+
+The dead ends are results too. Scaling the reward up did nothing. A warm-up that trained the encoder alone collapsed again as soon as policy training resumed. Widening the skill space from 4 to 24 dimensions, and switching to continuous skills, did not help.
+
+A decaying temperature helped early exploration and fixed nothing underneath. METRA’s own limit on how far the representation may move was never reached, so it was not the cause.
+
+What mattered was the encoder. A pretrained ResNet-18 raised the step to between 1.1e-3 and 1.0e-2, about five orders of magnitude. Even then the skills did not separate: silhouette scores stayed between -0.10 and 0.05.
 
 ## What I would change
 
-We also widened the skill space from 4 to 24 dimensions and tried continuous skills. Neither helped,
-because the representation was the bottleneck all along. I would measure the representation first and
-tune everything around it second.
+The representation was the bottleneck all along, and we tuned around it first. I would measure the representation before anything else, and tune the policy only once it moves.
 
-The team's code and the training logs these numbers come from are in a
-[shared repository](https://github.com/saahilsanganeriya/Scratch-Implementation); every code commit there
-is a teammate's. The report was a course paper and is not online.
+The team’s code and the training logs these numbers come from are in a [shared repository](https://github.com/saahilsanganeriya/Scratch-Implementation). Every code commit there is a teammate’s. The report was a course paper and is not online.
