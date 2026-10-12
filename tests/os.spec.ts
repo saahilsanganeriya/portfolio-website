@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
+import { readFileSync } from 'node:fs';
 import { devices, expect, test, type Page } from '@playwright/test';
 import { answerFor } from '../src/os/apps/game/words';
 
@@ -19,6 +20,9 @@ const APPS = [
   'Résumé',
   'Credits',
 ];
+/** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
+const firstH2 = (collection: string, slug: string): string =>
+  readFileSync(new URL(`../src/content/${collection}/${slug}.mdx`, import.meta.url), 'utf8').match(/^## (.+)$/m)![1].trim();
 const PROJECT = {
   slug: 'real-time-streaming',
   title: 'A real-time streaming pipeline (Amazon internship)',
@@ -48,7 +52,7 @@ test.describe('desktop', () => {
   test('a hash opens and fills that window', async ({ page }) => {
     await page.goto(`/os?embed=1#projects/${PROJECT.slug}`);
     const reader = page.getByRole('dialog', { name: PROJECT.title });
-    await expect(reader.getByRole('heading', { level: 2, name: 'What it does' })).toBeVisible();
+    await expect(reader.getByRole('heading', { level: 2, name: firstH2('projects', PROJECT.slug) })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`#projects/${PROJECT.slug}$`));
 
     await page.goto('/os?embed=1#films/la-la-land');
@@ -287,7 +291,7 @@ test.describe('desktop', () => {
   /** Catches contrast, naming and ARIA failures in the chrome and in a reader window. */
   test('axe finds no serious violations', async ({ page }) => {
     await page.goto(`/os?embed=1#projects/${PROJECT.slug}`);
-    await expect(page.getByRole('heading', { level: 2, name: 'What it does' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: firstH2('projects', PROJECT.slug) })).toBeVisible();
     await page.getByRole('button', { name: 'Start' }).click();
     expect(await seriousAxeViolations(page)).toEqual([]);
 

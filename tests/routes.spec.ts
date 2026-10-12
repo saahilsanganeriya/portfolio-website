@@ -1,7 +1,11 @@
 import AxeBuilder from '@axe-core/playwright';
+import { readFileSync } from 'node:fs';
 import { devices, expect, test } from '@playwright/test';
 
-const POST = { slug: 'redaction-is-not-enough', title: 'Redaction is not enough', h2: 'What a black bar breaks' };
+/** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
+const firstH2 = (collection: string, slug: string): string =>
+  readFileSync(new URL(`../src/content/${collection}/${slug}.mdx`, import.meta.url), 'utf8').match(/^## (.+)$/m)![1].trim();
+const POST = { slug: 'redaction-is-not-enough', title: 'Redaction is not enough', h2: firstH2('blog', 'redaction-is-not-enough') };
 
 /** Catches a shared post link previewing as the site's home instead of the post (the room carries each page's tags). */
 test('a post address is the room opening that post, with the post’s own share tags', async ({ request }) => {
@@ -34,7 +38,7 @@ test('/rss.xml is valid XML with the post in it', async ({ page, request }) => {
 test('/content/<collection>/<slug>.json carries frontmatter and rendered HTML', async ({ request }) => {
   const body = await (await request.get(`/content/blog/${POST.slug}.json`)).json();
   expect(body.data.title).toBe(POST.title);
-  expect(body.html).toContain(`<h2 id="what-a-black-bar-breaks">${POST.h2}</h2>`);
+  expect(body.html).toMatch(new RegExp(`<h2 id="[^"]+">${POST.h2.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</h2>`));
 });
 
 /** Catches WCAG A/AA failures on the one page that is not the room. */
