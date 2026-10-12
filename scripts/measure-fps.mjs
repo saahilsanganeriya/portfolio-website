@@ -1,13 +1,15 @@
 // Frame rate of the room on the "2020 laptop" profile (PLAN 3.9): Playwright Chromium at 1440x900, device scale 2,
 // software WebGL (SwiftShader) standing in for a 2020 integrated GPU. Counts requestAnimationFrame frames for 10 s in
 // each phase: the first drift (no input), every framing the room has, the monitor, a hovered prop, and across camera
-// moves; passes when every phase's median is at least 50 fps. --phone measures the light tier on an emulated
-// iPhone 13 instead: the wide view, the desk, moves, and the glide into the monitor until SaahilOS takes over.
-// The reel column is the share of frames in which the projector reel was playing (it plays only while its screen is
-// in view); --reel-always plays it in every phase, in view or not, for a worst case; --no-reel blocks it (the screen
-// keeps its baked still), as a baseline. The light tier has no reel.
+// moves, and the photo album open with a page turning every 1.2 s; passes when every phase's median is at least 50
+// fps. By default everything moves at once after the drift (PLAN 11.3, 12.3): the fan at its top speed, the espresso
+// machine brewing and the projector playing in view or not; --calm leaves the room as a visitor finds it. --phone
+// measures the light tier on an emulated iPhone 13 instead: the wide view, the desk, moves, and the glide into the
+// monitor until SaahilOS takes over. The reel column is the share of frames in which the projector was playing;
+// --reel-always plays only the reel in every phase; --no-reel blocks it (the screen keeps its baked still), as a
+// baseline. The light tier has no reel.
 //
-//   node scripts/measure-fps.mjs [--no-build] [--url https://…] [--seconds 10] [--phone] [--reel-always | --no-reel]
+//   node scripts/measure-fps.mjs [--no-build] [--url https://…] [--seconds 10] [--phone] [--calm | --reel-always | --no-reel]
 import { cpus, loadavg } from 'node:os';
 import { chromium, devices } from 'playwright';
 import { serveBuild } from './lib/serve-build.mjs';
@@ -40,28 +42,41 @@ try {
     if (flag('--reel-always')) await page.evaluate(() => window.__room.forceReel(true));
   }
 
-  /** Frame times for `ms`; `moving` keeps the camera gliding between the desk and the wide view. */
-  const count = (ms, moving) =>
+  const everything = !phone && !flag('--calm') && !flag('--reel-always') && !flag('--no-reel');
+
+  /** Frame times for `ms`; 'move' keeps the camera gliding between the desk and the wide view, 'album' turns pages. */
+  const count = (ms, mode = 'still') =>
     page.evaluate(
-      ([ms, moving]) =>
+      ([ms, mode]) =>
         new Promise((resolve) => {
           const times = [];
           let reelFrames = 0;
           const start = performance.now();
           let next = 'desk';
+          let lastTurn = start;
+          let forward = true;
           const frame = (t) => {
             times.push(t);
-            if (window.__room.reel?.state === 'playing') reelFrames++;
-            if (moving && !window.__room.moving) {
+            const projector = window.__room.world?.projector;
+            if (projector ? projector.state === 'playing' : window.__room.reel?.state === 'playing') reelFrames++;
+            if (mode === 'move' && !window.__room.moving) {
               window.__room.goto(next);
               next = next === 'desk' ? 'idle' : 'desk';
+            }
+            if (mode === 'album' && t - lastTurn > 1200) {
+              // Through the album and back, with its own keys.
+              const album = window.__room.world.album;
+              if (album.spread >= album.spreads - 1) forward = false;
+              if (album.spread <= 0) forward = true;
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: forward ? 'ArrowRight' : 'ArrowLeft' }));
+              lastTurn = t;
             }
             if (t - start < ms) requestAnimationFrame(frame);
             else resolve({ times, tier: window.__room.tier, reel: reelFrames / times.length });
           };
           requestAnimationFrame(frame);
         }),
-      [ms, moving],
+      [ms, mode],
     );
 
   const rows = [];
@@ -103,23 +118,24 @@ try {
         await page.evaluate(() => window.__room.goto('desk'));
         await settle('desk');
       }
-      record(phase, await count(seconds * 1000, phase === 'move'));
+      record(phase, await count(seconds * 1000, phase === 'move' ? 'move' : 'still'));
     }
   } else {
     // The drift starts by itself a moment after the intro; it is measured while nothing touches the page.
     await page.waitForFunction(() => window.__room.drifting && window.__room.moving, null, { timeout: 30_000 });
-    record('drift', await count(seconds * 1000, false));
+    record('drift', await count(seconds * 1000));
+    if (everything) await page.evaluate(() => window.__room.forceEverything(true));
     const stations = await page.evaluate(() => window.__room.stations);
     for (const station of ['idle', ...stations.filter((s) => s !== 'idle')]) {
       await page.evaluate((s) => window.__room.goto(s), station);
       await settle(station);
-      record(station, await count(seconds * 1000, false));
+      record(station, await count(seconds * 1000));
     }
     // A prop under the pointer, entered and left every 0.7 s: lifts and glints the whole time.
     await page.evaluate(() => window.__room.goto('idle'));
     await settle('idle');
     const mango = await page.evaluate(() => window.__room.point('hit_mango'));
-    const hovered = count(seconds * 1000, false);
+    const hovered = count(seconds * 1000);
     const end = Date.now() + seconds * 1000;
     for (let on = true; Date.now() < end; on = !on) {
       await page.mouse.move(on ? mango.x : mango.x - 260, on ? mango.y : mango.y + 200);
@@ -127,7 +143,15 @@ try {
     }
     record('hover', await hovered);
     await page.mouse.move(0, 0);
-    record('move', await count(seconds * 1000, true));
+    record('move', await count(seconds * 1000, 'move'));
+    // The album open in front of the desk framing, turning a page every 1.2 s.
+    await page.evaluate(() => window.__room.goto('idle'));
+    await settle('idle');
+    const album = await page.evaluate(() => window.__room.point('hit_album'));
+    await page.mouse.click(album.x, album.y);
+    await page.waitForFunction(() => window.__room.world.album?.state === 'open', null, { timeout: 30_000 });
+    await settle();
+    record('album', await count(seconds * 1000, 'album'));
   }
 
   console.log(`renderer: ${gpu}`);
@@ -136,7 +160,7 @@ try {
   console.log(
     phone
       ? `iPhone 13 (390x664 @3x), light tier, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps`
-      : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${flag('--reel-always') ? ', reel forced on' : ''}${flag('--no-reel') ? ', reel blocked' : ''}`,
+      : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${everything ? ', everything moving after the drift (fan top speed, steam, projector forced on)' : ''}${flag('--reel-always') ? ', reel forced on' : ''}${flag('--no-reel') ? ', reel blocked' : ''}`,
   );
   console.log('phase      frames  mean   median  p5     tier  reel  pass');
   for (const r of rows) {
