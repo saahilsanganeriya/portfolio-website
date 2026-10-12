@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.astro/
+.vercel/
+.env
+.env.*
+*.blend1
+*.blend@
+blender/.cache/
+test-results/
+playwright-report/
+.DS_Store
