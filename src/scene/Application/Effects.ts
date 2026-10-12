@@ -62,7 +62,6 @@ export class Effects {
   private beam: THREE.Mesh<THREE.CylinderGeometry, THREE.ShaderMaterial> | null = null;
   private motes: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial> | null = null;
   private readonly lampMaterial: THREE.MeshBasicMaterial | null = null;
-  private readonly glowMaterial: THREE.MeshBasicMaterial | null = null;
   private readonly haloMap = haloTexture();
   /** The projector's shutter, felt faintly in the whole frame. */
   flicker = 1;
@@ -84,10 +83,9 @@ export class Effects {
     }
 
     if (nodes.crtGlow) {
-      // Drawn additively without writing depth, so the glow brightens the screen instead of covering the OS.
-      this.glowMaterial = new THREE.MeshBasicMaterial({ color: PROJECTOR.clone().multiplyScalar(0.014), ...ADD_LIGHT });
-      nodes.crtGlow.material = this.glowMaterial;
-      nodes.crtGlow.renderOrder = 2;
+      // The curved glass bulges 8 mm in front of the flat OS hole, so a glow drawn on it shows only inside the bulge,
+      // as a hard-edged patch over the OS. The monitor's flat glass layer carries the CRT's light instead.
+      nodes.crtGlow.visible = false;
       this.addHalo(scene, nodes.monitor.position, 0.7, PROJECTOR, 0.12);
     }
   }
@@ -127,7 +125,6 @@ export class Effects {
     });
 
     if (this.lampMaterial) this.lampMaterial.color.copy(TUNGSTEN).multiplyScalar(0.985 + 0.015 * Math.sin(clock * 2.3));
-    if (this.glowMaterial) this.glowMaterial.color.copy(PROJECTOR).multiplyScalar(0.014 + 0.003 * Math.sin(clock * 0.9));
   }
 
   private addHalo(scene: THREE.Scene, position: THREE.Vector3, sizeMetres: number, color: THREE.Color, opacity: number) {
