@@ -98,6 +98,7 @@ export class Application implements RoomHandle {
       this.interaction.fromMonitor(e),
     );
     this.effects = new Effects(this.nodes, this.scene);
+    this.effects.setTier(this.quality.tier);
     this.audio = new RoomAudio(this.nodes.monitor.position, this.nodes.projector?.lens ?? null, this.nodes.framings.desk.target);
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
       hotspot: (hotspot) => (hotspot.target ? this.open(hotspot.target) : this.enterMonitor()),
@@ -205,7 +206,6 @@ export class Application implements RoomHandle {
     });
     visibility.observe(this.container);
     this.observers.push(resize, visibility);
-    this.effects.setTier(this.quality.tier);
   }
 
   private loop() {

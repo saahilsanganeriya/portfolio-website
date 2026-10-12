@@ -132,6 +132,12 @@ const index = [
     const status = bootEl.querySelector<HTMLElement>('[data-boot-status]')!;
     const progress = bootEl.querySelector<HTMLElement>('[data-boot-progress]')!;
     const bar = bootEl.querySelector<HTMLElement>('[data-boot-bar]')!;
+    // The visitor's own date, as a BIOS shows its clock; the page itself is built ahead of time.
+    const today = bootEl.querySelector<HTMLTimeElement>('[data-boot-today]')!;
+    const now = new Date();
+    today.dateTime = today.textContent = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+      .map((n) => String(n).padStart(2, '0'))
+      .join('-');
     let lastLabel = '';
     return {
       progress(p: number, label: string) {

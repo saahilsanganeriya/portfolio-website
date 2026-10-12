@@ -61,8 +61,7 @@ export class Interaction {
     if (event.type === 'pointer') {
       this.movePointer(event.x, event.y);
       if (!this.overMonitor) this.onMonitorPointer(true);
-    }
-    else if (event.type === 'press') {
+    } else if (event.type === 'press') {
       this.pressedInMonitor = event.down;
       this.handlers.click('mouse');
       if (!event.down && !this.overMonitor) this.handlers.leaveMonitor();

@@ -1,7 +1,6 @@
 ---
 // The computer's power-on self-test, shown while the room loads. START is the click that lets the room make sound.
-// The page script (index.astro) fills the log and reveals START; this component is markup and style only.
-const today = new Date().toISOString().slice(0, 10);
+// The page script (index.astro) fills the log, dates the screen and reveals START; this component is markup and style.
 ---
 
 <div class="boot" data-boot data-room-ui>
@@ -32,7 +31,7 @@ const today = new Date().toISOString().slice(0, 10);
 
     <footer class="boot-foot" aria-hidden="true">
       <p>Press ENTER to start, ESC to skip the room</p>
-      <p><time datetime={today} data-boot-today>{today}</time></p>
+      <p><time data-boot-today></time></p>
     </footer>
   </div>
 </div>
