@@ -33,6 +33,7 @@ export class Interaction {
   private heldKey = '';
   private touch = false;
   private overMonitor = false;
+  private focusInMonitor = false;
   private dwell = 0;
   private readonly abort = new AbortController();
 
@@ -63,11 +64,20 @@ export class Interaction {
     if (!iframe) return;
     iframe.addEventListener('pointerenter', () => !this.overMonitor && this.onMonitorPointer(true), { signal });
     iframe.addEventListener('pointerleave', () => this.overMonitor && this.onMonitorPointer(false), { signal });
-    // Tabbing into the OS takes the camera to it; tabbing out goes back to the desk. Tab from the page into the frame
-    // focuses only the frame's window (Chromium sends the element no focus event), so the page losing focus to it counts.
-    iframe.addEventListener('focus', () => handlers.enterMonitor(), { signal });
-    window.addEventListener('blur', () => setTimeout(() => document.activeElement === iframe && handlers.enterMonitor()), { signal });
-    iframe.addEventListener('blur', () => !this.overMonitor && handlers.leaveMonitor(), { signal });
+    // Tabbing into the OS takes the camera to it; tabbing out goes back to the desk. A Tab between the page and the
+    // frame moves focus without focus or blur events on the frame element (Chromium), so the page window's own focus
+    // and blur count too, read against document.activeElement.
+    const onFocusMove = () => {
+      const inMonitor = document.activeElement === iframe;
+      if (inMonitor === this.focusInMonitor) return;
+      this.focusInMonitor = inMonitor;
+      if (inMonitor) handlers.enterMonitor();
+      else if (!this.overMonitor) handlers.leaveMonitor();
+    };
+    for (const type of ['focus', 'blur']) {
+      iframe.addEventListener(type, onFocusMove, { signal });
+      window.addEventListener(type, onFocusMove, { signal });
+    }
   }
 
   /** Events the OS forwards from inside the iframe. */

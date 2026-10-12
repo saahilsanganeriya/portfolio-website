@@ -185,10 +185,11 @@ test('"Open SaahilOS" is the first tab stop and opens it on the monitor; motion 
 });
 
 /**
- * Catches the camera staying at the desk while the keyboard is back inside SaahilOS: Tab from the page into the
- * monitor focuses only the frame's window in Chromium, so the frame element hears no focus event.
+ * Catches the camera staying at the desk while the keyboard is back inside SaahilOS, or staying at the monitor once
+ * the keyboard has left it again: a Tab between the page and the frame moves focus in Chromium without focus or blur
+ * events on the frame element.
  */
-test('tabbing out of SaahilOS backs out to the desk, and tabbing back in returns to the monitor', async ({ page }) => {
+test('tabbing out of SaahilOS backs out to the desk, and tabbing back in and out again follows', async ({ page }) => {
   await page.goto('/');
   await settled(page, 'idle');
   await page.keyboard.press('Tab');
@@ -204,6 +205,8 @@ test('tabbing out of SaahilOS backs out to the desk, and tabbing back in returns
   await tabUntil(true);
   await expect.poll(() => page.evaluate(() => window.__room!.destination)).toBe('monitor');
   await settled(page, 'monitor', 15_000);
+  await tabUntil(false);
+  await expect.poll(() => page.evaluate(() => window.__room!.destination)).toBe('desk');
 });
 
 /** Catches WCAG failures on the boot screen and the room's own controls (the OS's windows are checked with it open). */
