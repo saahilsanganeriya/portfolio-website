@@ -15,11 +15,13 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Poster frame (`poster_frame`) | prop `poster_frame` (40 × 60 cm print, walnut moulding, glass) | blender/scripts/props_poster_frame.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
 | Planter Pot Clay (`planter_pot_clay`) | pot of prop `mango_plant` | https://polyhaven.com/a/planter_pot_clay | Amal Kumar (Poly Haven) | CC0 1.0 | scaled to 72 % (a 19 cm pot), origin moved to the base |
 | Mango seedling (`mango_plant_leaves`) | prop `mango_plant` (stone, stem, leaves, soil) | blender/scripts/props_mango_plant.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
-| Four-bay NAS (`nas_4bay`) | prop `nas_4bay` with `nas_led_0..3` | blender/scripts/props_nas_4bay.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
+| Four-bay NAS (`nas_4bay`) | prop `nas_4bay` with `nas_led_0..3` | blender/scripts/props_nas_4bay.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | unbranded; label text set in Blender's built-in font, Inter (SIL OFL 1.1) |
 | Book stack (`books_stack`) | prop `books_stack` | blender/scripts/props_books_stack.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
 | Film canisters (`film_canister_a/_b/_c`) | prop `film_canister` | blender/scripts/props_film_canister.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
-| Silver rangefinder-style camera (`fujifilm_x100`) | prop `fujifilm_x100` | blender/scripts/props_fujifilm_x100.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font (not the maker's logo) |
-| Black SLR-style digital camera (`fujifilm_xt`) | prop `fujifilm_xt` | blender/scripts/props_fujifilm_xt.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font (not the maker's logo) |
+| Silver rangefinder-style camera (`fujifilm_x100`) | prop `fujifilm_x100` | blender/scripts/props_fujifilm_x100.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font, Inter (SIL OFL 1.1), not the maker's logo |
+| Black SLR-style digital camera (`fujifilm_xt`) | prop `fujifilm_xt` | blender/scripts/props_fujifilm_xt.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font, Inter (SIL OFL 1.1), not the maker's logo |
+| 1970s film SLR (`fujica_st`) | prop `fujica_st` | blender/scripts/props_fujica_st.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font, Inter (SIL OFL 1.1), not the maker's logo |
+| Super 8 cine camera (`super8_camera`) | prop `super8_camera` | blender/scripts/props_super8_camera.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | unbranded; "SUPER 8" set in Blender's built-in font, Inter (SIL OFL 1.1) |
 
 ## Textures and HDRIs
 
@@ -33,6 +35,7 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Fabric 036 | book cloth of `books_stack` | https://ambientcg.com/view?id=Fabric036 | ambientCG (Lennart Demes) | CC0 1.0 | 1K colour and height maps, tinted per book |
 | Leather 026 | camera leatherette | https://ambientcg.com/view?id=Leather026 | ambientCG (Lennart Demes) | CC0 1.0 | 1K height and roughness maps, box-projected |
 | Metal 009 | satin aluminium of the camera plates | https://ambientcg.com/view?id=Metal009 | ambientCG (Lennart Demes) | CC0 1.0 | 1K roughness map, box-projected |
+| Studio Small 09 (HDRI) | lighting of the prop review renders in `blender/renders/props/` only; not shipped, not in the bake | https://polyhaven.com/a/studio_small_09 | Sergej Majboroda (Poly Haven) | CC0 1.0 | 1K, rotated |
 
 ## Images
 

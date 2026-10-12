@@ -23,8 +23,8 @@ def camera_materials():
             tile=0.05, micro_bump=(5000, 0.04), edge_wear=0.4, edge_color=(0.93, 0.92, 0.9), edge_roughness=0.16,
             edge_width=0.0009, smudges=0.12, scratches=0.1, dust=0.3, grime=0.25, color_var=0.02),
         "chrome": pl.surface(
-            "chrome", (0.86, 0.86, 0.85), 0.11, metallic=1.0, edge_wear=0.25, edge_color=(0.95, 0.95, 0.94),
-            edge_roughness=0.06, edge_width=0.0008, smudges=0.3, scratches=0.28, dust=0.3, grime=0.5, color_var=0.02),
+            "chrome", (0.86, 0.86, 0.85), 0.13, metallic=1.0, edge_wear=0.25, edge_color=(0.95, 0.95, 0.94),
+            edge_roughness=0.06, edge_width=0.0008, smudges=0.06, scratches=0.07, dust=0.2, grime=0.25, color_var=0.0),
         "black_paint": pl.surface(
             "black_paint", (0.018, 0.018, 0.019), 0.40, micro_bump=(6000, 0.05), edge_wear=0.85,
             edge_color=(0.55, 0.54, 0.52), edge_metallic=1.0, edge_roughness=0.3, edge_width=0.0009, smudges=0.28,

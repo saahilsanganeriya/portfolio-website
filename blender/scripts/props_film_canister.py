@@ -69,8 +69,9 @@ def canister_c(col, mats):
              (r - 0.0005, h - 0.006), (0.0, h - 0.006)], segments=56, mat=mats["tin"])
     rl = r + 0.0009
     prof = [(rl - 0.0009, h - 0.0074), (rl, h - 0.0068), (rl, h - 0.0006), (rl - 0.0008, h)]
-    for rr, dz in ((0.060, 0.0), (0.057, -0.0009), (0.054, 0.0), (0.040, 0.0), (0.037, -0.0008), (0.034, 0.0),
-                   (0.012, 0.0), (0.010, 0.0007), (0.0, 0.0007)):
+    for rr, dz in ((0.061, 0.0), (0.0595, -0.0006), (0.0565, -0.0014), (0.0535, -0.0006), (0.052, 0.0),
+                   (0.041, 0.0), (0.0395, -0.0006), (0.037, -0.0012), (0.0345, -0.0006), (0.033, 0.0),
+                   (0.013, 0.0), (0.0115, 0.0005), (0.009, 0.0010), (0.0, 0.0010)):
         prof.append((rr, h + dz))
     b.lathe(prof, segments=56, mat=mats["tin"], cap_start=False)
     b.box((0.050, 0.030, 0.00025), loc=(0.006, -0.004, h + 0.00045), rot=(0, 0, -8), mat=mats["label"])
@@ -91,7 +92,7 @@ def main():
         "cassette_label": cassette_label(),
         "velvet": pl.surface("light_trap_velvet", (0.01, 0.009, 0.009), 0.95, sheen=0.6, color_var=0.0),
         "film_base": pl.surface("film_leader", (0.10, 0.045, 0.02), 0.18, coat=0.4, color_var=0.05, smudges=0.3),
-        "tin": pl.surface("film_tin", (0.50, 0.50, 0.48), 0.33, metallic=1.0, scratches=0.35, smudges=0.15,
+        "tin": pl.surface("film_tin", (0.40, 0.395, 0.375), 0.42, metallic=1.0, scratches=0.3, smudges=0.15,
                           edge_wear=0.6, edge_color=(0.24, 0.12, 0.06), edge_metallic=0.0, edge_roughness=0.8,
                           edge_width=0.0007, dust=0.5, grime=0.5),
         "label": pl.surface("tin_label", (0.58, 0.52, 0.40), 0.8, edge_wear=0.7, edge_color=(0.42, 0.35, 0.25),

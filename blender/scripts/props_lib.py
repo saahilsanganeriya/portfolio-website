@@ -397,7 +397,7 @@ class Builder:
         return self._wrap(before, xform(loc, rot), mat)
 
     def text(self, body, size, loc=(0, 0, 0), rot=(0, 0, 0), mat=None, align="CENTER", resolution=3,
-             spacing=1.0, extrude=0.0, font_weight=None):
+             spacing=1.0, extrude=0.0, font_weight=None, matrix=None):
         """Flat (or slightly extruded) lettering in the XY plane, facing +Z before `rot`."""
         cu = bpy.data.curves.new("tmp_text", "FONT")
         cu.body = body
@@ -421,7 +421,7 @@ class Builder:
         faces = [f for f in self.bm.faces if f not in before]
         bmesh.ops.triangulate(self.bm, faces=[f for f in faces if len(f.verts) > 4], quad_method="BEAUTY",
                               ngon_method="BEAUTY")
-        return self._wrap(before, xform(loc, rot), mat)
+        return self._wrap(before, matrix if matrix is not None else xform(loc, rot), mat)
 
     def append_mesh(self, me, matrix=None, mat=None):
         before = set(self.bm.faces)
@@ -498,6 +498,28 @@ def unwrap_object(ob, seam_angle=48.0, margin=0.004, method="ANGLE_BASED"):
     bpy.ops.uv.average_islands_scale()
     bpy.ops.uv.pack_islands(margin=margin, rotate=True)
     bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def pack_uv(ob, margin=0.004):
+    """Average island scale and pack an object's existing UVMap islands into 0-1 without rotating them."""
+    ob.data.uv_layers.active = ob.data.uv_layers["UVMap"]
+    _activate(ob)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.select_all(action="SELECT")
+    bpy.ops.uv.average_islands_scale()
+    bpy.ops.uv.pack_islands(margin=margin, rotate=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def planar_uv(faces, uv_layer):
+    """Project each face onto its dominant axis plane (metres); every face becomes its own island."""
+    for f in faces:
+        n = f.normal
+        axis = max(range(3), key=lambda i: abs(n[i]))
+        a, b = [(1, 2), (0, 2), (0, 1)][axis]
+        for loop in f.loops:
+            loop[uv_layer].uv = (loop.vert.co[a], loop.vert.co[b])
 
 
 def uv_density(ob):

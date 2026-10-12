@@ -37,6 +37,7 @@ def moulding(builder, mat, grain):
     outer_w, outer_h = sight_w + 2 * FACE_W, sight_h + 2 * FACE_W
     bm = builder.bm
     uv_grain = bm.loops.layers.uv["grain"]
+    uv_main = bm.loops.layers.uv["UVMap"]
     # side: (axis along the piece, inward direction, outer-edge midpoint, outer length, grain offset)
     sides = [
         (Vector((1, 0, 0)), Vector((0, 0, 1)), Vector((0, 0, 0)), outer_w, 0.00),
@@ -64,6 +65,7 @@ def moulding(builder, mat, grain):
                 pv = perim[n] if (i == n - 1 and idx == 0) else perim[idx]
                 s = (loop.vert.co - mid).dot(axis)
                 loop[uv_grain].uv = (s / GRAIN_TILE + offset * 3.0, pv / GRAIN_TILE * 6.0 + offset)
+                loop[uv_main].uv = (s, pv)
     faces = [f for f in bm.faces if f not in before]
     bmesh.ops.recalc_face_normals(bm, faces=faces)
     mi = builder.slot(mat)
@@ -89,10 +91,13 @@ def main():
     moulding(frame, walnut, "grain")
     rebate_back = DEPTH - 0.0110
     art_v = rebate_back - 0.0022
-    frame.box((ART_W - 0.0006, 0.003, ART_H - 0.0006), loc=(0, -(art_v - 0.0018), (ART_H + 2 * (FACE_W - LIP)) / 2),
-              mat=backing_mat, bevel=0.0004, bevel_seg=1)
-    ob = frame.finish(col, smooth_angle=34, seam_angle=50)
-    ob.data.uv_layers.active = ob.data.uv_layers["UVMap"]
+    backing = frame.box((ART_W - 0.0006, 0.003, ART_H - 0.0006), loc=(0, -(art_v - 0.0018), (ART_H + 2 * (FACE_W - LIP)) / 2),
+                        mat=backing_mat, bevel=0.0004, bevel_seg=1)
+    for f in backing:
+        f.normal_update()
+    pl.planar_uv(backing, frame.bm.loops.layers.uv["UVMap"])
+    ob = frame.finish(col, smooth_angle=34, keep_uv=True)
+    pl.pack_uv(ob)
 
     outer_h = ART_H - 2 * LIP + 2 * FACE_W
     centre_z = outer_h / 2
