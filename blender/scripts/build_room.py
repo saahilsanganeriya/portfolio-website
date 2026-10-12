@@ -1282,7 +1282,7 @@ TEXEL_WEIGHTS = {
     "env_sky": 2.5, "env_window_frame": 1.3,
     "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_crt": 1.6, "crt_glow": 2.0, "desk_keyboard": 1.6,
     "desk_computer": 1.3, "desk_lamp_shade": 1.3,
-    "props_projector_screen": 0.6, "props_projector_screen_surface": 0.35, "props_projection": 0.15,
+    "props_projector_screen": 0.6, "props_projector_screen_surface": 0.8, "props_projection": 0.3,
     "props_mango_plant_leaves": 1.4,
 }
 SUPPORT_Z = (0.0, 0.732, 0.55, 0.92, 1.6475, 2.0075)

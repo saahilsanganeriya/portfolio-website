@@ -26,6 +26,10 @@ ATLAS_SIZES = {"env": 4096, "desk": 4096, "props": 2048, "posters": 2048}
 # Island margin in pixels at the final size: the plan's floor is 8 px; the props atlas needs the floor because its
 # scanned and modelled props bring about 3,700 islands into 2048 px.
 MARGIN_PX = {"env": 16, "desk": 16, "props": 8, "posters": 16}
+# How far the bake extends each island into the empty atlas around it, in pixels at the final size. It must fill
+# the gaps between islands: the site samples small mip levels from afar, and black gaps there bled into the
+# projector screen and a poster.
+FILL_PX = 64
 MAX_THREADS = 24
 TARGET_NODE = "bake_target"
 
@@ -242,7 +246,7 @@ def bake_atlas(atlas: str, size: int, samples: int):
     scene.cycles.samples = samples
     scene.cycles.use_denoising = False
     bake = scene.render.bake
-    bake.margin, bake.margin_type = max(2, MARGIN_PX[atlas] * size // ATLAS_SIZES[atlas]), "EXTEND"
+    bake.margin, bake.margin_type = max(4, FILL_PX * size // ATLAS_SIZES[atlas]), "EXTEND"
     bake.use_clear = True
     bpy.ops.object.bake(type="COMBINED", pass_filter={"EMIT", "DIRECT", "INDIRECT", "DIFFUSE", "GLOSSY"},
                         margin=bake.margin, margin_type="EXTEND", use_clear=True, target="IMAGE_TEXTURES",
