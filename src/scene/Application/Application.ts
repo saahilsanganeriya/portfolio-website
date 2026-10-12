@@ -1,15 +1,15 @@
 import * as THREE from 'three';
+import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
+import type { Hotspot } from '../hotspots';
 import { RoomAudio, type ClickKind } from './Audio';
-import { RoomCamera, type CameraPhase } from './Camera';
 import { Effects } from './Effects';
 import { Interaction } from './Interaction';
 import { MonitorScreen } from './MonitorScreen';
 import { DPR_CAP, Quality, type QualityTier } from './Quality';
 import { loadRoom, ROOM_URL, type ProgressReporter } from './Resources';
 import { Reel, type ReelFilm, type ReelState } from './Reel';
-import { readRoom, type RoomNodes } from './RoomModel';
+import { readRoom, type RoomNodes, type StationName } from './RoomModel';
 import { RoomRenderer } from './Renderer';
-import { easeInOutQuint, easeIntoMonitor, easeOutExpo, type Easing } from './tween';
 
 export interface RoomOptions {
   /** The OS page shown on the monitor, e.g. `/os?embed=1`. */
@@ -33,6 +33,8 @@ export interface RoomHandle {
   start(options?: StartOptions): void;
   /** Glides to the monitor and opens that SaahilOS window; `fast` shortens the glide. */
   openWindow(target: string, options?: { fast?: boolean }): void;
+  /** Flies the camera to a framing (idle, window, desk, monitor, projector, shelf, photos); false if the room lacks it. */
+  fly(station: StationName): boolean;
   /** Lands the intro glide now; later glides are left alone. */
   skipIntro(): void;
   /** Starts the room's sound. Browsers only allow it inside a user gesture (a click, tap or key). */
@@ -44,16 +46,18 @@ export interface RoomHandle {
 
 // The OS iframe must not hold the room back for ever; past this it keeps loading behind the boot screen.
 const OS_LOAD_TIMEOUT_MS = 8000;
-// A link to a window skips the slow intro: a short glide from the boot framing straight into the monitor.
-const FAST_GLIDE_MS = 1200;
 
 /** Debug and measurement hook: tests click real props by their projected screen position. */
 export interface RoomProbe {
   readonly phase: CameraPhase;
+  /** The station the camera is flying to, or `phase` when it rests. */
+  readonly destination: CameraPhase;
   readonly moving: boolean;
   readonly tier: number;
+  /** How far the free look has turned the view from its framing (radians). */
+  readonly look: { yaw: number; pitch: number };
   point(name: string): { x: number; y: number } | null;
-  goto(phase: 'idle' | 'desk' | 'monitor'): void;
+  goto(station: StationName): void;
   readonly reel: { state: ReelState; time: number; inView: boolean } | null;
   /** Plays the reel whenever the room runs, in view or not (worst-case frame rate). */
   forceReel(on: boolean): void;
@@ -136,7 +140,7 @@ export class Application implements RoomHandle {
       this.reel = new Reel(this.nodes.projection, this.nodes.screenSurface, this.scene, this.options.films);
     }
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
-      hotspot: (hotspot) => (hotspot.target ? this.openWindow(hotspot.target) : this.enterMonitor()),
+      hotspot: (hotspot) => this.onHotspot(hotspot),
       toggle: () => this.toggle(),
       enterMonitor: () => this.enterMonitor(),
       leaveMonitor: () => this.leaveMonitor(),
@@ -161,19 +165,30 @@ export class Application implements RoomHandle {
   start({ open, fast = false }: StartOptions = {}) {
     if (this.started) return;
     this.started = true;
-    this.intro = true;
     this.monitor.iframe.removeAttribute('tabindex');
     void this.reel?.load();
     const endIntro = () => (this.intro = false);
-    if (open !== undefined) {
-      this.glide('monitor', fast ? 0 : FAST_GLIDE_MS, easeIntoMonitor, endIntro);
-      if (open) this.monitor.open(open);
-    } else this.glide('idle', fast ? 0 : 2500, easeOutExpo, endIntro);
+    if (open !== undefined) this.toMonitor('fast', open || null, endIntro, fast);
+    else
+      this.glide(
+        'idle',
+        'intro',
+        endIntro,
+        fast,
+      );
+    // The intro runs as long as its flight does; a cut has already landed it.
+    this.intro = this.camera.moving;
   }
 
   openWindow(target: string, { fast = false }: { fast?: boolean } = {}) {
-    if (this.started) this.glide('monitor', fast ? FAST_GLIDE_MS : 2000, easeIntoMonitor);
-    this.monitor.open(target);
+    if (this.started) this.toMonitor(fast ? 'fast' : 'monitor', target);
+    else this.monitor.open(target);
+  }
+
+  fly(station: StationName) {
+    if (!this.camera.has(station)) return false;
+    this.flyTo(station, 'step');
+    return true;
   }
 
   skipIntro() {
@@ -207,22 +222,40 @@ export class Application implements RoomHandle {
     delete window.__room;
   }
 
+  private onHotspot(hotspot: Hotspot) {
+    if (hotspot.target) this.openWindow(hotspot.target);
+    else this.enterMonitor();
+  }
+
   private enterMonitor() {
-    if (this.started) this.glide('monitor', 2000, easeIntoMonitor);
+    if (this.started) this.toMonitor('monitor', null);
   }
 
   private leaveMonitor() {
-    if (this.camera.destination === 'monitor') this.glide('desk', 1000, easeInOutQuint);
+    if (this.camera.destination === 'monitor') this.flyTo('desk', 'step');
   }
 
+  /** A click on empty space: in to the desk from the wide view, back out to the wide view from anywhere else. */
   private toggle() {
     if (!this.started) return;
-    const next = this.camera.destination === 'desk' ? 'idle' : 'desk';
-    this.glide(next, 1000, easeInOutQuint);
+    this.flyTo(this.camera.destination === 'idle' ? 'desk' : 'idle', 'step');
   }
 
-  private glide(phase: CameraPhase, ms: number, easing: Easing, onDone?: () => void) {
-    this.camera.goTo(phase, this.options.reducedMotion ? 0 : ms, easing, onDone);
+  private flyTo(station: StationName, motion: Motion, onDone?: () => void) {
+    if (station === 'monitor') this.toMonitor(motion, null, onDone);
+    else this.glide(station, motion, onDone);
+  }
+
+  /** Into the glass, opening a SaahilOS window when one is asked for. */
+  private toMonitor(motion: Motion, target: string | null, onDone?: () => void, cut = false) {
+    this.glide('monitor', motion === 'step' || motion === 'drift' ? 'monitor' : motion, onDone, cut);
+    if (target) this.monitor.open(target);
+  }
+
+  private glide(station: StationName, motion: Motion, onDone?: () => void, cut = false) {
+    this.intro = false;
+    this.dirty = true;
+    this.camera.fly(station, motion, onDone, cut || this.options.reducedMotion);
   }
 
   private aspect() {
@@ -252,7 +285,7 @@ export class Application implements RoomHandle {
   private observe() {
     const resize = new ResizeObserver(() => this.resize());
     resize.observe(this.container);
-    // Off screen (scrolled down to the text index) the room stops drawing.
+    // Hidden (the drawn monitor took over, or the page is off screen) the room stops drawing.
     const visibility = new IntersectionObserver(([entry]) => {
       this.onScreen = entry.isIntersecting;
       if (this.onScreen) this.loop();
@@ -277,7 +310,7 @@ export class Application implements RoomHandle {
     this.last = now;
     if (!this.paused) this.clock += dt;
 
-    this.camera.update(now, dt, this.clock, this.interaction.pointer);
+    this.camera.update(dt, this.clock, this.interaction.pointer);
     this.interaction.update();
     if (!this.paused) this.effects.update(this.clock, this.renderer.gl.getPixelRatio());
     this.monitor.update(this.clock, this.camera.instance);
@@ -306,11 +339,17 @@ export class Application implements RoomHandle {
       get phase() {
         return app.camera.phase;
       },
+      get destination() {
+        return app.camera.destination;
+      },
       get moving() {
         return app.camera.moving;
       },
       get tier() {
         return app.quality.index;
+      },
+      get look() {
+        return app.camera.lookAngles;
       },
       point(name) {
         const rect = app.container.getBoundingClientRect();
@@ -325,9 +364,8 @@ export class Application implements RoomHandle {
         if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1 || p.z > 1) return null;
         return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
       },
-      goto(phase) {
-        if (phase === 'monitor') app.enterMonitor();
-        else app.glide(phase, 1000, easeInOutQuint);
+      goto(station) {
+        app.fly(station);
       },
       get reel() {
         const reel = app.reel;

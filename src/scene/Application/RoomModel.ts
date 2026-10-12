@@ -4,9 +4,12 @@ import * as THREE from 'three';
 // so a 0.34 m screen at metre scale would ask the browser to magnify a sub-pixel element thousands of times.
 export const WORLD_SCALE = 1000;
 
-export type FramingName = 'loading' | 'idle' | 'desk' | 'monitor' | 'projector' | 'shelf';
 const REQUIRED_FRAMINGS = ['loading', 'idle', 'desk', 'monitor'] as const;
-const OPTIONAL_FRAMINGS = ['projector', 'shelf'] as const;
+// cam_window and cam_photos come with the second room (PLAN 11.1, 12.1); the camera skips any the room lacks.
+const OPTIONAL_FRAMINGS = ['window', 'projector', 'shelf', 'photos'] as const;
+export type FramingName = (typeof REQUIRED_FRAMINGS)[number] | (typeof OPTIONAL_FRAMINGS)[number];
+/** A framing the camera can rest at (every framing but the boot one). */
+export type StationName = Exclude<FramingName, 'loading'>;
 
 export interface Framing {
   position: THREE.Vector3;
