@@ -1,0 +1,121 @@
+---
+// The room's monitor drawn in 2D, for visitors who do not get the 3D room (no WebGL, phones, Save-Data, a failed
+// load): SaahilOS still runs on the screen of the cream CRT on the walnut desk. The page script puts the OS's iframe
+// into the glass only in this mode; nothing is drawn over the screen, so the OS reads as it does on the 3D monitor.
+---
+
+<div class="monitor-frame" data-monitor-frame>
+  <div class="monitor-case">
+    <div class="monitor-glass" data-monitor-glass>
+      <noscript><p class="monitor-off">SaahilOS runs on JavaScript, which this browser has turned off.</p></noscript>
+    </div>
+    <div class="monitor-chin" aria-hidden="true">
+      <span class="monitor-badge">Saahil</span>
+      <span class="monitor-led"></span>
+    </div>
+  </div>
+  <div class="monitor-desk" aria-hidden="true"></div>
+</div>
+
+<style>
+  .monitor-frame {
+    --plastic: #d8ccb6;
+    --plastic-lit: #ebe2d2;
+    --plastic-shade: #a99c86;
+    --glass: #0c0b0a;
+    --margin: clamp(0.5rem, 3vmin, 2.5rem);
+    --desk: clamp(0.75rem, 5vh, 3rem);
+
+    position: absolute;
+    inset: 0;
+    background: var(--ink);
+  }
+
+  /* A moulded case: flat cream plastic, lit along its top-left edge and shaded along its bottom-right. */
+  .monitor-case {
+    position: absolute;
+    inset: var(--margin) var(--margin) var(--desk);
+    display: flex;
+    flex-direction: column;
+    padding: clamp(0.5rem, 2.4vmin, 1.75rem) clamp(0.5rem, 2.4vmin, 1.75rem) 0;
+    border-radius: clamp(0.75rem, 2.4vmin, 1.5rem) clamp(0.75rem, 2.4vmin, 1.5rem) 0.35rem 0.35rem;
+    background: var(--plastic);
+    box-shadow:
+      inset 2px 2px 0 var(--plastic-lit),
+      inset -3px -3px 0 var(--plastic-shade),
+      0 1.5rem 3rem rgb(0 0 0 / 0.45);
+  }
+
+  /* The glass sits in a recess: a dark lip, then the tube's rounded corners. */
+  .monitor-glass {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 2.5% / 3.5%;
+    background: var(--glass);
+    box-shadow:
+      0 0 0 clamp(2px, 0.5vmin, 5px) #2a241d,
+      0 -2px 0 clamp(2px, 0.5vmin, 5px) var(--plastic-shade);
+  }
+
+  .monitor-glass:focus-within {
+    outline: 2px solid var(--projector);
+    outline-offset: clamp(4px, 0.9vmin, 8px);
+  }
+
+  .monitor-glass :global(iframe) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--glass);
+  }
+
+  .monitor-off {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: var(--space-4);
+    color: var(--paper);
+    font-family: var(--font-sans);
+    font-size: var(--size-ui);
+    text-align: center;
+  }
+
+  .monitor-chin {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: clamp(1.75rem, 6vmin, 3.5rem);
+    padding-inline: clamp(0.25rem, 1.5vmin, 1rem);
+  }
+
+  /* The maker's name, moulded into the plastic rather than printed on it. */
+  .monitor-badge {
+    color: var(--plastic-shade);
+    font-family: var(--font-serif);
+    font-size: clamp(0.8rem, 2.2vmin, 1.15rem);
+    font-style: italic;
+    letter-spacing: 0.04em;
+    text-shadow: 0 1px 0 var(--plastic-lit);
+  }
+
+  .monitor-led {
+    width: clamp(5px, 0.9vmin, 8px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--projector);
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25);
+  }
+
+  /* The desk the monitor stands on, running out of the frame on both sides. */
+  .monitor-desk {
+    position: absolute;
+    inset: auto 0 0;
+    height: var(--desk);
+    background: var(--walnut);
+    box-shadow: inset 0 1px 0 #4d3a2b;
+  }
+</style>
