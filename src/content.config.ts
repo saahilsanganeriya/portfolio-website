@@ -82,4 +82,22 @@ const story = defineCollection({
     }),
 });
 
-export const collections = { projects, blog, pages, story };
+// The owner's own photography, one YAML file per photo, written by `npm run photos:ingest`. Never photos of him.
+const photography = defineCollection({
+  loader: glob({ base: './src/content/photography', pattern: '[^_]*.{yaml,yml}' }),
+  schema: ({ image }) =>
+    z.object({
+      file: image(),
+      title: z.string(),
+      year: z.number().int(),
+      place: z.string().optional(),
+      series: z.string(),
+      /** One line in his voice; it also serves as the photo's alt text. */
+      caption: z.string().max(140),
+      featured: z.boolean(),
+      onWall: z.boolean(),
+      order: z.number().int().optional(),
+    }),
+});
+
+export const collections = { projects, blog, pages, story, photography };
