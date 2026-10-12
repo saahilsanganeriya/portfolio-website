@@ -24,6 +24,7 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | La La Land poster (a street lamp on the hill at magic hour) | framed poster on the room wall (baked texture); typographic design, no studio art | blender/posters/la-la-land.svg, drawn by scripts/posters/ | Saahil Sanganeriya (made for this site) | own work | none |
 | Chungking Express poster (a tin of pineapple stamped 1 May) | framed poster on the room wall (baked texture); typographic design, no studio art | blender/posters/chungking-express.svg, drawn by scripts/posters/ | Saahil Sanganeriya (made for this site) | own work | none |
 | Marty Supreme poster (a pimpled hardbat, the ball and the net) | framed poster on the room wall (baked texture); typographic design, no studio art | blender/posters/marty-supreme.svg, drawn by scripts/posters/ | Saahil Sanganeriya (made for this site) | own work | none |
+| SaahilOS pixel icons (14 icons on 16 x 16 and 8 x 7 grids, in src/os/assets/icons.ts) | SaahilOS desktop, Start menu, taskbar and window controls | none (drawn in code) | Saahil Sanganeriya (made for this site) | own work | none |
 
 ## Fonts
 
@@ -35,6 +36,7 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | League Gothic | titles on the four room posters | https://github.com/theleagueof/league-gothic | The League Gothic Project Authors (The League of Moveable Type) | SIL OFL 1.1 | outlined to SVG paths in the poster files (@fontsource-variable/league-gothic 5.3.0, default width) |
 | Newsreader (italic and roman) | credit lines on the four room posters | https://github.com/productiontype/Newsreader | The Newsreader Project Authors (Production Type) | SIL OFL 1.1 | outlined to SVG paths in the poster files (@fontsource-variable/newsreader 5.3.0) |
 | IBM Plex Mono SemiBold | the expiry stamp on the Chungking Express poster | https://github.com/IBM/plex | IBM Corp. | SIL OFL 1.1 | outlined to SVG paths in the poster file (@fontsource/ibm-plex-mono 5.3.0) |
+| Pixel Operator (Regular, Bold) | SaahilOS window chrome, icons and menus | https://www.dafont.com/pixel-operator.font | Jayvee Enaguas (HarvettFox96) | CC0 1.0 | subset to Latin and Latin-1, converted to WOFF2 (version 2018.10.04) |
 
 ## Audio
 
