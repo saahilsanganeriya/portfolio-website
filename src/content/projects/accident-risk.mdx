@@ -1,33 +1,51 @@
 ---
 title: "Car accident risk in Maryland"
-summary: "A course project predicting crash risk from 155,108 Maryland crash records, and why its headline 98% was the wrong number."
+summary: "A course project predicting crash risk from Maryland crash reports, and why my model's headline 98% was the wrong number."
 year: 2023
 status: "archived"
-role: "Team member: data cleaning and the problem definition"
-team: "team of 5; I cleaned the data for all three models and wrote the proposal's introduction and problem definition"
+role: "Team member: the random negatives, the random forest and data cleaning"
+team: "team of 5; I built the random negatives with a teammate, trained the random forest and took the data-cleaning tasks"
 stack: ["Python", "scikit-learn", "XGBoost", "TensorFlow", "pandas"]
 featured: false
 links:
   repo: "https://github.com/saahilsanganeriya/Accident-Risk-Assessor"
 ---
 
-Crash reports only record crashes. To train a model that tells risky moments from safe ones you also need
-safe examples, and the data has none. Everything after that depends on how you invent them.
+The random forest I trained scored 98.2%. It had learned to recognise our own made-up data, not crashes.
 
-We used 155,108 crash records from Montgomery County, Maryland, and dropped every field known only after a
-crash, such as severity and fault. Then we built two sets of made-up non-crash examples. The random set
-took a real crash and changed its road segment, hour or day, at three non-crashes for every crash. The
-hand-built set drew each feature from realistic distributions instead.
+For a machine-learning course in spring 2023, five of us tried to predict whether a crash happens, given a place, a time, and the road, weather, driver and vehicle. We had the public crash reports of Montgomery County, Maryland, 155,707 of them after cleaning. Crash reports only record crashes. To tell a risky moment from a safe one, a model also needs safe moments, and the data has none. Everything after that depends on how you invent them.
 
-A random forest scored 98% accuracy with the hand-built negatives and 67.7% with the random ones. The
-67.7% is the honest number, and it is worse than it looks. With three non-crashes for every crash, a model
-that always answers "no crash" scores 75%. Ours caught 2% of the real crashes. The 98% meant the model had
-learned to spot our generator, not crashes.
+## Two ways to invent a non-crash
 
-My part was cleaning the data for all three models, and the introduction and problem definition in our
-proposal.
+We dropped every field known only after a crash, such as severity and fault. Then we made two sets of non-crashes. I built the random set with a teammate, and another teammate built the hand-built set.
+
+<figure class="os-figure">
+
+```text
+ random negatives              hand-built negatives
+ ----------------              --------------------
+ take a real crash record      draw every feature from
+ swap its place, time of day   its own distribution
+ or date for another crash's   (a few linked pairs,
+ 3 for every crash             such as make and model)
+          |                              |
+          v                              v
+ still looks like a            81.5% land outside the
+ real record                   box that holds 96.2%
+                               of real crashes
+```
+
+<figcaption>How the two sets of non-crash examples were made, and why the hand-built ones were easy to spot: most of them fall outside the area where real crashes happen.</figcaption>
+</figure>
+
+## What the two numbers meant
+
+The same random forest scored 98.2% with the hand-built negatives and 67.7% with the random ones. Location alone gives most hand-built rows away, so the 98.2% measured how well the model spots our generator.
+
+The 67.7% is the honest number, and it is worse than it looks. With three non-crashes for every crash, a model that always answers “no crash” scores 75.0%. Mine found 651 of the 31,141 real crashes in the test set, 2%. XGBoost on all features found the most, 17%, at 71.6% accuracy. No model in the project beat the always-“no crash” answer on random negatives.
+
+The random set gives up that easy win. Its non-crashes are real records with one detail swapped, so they sit where real crashes sit: 3.8% of each fall outside the box. That is the point of it, and it left us nothing to celebrate.
 
 ## What I would change
 
-I would start from how much traffic each road carries at each hour. A busy road at rush hour has more
-crashes because it has more cars, and a model that cannot tell those apart is measuring traffic, not risk.
+I would start from how much traffic each road carries at each hour. A busy road at rush hour has more crashes because it has more cars, and a model that cannot tell those apart is measuring traffic, not risk. I would also score every model against the always-“no crash” answer from day one, so a number like 98% has to explain itself before anyone puts it in a headline.
