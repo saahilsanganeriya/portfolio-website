@@ -3,13 +3,15 @@ import { RoomAudio, type AudioHandle, type OfflineOptions } from '../audio/RoomA
 import { Navigation } from '../Camera/Navigation';
 import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
 import type { Hotspot } from '../hotspots';
+import type { ProgramState, ReelFilm } from '../World/Projector';
+import { deferWindowPictures } from '../World/textures';
+import { World } from '../World/World';
 import { Effects } from './Effects';
 import { HoverReactions } from './Hover';
 import { Interaction } from './Interaction';
 import { MonitorScreen } from './MonitorScreen';
 import { FULL, LIGHT, Quality, type QualityTier } from './Quality';
-import { halveTextures, loadRoom, ROOM_URL, textureWidths, type ProgressReporter } from './Resources';
-import { Reel, type ReelFilm, type ReelState } from './Reel';
+import { createKtx2Loader, halveTextures, loadRoom, ROOM_URL, textureWidths, type ProgressReporter } from './Resources';
 import { readRoom, type RoomNodes, type StationName } from './RoomModel';
 import { RoomRenderer } from './Renderer';
 
@@ -85,9 +87,17 @@ export interface RoomProbe {
   /** The proxy under a client point, or null for empty space. */
   hit(x: number, y: number): string | null;
   goto(station: StationName): void;
-  readonly reel: { state: ReelState; time: number; inView: boolean } | null;
+  readonly reel: { state: ProgramState; time: number; inView: boolean } | null;
   /** Plays the reel whenever the room runs, in view or not (worst-case frame rate). */
   forceReel(on: boolean): void;
+  /** The living room (PLAN 11.1, 12.1): the window, lamp, fan, steam, posters, prints, projector and album. */
+  readonly world: ReturnType<World['probe']>;
+  /** performance.now() when the intro ended and the room became interactive; null before. */
+  readonly interactiveAt: number | null;
+  /** The last frame's draw calls and triangles, and what the GPU holds. */
+  readonly gpu: { calls: number; triangles: number; textures: number; geometries: number; programs: number };
+  /** Everything that moves at once: fan at top speed, steam brewing, the projector playing in view or not. */
+  forceEverything(on: boolean): void;
   /** Renders the room's sound offline as heard from a framing; see RoomAudio.renderOffline. */
   renderSound(seconds: number, options: OfflineOptions & { view: string }): Promise<Float32Array[]>;
   /** The sound's graph state (music stems, filter, beds, master) and its controls. */
@@ -108,12 +118,14 @@ export class Application implements RoomHandle {
   private readonly label: HTMLElement;
   private readonly layers: HTMLElement[];
   private readonly light: boolean;
+  private readonly ktx2: ReturnType<typeof createKtx2Loader>;
   private nodes!: RoomNodes;
   private camera!: RoomCamera;
   private monitor!: MonitorScreen;
   private effects!: Effects;
   audio!: RoomAudio;
-  private reel: Reel | null = null;
+  private world!: World;
+  private interactiveAt: number | null = null;
   private interaction!: Interaction;
   private navigation!: Navigation;
   private hover!: HoverReactions;
@@ -152,13 +164,18 @@ export class Application implements RoomHandle {
     this.label.setAttribute('aria-hidden', 'true');
     this.layers = [cssHost, webglHost, this.label];
     this.renderer = new RoomRenderer(webglHost, cssHost);
+    // One transcoder for the room and the runtime art loaded after it.
+    this.ktx2 = createKtx2Loader(this.renderer.gl);
+    // Counted per frame (scene and film pass together) for the probe.
+    this.renderer.gl.info.autoReset = false;
     this.renderer.gl.domElement.addEventListener('webglcontextlost', () => this.options.onLost?.());
     this.quality = new Quality(this.light ? LIGHT : FULL, (tier) => this.applyTier(tier));
   }
 
   async load() {
     const report = this.options.onProgress;
-    const root = await loadRoom(ROOM_URL, this.renderer.gl, (p, label) => report(p * 0.8, label));
+    const undefer = deferWindowPictures(this.ktx2);
+    const root = await loadRoom(ROOM_URL, this.renderer.gl, (p, label) => report(p * 0.8, label), this.ktx2).finally(undefer);
     // Before anything is uploaded: dropping the largest mip level quarters the GPU memory the atlases take.
     if (this.light) halveTextures(root);
     this.nodes = readRoom(root);
@@ -180,14 +197,23 @@ export class Application implements RoomHandle {
       { crt: this.nodes.monitor.position, projector: this.nodes.projector?.lens ?? null, desk: this.nodes.framings.desk.target },
       root,
     );
-    // The light tier keeps the baked still on the projector screen: no reel to download and decode on a phone.
-    if (this.nodes.projection && !this.light) {
-      this.reel = new Reel(this.nodes.projection, this.nodes.screenSurface, this.scene, this.options.films);
-    }
+    // Before the hover reactions: the world names and adds proxies (posters by slot, one per print, the dial's).
+    this.world = new World(this.nodes, this.scene, this.container, this.ktx2, this.effects, this.options.films, {
+      fly: (station) => this.fly(station),
+      station: () => this.camera.destination,
+      openWindow: (target) => this.openWindow(target),
+      sfx: (name, at) => this.audio.sfx(name, at),
+      setMonitorBlocked: (blocked) => {
+        if (this.monitor.iframe) this.monitor.iframe.style.pointerEvents = blocked ? 'none' : '';
+      },
+      reducedMotion: Boolean(this.options.reducedMotion),
+      light: this.light,
+    });
+    this.world.setTier(this.quality.tier);
     this.hover = new HoverReactions(root, this.nodes.proxies, this.camera.instance, Boolean(this.options.reducedMotion));
     this.navigation = new Navigation(this.container, this.camera, this.nodes, {
       fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
-      canSteer: () => this.started && !this.handedOver,
+      canSteer: () => this.started && !this.handedOver && !this.world.capturing,
       takeOver: () => this.takeOver(),
     });
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
@@ -196,12 +222,14 @@ export class Application implements RoomHandle {
       enterMonitor: () => this.enterMonitor(),
       leaveMonitor: () => this.leaveMonitor(),
       click: (kind) => this.audio.click(kind),
-      canHover: () => this.started && this.camera.destination !== 'monitor' && !this.handedOver,
+      canHover: () => this.started && this.camera.destination !== 'monitor' && !this.handedOver && !this.world.capturing,
       endedDrag: () => this.navigation.endedDrag(),
     });
     this.resize();
     this.observe();
 
+    await this.world.load();
+    report(0.85, 'posters');
     // Compile every shader and upload the textures now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
     this.render();
@@ -218,8 +246,12 @@ export class Application implements RoomHandle {
     if (this.started) return;
     this.started = true;
     this.monitor.iframe?.removeAttribute('tabindex');
-    void this.reel?.load();
-    const endIntro = () => (this.intro = false);
+    const endIntro = () => {
+      this.intro = false;
+      // The visitor can act now: what was left for later may start loading.
+      this.interactiveAt ??= performance.now();
+      this.world.becomeInteractive();
+    };
     if (open !== undefined) this.toMonitor('fast', open || null, endIntro, fast);
     else
       this.glide(
@@ -281,7 +313,8 @@ export class Application implements RoomHandle {
     this.hover?.dispose();
     this.monitor?.dispose();
     this.audio?.dispose();
-    this.reel?.dispose();
+    this.world?.dispose();
+    this.ktx2.dispose();
     this.effects?.dispose();
     this.renderer.dispose();
     for (const el of this.layers) el.remove();
@@ -305,6 +338,7 @@ export class Application implements RoomHandle {
   private onHotspot(hotspot: Hotspot, proxy: THREE.Object3D) {
     this.hover.pulse(proxy);
     this.audio.hotspot({ proxies: [proxy.name] });
+    if (this.world.activate(hotspot)) return;
     if (hotspot.fly && this.camera.destination !== hotspot.fly && this.camera.has(hotspot.fly)) this.fly(hotspot.fly);
     else if (hotspot.target) this.openWindow(hotspot.target);
     else if (!hotspot.fly) this.enterMonitor();
@@ -399,6 +433,7 @@ export class Application implements RoomHandle {
     this.renderer.film.enabled = tier.film;
     this.renderer.setPixelRatio(this.pixelRatio(tier));
     this.effects.setTier(tier);
+    this.world.setTier(tier);
     this.dirty = true;
   }
 
@@ -408,8 +443,8 @@ export class Application implements RoomHandle {
     // Hidden (the drawn monitor took over, or the page is off screen) the room stops drawing.
     const visibility = new IntersectionObserver(([entry]) => {
       this.onScreen = entry.isIntersecting;
+      this.world.projector?.suspend(!this.onScreen);
       if (this.onScreen) this.loop();
-      else this.reel?.suspend();
     });
     visibility.observe(this.container);
     this.observers.push(resize, visibility);
@@ -445,7 +480,15 @@ export class Application implements RoomHandle {
     if (this.hover.update(dt, now)) this.dirty = true;
     if (!this.paused) this.effects.update(this.clock, this.renderer.gl.getPixelRatio());
     this.monitor.update(this.clock, this.camera.instance);
-    this.reel?.update(this.camera.instance, this.started && !this.paused, dt);
+    this.world.update({
+      camera: this.camera.instance,
+      clock: this.clock,
+      dt: this.paused ? 0 : dt,
+      realDt: dt,
+      running: this.started && !this.paused,
+      pixelRatio: this.renderer.gl.getPixelRatio(),
+    });
+    if (this.world.animating) this.dirty = true;
     this.audio.update(this.camera.instance, now, this.camera.destination, this.monitor.frontWindow);
 
     // While paused, a still camera means a still frame: skip the work entirely.
@@ -459,6 +502,7 @@ export class Application implements RoomHandle {
   };
 
   private render() {
+    this.renderer.gl.info.reset();
     this.renderer.render(this.scene, this.cssScene, this.camera.instance, this.clock, this.effects.flicker);
     this.lastView.copy(this.camera.instance.matrixWorld);
     this.dirty = false;
@@ -493,6 +537,8 @@ export class Application implements RoomHandle {
       lift: (proxy) => this.hover.liftOf(proxy),
       point(name) {
         const rect = app.container.getBoundingClientRect();
+        const feature = app.world.point(name, rect);
+        if (feature !== undefined) return feature;
         let world: THREE.Vector3;
         if (name === 'monitor') world = app.nodes.monitor.position.clone();
         else {
@@ -515,11 +561,23 @@ export class Application implements RoomHandle {
         app.fly(station);
       },
       get reel() {
-        const reel = app.reel;
-        return reel ? { state: reel.state, time: reel.time, inView: reel.inView } : null;
+        return app.world.projector?.reel ?? null;
       },
       forceReel(on) {
-        app.reel?.force(on);
+        app.world.projector?.force(on);
+      },
+      get world() {
+        return app.world.probe();
+      },
+      get interactiveAt() {
+        return app.interactiveAt;
+      },
+      get gpu() {
+        const { render, memory, programs } = app.renderer.gl.info;
+        return { calls: render.calls, triangles: render.triangles, ...memory, programs: programs?.length ?? 0 };
+      },
+      forceEverything(on) {
+        app.world.forceEverything(on);
       },
       renderSound(seconds, { view, ...options }) {
         // A framing the runtime does not read yet (cam_window) still renders from its empties.

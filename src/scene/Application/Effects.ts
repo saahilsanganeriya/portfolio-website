@@ -16,7 +16,7 @@ const FRAME_ASPECT = 4 / 3;
 const LENS_HALF_WIDTH = 0.018;
 
 /** A soft radial glow, warm-fringed like film halation around a bright source. */
-function haloTexture() {
+export function haloTexture() {
   const size = 64;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -37,7 +37,7 @@ function haloTexture() {
  * Additive light that leaves the canvas alpha alone. three.js's AdditiveBlending also adds alpha, which would
  * make the monitor's alpha hole opaque wherever a glow, halo, beam or mote crosses the screen.
  */
-const ADD_LIGHT = {
+export const ADD_LIGHT = {
   transparent: true,
   depthWrite: false,
   blending: THREE.CustomBlending,
@@ -93,6 +93,13 @@ export class Effects {
   setTier(tier: QualityTier) {
     if (this.motes) this.motes.geometry.setDrawRange(0, Math.min(MAX_MOTES, tier.motes));
     for (const halo of this.halos) halo.visible = tier.halos;
+  }
+
+  /** The ceiling fan's pull on the dust in the beam: `strength` 0–1, `phase` how far the blades have turned (radians). */
+  setWind(strength: number, phase: number) {
+    if (!this.motes) return;
+    this.motes.material.uniforms.uWind.value = strength;
+    this.motes.material.uniforms.uWindPhase.value = phase;
   }
 
   /** `clock` is the ambient time in seconds; it stops while motion is paused. */
@@ -195,6 +202,8 @@ export class Effects {
         uniforms: {
           uTime: { value: 0 },
           uSize: { value: 1 },
+          uWind: { value: 0 },
+          uWindPhase: { value: 0 },
           uColor: { value: PROJECTOR.clone().multiplyScalar(0.55) },
           uLens: { value: lens.clone() },
           uDir: { value: dir },

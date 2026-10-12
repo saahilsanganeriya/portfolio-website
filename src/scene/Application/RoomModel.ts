@@ -45,7 +45,7 @@ export interface RoomNodes {
   screenSurface: THREE.Mesh | null;
 }
 
-/** The projector screen has no proxy in room.glb; this one, made from the screen's bounds, also opens Films. */
+/** The first room has no proxy for the projector screen; this one, made from the screen's bounds, stands in for it. */
 const SCREEN_PROXY = 'hit_projector_screen';
 
 /** Reads the PLAN 3.6 node contract from a loaded room (metres), after scaling it to world units. Throws on a missing required node. */
@@ -116,7 +116,7 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
   };
 
   const screenSurface = mesh('props_projector_screen_surface');
-  if (screenSurface) {
+  if (screenSurface && !find(SCREEN_PROXY)) {
     const box = new THREE.Box3().setFromObject(screenSurface);
     const proxy = new THREE.Mesh(new THREE.BoxGeometry(...box.getSize(new THREE.Vector3()).divideScalar(WORLD_SCALE).toArray()));
     proxy.name = SCREEN_PROXY;

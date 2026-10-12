@@ -9,9 +9,22 @@ export type ProgressReporter = (progress: number, label: string) => void;
 export const ROOM_URL = '/room/room.glb';
 const BASIS_PATH = '/room/basis/';
 
-/** Loads the baked room (KTX2 textures, meshopt geometry). Byte progress drives the BIOS percent. */
-export async function loadRoom(url: string, renderer: THREE.WebGLRenderer, onProgress: ProgressReporter): Promise<THREE.Object3D> {
-  const ktx2 = new KTX2Loader().setTranscoderPath(BASIS_PATH).detectSupport(renderer);
+/** One KTX2 transcoder for the room and everything loaded after it (posters, the window), so it downloads once. */
+export function createKtx2Loader(renderer: THREE.WebGLRenderer) {
+  return new KTX2Loader().setTranscoderPath(BASIS_PATH).detectSupport(renderer);
+}
+
+/**
+ * Loads the baked room (KTX2 textures, meshopt geometry). Byte progress drives the BIOS percent. A transcoder passed
+ * in stays with the caller; one made here is disposed once the room has loaded.
+ */
+export async function loadRoom(
+  url: string,
+  renderer: THREE.WebGLRenderer,
+  onProgress: ProgressReporter,
+  shared?: KTX2Loader,
+): Promise<THREE.Object3D> {
+  const ktx2 = shared ?? createKtx2Loader(renderer);
   const loader = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
   const name = url.split('/').pop() ?? url;
   try {
@@ -21,7 +34,7 @@ export async function loadRoom(url: string, renderer: THREE.WebGLRenderer, onPro
     onProgress(1, name);
     return gltf.scene;
   } finally {
-    ktx2.dispose();
+    if (!shared) ktx2.dispose();
   }
 }
 

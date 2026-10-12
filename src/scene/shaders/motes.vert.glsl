@@ -1,6 +1,10 @@
 // Dust drifting through the beam on a cheap curl-like flow. Each mote's place is computed from its seed and the
-// clock, so nothing is simulated on the CPU. Brightness falls to zero outside the beam: only lit dust is seen.
+// clock, so nothing is simulated on the CPU. Brightness falls to zero outside the beam: only lit dust is seen. The
+// ceiling fan stirs it: `uWind` (0 still, 1 the fan's top speed) quickens the flow and swirls it across the beam, and
+// `uWindPhase` is how far the fan has turned, so the swirl moves with the blades.
 uniform float uTime;
+uniform float uWind;
+uniform float uWindPhase;
 uniform float uSize;
 uniform vec3 uLens;
 uniform vec3 uDir;
@@ -22,8 +26,9 @@ vec3 curl(vec3 p) {
 
 void main() {
   float t = fract(aSeed.x + uTime * (0.004 + aSeed.w * 0.006));
-  vec3 flow = curl(vec3(aSeed.yzw * 6.283 + uTime * 0.07)) * 0.18;
-  vec2 section = (aSeed.yz * 2.0 - 1.0) * 1.35 + flow.xy;
+  vec3 flow = curl(vec3(aSeed.yzw * 6.283 + uTime * 0.07 + uWindPhase * 0.02)) * (0.18 + 0.22 * uWind);
+  vec2 swirl = vec2(sin(uWindPhase * 0.05 + aSeed.y * 6.283), cos(uWindPhase * 0.04 + aSeed.z * 6.283)) * 0.3 * uWind;
+  vec2 section = (aSeed.yz * 2.0 - 1.0) * 1.35 + flow.xy + swirl;
   t = clamp(t + flow.z * 0.02, 0.0, 1.0);
 
   vec2 halfSize = mix(uHalfStart, uHalfEnd, t);
