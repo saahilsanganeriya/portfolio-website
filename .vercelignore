@@ -5,3 +5,5 @@ docs/
 tests/
 test-results/
 playwright-report/
+# Henry Heffernan's models for local scene development; never deployed (PLAN 3.6).
+public/room-dev/
