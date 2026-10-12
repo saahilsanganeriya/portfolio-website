@@ -44,7 +44,7 @@ MAX_GLB_BYTES = 4_300_000  # PLAN 11.3: glb plus the two day textures keep the i
 MAX_VIEW_DAY_BYTES = 400_000
 INK = "0x14110F"
 # The stills show San Francisco at dusk and Delhi by day: the view's night share per half.
-STILL_NIGHT = {"window_sf": 0.5, "window_delhi": 0.0}
+STILL_NIGHT = {"window_sf": 0.72, "window_delhi": 0.0}
 STILLS = {
     # file stem: (camera framing, width, height)
     "room_idle": ("cam_idle", 1600, 1000),
@@ -382,12 +382,23 @@ def show_view_from_bakes():
             obj.visible_volume_scatter = obj.visible_shadow = False
 
 
+def show_current_photos():
+    """Give the photo prints the wall's current photographs (src/assets/photography), read now rather than when the
+    room was built, so the stills follow the collection."""
+    import room_dressing
+    for obj in bpy.context.scene.objects:
+        if obj.get("runtime_art") == "photo":
+            obj.data.materials.clear()
+            obj.data.materials.append(room_dressing.photo_material(int(obj["photo_slot"])))
+
+
 def render_stills(samples: int, threads: int, only: set[str]):
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import build_room
 
     show_view_from_bakes()
+    show_current_photos()
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.samples = samples
@@ -409,12 +420,9 @@ def render_stills(samples: int, threads: int, only: set[str]):
         scene.render.filepath = str(rgba)
         bpy.ops.render.render(write_still=True)
         flat = (RENDERS / f"{stem}.png") if stem != "poster" else work / "poster.png"
-        look = []
-        if stem == "window_view":
-            # SaahilOS wallpaper: a film look, fine grain and a soft vignette over the plain render.
-            look = [",noise=alls=7:allf=t,vignette=angle=PI/5"]
+        # window_view.png stays plain: SaahilOS adds its film look (src/os/assets/wallpaper/build.mjs).
         ffmpeg("-f", "lavfi", "-i", f"color=c={INK}:s={width}x{height}", "-i", rgba,
-               "-filter_complex", f"[0][1]overlay=format=auto{''.join(look)}", "-frames:v", "1", flat)
+               "-filter_complex", "[0][1]overlay=format=auto", "-frames:v", "1", flat)
         if stem == "poster":
             OUT_DIR.mkdir(parents=True, exist_ok=True)
             ffmpeg(*avif_args(flat), OUT_DIR / "poster.avif")

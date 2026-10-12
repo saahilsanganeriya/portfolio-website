@@ -18,11 +18,12 @@ blender -b blender/room.blend -P blender/scripts/bake.py
 ```
 
 `room.blend` reads its downloaded textures, models and font from `blender/.cache/` (git-ignored), so on a fresh clone
-run the rebuild below once before baking. Bakes the three room atlases (env, desk, props; 4096² each) at 512 samples, then each half of the window view
-(window_sf, window_delhi; 1024² each) by day and by night, on 24 threads, and saves the bake UVs into `room.blend`.
-The room atlases bake without the view (a camera-invisible card behind the window, lit by Poly Haven's dusk HDRI,
-lights the room); the view bakes alone with its own sun, sky and night lights. For a quick look, bake small:
-`-- --scale 0.25 --samples 32`, one atlas: `-- --atlas desk`, or the view only: `-- --atlas window_sf,window_delhi`.
+run the rebuild below once before baking. Bakes the three room atlases (env, desk, props; 4096² each) at 512 samples,
+then each half of the window view (window_sf, window_delhi; 1024² each) by day and by night, on 24 threads, and saves
+the bake UVs into `room.blend`. The room atlases bake without the view (a camera-invisible card behind the window, lit
+by Poly Haven's dusk HDRI, lights the room); the view bakes alone with its own sun, sky and night lights. For a quick
+look, bake small: `-- --scale 0.25 --samples 32`, one atlas: `-- --atlas desk`, or the view only:
+`-- --atlas window_sf,window_delhi`.
 
 ## Re-export
 
@@ -40,10 +41,11 @@ from KTX-Software 4.x and `ffmpeg` with libaom on `PATH`. `-- --no-stills` expor
 `-- --only room_idle,window_view` renders some stills.
 
 Stills: `renders/room_{idle,desk,shelf,window,projector,photos}.png`, `renders/window_view.png` (the `cam_window`
-framing with a film look, the SaahilOS wallpaper) and `public/room/poster.{avif,jpg}` (the `cam_idle` view). They
-show San Francisco at dusk and Delhi by day, the four Letterboxd favourites from `public/room/posters/` and the
-photographs the photography collection puts on the wall (`src/assets/photography/`). In the glb those pictures are
-runtime textures, so re-export the stills when the favourites or the wall's photographs change.
+framing, plain; `src/os/assets/wallpaper/build.mjs` turns it into the SaahilOS wallpaper with its film look) and
+`public/room/poster.{avif,jpg}` (the `cam_idle` view). They show San Francisco at dusk and Delhi by day, the four
+Letterboxd favourites from `public/room/posters/` and the photographs the photography collection puts on the wall
+(`src/assets/photography/`). In the glb those pictures are runtime textures, so re-export the stills when the
+favourites or the wall's photographs change.
 
 ## Rebuild from scratch
 
