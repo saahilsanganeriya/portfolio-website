@@ -1,5 +1,6 @@
 // Builds the site, then checks the output: every content entry has its page and JSON body, every page carries the
-// tags a shared link needs (title, description, og:title, og:image) and one <h1>, and no internal link or anchor is broken.
+// tags a shared link needs (title, description, og:title, og:image) and one <h1>, no internal link or anchor is broken,
+// and no link is glued to the word next to it.
 // Usage: node scripts/check-routes.mjs [--samples] [--no-build]   (--samples builds with SAMPLES=1: draft posts too)
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -115,6 +116,10 @@ for (const file of pages) {
   if (!metaContent(html, 'property', 'og:image')) problems.push(`${page}: no og:image`);
   const h1s = html.match(/<h1[\s>]/g)?.length ?? 0;
   if (h1s !== 1) problems.push(`${page}: ${h1s} <h1> elements`);
+  // compressHTML drops a template line break that sits between a word and a link, gluing the two ("asRSS").
+  for (const [glued] of html.matchAll(/[A-Za-z.,;:!?]<a\b[^>]*>[^<]{0,20}|<\/a>[A-Za-z]{1,20}/g)) {
+    problems.push(`${page}: no space around a link: ${glued}`);
+  }
 
   for (const [, href] of html.matchAll(/<a\b[^>]*?\shref="([^"]*)"/g)) {
     if (!href.startsWith('/') && !href.startsWith('#')) continue;

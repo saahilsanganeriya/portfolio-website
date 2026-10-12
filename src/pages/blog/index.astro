@@ -10,8 +10,8 @@ const years = groupByYear(posts, (post) => post.data.date.getUTCFullYear());
 <Base title="Writing" description="Essays on systems, data and film, and reviews from my Letterboxd diary, newest first.">
   <h1 class="page-title">Writing</h1>
   <p class="page-lead">
-    Essays on the systems I build, the data they run on, and the films I keep going back to. Newest first, also as
-    <a href="/rss.xml">RSS</a>.
+    Essays on the systems I build, the data they run on, and the films I keep going back to. Newest first,
+    also as <a href="/rss.xml">RSS</a>.
   </p>
   {posts.length === 0 && <p class="empty-note">The first posts are being written. Subscribe to the RSS feed to get them.</p>}
   {
