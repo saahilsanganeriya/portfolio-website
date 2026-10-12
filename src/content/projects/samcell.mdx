@@ -81,7 +81,8 @@ and dark-field microscopy shows the opposite.
 
 ## My part
 
-The paper has seven authors. Alexandra VandeLoo and Nathan Malta are joint first authors, and I am third.
+The paper has seven authors. Alexandra Dunnum VandeLoo and Nathan Malta are joint first authors, and I am
+third.
 I proposed the distance-map regression with watershed post-processing, trained the model, built both new
 test datasets and wrote the napari plugin. An expert biologist among the co-authors annotated those
 datasets by hand, cell by cell. The public code lives in my fork of Nathan's repository, where
@@ -99,7 +100,7 @@ thresholds is predictable, at the price of struggling with odd shapes such as di
 
 ## Results
 
-Every image in LIVECell, the standard training set, comes from the same microscope. A model can ace its
+Every image in LIVECell, the dataset SAMCell trains on, comes from the same microscope. A model can ace its
 test set and fall apart on someone else's bench. So I built two new datasets for that question, PBL-HEK and
 PBL-N2a: phase-contrast images of two common cell lines, taken on different microscopes, 5 images each with
 about 300 cells per image. We used them only for zero-shot testing.

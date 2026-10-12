@@ -14,9 +14,8 @@ cover: "../../assets/projects/swe-sim.png"
 coverAlt: "swe-sim's pipeline in nine boxes: repository URL or SWE-bench pool, discover and judge, probe base and gold on Modal, draft facts and briefs, approval gates, compile and validate controls, register, run through Temporal, then grade, audit, score and export."
 ---
 
-Here is a real pytest bug report, in one line: run your tests with `--pdb`, and a unittest test that was
-skipped still runs its `tearDown`. It sounds complete. It is not. You can skip a unittest test with
-`@unittest.skip` or with pytest's own skip marker, and the report never says which one it means.
+Most GitHub issues leave something out. The person who filed the bug knew what they meant, and what they
+left unsaid usually turns up later, in the discussion thread or in the fix itself.
 
 An engineer on the project would ask. A coding agent in most benchmarks cannot. It gets a tidy spec, so the
 benchmark never learns whether the agent knows when a spec is missing something.
@@ -126,7 +125,8 @@ but a prompt is not a wall. And the interactive runs stay unjudged until a perso
 
 ## First results, and the bugs they found
 
-The first task on the hosted pipeline was that pytest report. Four models ran in all three conditions. Two
+The first task on the hosted pipeline came from a real pytest bug: run your tests with `--pdb`, and a
+unittest test that was skipped still runs its `tearDown`. Four models ran in all three conditions. Two
 solved every trial they got, 7 of 7 and 6 of 6. The other two scored backwards:
 
 | | full | hidden | interactive |
@@ -136,8 +136,9 @@ solved every trial they got, 7 of 7 and 6 of 6. The other two scored backwards:
 
 That should not happen. The full brief holds strictly more information than the hidden one.
 
-One fact in the ledger caused it. It said the fix applies to both kinds of skip, and the second kind was
-covered only by an existing, passing test that punishes changing it. Agents that were handed every fact
+One fact in the ledger caused it. You can skip a unittest test with `@unittest.skip` or with pytest's own
+skip marker. The fact said the fix applies to both, but the second kind was covered only by an existing,
+passing test that punishes changing it. Agents that were handed every fact
 acted on it, one broke the passing test, and the regression rule set its reward to zero. That was my bug in
 writing the task, not a finding about asking. I added the ninth gate the same day: a stakeholder fact may
 not claim behaviour outside what the tests require.

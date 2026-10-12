@@ -31,15 +31,14 @@ Each person has exactly one referrer. Nobody can refer themselves, and no referr
 <figure class="os-figure">
 
 ```text
- add a referral: d refers a?
+ new referral: C refers A?
 
-    a   <-- the walk reaches a, the candidate,
-    |       so this referral would close a loop:
-    b       refused, with a clear error
+    A   <-- the walk reaches A, the person being
+    |       referred, so this would close a loop:
+    B       refused, with a clear error
     |
-    c       the check walks up from the referrer:
-    |       d -> c -> b -> a
-    d
+    C       the check walks up from the referrer:
+            C -> B -> A
 ```
 
 <figcaption>The loop check: walk up from the referrer to the top of its tree, and refuse if the walk meets the person being referred.</figcaption>
@@ -116,7 +115,8 @@ well short of that.
 
 The bonus search trusts that adoption only rises as the bonus rises, and nothing checks that. Its binary
 search also starts again from $0, although, if adoption does rise with the bonus, the doubling has
-already ruled out everything up to the last bonus that fell short. A chain-heavy network needs a different way to keep reach current.
+already ruled out everything up to the last bonus that fell short. A chain-heavy network needs a
+different way to keep reach current.
 
 And the first version had no tests at all, which for code this easy to get subtly wrong was a mistake.
 Tests came almost nine months later, when I published it.

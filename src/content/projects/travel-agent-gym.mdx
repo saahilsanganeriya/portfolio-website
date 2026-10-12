@@ -80,7 +80,7 @@ The world is synthetic. Travel times between places come from 108 real distance 
 nothing touches the network during an episode. I traded real inventory for a reward that never changes
 under you.
 
-The shaping trade-off came back to bite. Shaping that cannot change the best policy also cannot rescue a
+The shaping guarantee cuts both ways. Shaping that cannot change the best policy also cannot rescue a
 terminal reward that favours the wrong thing. That is the next section.
 
 ## Where the difficulty went wrong
@@ -135,8 +135,8 @@ with episodes running out the 90-turn clock.
 
 A trip that gets booked absorbs disruption damage. A policy that stalls pays only for the client's lost
 patience. PPO found that. A small LLM agent did everything right, finding 91% of the preference axes and
-asking about every class of hard constraint, and still completed no trips. When a careful agent hits the
-same wall as a lazy one, the wall is the environment.
+asking about every class of hard constraint, and still completed no trips. When an agent that does
+everything right hits the same wall, the wall is the environment.
 
 One more correction, against myself. My own commit messages recorded the version-one heuristic at 96% and
 the version-two one at 7%. Re-running the committed code gives 67–83% and 5%. Every number on this page is

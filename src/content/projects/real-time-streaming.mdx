@@ -14,7 +14,6 @@ cover: "../../assets/projects/real-time-streaming.png"
 coverAlt: "Pipeline diagram: an SNS topic feeds a Lambda processor with a dead-letter queue and replay, then a Kinesis stream and a Flink job that writes three OpenSearch indexes and an optional S3 copy, read by OpenSearch Dashboards."
 ---
 
-
 A set of workforce dashboards at Amazon ran on an hourly batch job. Anything that happened just after a
 run sat unseen until the next one, up to an hour later. My internship project was to make those dashboards
 real time.

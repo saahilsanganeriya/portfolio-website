@@ -14,13 +14,12 @@ cover: "../../assets/projects/projectionist.jpg"
 coverAlt: "A four-bay NAS labelled projectionist, modelled and rendered in Blender for this site's room."
 ---
 
-
 Move a film while someone is watching it, and Plex loses it mid-stream. It re-opens the file's path for
-every chunk it reads, the path is gone, and it gets a 404. The TV app then falls back to transcoding the
-rest of the film on the NAS's small processor.
+every chunk it reads, the path is gone, and it gets a 404. The TV app then falls back to a full transcode
+for the rest of the film.
 
-My film library used to be run by Python scripts. One renamed new
-arrivals, one fetched subtitles, one picked posters. Some ran on a timer and some I started by hand. None
+My film library used to be run by Python scripts. One renamed new arrivals, one fetched subtitles, one
+picked posters. Some ran on a timer and some I started by hand. None
 of them knew what the others were doing, or whether anyone was watching.
 
 projectionist replaces them with one Go service in one container on the NAS. The name is the main rule.
