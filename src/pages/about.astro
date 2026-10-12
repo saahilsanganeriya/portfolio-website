@@ -1,5 +1,6 @@
 ---
 import { getEntry, render } from 'astro:content';
+import Headshot from '../components/Headshot.astro';
 import Article from '../layouts/Article.astro';
 
 const entry = await getEntry('pages', 'about');
@@ -8,6 +9,9 @@ const summary = entry?.data.summary ?? 'Who I am, where I am from, and what I wa
 ---
 
 <Article title={entry?.data.title ?? 'About'} description={summary}>
-  <p slot="lead" class="article-lead">{summary}</p>
+  <Fragment slot="lead">
+    <p class="article-lead">{summary}</p>
+    <Headshot />
+  </Fragment>
   {rendered ? <rendered.Content /> : <p>This page is being written.</p>}
 </Article>

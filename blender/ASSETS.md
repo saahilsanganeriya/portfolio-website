@@ -52,7 +52,7 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Tech Tower at night, Georgia Tech | story reel, chapter 4 background | https://unsplash.com/photos/a-clock-tower-with-a-neon-sign-on-top-of-it-slr9Z9kMmPY | Sid Suratia | Unsplash License | drone light trail above the spire removed; resized to 2000 px wide; toned, faded and grained on the page |
 | Desk lamp at night | story reel, chapter 5 background | https://unsplash.com/photos/lit-desk-lamp-on-top-of-desk-EH9f0TI5wco | JC Gellidon | Unsplash License | resized to 2000 px wide; toned, faded and grained on the page |
 | Sapling on a windowsill | story reel, chapter 6 background and the closing frame | https://unsplash.com/photos/a-potted-plant-sitting-on-a-window-sill-vD7Mi0rDqMI | Peter Heymans | Unsplash License | resized to 1600 px wide; toned, faded and grained on the page |
-| Portrait of Saahil Sanganeriya | story reel, closing frame | the owner's professional headshot | Saahil Sanganeriya (his own photo) | used by the owner | resized to 640 px |
+| Portrait of Saahil Sanganeriya | story reel, closing frame; /about and /resume | the owner's professional headshot | Saahil Sanganeriya (his own photo) | used by the owner | resized to 640 px |
 
 ## Fonts
 

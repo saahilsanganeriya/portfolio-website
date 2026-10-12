@@ -1,6 +1,7 @@
 ---
 import { existsSync } from 'node:fs';
 import { getEntry, render } from 'astro:content';
+import Headshot from '../components/Headshot.astro';
 import Article from '../layouts/Article.astro';
 
 const PDF_PATH = '/resume/saahil-sanganeriya-resume.pdf';
@@ -15,6 +16,7 @@ const summary = entry?.data.summary ?? 'Experience, education and selected work 
 <Article title={entry?.data.title ?? 'Résumé'} description={summary}>
   <Fragment slot="lead">
     <p class="article-lead">{summary}</p>
+    <Headshot />
     {
       hasPdf && (
         <p class="article-meta meta">
