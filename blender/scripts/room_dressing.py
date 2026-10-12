@@ -76,7 +76,7 @@ def build_dressing(mats, placed):
     build_desk_clutter(rng)
     found["cc0"] = {name: import_cc0(name, *spec) for name, spec in CC0.items()}
     build_jacket()
-    build_pothos(rng)
+    build_pothos()
     build_floor_books(rng)
     found["floor_lamp"] = build_reading_corner()
     return found
@@ -776,8 +776,9 @@ def build_jacket():
     return finish(b_, "props_jacket", atlas="desk", smooth=70)
 
 
-def build_pothos(rng):
+def build_pothos():
     """A golden pothos in a small glazed pot on the book stack, trailing over the shelf's edge and down."""
+    rng = random.Random(SEED + 7)
     pot_mat = pl.surface("pothos_pot", (0.62, 0.58, 0.50), 0.25, coat=0.5, edge_wear=0.4,
                          edge_color=(0.36, 0.28, 0.20), grime=0.5, dust=0.6, color_var=0.05)
     soil = pl.surface("pothos_soil", (0.03, 0.022, 0.015), 0.95, color_var=0.1)
@@ -806,10 +807,10 @@ def build_pothos(rng):
         b.tube(path, 0.0022, sides=4, mat=stem)
         for k, p in enumerate(path[2::2]):
             side = 1 if k % 2 else -1
-            size = rng.uniform(0.028, 0.045) * (1.0 - 0.3 * k / len(path))
+            size = rng.uniform(0.017, 0.027) * (1.0 - 0.3 * k / len(path))
             heart_leaf(b, p, side, size, leaf, rng)
     for k, p in enumerate([base + Vector((0.0, -0.01, 0.09)), base + Vector((0.03, 0.02, 0.10))]):
-        heart_leaf(b, p, 1 if k else -1, 0.04, leaf, rng, upright=True)
+        heart_leaf(b, p, 1 if k else -1, 0.026, leaf, rng, upright=True)
     return finish(b, "props_pothos", smooth=60)
 
 

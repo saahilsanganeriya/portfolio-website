@@ -100,6 +100,7 @@ CAMERAS = {
 PROJECTOR_CAM_DISTANCE = 1.85
 CAMERA_FOV_DEG = 35.0
 EXPOSURE = 2.15  # owner round 2: about +0.5 EV over T3's 1.65, same lights and mood
+LAVA_GLOW = 0.45
 
 
 def texture_path(name: str, kind: str) -> Path:
@@ -1232,11 +1233,26 @@ DECIMATE = {
     "props_fujifilm_xt": 0.4, "props_fujifilm_x100": 0.4, "props_fujica_st": 0.4, "props_super8_camera": 0.4,
     "props_projector_8mm": 0.3, "props_projector_8mm_reel_front": 0.4, "props_projector_8mm_reel_rear": 0.4,
     "props_projector_screen": 0.35, "props_nas_4bay": 0.5, "espresso_machine": 0.55, "ceiling_fan": 0.5,
-    "ceiling_fan_blades": 0.55, "countertop_oven": 0.7, "props_alarm_clock": 0.45, "props_pothos": 0.8,
+    "ceiling_fan_blades": 0.55, "countertop_oven": 0.7, "props_alarm_clock": 0.45,
     "props_haworthia": 0.5, "props_vase": 0.5, "props_tea_tin": 0.6, "props_lota": 0.6, "props_pen_cup": 0.7,
     "props_books_stack": 0.7, "props_film_canister_b": 0.6, "lava_lamp": 0.7, "desk_keyboard": 0.7,
     "env_radiator": 0.6, "props_mango_plant": 0.6,
 }
+
+
+def tone_room_emitters():
+    """The lava lamp's glass was tuned in the prop studio; at the room's exposure it washes to pale pink, so the
+    room dims its glow (the site draws the glass with its own shader anyway)."""
+    mat = bpy.data.materials.get("lava_lamp_glass")
+    emit = next((n for n in mat.node_tree.nodes if n.bl_idname == "ShaderNodeEmission"), None) if mat else None
+    if emit is None or not emit.inputs["Strength"].links:
+        return
+    src = emit.inputs["Strength"].links[0].from_socket
+    dim = mat.node_tree.nodes.new("ShaderNodeMath")
+    dim.operation = "MULTIPLY"
+    dim.inputs[1].default_value = LAVA_GLOW
+    mat.node_tree.links.new(src, dim.inputs[0])
+    mat.node_tree.links.new(dim.outputs[0], emit.inputs["Strength"])
 
 
 def reduce_geometry():
@@ -1280,8 +1296,10 @@ def tune_atlas_objects():
             continue
         name = obj.name
         weight = TEXEL_WEIGHTS.get(name)
-        if weight is None and name.startswith(("props_poster_frame_", "props_photo_frame_")):
+        if weight is None and name.startswith("props_poster_frame_"):
             weight = 0.35
+        elif weight is None and name.startswith("props_photo_frame_"):
+            weight = 1.2  # cam_photos looks at them from 1.3 m
         elif obj.get("runtime_art"):
             # Only the light on the picture is baked (the site draws the art), and light is smooth.
             weight = 0.45
@@ -1333,6 +1351,7 @@ def main():
     lens, beam = build_markers(placed, anchors, screen_centre)
     build_lights(lens, beam, picture, screen_centre, mats)
     build_round2_lights(dressing)
+    tone_room_emitters()
     reduce_geometry()
     tune_atlas_objects()
     setup_world_and_render()

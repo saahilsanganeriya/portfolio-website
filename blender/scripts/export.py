@@ -32,6 +32,9 @@ OUT_DIR = REPO / "public" / "room"
 RENDERS = REPO / "blender" / "renders"
 
 ATLASES = ("env", "desk", "props")
+# Shipped atlas sizes: baked at 4096, resampled (Lanczos) to fit room.glb in 4.3 MB; the desk keeps the most for the
+# close-up framings. Non-power-of-two sizes are fine for KTX2 on WebGL2.
+EXPORT_SIZES = {"env": 2560, "desk": 3584, "props": 2944}
 VIEW_ATLASES = {"window_sf": "window_view_sf", "window_delhi": "window_view_delhi"}
 RUNTIME_MESHES = {"crt_glow": "crt_glow", "lamp_bulb": "lamp_bulb", "lava_lamp_glass": "lava_lamp_glass",
                   "oven_glow": "oven_glow"}  # mesh name -> material name
@@ -88,6 +91,12 @@ def atlas_image(atlas: str) -> bpy.types.Image:
     path = BAKE_DIR / f"{atlas}.png"
     if not path.exists():
         raise SystemExit(f"export: missing {path}; run bake.py first")
+    size = EXPORT_SIZES.get(atlas)
+    if size:
+        resized = CACHE / "export" / f"sized_{size}" / f"{atlas}.png"
+        resized.parent.mkdir(parents=True, exist_ok=True)
+        ffmpeg("-i", path, "-vf", f"scale={size}:{size}:flags=lanczos", resized)
+        path = resized
     image = bpy.data.images.load(str(path), check_existing=False)
     image.name = f"room_{atlas}"
     return image
@@ -128,7 +137,9 @@ def join_view_halves() -> list[bpy.types.Object]:
 
 
 def prepare_meshes() -> list[bpy.types.Object]:
-    for name in ["proxy", *RUNTIME_MESHES.values(), "nas_led", "room_props_leaves", *(f"room_{a}" for a in ATLASES)]:
+    art_names = [o.name for o in bpy.context.scene.objects if o.get("runtime_art")]
+    for name in ["proxy", *RUNTIME_MESHES.values(), "nas_led", "room_props_leaves", *(f"room_{a}" for a in ATLASES),
+                 *VIEW_ATLASES.values(), *art_names]:
         if name in bpy.data.materials:
             bpy.data.materials[name].name = f"{name}_scene"
     images = {atlas: atlas_image(atlas) for atlas in ATLASES}
