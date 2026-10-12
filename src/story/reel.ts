@@ -285,7 +285,8 @@ export function startReel(): void {
 
   function loop(now: number): void {
     raf = 0;
-    const dt = Math.min((now - lastTime) / 1000, 0.1);
+    // The first frame after waking may carry a timestamp from before the wake, so it counts as one 60 Hz frame.
+    const dt = lastTime < 0 ? 1 / 60 : clamp((now - lastTime) / 1000, 0, 0.1);
     lastTime = now;
 
     const target = targetIndex();
@@ -300,7 +301,7 @@ export function startReel(): void {
       pos = target;
       velocity = 0;
     }
-    const moving = pos !== before;
+    const moving = pos !== before || pos !== target;
     if (moving) {
       lastMotion = now;
       filmDirty = true;
@@ -354,7 +355,7 @@ export function startReel(): void {
 
   function wake(): void {
     if (raf) return;
-    lastTime = performance.now();
+    lastTime = -1;
     raf = requestAnimationFrame(loop);
   }
 
