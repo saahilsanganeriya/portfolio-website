@@ -20,7 +20,8 @@ interface Transition {
   onDone?: () => void;
 }
 
-const IDLE_SWAY_RAD = 0.22;
+// ±8°: the Blender room fills the 16:10 idle framing, so Henry's ±12.6° pushed the posters and the window out of view.
+const IDLE_SWAY_RAD = 0.14;
 const IDLE_PERIOD_S = 80;
 const MONITOR_MARGIN = 1.3;
 // Henry's framings were tuned for a 16:10 window; taller windows step back so the desk stays in frame.
