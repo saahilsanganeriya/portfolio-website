@@ -1,7 +1,7 @@
 import type { FilmEntry, FilmsData } from '../../../lib/films';
 import type { OsFavourite } from '../../types';
 
-/** Diary cards the Films window shows; the whole archive is on /films. */
+/** Diary cards the Films window shows; the whole archive is in /api/films.json. */
 export const DIARY_CARDS = 60;
 
 type FilmRef = Pick<OsFavourite, 'slug' | 'title' | 'year'>;

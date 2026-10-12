@@ -1,8 +1,10 @@
 # portfolio-website
 
 Saahil Sanganeriya's personal site. On a desktop, it opens on a vintage room built in Blender; the CRT on the desk runs
-SaahilOS, a small retro desktop. Every post and project also has a plain, fast page with its own URL. The site is built
-with Astro, MDX content collections, React (SaahilOS) and three.js (the room), and deploys to Vercel.
+SaahilOS, a small retro desktop. Every post, project and app has its own address, and opening one loads the room and
+opens that window on the monitor; there are no plain pages. Phones get the room at a lighter tier; a browser without
+WebGL gets SaahilOS on a drawn monitor. The site is built with Astro, MDX content collections, React (SaahilOS) and
+three.js (the room), and deploys to Vercel.
 
 Based on Henry Heffernan's portfolio, heavily edited. Ideas from Alana Goyal's site. See [Credits](#credits).
 
@@ -28,7 +30,8 @@ Then open http://localhost:4321.
 
 ## Add a post in one step
 
-Create `src/content/blog/<slug>.mdx` with this frontmatter and commit. The file name is the URL: `/blog/<slug>`.
+Create `src/content/blog/<slug>.mdx` with this frontmatter and commit. The file name is the address: `/blog/<slug>`
+opens the post in its own window on the monitor, and the post joins the Writing window and `/rss.xml`.
 
 ```mdx
 ---
@@ -50,7 +53,7 @@ The post, in Markdown. An `<aside>` becomes a sidenote in the margin.
 
 ## Add a project
 
-Create `src/content/projects/<slug>.mdx`. It appears on `/projects` and at `/projects/<slug>`.
+Create `src/content/projects/<slug>.mdx`. It appears in the Projects window, and `/projects/<slug>` opens it.
 
 ```mdx
 ---
@@ -109,30 +112,14 @@ which writes the sizes into `src/assets/me/<name>/` and adds `{ "file": "<name>"
 an empty alt fails the build. A photo of me appears only where it is placed beside text: in an `.mdx` page with
 `<MePhoto file="<name>" side="right" />`, or in a story chapter with `photo: "<name>"`.
 
-## Content
+## Update the favourite films (the posters) in one step
 
-| Collection | Files | Pages |
-|---|---|---|
-| `projects` | `src/content/projects/<slug>.mdx` | `/projects`, `/projects/<slug>` |
-| `blog` | `src/content/blog/<slug>.mdx` | `/blog`, `/blog/<slug>`, `/rss.xml` |
-| `pages` | `src/content/pages/{about,resume}.mdx` | `/about`, `/resume` |
-| `story` | `src/content/story/<nn>-<slug>.mdx` | `/story` |
-| `photography` | `src/content/photography/<name>.yaml` (`npm run photos:ingest`) | the photography exhibit (SaahilOS, the room) |
-
-The schemas are in `src/content.config.ts`. Every entry is also served as static JSON at
-`/content/<collection>/<slug>.json` (`{ data, html }`), which SaahilOS reader windows load.
-
-Films come from the Letterboxd diary of `saahilsan`. The archive is the export in `src/data/letterboxd/` (diary,
-ratings, reviews, watched; the Tags column is removed). `/api/films.json`, the only server route, merges the public RSS
-feed over it per film and watched date, at most once an hour (Vercel ISR), at most one Letterboxd request per 2 s. When
-the feed fails, it serves the archive and the last good copy. `src/content/films.json` is the same merge, written by
-each build as the static fallback. Set `FILMS_PRIVATE_NAMES` (comma-separated, in Vercel) to drop the text of any live
-review that names one of those people.
+With a Letterboxd export unzipped, run `npm run favorites -- <export folder>` and commit `src/content/favorites.json`.
 
 The posters in the room are the four favourite films on the Letterboxd profile, in profile order. They are also the
-"On the wall" list on `/films`. Letterboxd answers a request for a profile page with HTTP 403, and the RSS feed does
-not include the favourites. So the source is the account export: its `profile.csv` has a "Favorite Films" column with
-four `boxd.it` links. To update the posters after a change on Letterboxd:
+"Four favourites" at the top of the Films window. Letterboxd answers a request for a profile page with HTTP 403, and
+the RSS feed does not include the favourites. So the source is the account export: its `profile.csv` has a "Favorite
+Films" column with four `boxd.it` links. In full, after a change on Letterboxd:
 
 1. Export the data (Letterboxd, Settings, Data, Export your data) and unzip it.
 2. Run `npm run favorites -- <export folder>`. The script follows each `boxd.it` link to its film page (browser
@@ -149,6 +136,26 @@ outlines, so an `<img>` or a texture shows it without web fonts). To add hand-dr
 `npm run posters:runtime -- <slug>` and `npm run favorites -- <export folder>`. The art for films that are no longer
 favourites stays in `blender/posters/`.
 
+## Content
+
+| Collection | Files | Addresses (each opens its window on the monitor) |
+|---|---|---|
+| `projects` | `src/content/projects/<slug>.mdx` | `/projects`, `/projects/<slug>` |
+| `blog` | `src/content/blog/<slug>.mdx` | `/blog`, `/blog/<slug>`, `/rss.xml` |
+| `pages` | `src/content/pages/{about,resume}.mdx` | `/about`, `/resume` |
+| `story` | `src/content/story/<nn>-<slug>.mdx` | `/story` (The Thread) |
+| `photography` | `src/content/photography/<name>.yaml` (`npm run photos:ingest`) | the photography exhibit (SaahilOS, the room) |
+
+The schemas are in `src/content.config.ts`. Every entry is also served as static JSON at
+`/content/<collection>/<slug>.json` (`{ data, html }`), which SaahilOS reader windows load.
+
+Films come from the Letterboxd diary of `saahilsan`. The archive is the export in `src/data/letterboxd/` (diary,
+ratings, reviews, watched; the Tags column is removed). `/api/films.json`, the only server route, merges the public RSS
+feed over it per film and watched date, at most once an hour (Vercel ISR), at most one Letterboxd request per 2 s. When
+the feed fails, it serves the archive and the last good copy. `src/content/films.json` is the same merge, written by
+each build as the static fallback. Set `FILMS_PRIVATE_NAMES` (comma-separated, in Vercel) to drop the text of any live
+review that names one of those people.
+
 ## Scripts
 
 | Command | What it does |
@@ -158,7 +165,7 @@ favourites stays in `blender/posters/`.
 | `npm run preview` | Serves the last build from `.vercel/output/`, `/api/films.json` included (`astro preview` does not support the Vercel adapter). |
 | `npm run check` | Type-checks the project (`astro check`). |
 | `npm run test:e2e` | Playwright tests in `tests/*.spec.ts`. They build with `SAMPLES=1` (draft posts included) and serve the build themselves. |
-| `node scripts/check-routes.mjs` | Builds, then checks every route: each entry has its page and JSON body, each page has a title, description, `og:title`, `og:image` and one `<h1>`, and no internal link is broken. `--samples` includes draft posts. |
+| `node scripts/check-routes.mjs` | Builds, then checks every address: each entry's page is the room opening its window, with its JSON body; no page exists beyond those, `/os` and `/story` (framed inside the room) and `/404`; each page has a title, description, `og:title`, `og:image` and one `<h1>`; no internal link is broken. `--samples` includes draft posts. |
 | `npm run photos:ingest -- <folder>` | Strips all metadata from the photos in a folder, writes AVIF and WebP sizes, and adds an entry per photo (see "Add photos in one step"). |
 | `npm run films` | Writes `src/content/films.json`: the archive and the cached copy, with the Letterboxd feed merged over them. When the feed fails, it keeps the cached copy and exits 0. |
 | `npm run posters [-- <slug> ...]` | Draws the hand-drawn posters into `blender/posters/` (SVG and 2048-px PNG). |
@@ -172,12 +179,16 @@ favourites stays in `blender/posters/`.
 Vercel, through `@astrojs/vercel`. Every page is prerendered. A route that must run on request sets
 `export const prerender = false`; Vercel then caches it with ISR for at most an hour.
 
+The Vercel project (`portfolio-website`) is not connected to the GitHub repository, so a push does not deploy. From a
+checkout, `npx vercel link --yes --project portfolio-website` once, then `npx vercel deploy --prod --yes`; Vercel runs
+`npm run build` itself.
+
 ## Design
 
 Warm light in a dark room, and one thread. Colours: ink `#14110F` (background), walnut `#3B2A1E`, paper `#EDE4D3`
 (text), dust `#A89F91` (secondary text), thread `#B4442C` (the one accent; never for text), projector `#9DB4C0` (the beam
 and the CRT only). Type: Newsreader for headings and essays, IBM Plex Sans for the interface, IBM Plex Mono for code.
-Reading pages have no effects over the text.
+Reading windows have no effects over the text.
 
 ## Credits
 
