@@ -6,16 +6,34 @@ export interface QualityTier {
   halos: boolean;
 }
 
-// Highest first. The renderer starts at the top and steps down until frames hold 50 fps.
-export const TIERS: readonly QualityTier[] = [
-  { resolution: 1, film: true, motes: 600, halos: true },
-  { resolution: 0.8, film: true, motes: 360, halos: true },
-  { resolution: 0.62, film: true, motes: 200, halos: true },
-  { resolution: 0.5, film: true, motes: 120, halos: false },
-  { resolution: 0.4, film: false, motes: 60, halos: false },
-];
+export interface QualityLadder {
+  /** Highest first. The renderer starts at the top and steps down until frames hold 50 fps. */
+  tiers: readonly QualityTier[];
+  /** Cap on the device pixel ratio that each tier's resolution multiplies. */
+  dprCap: number;
+}
 
-export const DPR_CAP = 1.5;
+export const FULL: QualityLadder = {
+  tiers: [
+    { resolution: 1, film: true, motes: 600, halos: true },
+    { resolution: 0.8, film: true, motes: 360, halos: true },
+    { resolution: 0.62, film: true, motes: 200, halos: true },
+    { resolution: 0.5, film: true, motes: 120, halos: false },
+    { resolution: 0.4, film: false, motes: 60, halos: false },
+  ],
+  dprCap: 1.5,
+};
+
+/** Phones and small windows: one CSS pixel per pixel at most, a little dust, no halos. */
+export const LIGHT: QualityLadder = {
+  tiers: [
+    { resolution: 1, film: true, motes: 120, halos: false },
+    { resolution: 0.8, film: true, motes: 60, halos: false },
+    { resolution: 0.62, film: false, motes: 30, halos: false },
+  ],
+  dprCap: 1,
+};
+
 const TARGET_FPS = 50;
 const WINDOW_MS = 1000;
 
@@ -29,10 +47,13 @@ export class Quality {
   private windowStart = 0;
   private warmingUp = true;
 
-  constructor(private readonly onChange: (tier: QualityTier, index: number) => void) {}
+  constructor(
+    readonly ladder: QualityLadder,
+    private readonly onChange: (tier: QualityTier, index: number) => void,
+  ) {}
 
   get tier() {
-    return TIERS[this.index];
+    return this.ladder.tiers[this.index];
   }
 
   /** Forget the current window after a pause, a resize or a hidden tab, so stale frames do not count. */
@@ -54,10 +75,10 @@ export class Quality {
     const warmingUp = this.warmingUp;
     this.reset(now);
     this.warmingUp = false;
-    if (warmingUp || fps >= TARGET_FPS || this.index === TIERS.length - 1) return;
+    if (warmingUp || fps >= TARGET_FPS || this.index === this.ladder.tiers.length - 1) return;
 
     this.index += 1;
     this.warmingUp = true;
-    this.onChange(TIERS[this.index], this.index);
+    this.onChange(this.tier, this.index);
   }
 }

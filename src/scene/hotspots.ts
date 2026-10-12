@@ -25,7 +25,8 @@ const POSTERS = [
 ] as const;
 
 export const HOTSPOTS: readonly Hotspot[] = [
-  { proxies: [], prop: 'The monitor', label: 'SaahilOS', target: null, href: '/os' },
+  // On the desktop the monitor is its live iframe; phones have no live screen, so the room makes hit_monitor there.
+  { proxies: ['hit_monitor'], prop: 'The monitor', label: 'SaahilOS', target: null, href: '/os' },
   {
     proxies: ['hit_fujifilm_a', 'hit_fujifilm_b', 'hit_fujifilm_c'],
     prop: 'The Fujifilm cameras',

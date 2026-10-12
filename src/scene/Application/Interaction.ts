@@ -38,7 +38,7 @@ export class Interaction {
 
   constructor(
     private readonly stage: HTMLElement,
-    iframe: HTMLIFrameElement,
+    iframe: HTMLIFrameElement | null,
     private readonly camera: THREE.PerspectiveCamera,
     private readonly proxies: THREE.Object3D[],
     private readonly label: HTMLElement,
@@ -57,6 +57,8 @@ export class Interaction {
     stage.addEventListener('pointerleave', () => (this.clientPointer.inside = false), { signal });
     stage.addEventListener('pointerdown', (e) => (this.touch = e.pointerType === 'touch'), { signal });
     stage.addEventListener('click', (e) => this.onClick(e), { signal });
+    // Phones have no live screen in the 3D monitor (the OS opens full screen there), so no frame to follow.
+    if (!iframe) return;
     iframe.addEventListener('pointerenter', () => !this.overMonitor && this.onMonitorPointer(true), { signal });
     iframe.addEventListener('pointerleave', () => this.overMonitor && this.onMonitorPointer(false), { signal });
     // Tabbing into the OS takes the camera to it; tabbing out goes back to the desk.

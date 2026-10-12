@@ -7,8 +7,8 @@ import { Effects } from './Effects';
 import { HoverReactions } from './Hover';
 import { Interaction } from './Interaction';
 import { MonitorScreen } from './MonitorScreen';
-import { DPR_CAP, Quality, type QualityTier } from './Quality';
-import { loadRoom, ROOM_URL, type ProgressReporter } from './Resources';
+import { FULL, LIGHT, Quality, type QualityTier } from './Quality';
+import { halveTextures, loadRoom, ROOM_URL, textureWidths, type ProgressReporter } from './Resources';
 import { Reel, type ReelFilm, type ReelState } from './Reel';
 import { readRoom, type RoomNodes, type StationName } from './RoomModel';
 import { RoomRenderer } from './Renderer';
@@ -21,6 +21,14 @@ export interface RoomOptions {
   reducedMotion?: boolean;
   /** The newest diary entries in the build, for the reel's cards until the live diary answers. */
   films: ReelFilm[];
+  /**
+   * Phones and small windows: the light tier (one pixel per CSS pixel, fewer effects, half-size textures) and no live
+   * screen in the 3D monitor. Reaching the monitor hands over to `onMonitor`, which shows SaahilOS full screen.
+   */
+  light?: boolean;
+  onMonitor?(target: string | null): void;
+  /** The browser took the GL context away (memory pressure): the page should show the drawn monitor instead. */
+  onLost?(): void;
 }
 
 export interface StartOptions {
@@ -43,11 +51,15 @@ export interface RoomHandle {
   unlockAudio(): void;
   setMuted(muted: boolean): void;
   setPaused(paused: boolean): void;
+  /** The median frame rate over the next `ms` (the second half of it), drawing every frame meanwhile. */
+  measureFps(ms: number): Promise<number>;
   dispose(): void;
 }
 
 // The OS iframe must not hold the room back for ever; past this it keeps loading behind the boot screen.
 const OS_LOAD_TIMEOUT_MS = 8000;
+// On a phone the wide view holds this long after the intro, then the camera goes into the monitor by itself.
+const PHONE_HOLD_MS = 1600;
 
 /** Debug and measurement hook: tests click real props by their projected screen position. */
 export interface RoomProbe {
@@ -56,11 +68,14 @@ export interface RoomProbe {
   readonly destination: CameraPhase;
   readonly moving: boolean;
   readonly tier: number;
+  readonly light: boolean;
   /** The stations arrow keys and the wheel step through, in order. */
   readonly stations: readonly StationName[];
   readonly drifting: boolean;
   /** How far the free look has turned the view from its framing (radians). */
   readonly look: { yaw: number; pitch: number };
+  /** Base width of each texture in the room, after the light tier halves them. */
+  readonly textureWidths: number[];
   /** The visible meshes each proxy lifts on hover. */
   readonly claims: Record<string, string[]>;
   /** How far the object behind a proxy is lifted now (millimetres). */
@@ -90,6 +105,7 @@ export class Application implements RoomHandle {
   private readonly quality: Quality;
   private readonly label: HTMLElement;
   private readonly layers: HTMLElement[];
+  private readonly light: boolean;
   private nodes!: RoomNodes;
   private camera!: RoomCamera;
   private monitor!: MonitorScreen;
@@ -103,6 +119,11 @@ export class Application implements RoomHandle {
   private intro = false;
   private paused = false;
   private onScreen = true;
+  /** Light tier: SaahilOS is open full screen over the room, which stops drawing until the camera leaves. */
+  private handedOver = false;
+  private pendingWindow: string | null = null;
+  private phoneZoom = 0;
+  private frameSink: ((frameMs: number) => void) | null = null;
   private clock = 0;
   private last = 0;
   private raf = 0;
@@ -114,6 +135,7 @@ export class Application implements RoomHandle {
     private readonly container: HTMLElement,
     private readonly options: RoomOptions,
   ) {
+    this.light = Boolean(options.light);
     const layer = (className: string) => {
       const el = document.createElement('div');
       el.className = className;
@@ -127,19 +149,28 @@ export class Application implements RoomHandle {
     this.label.setAttribute('aria-hidden', 'true');
     this.layers = [cssHost, webglHost, this.label];
     this.renderer = new RoomRenderer(webglHost, cssHost);
-    this.quality = new Quality((tier) => this.applyTier(tier));
+    this.renderer.gl.domElement.addEventListener('webglcontextlost', () => this.options.onLost?.());
+    this.quality = new Quality(this.light ? LIGHT : FULL, (tier) => this.applyTier(tier));
   }
 
   async load() {
     const report = this.options.onProgress;
     const root = await loadRoom(ROOM_URL, this.renderer.gl, (p, label) => report(p * 0.8, label));
+    // Before anything is uploaded: dropping the largest mip level quarters the GPU memory the atlases take.
+    if (this.light) halveTextures(root);
     this.nodes = readRoom(root);
     this.scene.add(root);
 
     this.camera = new RoomCamera(this.nodes, this.aspect());
-    this.monitor = new MonitorScreen(this.nodes.monitor, this.scene, this.cssScene, this.options.osUrl, (e) =>
-      this.interaction.fromMonitor(e),
+    this.monitor = new MonitorScreen(
+      this.nodes.monitor,
+      this.scene,
+      this.cssScene,
+      this.options.osUrl,
+      (e) => this.interaction.fromMonitor(e),
+      !this.light,
     );
+    if (this.light) this.addMonitorProxy();
     this.effects = new Effects(this.nodes, this.scene);
     this.effects.setTier(this.quality.tier);
     this.audio = new RoomAudio({
@@ -147,13 +178,14 @@ export class Application implements RoomHandle {
       projector: this.nodes.projector?.lens ?? null,
       desk: this.nodes.framings.desk.target,
     });
-    if (this.nodes.projection) {
+    // The light tier keeps the baked still on the projector screen: no reel to download and decode on a phone.
+    if (this.nodes.projection && !this.light) {
       this.reel = new Reel(this.nodes.projection, this.nodes.screenSurface, this.scene, this.options.films);
     }
     this.hover = new HoverReactions(root, this.nodes.proxies, this.camera.instance, Boolean(this.options.reducedMotion));
     this.navigation = new Navigation(this.container, this.camera, this.nodes, {
       fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
-      canSteer: () => this.started,
+      canSteer: () => this.started && !this.handedOver,
       takeOver: () => this.takeOver(),
     });
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
@@ -162,7 +194,7 @@ export class Application implements RoomHandle {
       enterMonitor: () => this.enterMonitor(),
       leaveMonitor: () => this.leaveMonitor(),
       click: (kind) => this.audio.click(kind),
-      canHover: () => this.started && this.camera.destination !== 'monitor',
+      canHover: () => this.started && this.camera.destination !== 'monitor' && !this.handedOver,
       endedDrag: () => this.navigation.endedDrag(),
     });
     this.resize();
@@ -183,7 +215,7 @@ export class Application implements RoomHandle {
   start({ open, fast = false }: StartOptions = {}) {
     if (this.started) return;
     this.started = true;
-    this.monitor.iframe.removeAttribute('tabindex');
+    this.monitor.iframe?.removeAttribute('tabindex');
     void this.reel?.load();
     const endIntro = () => (this.intro = false);
     if (open !== undefined) this.toMonitor('fast', open || null, endIntro, fast);
@@ -203,6 +235,7 @@ export class Application implements RoomHandle {
 
   openWindow(target: string, { fast = false }: { fast?: boolean } = {}) {
     if (this.started) this.toMonitor(fast ? 'fast' : 'monitor', target);
+    else if (this.light) this.pendingWindow = target;
     else this.monitor.open(target);
   }
 
@@ -233,8 +266,21 @@ export class Application implements RoomHandle {
     this.dirty = true;
   }
 
+  measureFps(ms: number) {
+    return new Promise<number>((resolve) => {
+      const frames: number[] = [];
+      this.frameSink = (frameMs) => frames.push(frameMs);
+      setTimeout(() => {
+        this.frameSink = null;
+        const settled = frames.slice(Math.floor(frames.length / 2)).sort((a, b) => a - b);
+        resolve(settled.length ? 1000 / settled[Math.floor(settled.length / 2)] : 0);
+      }, ms);
+    });
+  }
+
   dispose() {
     cancelAnimationFrame(this.raf);
+    clearTimeout(this.phoneZoom);
     for (const observer of this.observers) observer.disconnect();
     this.navigation?.dispose();
     this.interaction?.dispose();
@@ -248,13 +294,16 @@ export class Application implements RoomHandle {
     delete window.__room;
   }
 
-  /** After the intro lands on the wide view: the slow drift past the corners. */
+  /** After the intro lands on the wide view: the slow drift past the corners, or on a phone the way into the monitor. */
   private afterIntro() {
-    if (!this.options.reducedMotion && !this.paused) this.navigation.drift();
+    if (this.options.reducedMotion || this.paused) return;
+    if (this.light) this.phoneZoom = window.setTimeout(() => this.toMonitor('monitor', null), PHONE_HOLD_MS);
+    else this.navigation.drift();
   }
 
   /** The visitor took over: nothing moves the camera by itself any more. */
   private takeOver() {
+    clearTimeout(this.phoneZoom);
     this.navigation.stopDrift();
   }
 
@@ -284,16 +333,52 @@ export class Application implements RoomHandle {
     else this.glide(station, motion, onDone);
   }
 
-  /** Into the glass, opening a SaahilOS window when one is asked for. */
+  /** Into the glass. On the light tier, landing there hands over to SaahilOS full screen with the window asked for. */
   private toMonitor(motion: Motion, target: string | null, onDone?: () => void, cut = false) {
-    this.glide('monitor', motion === 'step' || motion === 'drift' ? 'monitor' : motion, onDone, cut);
-    if (target) this.monitor.open(target);
+    const motionIn = motion === 'step' || motion === 'drift' ? 'monitor' : motion;
+    if (!this.light) {
+      this.glide('monitor', motionIn, onDone, cut);
+      if (target) this.monitor.open(target);
+      return;
+    }
+    if (target !== null) this.pendingWindow = target;
+    this.glide(
+      'monitor',
+      motionIn,
+      () => {
+        onDone?.();
+        this.handOver();
+      },
+      cut,
+    );
+  }
+
+  private handOver() {
+    if (this.camera.phase !== 'monitor' || this.camera.moving) return;
+    this.handedOver = true;
+    const target = this.pendingWindow;
+    this.pendingWindow = null;
+    this.options.onMonitor?.(target);
   }
 
   private glide(station: StationName, motion: Motion, onDone?: () => void, cut = false) {
     this.intro = false;
+    if (station !== 'monitor') this.handedOver = false;
     this.dirty = true;
     this.camera.fly(station, motion, onDone, cut || this.options.reducedMotion);
+  }
+
+  /** Phones have no live screen to hover or focus, so the glass gets a proxy box of its own (hotspots: hit_monitor). */
+  private addMonitorProxy() {
+    const { position, quaternion, width, height } = this.nodes.monitor;
+    const proxy = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+    proxy.name = 'hit_monitor';
+    proxy.visible = false;
+    proxy.position.copy(position);
+    proxy.quaternion.copy(quaternion);
+    this.scene.add(proxy);
+    proxy.updateMatrixWorld();
+    this.nodes.proxies.push(proxy);
   }
 
   private aspect() {
@@ -310,7 +395,7 @@ export class Application implements RoomHandle {
   }
 
   private pixelRatio(tier: QualityTier = this.quality.tier) {
-    return Math.min(window.devicePixelRatio || 1, DPR_CAP) * tier.resolution;
+    return Math.min(window.devicePixelRatio || 1, this.quality.ladder.dprCap) * tier.resolution;
   }
 
   private applyTier(tier: QualityTier) {
@@ -346,7 +431,16 @@ export class Application implements RoomHandle {
     const frameMs = this.last ? now - this.last : 0;
     const dt = Math.min(0.1, frameMs / 1000);
     this.last = now;
+    // SaahilOS covers the whole screen: nothing of the room is visible to draw.
+    if (this.handedOver && !this.camera.moving) {
+      this.quality.reset(now);
+      return;
+    }
     if (!this.paused) this.clock += dt;
+    if (this.frameSink) {
+      this.dirty = true;
+      if (frameMs > 0) this.frameSink(frameMs);
+    }
 
     this.camera.update(dt, this.clock, this.interaction.pointer);
     this.interaction.update();
@@ -375,6 +469,7 @@ export class Application implements RoomHandle {
 
   private installProbe() {
     const app = this;
+    const widths = textureWidths(this.nodes.root);
     window.__room = {
       get phase() {
         return app.camera.phase;
@@ -388,6 +483,7 @@ export class Application implements RoomHandle {
       get tier() {
         return app.quality.index;
       },
+      light: this.light,
       stations: this.navigation.tour,
       get drifting() {
         return app.navigation.drifting;
@@ -395,6 +491,7 @@ export class Application implements RoomHandle {
       get look() {
         return app.camera.lookAngles;
       },
+      textureWidths: widths,
       claims: this.hover.claims,
       lift: (proxy) => this.hover.liftOf(proxy),
       point(name) {

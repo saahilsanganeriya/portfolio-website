@@ -21,6 +21,7 @@ export async function startRoom(container: HTMLElement, opts: RoomOptions): Prom
     unlockAudio: () => app.unlockAudio(),
     setMuted: (muted) => app.setMuted(muted),
     setPaused: (paused) => app.setPaused(paused),
+    measureFps: (ms) => app.measureFps(ms),
     dispose: () => app.dispose(),
   };
 }
