@@ -5,7 +5,7 @@ const NAMED_ENTITIES: Record<string, string> = {
   hellip: '…', mdash: '—', ndash: '–', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”',
 };
 
-export function decodeEntities(text: string): string {
+function decodeEntities(text: string): string {
   return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, code: string) => {
     if (code[0] !== '#') return NAMED_ENTITIES[code.toLowerCase()] ?? whole;
     const point = code[1].toLowerCase() === 'x' ? Number.parseInt(code.slice(2), 16) : Number(code.slice(1));
@@ -18,7 +18,7 @@ export function decodeEntities(text: string): string {
 const BOILERPLATE = [/^Watched on \w+ \w+ \d{1,2}, \d{4}\.?$/, /^This review may contain spoilers\.?$/];
 
 /** Review HTML (feed description or export cell) to plain text, or null when no words of the member remain. */
-export function cleanReview(html: string): string | null {
+function cleanReview(html: string): string | null {
   const text = decodeEntities(
     html
       .replace(/<img\b[^>]*>/gi, '')

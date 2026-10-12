@@ -5,13 +5,13 @@ import { buildFilmsData, FEED_URL, mergeEntries, withholdNamedReviews, type Film
 import { sharedPacer, type Pacer } from './pace.ts';
 import { parseFeed } from './parse.ts';
 
-export const USER_AGENT =
+const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36 ' +
   "(saahilsanganeriya.com; reads one member's own public diary feed)";
 const TIMEOUT_MS = 10_000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
-export class FeedBlockedError extends Error {}
+class FeedBlockedError extends Error {}
 
 export interface FeedOptions {
   fetchImpl?: typeof fetch;

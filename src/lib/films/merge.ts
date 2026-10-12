@@ -17,7 +17,7 @@ export interface FilmsData {
   posters: string[];
 }
 
-export const PROFILE_URL = 'https://letterboxd.com/saahilsan/';
+const PROFILE_URL = 'https://letterboxd.com/saahilsan/';
 export const FEED_URL = `${PROFILE_URL}rss/`;
 
 // The four films whose posters hang in the room; each id is the film's Letterboxd slug.
@@ -38,7 +38,7 @@ const normalise = (title: string) =>
     .replace(/^-|-$/g, '');
 
 // The export names films by title and year only (no slug), so a film is identified by both.
-export const filmKey = (title: string, year: number) => `${normalise(title)}|${year}`;
+const filmKey = (title: string, year: number) => `${normalise(title)}|${year}`;
 const entryKey = (entry: FilmEntry) => `${filmKey(entry.title, entry.year)}|${entry.watchedDate}`;
 
 /** Letterboxd slug for an exported film: the poster ids where known, else the plain title slug. */
