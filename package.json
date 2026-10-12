@@ -15,7 +15,8 @@
     "films": "node scripts/fetch-films.mjs",
     "measure:payload": "node scripts/measure-payload.mjs",
     "measure:fps": "node scripts/measure-fps.mjs",
-    "astro": "astro"
+    "astro": "astro",
+    "posters": "node scripts/posters/build.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^8.0.3",
@@ -38,12 +39,15 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@axe-core/playwright": "^4.13.0",
+    "@fontsource-variable/league-gothic": "^5.3.0",
     "@gltf-transform/cli": "^4.5.1",
     "@playwright/test": "~1.63.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
+    "fontkit": "^2.0.4",
     "playwright": "~1.63.0",
+    "sharp": "^0.35.5",
     "typescript": "^6.0.3",
     "vitest": "^5.0.3"
   },
