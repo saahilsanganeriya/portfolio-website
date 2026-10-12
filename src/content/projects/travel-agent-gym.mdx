@@ -31,38 +31,40 @@ Hard needs work the same way. A constraint the agent has asked about is enforced
 an informed agent cannot fumble it. A constraint it never asked about is not masked. It can book the
 inaccessible hotel, and the trip fails when the family arrives.
 
-Illegal actions are removed rather than punished: 9 of the 21 invariants live in the mask. The two obvious
-exploits, always booking the cheapest flight and always picking the top-rated hotel, both score zero with
+Illegal actions are removed by the action mask rather than punished. The two obvious exploits, always booking the cheapest flight and always picking the top-rated hotel, both score zero with
 no penalty written against either. Cheap fragile fares lose once the disruptions start. Ratings from a
 handful of reviews are noisy, and price follows true quality, so sorting by rating overpays. No LLM sits
 in the reward path. The reward is arithmetic over a booking ledger.
 
 The first version had a clock bug I am glad I found: it applied Tokyo's time offset to a San Francisco
-departure, so every long-haul leg was off by 16 hours. The second version builds every time from real time
-zones and checks the whole world for coherence. On its first run that check caught 96 flights from SFO to
-SFO.
+departure, so every long-haul leg landed at the wrong local time. The second version builds every time from
+real time zones and checks the whole world for coherence. On its first run that check caught flights from
+San Francisco to San Francisco.
 
 ## Where the difficulty went wrong
 
-I wanted a scripted agent to land in the middle, solving some trips and failing many, and a random policy
-to solve almost none. Version one missed at both ends. Random solved 25% of episodes, so a trip could be
-finished by accident, and my heuristic solved 96%.
+I wanted a random policy to solve almost none, and my scripted agent to land near 30%, solving some trips
+and failing many. Version one missed at both ends. Random solved one episode in eight and finished one in
+four, so a trip could be completed by accident. My heuristic solved 75%, and a trained PPO policy 88%.
 
 Version two widened the world to 3 regions, 13 cities and 5 transport modes. Random fell to zero, which
-was the fix that mattered. The heuristic fell to 7%, past the other edge.
+was the fix that mattered. The heuristic fell to 5%, past the other edge. An expert version that asks every
+hard-constraint question did no better, at 2%, so the interviewing I built the world around does not yet
+show in the score.
 
-It was not losing on judgement. It finished only 10% of trips. I found and fixed two causes. Nothing held
-back money for hotels, so one flight could take 97% of the budget, and one rollout spent 76 of its 90 turns
-repeating the same flight search. Completion still sat at 10%. Raising the turn cap from 90 to 150 made it
-worse: the client walked out more often, 0.47 of episodes up to 0.80.
+The heuristic was not losing on judgement. It finished only 8% of trips. I found and fixed two causes.
+Nothing held back money for the rest of the trip, so one outbound flight could take 97% of the budget, and
+the heuristic kept repeating the same empty search. The 8% is what is left after those fixes. Raising the
+turn cap from 90 to 150 made it worse, because the client's patience ran out first.
 
-Then I trained PPO for 500k steps. It converged to the score of doing nothing, which made it the best
-policy in the environment. Doing nothing scored −0.360. Building a real trip, as the heuristic does,
-scored −1.321. A small LLM agent did the right things, asking about 91% of the preference axes and every
-class of hard constraint, and still completed 0% of trips. That points at the environment, not the agents.
+Then I trained PPO for 500k steps. It learned to book nothing: its training reward settled at −0.00005,
+with episodes running out the 90-turn clock. Doing nothing scored −0.360. Building a real trip, as the
+heuristic does, scored −1.318. Stalling beats working in this reward, and PPO found that. A small LLM agent
+did the right things, finding 91% of the preference axes and asking about every class of hard constraint,
+and still completed no trips. That points at the environment, not the agents.
 
 ## What I would change
 
-Fix completion first. At a 10% completion rate no reward shape can save it. Then make walking away the
+Fix completion first. At 8% completion no reward shape can save it. Then make walking away the
 worst outcome, instead of a floor an agent can retreat to. An environment that is hard because nobody can
 finish it is broken, and the only way to tell the two apart is to say which one you measured.
