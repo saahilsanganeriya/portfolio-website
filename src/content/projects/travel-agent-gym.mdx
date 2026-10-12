@@ -14,59 +14,136 @@ cover: "../../assets/projects/travel-agent-gym.png"
 coverAlt: "Diagram of an episode: Act I runs interview, search, itinerary, book and finalize; Act II runs the booked trip, where a delayed flight cascades into a missed connection, a late arrival and a hotel no-show."
 ---
 
-A client writes in: family of four, two weeks in Japan, spring, nothing too packed. They do not mention
-that one of them uses a wheelchair. A good travel agent asks. A bad one books the charming hotel up three
-flights of stairs.
+A client writes in: family of four, Japan in spring, around $4k. They do not say that one of them uses a
+wheelchair, or that food matters to them more than anything else on the trip. A good travel agent finds
+both out before booking anything. A bad one books the cheapest flight and the best-rated hotel, and the
+trip comes apart in the second week.
 
-travel-agent-gym is an environment for training and testing agents on that whole job. The agent
-interviews the client, decides where the trip goes, searches flights, rail and hotels, builds a schedule
-that fits a real clock, gets it approved and books it. Then the trip happens. Flights slip and
-monsoon ferries cancel, so anything that no longer fits gets missed.
+travel-agent-gym is a reinforcement-learning environment built around that job. The agent interviews the
+client, searches, builds an itinerary that has to fit a real clock, books it against a budget, and then the
+trip actually happens. The reward is the trip the client got, not the plan.
 
-## How it is built
+## How big the job is
 
-The client's preferences are hidden: eight axes, of which the opening message reveals one to three. The
-reward is the trip's value under those hidden weights, so asking questions pays for itself. Nobody has to
-tell the agent to do it.
+The client has eight hidden preferences: cost, comfort, location, pacing, food, culture, novelty and
+reliability. The opening message reveals one to three of them. In the second version the party is hidden
+too: each traveller's age, passport, access needs and diet. The client loses patience every turn and can
+walk out.
 
-Hard needs work the same way. A constraint the agent has asked about is enforced by the action mask, so
-an informed agent cannot fumble it. A constraint it never asked about is not masked. It can book the
-inaccessible hotel, and the trip fails when the family arrives.
+The world has 3 regions (Japan, Italy and Thailand), 13 cities and 43 districts. There are 5 ways to get
+around, from rail to ferries, on local timetables, and 7 kinds of places to sleep. An episode can last 90
+turns, and the agent picks from 89 actions on each one.
 
-Illegal actions are removed by the action mask rather than punished. The two obvious exploits, always booking the cheapest flight and always picking the top-rated hotel, both score zero with
-no penalty written against either. Cheap fragile fares lose once the disruptions start. Ratings from a
-handful of reviews are noisy, and price follows true quality, so sorting by rating overpays. No LLM sits
-in the reward path. The reward is arithmetic over a booking ledger.
+Then Act II runs the trip. Delays, cancellations, overbooking, weather and strikes fire on what was
+actually booked, and a delay travels down the timeline as far as it really reaches. A cheap fare with a
+45-minute connection finally costs what it costs.
 
-The first version had a clock bug I am glad I found: it applied Tokyo's time offset to a San Francisco
-departure, so every long-haul leg landed at the wrong local time. The second version builds every time from
-real time zones and checks the whole world for coherence. On its first run that check caught flights from
-San Francisco to San Francisco.
+## The shortcuts an agent would take
+
+Any agent, human or learned, reaches for the same few shortcuts. I wanted each of them to lose on its own,
+without a penalty written against it.
+
+- **Book the cheapest flight.** Cheap and fragile loses in expectation once the delays start.
+- **Book the top-rated hotel.** A rating from a handful of reviews is noisy, and price follows true
+  quality. Over 200 generated worlds, sorting by rating picks lucky small hotels and overpays.
+- **Book without asking.** The weights are hidden, so an unasked booking is a bet on the average client.
+- **Ask forever.** Patience runs out and the client leaves.
+
+The first version of the world had a different kind of shortcut: mine. Its clock had three silent
+time-zone bugs. One gave every San Francisco departure Tokyo's offset from UTC.
+
+## The design
+
+**Asking pays for itself.** The reward is the trip's value under the client's hidden weights. Nobody tells
+the agent to ask questions; it just scores better when it knows what the client wants.
+
+**Hard needs are masked only once asked.** If the agent asks about access needs, the action mask removes
+every inaccessible hotel, so an informed agent cannot fumble it. If it never asks, nothing is masked. It
+can book the hotel up three flights of stairs, and the trip fails on arrival.
+
+**Illegal is impossible, not punished.** Over budget, the wrong city, a museum closed that day: the mask
+removes those actions. The booking ledger counts integer cents, so overspending cannot happen at all.
+
+**One inequality instead of a pile of rules.** Every pair of things on the itinerary has to satisfy
+`a.end + transfer(a, b) <= b.start`. That one line catches an over-packed day, a move between cities
+with no booked leg, and a tour that starts before the flight lands.
+
+**No LLM in the reward.** It is arithmetic over the ledger, so the same seed always gives the same reward.
+The shaping term is a potential difference, which by construction cannot change which policy is best.
+
+The second version builds every time from real time zones, derives arrivals from distance and checks the
+whole world for coherence. On its first run the check caught flights from San Francisco to San Francisco.
+
+## What I gave up
+
+The world is synthetic. Travel times between places come from 108 real distance pairs fetched once, and
+nothing touches the network during an episode. I traded real inventory for a reward that never changes
+under you.
+
+The shaping trade-off came back to bite. Shaping that cannot change the best policy also cannot rescue a
+terminal reward that favours the wrong thing. That is the next section.
 
 ## Where the difficulty went wrong
 
-I wanted a random policy to solve almost none, and my scripted agent to land near 30%, solving some trips
-and failing many. Version one missed at both ends. Random solved one episode in eight and finished one in
-four, so a trip could be completed by accident. My heuristic solved 75%, and a trained PPO policy 88%.
+I wanted a random policy to solve almost nothing and my scripted agent to land near 30%: low enough that a
+learner has something to find, high enough that it ever sees a success.
 
-Version two widened the world to 3 regions, 13 cities and 5 transport modes. Random fell to zero, which
-was the fix that mattered. The heuristic fell to 5%, past the other edge. An expert version that asks every
-hard-constraint question did no better, at 2%, so the interviewing I built the world around does not yet
-show in the score.
+<figure class="os-figure">
 
-The heuristic was not losing on judgement. It finished only 8% of trips. I found and fixed two causes.
-Nothing held back money for the rest of the trip, so one outbound flight could take 97% of the budget, and
-the heuristic kept repeating the same empty search. The 8% is what is left after those fixes. Raising the
-turn cap from 90 to 150 made it worse, because the client's patience ran out first.
+```text
+            0%        25%       50%       75%      100%
+            |---------|---------|---------|---------|
+ target     R           H
+ v1              R                        H    P
+ v2         R H
 
-Then I trained PPO for 500k steps. It learned to book nothing: its training reward settled at −0.00005,
-with episodes running out the 90-turn clock. Doing nothing scored −0.360. Building a real trip, as the
-heuristic does, scored −1.318. Stalling beats working in this reward, and PPO found that. A small LLM agent
-did the right things, finding 91% of the preference axes and asking about every class of hard constraint,
-and still completed no trips. That points at the environment, not the agents.
+ R random policy   H scripted heuristic   P trained PPO
+```
 
-## What I would change
+<figcaption>Solve rates against the target band. Version one was too easy at both ends; version two fixed the random end and overshot the other.</figcaption>
+</figure>
 
-Fix completion first. At 8% completion no reward shape can save it. Then make walking away the
-worst outcome, instead of a floor an agent can retreat to. An environment that is hard because nobody can
-finish it is broken, and the only way to tell the two apart is to say which one you measured.
+Version one missed at both ends. Random solved one episode in eight and finished one in four, so a trip
+could be completed by accident. The heuristic solved 75%, and a trained PPO policy 88%.
+
+Version two is the bigger world described above. Random fell to zero, which was the fix that mattered.
+The heuristic fell to 5%, far past the target. An expert version that asks every hard-constraint question
+did no better, at 2%, so the interviewing the whole world is built around does not yet show in the score.
+
+The heuristic was not losing on judgement. It finished only 8% of trips. Two causes were found and fixed:
+nothing held money back for the way home, so one outbound flight could eat 97% of the budget, and the
+heuristic kept repeating the same empty search. The 8% is what is left after those fixes. Raising the turn
+cap from 90 to 150 made it worse, because the client's patience ran out first.
+
+Then I trained PPO for 500k steps, and it learned to book nothing. Its training reward settled at −0.00005,
+with episodes running out the 90-turn clock.
+
+<figure class="os-figure">
+
+```text
+ v2 score over 60 seeds (0 is best, lower is worse)
+
+ does nothing  -0.360  #########
+ expert        -1.183  ##############################
+ heuristic     -1.318  #################################
+                       |         |         |         |
+                       0       -0.4      -0.8      -1.2
+```
+
+<figcaption>Doing nothing beats every policy that tries to build a trip, which is the reward PPO learned to exploit.</figcaption>
+</figure>
+
+A trip that gets booked absorbs disruption damage. A policy that stalls pays only for the client's lost
+patience. PPO found that. A small LLM agent did everything right, finding 91% of the preference axes and
+asking about every class of hard constraint, and still completed no trips. When a careful agent hits the
+same wall as a lazy one, the wall is the environment.
+
+One more correction, against myself. My own commit messages recorded the version-one heuristic at 96% and
+the version-two one at 7%. Re-running the committed code gives 67–83% and 5%. Every number on this page is
+the re-run.
+
+## What's next
+
+Completion comes first. At 8% completion no reward shape can save it. Then the terminal reward needs
+rebalancing: walking out costs a flat 1.0, while disruption damage can reach 2.0 and is scaled by 0.9.
+Walking away should be the worst outcome, not a floor to retreat to.
