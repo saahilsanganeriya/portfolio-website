@@ -43,7 +43,7 @@ export interface RoomNodes {
 }
 
 /** The projector screen has no proxy in room.glb; this one, made from the screen's bounds, also opens Films. */
-export const SCREEN_PROXY = 'hit_projector_screen';
+const SCREEN_PROXY = 'hit_projector_screen';
 
 /** Reads the PLAN 3.6 node contract from a loaded room (metres), after scaling it to world units. Throws on a missing required node. */
 export function readRoom(root: THREE.Object3D): RoomNodes {
