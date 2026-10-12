@@ -73,7 +73,8 @@ for (const id of entryIds('story')) {
 const OS_APPS = JSON.parse(
   readFileSync(join(ROOT, 'src/os/types.ts'), 'utf8')
     .match(/APP_IDS = (\[[^\]]*\])/)[1]
-    .replaceAll("'", '"'),
+    .replaceAll("'", '"')
+    .replace(/,\s*\]$/, ']'),
 );
 const OS_SLUGS = {
   projects: new Set(entryIds('projects')),
