@@ -59,7 +59,9 @@ props from another checkout). Re-bake after a rebuild.
 | `cam_loading`, `cam_idle`, `cam_desk`, `cam_monitor`, `cam_shelf`, `cam_projector` | camera framings, each with a `<name>_target` look-at empty; extras `fov_deg` (vertical) |
 
 Units are metres, +Y up. Every material is `KHR_materials_unlit` with the baked light as its base colour, already
-tone-mapped (AgX, the same as the stills), so the site shows it with no tone mapping and sRGB output.
+tone-mapped (AgX, the same as the stills), so the site shows it with no tone mapping and sRGB output. The atlas
+materials are `room_env`, `room_desk`, `room_props` and `room_posters`; only `room_props_leaves` (the mango leaves,
+same texture as `room_props`) is double-sided, because thin closed shells z-fight through a double-sided material.
 
 ## Lights
 
