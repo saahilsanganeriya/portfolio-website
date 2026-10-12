@@ -1,0 +1,78 @@
+---
+title: "saahil-brain: a brain for coding agents"
+summary: "One folder of notes, the same on two machines, that every coding-agent session reads from, and an hourly job that files what they learn."
+year: 2026
+status: "shipped"
+role: "Sole author"
+team: "solo"
+stack: ["Go", "SQLite", "Temporal", "Unison", "Claude Code plugins", "MCP"]
+featured: true
+order: 4
+links:
+  repo: "https://github.com/saahilsanganeriya/saahil-brain"
+---
+
+A coding agent starts every session knowing nothing about the last one. Claude Code keeps a memory folder
+for each project, so a rule I taught an agent in one repo never reached a session in another. And I work
+on two machines: a MacBook, and a Linux machine in the cloud that stays on, which I call the devbox.
+
+saahil-brain is my fix: one folder, `~/brain`, kept the same on both machines, and one Go program that
+hands every agent session a capped slice of it.
+
+## What it holds
+
+My work lives in one box per project. What agents learn becomes small typed notes of 4 KB at most, grouped
+under topic pages called hubs. Notes link through seven named fields and no more, because models misuse a
+large vocabulary of relations.
+
+One page of memory loads in every session, in every repo, on both machines. It is capped at 200 lines and
+24 KiB, because Claude Code cuts the file after about 24.4 KB.
+
+## A few pointers, or none
+
+A session starts with a digest of at most 8,000 characters: this week, where its project stands, and the
+files earlier sessions of that project read most. On every prompt, a hook offers at most three pointers in
+300 tokens, or nothing when nothing matches well. A note shown ten times and never opened sinks. Every
+hook fails open, so a broken brain never blocks a session.
+
+## The dream
+
+Once an hour the devbox checks whether anything new has landed. If enough has piled up, it dreams: it
+turns sessions where I corrected an agent into short lessons, files new memories as notes, merges
+duplicate rules and redraws the memory page.
+
+A model does the judgment, but it can only propose edits. Code checks each one and applies at most 50 a
+run. Nothing is ever deleted: overwritten files are archived first, and if the lint check fails, the whole
+run is rolled back. A run may spend at most $8, and a day $100.
+
+## Two machines, one mesh
+
+Every hour the laptop syncs the folder with the devbox over Unison. Agents on either machine can also list
+each other and send notes. My laptop accepts no incoming ssh, so it runs a small bridge on its own
+localhost and reaches the devbox through a reverse ssh tunnel. The bridge answers a short allow-list of
+commands, never a shell. A note is a file in the target session's inbox. A hook delivers it at that
+session's next tool call or prompt and claims it with an atomic rename, so it arrives exactly once.
+
+Coding agents wrote nearly all of the code, about 38,000 lines of Go, over four days in October. My part
+was the design, including the rule that a model proposes and code decides.
+
+## What was hard
+
+The repo lists 26 things that broke while I built it. Two stay with me.
+
+A git snapshot of the brain once ran over about 600 GB of project results. Git now tracks only brain text,
+and the history went from 6.4 GB to 5.7 MB.
+
+The quieter one: for 12 dreams in a row, the merge step tried to narrow the same old rule, and the code
+refused every time. A lesson holds 300 characters, and 108 of the 109 global lessons had no room for one
+more line. The step still reported ok. Now the narrowing goes into the note's link, and every step counts
+the edits it refused, not only the steps that failed.
+
+## What I would change
+
+The eval closest to real use matches prompts I typed to the file that answered them, and it was the
+weakest. The right file was in the top three pointers 15.9% of the time, and within three tool calls 50.7%
+of the time. A daily agent now works on that number first, and keeps a change only if the numbers improve.
+
+It is also built around one person's setup. Packaging it for someone else turned up steps that had only
+ever run by hand, and it cannot run on a laptop alone, because the dream needs a machine that stays on.
