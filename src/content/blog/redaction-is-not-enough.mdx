@@ -1,7 +1,7 @@
 ---
 title: "Redaction is not enough"
 date: 2026-10-12
-summary: "Blacking out names protects people by wrecking the data. One consistent fake identity per person keeps the conversation and loses the person, if you can tell who is who."
+summary: "Blacking out names protects people by wrecking the data. One consistent fake identity per person keeps the conversation and loses the person, if you can first tell who is who."
 tags: ["privacy", "data", "engineering", "essays"]
 draft: false
 ---
@@ -14,50 +14,85 @@ Here is a work chat after redaction:
 >
 > **[NAME]:** [NAME] is out. Ask [NAME].
 
-Three lines and six names, and you cannot tell whether three people are in it or six. Before the black bars, the thread had a shape: one person asked for help, a second pushed back, and the work went to a fourth because the third was away. Redaction kept the words and threw away the people.
+Three lines and six names, and you cannot tell whether it holds three people or six. Before the black bars, the thread had a shape. One person asked for help, a second pushed back, and the work went to a fourth because the third was away. Redaction kept the words and threw away the people.
 
-I work on anonymization at Mercor. Company data such as chat and email has to lose every real person in it before anyone trains a model on it. I have come to think the black bar is the wrong tool for that.
+## Why I care
 
-## What a black bar breaks
+I work on anonymization at Mercor. The company data we deliver runs to terabytes, billions of tokens of it, and every real person in it has to disappear before anyone trains a model on it. Nobody reads that much text by hand. Whatever rule the pipeline follows for a name, it follows everywhere at once, mistakes included.
 
-Most of what makes a conversation useful is who said what to whom. A question from a new hire means something different from the same question asked by the person who wrote the code. A bug report matters because of who closed it and who opened it again. Redact the names and all of that collapses into one speaker called [NAME].
+So the question is not only “is the person gone?” It is also “is the data still worth anything once they are?”
+
+## The black bar
+
+Redaction is the obvious tool, and it is popular for good reasons. It is simple. It is easy to check: either a name is still there or it is not. It is what courts and governments do to documents they release.
+
+It breaks the data, though. Most of what makes a conversation useful is who said what to whom. A question from a new hire means something different from the same question asked by the person who wrote the code. A bug report matters because of who opened it and who closed it again. Redact the names and all of that collapses into one speaker called [NAME].
 
 It is not only names. Emails, handles, phone numbers and addresses go the same way. A field that held an email address now holds a placeholder, and any code that expects an address breaks on it. Train a model on enough of this and it learns that people are called [NAME].
 
 Redaction also fails at its own job more often than you would hope. A black box drawn over text in a PDF can hide the words from your eyes and leave them in the file, where copy and paste finds them. And taking names out does not take people out. When Netflix released movie ratings with the names removed for a public contest, researchers matched some of the viewers to ratings they had posted publicly on another site. When AOL released search logs with numbers in place of names, a newspaper tracked down one of the searchers from what she had searched for.
 
-## Random fakes break it differently
+## Random fakes
 
-The obvious next step is to swap each name for a fake one. Done carelessly, that breaks the data in a new way. If every mention gets its own random fake, “Jordan” in one message and “J. Lee” in the next become two strangers. One person turns into five. You have not hidden anyone. You have invented a crowd.
+The next idea is to swap each name for a fake one. Done carelessly, that breaks the data in a new way.
 
-The fake also has to look like the thing it replaced. An email address should still be an email address, ideally one that matches the fake name. `jordan.lee@example.com` turning into `8f2c1a@null.invalid` is anonymous and useless. A phone number should keep its country’s shape. A name on a PDF form has to fit the box it was printed in, or the layout falls apart.
+If every mention gets its own random fake, “Jordan” in one message and “J. Lee” in the next become two strangers. One person turns into five. You have not hidden anyone. You have invented a crowd.
 
-## One person, one fake, everywhere
+The fake also has to look like the thing it replaced. `jordan.lee@example.com` turning into `8f2c1a@null.invalid` is anonymous and useless. A phone number should keep its country’s shape. A name on a PDF form has to fit the box it was printed in, or the layout falls apart.
 
-What works, I think, is one consistent fake identity per real person. Jordan Lee becomes, say, Maya Ortiz everywhere she appears. Her address matches her new name, her handle matches too, and when someone types “J.” in a hurry, it becomes “M.” The thread keeps its shape. You can still see that the same person asked twice and nobody answered. Nothing in it points at Jordan.
+## One person, one fake
 
-At work I built the generator that does this. It covers more than 90 kinds of personal data with replacements that keep their format, and the names and addresses it writes keep the length of the originals. Expert reviewers kept 95% of its replacements on 675 documents. I care more about the 5% they changed.
+What works, I think, is one consistent fake identity per real person. It takes two steps, and the first one is the hard one.
 
-## The catch
+<figure class="os-figure">
 
-To give one person one fake, you first have to know which mentions are the same person. Jordan, J. Lee, jlee, a work address and a phone number: is that one person or three? That question is much harder than it looks, and I wrote about it [separately](/blog/the-same-person-problem).
+```text
+ step 1: which mentions are the same person?
 
-When it goes wrong, it goes wrong in two directions, and they are not equally bad. Split one person in two and the thread reads a little oddly, with two fakes for one Jordan. Merge two people into one and the fake carries both of their lives, so one person’s words and details get pinned on the other. The first costs some usefulness. The second cannot be undone once the data has left. So every close call should split.
+   Jordan   J. Lee   J.   jlee   jordan.lee@example.com
+                          |
+                          v
+                      person 7
+                          |
+ step 2: one fake for that person, in every format
+                          |
+                          v
+   Sophie   S. Kim   S.   skim   sophie.kim@example.com
+```
 
-## Fakes are not magic
+<figcaption>An invented example: five mentions are first resolved to one person, then each is replaced by the matching part of one fake identity, in the same format and length.</figcaption>
+</figure>
 
-Consistent fakes fix the usefulness problem. They do not make data private by themselves. The rest of the text can still point at someone: the only engineer in a small office, or a job title only one person holds. Names were never the whole problem, which is what the Netflix and AOL cases showed.
+Jordan Lee becomes Sophie Kim everywhere she appears. Her address matches her new name, her handle matches too, and when someone types “J.” in a hurry, it becomes “S.” The thread keeps its shape. You can still see that the same person asked twice and nobody answered. Nothing in it points at Jordan.
 
-So the check I trust is not “did every name change?” It is “could someone who sees only the output find a real person?” The test should start from that side, the side an attacker would see, and use the original data only to score the result.
+At work I built the generator that does step 2. It covers more than 90 kinds of personal data with replacements that keep their format, and the names and addresses it writes keep the length of the originals.
 
-I also distrust any privacy step that can fail quietly. A step that checks only that it ran, and not what it changed, will one day report success on data it never touched. I would rather the pipeline stop and complain than ship something it was not sure about.
+## What it costs
 
-Here is the same chat with consistent fakes:
+Step 1 is a whole problem of its own. Jordan, J. Lee, jlee, a work address and a phone number: is that one person or three? That question is much harder than it looks, and I wrote about it [separately](/blog/the-same-person-problem).
 
-> **Maya:** can you look at the deploy before Friday?
+When step 1 goes wrong, it goes wrong in two directions, and they are not equally bad. Split one person in two and the thread reads a little oddly, with two fakes for one Jordan. Merge two people into one and the fake carries both of their lives, so one person’s words and details get pinned on the other.
+
+The first costs some usefulness. The second cannot be undone once the data has left. So every close call should split, and I accept a seam in the data as the price.
+
+Consistent fakes also do not make data private by themselves. The rest of the text can still point at someone: the only engineer in a small office, or a job title only one person holds. Names were never the whole problem, which is what the Netflix and AOL cases showed.
+
+## What it bought
+
+Expert reviewers kept 95% of the generator’s replacements on 675 documents. I care more about the 5% they changed. That number says the fakes read right to the people who checked them. It does not say whether someone could find a real person behind them, which takes a different test.
+
+Here is the opening chat again, with consistent fakes:
+
+> **Sophie:** can you look at the deploy before Friday?
 >
 > **Sam:** I thought Ravi owned it.
 >
-> **Maya:** Ravi is out. Ask Lena.
+> **Sophie:** Ravi is out. Ask Lena.
 
 None of these four people exist. Ravi is still out.
+
+## What I would check next
+
+The check I trust is not “did every name change?” It is “could someone who sees only the output find a real person?” That test should start from the side an attacker would see, and use the original data only to score the result.
+
+I also distrust any privacy step that can fail quietly. A step that checks only that it ran, and not what it changed, will one day report success on data it never touched. I would rather the pipeline stop and complain than ship something it was not sure about.
