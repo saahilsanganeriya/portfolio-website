@@ -1,0 +1,34 @@
+---
+title: "Graph ML for irregular ICU time series"
+summary: "Forecasting ICU patients' vital signs with graph neural networks, when most of the measurements are missing."
+year: 2025
+status: "research"
+role: "Team member: repository setup, data exploration and the RainDrop forecasting baseline"
+team: "team of 4; I set up the repository, explored the data and adapted RainDrop for forecasting"
+stack: ["Python", "PyTorch"]
+featured: false
+links:
+  repo: "https://github.com/saahilsanganeriya/GraphML-imts"
+---
+
+An ICU chart is not a neat table. Heart rate might be logged every few minutes, a lab value twice a day,
+and some variables never. In the PhysioNet 2012 challenge data, about 86% of the possible measurements
+are missing.
+
+For a graph machine learning course, four of us asked whether graph neural networks could forecast a
+patient's vitals and labs 6 to 24 hours ahead from 24 hours of history, using the irregular data as it is
+instead of filling the gaps first. Each patient becomes a graph. Every measurement is a node, with edges
+to the same variable nearby in time and to other variables taken at the same moment.
+
+The data covers 12,000 patients, 48-hour windows and 41 variables. We kept extreme values, such as a heart
+rate of 300, instead of throwing them out, since in an ICU they can be real.
+
+My part was the repository and the data exploration, and adapting RainDrop, a published graph model for
+irregular sensor data, from classifying patients to forecasting. It reached an RMSE of 0.561 on validation
+and 0.596 on test. The targets are z-scored, so that is about six-tenths of a standard deviation off.
+
+## What I would change
+
+That number is on normalised values and says nothing yet about the bedside. Six-tenths of a standard
+deviation of heart rate might matter a great deal or not at all. I would report errors in clinical units
+next to the normalised ones.

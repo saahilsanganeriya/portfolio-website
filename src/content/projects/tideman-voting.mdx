@@ -1,0 +1,34 @@
+---
+title: "Tideman voting, extended"
+summary: "A CS50 ranked-pairs voting exercise grown into a 1,300-line C tool that compares voting methods across simulated elections."
+year: 2025
+status: "archived"
+role: "Sole author"
+team: "solo"
+stack: ["C"]
+featured: false
+links:
+  repo: "https://github.com/saahilsanganeriya/tideman-voting-algorithm-implementation"
+---
+
+Ranked-pairs voting, also called Tideman, takes every voter's full ranking and asks, for each pair of
+candidates, which one more voters preferred. It locks in those head-to-head wins from the biggest margin
+down, skipping any win that would create a cycle, and the candidate nobody beats wins. When one candidate
+beats everyone head to head, ranked pairs always picks them.
+
+Writing it was a CS50 problem set. Afterwards I kept going. The program now sets Tideman beside plurality,
+Borda count and Condorcet results, runs Monte Carlo simulations over many random elections, and saves and
+loads elections. Its menu mode can load a saved election or run simulations, though running a new election
+from the menu was never finished. `tideman.c` has grown to 1,323 lines.
+
+## What is wrong with it
+
+Its "plurality winner" is not plurality. Plurality counts first choices. The program keeps only the
+pairwise preference table, so it estimates first-place votes by adding up each candidate's head-to-head
+support and dividing by the number of opponents. That is a Borda score scaled down, so the plurality and
+Borda columns will nearly always agree, and comparing them says little. The fix is to record each ballot's
+first choice as the votes come in.
+
+The simulation's "agreement" figure has a similar problem. It compares how often each method picked each
+candidate across all runs, not whether two methods picked the same winner in the same election. Both are
+small fixes, and both matter more than any feature the tool gained.

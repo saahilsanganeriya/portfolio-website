@@ -1,0 +1,53 @@
+---
+title: "A projectionist for my film library"
+date: 2026-10-12
+summary: "Why the service that runs my home film library is named after a job that barely exists, what broke while I built it, and the one rule it keeps."
+tags: ["engineering", "home lab", "projectionist", "essays"]
+draft: false
+---
+
+In late September I changed the clock on the small server that holds my film library. It had been running on Bogotá time, so every night job ran at the wrong hour. A new time zone meant restarting Plex, the app that streams the films. The script doing it ended a viewer’s stream first, then called a restart command that this version of the server’s operating system does not have. Plex did not restart. The only thing that stopped was someone’s film.
+
+Nine days later I made the first commit of projectionist.
+
+## The old way
+
+The server is a four-bay Synology NAS with a low-power Celeron inside. Before projectionist it ran on Python scripts. Some ran on a timer and some I started by hand. None of them knew what the others were doing, or whether anyone was watching.
+
+## Why the name
+
+In an old cinema the projectionist sat in a booth at the back. They threaded the film and switched from one reel to the next without the audience seeing a flicker. When the job went well, nobody in the audience thought about the projectionist at all. When it went badly, everyone turned around.
+
+That job has mostly gone. Cinemas swapped film for digital projectors, and a show now starts from a schedule on a server. Where someone is still in the booth, they look after many screens at once. The screenings I go out of my way for are the few still shown on film, 35mm and 70mm prints that need a person back there.
+
+So it is a little sad to name a service after the job. I did it anyway, because the part I wanted is the part that survives in software: run the show and stay out of the audience’s way.
+
+In projectionist that is one rule. Every disruptive job pauses while anyone but me is watching. Before it moves a file, it waits until nobody else has a stream open. During a long encode it freezes the process and lets it go again when the room empties. If it cannot read who is watching, it assumes someone is. I think every background job should work this way. A job that cannot tell whether the room is empty should act as if it is full.
+
+## What it is
+
+projectionist is one Go service in one container on the NAS. Each job is a stage with its own schedule and, where it matters, a night window. State lives in SQLite, so a restart never runs a stage early, and every stage has to be safe to run again after a crash. The service answers a health check, and the NAS emails me when that check fails. There are 15 stages now. They rename new arrivals, fit subtitles, choose posters, keep watch history in step between two media apps, audit the library and back up the apps’ own data.
+
+I did not write it alone. Coding agents wrote a lot of the Go, and 316 of its 641 commits carry an agent’s co-author line. My part was deciding what each stage had to prove. An old script could go only when its replacement matched it on a recorded test, and the script and its scheduled task were deleted in the same change, so the two never ran side by side.
+
+## What broke
+
+The first real bug came before any Go. During a trial of a bigger rename job, Plex started marking films as deleted. On a Synology, a new folder inherits its parent’s access list, and `chmod` quietly strips it. The old mover ran `chmod` on every folder it made, so it took away the access Plex needed to see what had just moved. The Go stages never call `chmod`. Before I trusted any file operation, I measured it on this NAS, in scratch folders on shares that hold no films, to learn which renames are atomic and which copies cost no space. A manual describes a filesystem. The NAS has its own opinions.
+
+Subtitles were worse, and that one was a design mistake. An early mode wrote any subtitle that passed a cheap length check. It was fast. Then a spot check found 4 of 5 of those files between 1.3 and 55 seconds out of sync. Nothing ever looks at a subtitle again once it is written, so each of those mistakes would have stayed in the library for good. I deleted the mode. Now every subtitle is fitted to its own video before it is written. The stage samples four short stretches of the film and checks that the lines land where the speech or the original captions do. Even a subtitle made for the exact release has to pass, after one that matched only on length sat 15.7 seconds off. A file nobody will check again has to be right the first time.
+
+Then there was the alert that would not clear. For about 12 hours one day, the NAS emailed me every 15 minutes. A subtitle run had raised one alert. The next run spent half a day working through a backlog without a single problem, but the health check kept showing the old alert, because the clean run had not finished. An alert that will not clear teaches you to stop reading alerts. Now a run that goes 30 minutes without a new problem clears the old one.
+
+Some failures were not my code at all. After an update to the NAS’s operating system, Plex silently stopped using the GPU. Every stream it converted ran on the processor instead, at 247% CPU, and a viewer’s film kept buffering. The first stage I ported was a guard that checks that setting every 15 minutes and puts it back.
+
+And one was my taste. I let an image model make collage posters for the list shelves in my library. They looked horrible. A model in projectionist may now judge posters, never draw them. It picks among existing posters under a hard budget of $12, and it never replaces a poster I chose myself. My own picks are often odd on purpose, and the judge would mark them down.
+
+## Polite to other people’s servers
+
+Staying out of the way applies outside the house too. projectionist reads my Letterboxd diary so both media apps know what I have watched. It reads the public RSS feed and a few public pages, with no login. Every Letterboxd request in the whole process waits on one shared limiter: never more than one request every 2 seconds, however many stages want one. When Letterboxd refuses a page, projectionist stops and leaves it for a later run.
+
+The Films page on this site reads my diary from the same RSS feed, under the same limit, and never asks for any other page. Its live copy refreshes at most once an hour.
+
+## At night
+
+Most nights nothing happens that anyone would notice. Between one and seven in the morning, while nobody but me is watching, a few more subtitles get fitted to films I might not watch for a year. Nobody turns around.

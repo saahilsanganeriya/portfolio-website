@@ -1,0 +1,53 @@
+---
+title: "A real-time streaming pipeline (Amazon internship)"
+summary: "An Apache Flink pipeline that replaced an hourly batch job. Events now land in 600–900 ms, against a 120 s target."
+year: 2025
+status: "shipped"
+role: "Data Engineer Intern"
+team: "solo build, as a summer intern on an Amazon data team"
+stack: ["Java", "Apache Flink", "Amazon Kinesis", "AWS Lambda", "Amazon SNS", "Amazon OpenSearch", "Amazon S3", "CloudWatch"]
+featured: true
+order: 5
+links:
+  repo: "https://github.com/saahilsanganeriya/real_time_streaming"
+---
+
+The data behind a set of workforce dashboards ran through an hourly batch job. Whatever happened just
+after a run showed up nearly an hour later. My internship project was to make it real time.
+
+## What it does
+
+Events arrive on SNS in an AWS region in Australia and have to reach OpenSearch dashboards in the US. A
+Lambda function bridges SNS into Kinesis. A Flink application written in Java reads the stream, reshapes
+the nested JSON and writes it to several OpenSearch indexes at once. Beside that real-time path, every
+event also goes to S3 as a backup, with a dead-letter queue for replays, retries and CloudWatch alerts.
+
+Before writing any Flink I compared Firehose, OpenSearch Ingestion, Data Prepper and a direct Lambda design
+against Flink on latency, exactly-once guarantees and cost. I picked Flink. The next two problems are why
+that choice mattered.
+
+## What was hard
+
+**The notebook.** I started where the managed service makes starting easy, a PyFlink notebook. It worked
+for one sink. Then I needed several, and notebooks there allow only one. They also could not do the
+guarded updates I needed, and they could not use IAM authentication. I rebuilt the whole thing as a Java
+DataStream application.
+
+**Order.** Events cross regions and get retried, so an older update can arrive after a newer one. If the
+sink just writes whatever comes in, the dashboard moves backwards. I built 5 custom OpenSearch sinks. Each
+signs its requests with IAM SigV4 and runs a Painless script that refuses an event older than the stored
+document. Delivery can repeat and arrive out of order, and the result still comes out exactly once.
+
+## The result
+
+The target was 120 seconds from event to dashboard. Events landed in 600–900 ms. The Lambda layer has
+headroom for 300K+ events a minute.
+
+That is room to spare against the target. The 120 s was the target, not the old job's time, so it
+gives no fair multiple to quote.
+
+## What I would change
+
+I spent weeks on the notebook before checking whether it could do the two things I already knew I needed,
+more than one sink and IAM. Today I check hard requirements against a platform's documented limits on the
+first day, before writing a line for it.

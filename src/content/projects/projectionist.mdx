@@ -1,0 +1,75 @@
+---
+title: "projectionist: a home media pipeline on a NAS"
+summary: "One Go service that runs my home film library on a small NAS, and pauses every heavy job while anyone else is watching."
+year: 2026
+status: "shipped"
+role: "Sole author"
+team: "solo"
+stack: ["Go", "SQLite", "Docker", "FFmpeg", "Prometheus", "Plex and Jellyfin APIs", "LLM APIs"]
+featured: true
+order: 6
+links:
+  repo: "https://github.com/saahilsanganeriya/projectionist"
+---
+
+In an old cinema the projectionist sits in the booth at the back. When the show runs well, nobody in the
+audience thinks about them. That is the job I wanted from the software behind my film library.
+
+The library lives on a four-bay Synology NAS with a low-power Celeron. For a long time it ran on Python
+scripts, some on a timer and some I started by hand. One renamed files, one fetched subtitles, one picked
+posters, and none of them knew what the others were doing.
+
+## What it does
+
+projectionist replaces those scripts, one at a time, with one Go service in one container. Each job is a
+stage with its own schedule and, where it matters, a night-time window. State lives in SQLite, and the
+service answers `/health` and `/metrics`. There are 15 stages now, covering renaming new arrivals against
+TMDB, subtitles, posters and collections, watch history across Plex and Jellyfin, a library audit,
+backups of the apps' data, and health checks that can restart a stuck service.
+
+The name is the main rule. Every disruptive job pauses while anyone but me is watching. A gate counts the
+Plex and Jellyfin sessions that are not mine. Before it moves a file it waits for zero, and during a long
+encode it sends SIGSTOP and SIGCONT. If it cannot read the count, it assumes someone is watching.
+
+Each stage has to be safe to rerun after a crash: it finishes the work and never repeats a side effect.
+Every file move is a single system call that cannot overwrite anything, and I tested that call on the NAS
+itself before trusting it. A Python script goes away only when its Go stage matches it on a recorded
+gate. The rename planner agreed with the old script on 21,333 of 21,334 rows, and the one difference was
+intended.
+
+## What broke
+
+**Quick subtitles.** An early mode wrote any subtitle that passed a cheap length check. A spot check found
+4 of 5 such files 1.3 to 55 seconds out of sync, and nothing ever revisits a subtitle once it is written.
+I deleted the mode. Every subtitle is now fitted to its video first, from 4 windows of 90 s each, and on
+the gate every sampled fit sat within 134 ms of a whole-file reference.
+
+**A restart that was half a restart.** Docker's one-call restart killed Jellyfin while it was still
+cancelling a scan, then never ran the start half. Restarts are now three steps: stop with a grace period,
+start, then poll the service until it answers. No reply from Docker counts as proof.
+
+**A slow Plex.** Mass edits fragmented Plex's database until the Movies page took 26.8 s to load cold.
+Plex's own database optimise brought it to 17 ms. The health stage now times those pages on every run and
+schedules the optimise itself, at night, while nobody but me is watching.
+
+**An alert that would not clear.** One stale subtitles alert held `/health` at 503 for about 12 hours of a
+clean run and emailed me every 15 minutes. Now a run that has gone 30 minutes without raising anything
+clears it.
+
+## Small things I like
+
+Posters are picked by a vision model under a hard budget of $12, and it never replaces a poster I chose by
+hand. My own picks are often deliberately odd art, which the judge marks down, so it does not get a vote
+on them.
+
+My Letterboxd diary flows into the watch history from Letterboxd's public RSS feed and pages, and the
+whole service sends Letterboxd at most one request every 2 seconds. The Films page on this site reads the
+same feed at the same polite pace.
+
+The repository holds 641 commits and about 62,000 lines of Go across 169 files, 64 of them tests. It
+ships as a 12 MB static binary.
+
+## What I would change
+
+Quick mode is the lesson. Anything that writes into the library has to prove itself before it writes,
+because nobody checks a file twice.

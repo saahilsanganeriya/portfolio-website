@@ -1,0 +1,68 @@
+---
+title: "travel-agent-gym: an RL environment for a travel agent"
+summary: "A Gymnasium environment where an agent interviews a client, plans and books a trip, and then lives through what goes wrong."
+year: 2026
+status: "research"
+role: "Sole author"
+team: "solo"
+stack: ["Python", "Gymnasium", "Stable-Baselines3", "sb3-contrib (MaskablePPO)", "NumPy"]
+featured: true
+order: 3
+links:
+  repo: "https://github.com/saahilsanganeriya/travel-agent-gym"
+---
+
+A client writes in: family of four, two weeks in Japan, spring, nothing too packed. They do not mention
+that one of them uses a wheelchair. A good travel agent asks. A bad one books the charming hotel up three
+flights of stairs.
+
+travel-agent-gym is an environment for training and testing agents on that whole job. The agent
+interviews the client, decides where the trip goes, searches flights, rail and hotels, builds a schedule
+that fits a real clock, gets it approved and books it. Then the trip happens. Flights slip and
+monsoon ferries cancel, so anything that no longer fits gets missed.
+
+## How it is built
+
+The client's preferences are hidden: eight axes, of which the opening message reveals one to three. The
+reward is the trip's value under those hidden weights, so asking questions pays for itself. Nobody has to
+tell the agent to do it.
+
+Hard needs work the same way. A constraint the agent has asked about is enforced by the action mask, so
+an informed agent cannot fumble it. A constraint it never asked about is not masked. It can book the
+inaccessible hotel, and the trip fails when the family arrives.
+
+Illegal actions are removed rather than punished: 9 of the 21 invariants live in the mask. The two obvious
+exploits, always booking the cheapest flight and always picking the top-rated hotel, both score zero with
+no penalty written against either. Cheap fragile fares lose once the disruptions start. Ratings from a
+handful of reviews are noisy, and price follows true quality, so sorting by rating overpays. No LLM sits
+in the reward path. The reward is arithmetic over a booking ledger.
+
+The first version had a clock bug I am glad I found: it applied Tokyo's time offset to a San Francisco
+departure, so every long-haul leg was off by 16 hours. The second version builds every time from real time
+zones and checks the whole world for coherence. On its first run that check caught 96 flights from SFO to
+SFO.
+
+## Where the difficulty went wrong
+
+I wanted a scripted agent to land in the middle, solving some trips and failing many, and a random policy
+to solve almost none. Version one missed at both ends. Random solved 25% of episodes, so a trip could be
+finished by accident, and my heuristic solved 96%.
+
+Version two widened the world to 3 regions, 13 cities and 5 transport modes. Random fell to zero, which
+was the fix that mattered. The heuristic fell to 7%, past the other edge.
+
+It was not losing on judgement. It finished only 10% of trips. I found and fixed two causes. Nothing held
+back money for hotels, so one flight could take 97% of the budget, and one rollout spent 76 of its 90 turns
+repeating the same flight search. Completion still sat at 10%. Raising the turn cap from 90 to 150 made it
+worse: the client walked out more often, 0.47 of episodes up to 0.80.
+
+Then I trained PPO for 500k steps. It converged to the score of doing nothing, which made it the best
+policy in the environment. Doing nothing scored −0.360. Building a real trip, as the heuristic does,
+scored −1.321. A small LLM agent did the right things, asking about 91% of the preference axes and every
+class of hard constraint, and still completed 0% of trips. That points at the environment, not the agents.
+
+## What I would change
+
+Fix completion first. At a 10% completion rate no reward shape can save it. Then make walking away the
+worst outcome, instead of a floor an agent can retreat to. An environment that is hard because nobody can
+finish it is broken, and the only way to tell the two apart is to say which one you measured.

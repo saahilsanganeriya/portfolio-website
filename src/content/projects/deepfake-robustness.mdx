@@ -1,0 +1,34 @@
+---
+title: "Deepfake detection under real-world edits"
+summary: "Retrained a fake-image detector so it still works after the compression, sharpening and colour filters that social media apply."
+year: 2025
+status: "research"
+role: "Team member: fine-tuning and evaluation"
+team: "team of 3; I fine-tuned the detector on edited images and measured the results"
+stack: ["Python", "PyTorch", "ResNet-50"]
+featured: false
+links: {}
+---
+
+A detector that catches AI-generated images in a lab can fail the moment someone posts the image.
+Platforms recompress it, people sharpen it and add filters, and the faint traces a detector relies on get
+smoothed away.
+
+We started from a published universal detector, a ResNet-50 trained on GAN images. On a modern set of
+about 19,000 real and AI-generated images it reached 51% accuracy, a coin flip, and caught 3.8% of the
+fakes.
+
+We fine-tuned it on the same kind of images with social-media edits applied: WebP compression in place of
+the JPEG compression from its original training, colour jitter, and sharpening. The best version reached
+83% accuracy while still catching over 93% of the fakes. Sharpening helped the real-image side the most,
+perhaps because it brings out genuine detail in real photos as well as artifacts in fakes. That is our
+guess, and the paper does not prove it.
+
+## What I would change
+
+We fine-tuned and tested on splits of one dataset. So 83% says the detector adapts to this kind of image.
+It does not say the detector would catch images from a generator it has never seen, which is the case
+that matters. I would test on a held-out generator first.
+
+The code lives in a teammate's fork of the original detector, and the commits there are theirs, so I do
+not link it here as mine. The write-up was a course paper and is not online.

@@ -1,0 +1,39 @@
+---
+title: "Context distillation on small language models"
+summary: "Tested whether context distillation helps small OPT models learn language inference from 16 examples. It did not."
+year: 2024
+status: "research"
+role: "Team member: RTE data, BitFit on RTE, and the plain and pattern-based fine-tuning runs"
+team: "team of 4; I prepared the RTE data, ran BitFit on RTE and ran plain and pattern-based fine-tuning at all three sizes"
+stack: ["Python", "PyTorch", "Hugging Face Transformers", "OPT"]
+featured: false
+links:
+  repo: "https://github.com/saahilsanganeriya/context_distillation"
+  paper: "https://github.com/saahilsanganeriya/context_distillation/blob/main/Efficient_LLM_Context_Distillation-CS_7643.pdf"
+---
+
+Put a few examples in a language model's prompt and it can often do a task it was never trained for. The
+examples cost context on every call, though. Context distillation, a method Anthropic described, tries to
+bake the effect of a prompt into the weights instead.
+
+For a deep learning course, four of us tested it against plain fine-tuning, pattern-based fine-tuning and
+in-context learning, with and without BitFit, which trains only the bias terms. The models were OPT at
+125M, 350M and 1.3B parameters, the largest our hardware could hold. Each model saw 16 examples. We
+measured accuracy on three inference datasets and on harder out-of-domain sets, over up to 5 random seeds
+per setting.
+
+My part was the RTE dataset and its preprocessing, BitFit on RTE, and the plain and pattern-based
+fine-tuning runs on every dataset at all three sizes. I also wrote the paper's Approach section.
+
+## What we found
+
+Accuracy sat between 50% and 60%, barely above chance. One dataset looked better until we checked its
+labels: with 40% true labels, answering "false" every time scores 60%, and 72% on its out-of-domain
+partner. We found no evidence that context distillation helps at this scale. It also trains much more
+slowly, because its loss runs over the top 50 logits at every token instead of one label.
+
+## What I would change
+
+We spent our time on careful comparisons at sizes too small to show any difference, and the original
+paper's gaps appear in larger models. One or two runs that worked at a large size would have taught us more
+than five seeds at three small ones.

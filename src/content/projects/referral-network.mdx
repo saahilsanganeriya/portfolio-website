@@ -1,0 +1,59 @@
+---
+title: "referral-network"
+summary: "A small Python library that models who referred whom, counts each person's reach and finds the people most referral paths run through."
+year: 2026
+status: "shipped"
+role: "Sole author"
+team: "solo"
+stack: ["Python"]
+featured: true
+order: 7
+links:
+  repo: "https://github.com/saahilsanganeriya/referral-network"
+---
+
+A referral program grows like a family tree. One person brings in three friends, one of those friends
+brings in two more, and after a few months the questions that matter are about shape: who brought in the
+most people, directly or not, and who sits on the most chains. Then there is money. How big a bonus does
+it take to hit a growth target?
+
+referral-network answers those questions in about 200 lines of Python.
+
+## The rules
+
+Each candidate has exactly one referrer. Nobody can refer themselves, and no referral may close a loop. To
+check for a loop, the library walks up from the referrer toward the root. If it meets the candidate on the
+way, the referral would make a cycle, and it refuses with a clear error.
+
+Those rules make the network a forest: a set of trees. Everything below depends on that.
+
+## Reach and flow
+
+A person's reach is how many people sit below them, at any depth. The library keeps reach current on
+every insert by adding the new candidate's subtree size to each ancestor, so asking for the top people
+by reach never has to walk the whole network.
+
+The more interesting measure is flow centrality: how many pairs of people have this person on the
+referral chain that runs from one to the other. In a general graph that means finding shortest paths between every pair. In a forest there
+is at most one path between two people, so a person sits on the path from someone above them to someone
+below them, and nowhere else. Flow centrality is just the number of people above times the number of
+people below. One multiplication replaces a search over every pair.
+
+## Growth and bonuses
+
+The last part is a small model. Start with 100 referrers, each able to make 10 successful referrals. Every
+day each active referrer succeeds with probability p, uses up one of their referrals, and each new person
+joins the next day with a full allowance of their own. The library tracks the expected number of
+referrers at each remaining allowance, which gives the expected network size after any number of days
+without simulating anyone.
+
+On top of that it finds the smallest bonus, in $10 steps, whose adoption rate reaches a target size. It
+doubles the bonus until the target is reachable, then binary-searches back down. It gives up if the
+adoption rate stops rising for 5 doublings in a row, since more money would buy nothing.
+
+## What I would change
+
+Keeping ancestor counts current walks the new candidate's whole subtree on every insert. That is fine for
+thousands of people and quadratic for one long chain. The bonus search also trusts that adoption only rises
+with the bonus, and nothing checks it. And the first version shipped with no tests at all, which for code
+this easy to get subtly wrong was a mistake.

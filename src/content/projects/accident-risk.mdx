@@ -1,0 +1,33 @@
+---
+title: "Car accident risk in Maryland"
+summary: "A course project predicting crash risk from 155,108 Maryland crash records, and why its headline 98% was the wrong number."
+year: 2023
+status: "archived"
+role: "Team member: data cleaning and the problem definition"
+team: "team of 5; I cleaned the data for all three models and wrote the proposal's introduction and problem definition"
+stack: ["Python", "scikit-learn", "XGBoost", "TensorFlow", "pandas"]
+featured: false
+links:
+  repo: "https://github.com/saahilsanganeriya/Accident-Risk-Assessor"
+---
+
+Crash reports only record crashes. To train a model that tells risky moments from safe ones you also need
+safe examples, and the data has none. Everything after that depends on how you invent them.
+
+We used 155,108 crash records from Montgomery County, Maryland, and dropped every field known only after a
+crash, such as severity and fault. Then we built two sets of made-up non-crash examples. The random set
+took a real crash and changed its road segment, hour or day, at three non-crashes for every crash. The
+hand-built set drew each feature from realistic distributions instead.
+
+A random forest scored 98% accuracy with the hand-built negatives and 67.7% with the random ones. The
+67.7% is the honest number, and it is worse than it looks. With three non-crashes for every crash, a model
+that always answers "no crash" scores 75%. Ours caught 2% of the real crashes. The 98% meant the model had
+learned to spot our generator, not crashes.
+
+My part was cleaning the data for all three models, and the introduction and problem definition in our
+proposal.
+
+## What I would change
+
+I would start from how much traffic each road carries at each hour. A busy road at rush hour has more
+crashes because it has more cars, and a model that cannot tell those apart is measuring traffic, not risk.

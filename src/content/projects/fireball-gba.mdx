@@ -1,0 +1,29 @@
+---
+title: "Fireball Dodge, a Game Boy Advance game"
+summary: "A dodge-the-fireballs game for the Game Boy Advance, written in C straight against the hardware for a course."
+year: 2023
+status: "archived"
+role: "Sole author"
+team: "solo (course project)"
+stack: ["C", "Game Boy Advance", "CMake"]
+featured: false
+links:
+  repo: "https://github.com/saahilsanganeriya/Fireball-GBAGame"
+---
+
+The Game Boy Advance has no operating system to hide behind. You write pixels straight into video memory
+and read the buttons from a hardware register. That was the point of this project for Georgia Tech's
+CS 2110, a course on computer organisation in C.
+
+In Fireball Dodge you move a small sprite around the screen while fireballs bounce at random speeds and
+angles, with a new one every 6 seconds. Survive long enough and you win. Easy mode has 2 fireballs and a
+10-second goal, medium has 5 and 25 seconds, and hard has 8 and 40 seconds.
+
+The game runs in Mode 3, the console's plain bitmap mode, and uses DMA to copy images into video memory,
+because drawing them pixel by pixel from the CPU is too slow. The game loop and its state machine, from the
+start screen to game over, live in a 193-line `main.c`.
+
+## What I would change
+
+In bitmap mode every moving thing is redrawn by hand, every frame. The console has hardware sprites that
+would do that work, and they are what I would reach for now.

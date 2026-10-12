@@ -1,0 +1,30 @@
+---
+title: "TMNT Frogger for Android"
+summary: "A Frogger-style Android game in plain Java, with the Ninja Turtles as characters and no game engine."
+year: 2023
+status: "archived"
+role: "Developer"
+team: "course project; every commit in the repository is mine"
+stack: ["Java", "Android SDK"]
+featured: false
+links:
+  repo: "https://github.com/saahilsanganeriya/TNMT-Frogger-Android"
+---
+
+Frogger is a good first game because the rules fit in one sentence: cross the road, then the river, and do
+not get hit or fall in. This version is an Android app in plain Java, with no game engine, and with the four
+Ninja Turtles as the characters you can play.
+
+You pick a name, a difficulty and a turtle. Easy gives you 5 lives, medium 3 and hard 1. There are 5 lanes
+of traffic at different speeds and 4 river lanes of floating logs. Moving forward scores points, and
+crossing the water scores double.
+
+Everything runs in one activity. Timers move the vehicles and logs, and every tick checks each object's
+bounds against the player. All of it, from setup to the win and lose screens, sits in a 559-line
+`MainActivity.java`.
+
+## What I would change
+
+One 559-line activity was quick to write and hard to change. The game state, the drawing and the loop
+belong in separate pieces that can be tested on their own. The turtle artwork also belongs to its owners,
+so none of it appears here.

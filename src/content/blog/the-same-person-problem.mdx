@@ -1,0 +1,57 @@
+---
+title: "The same-person problem"
+date: 2026-10-12
+summary: "“Is this the same person?” takes a human a second and a program a long time. Why it is the hardest easy problem in data, and the two ways every answer goes wrong."
+tags: ["data", "identity resolution", "engineering", "essays"]
+draft: false
+---
+
+My surname has two spellings, and both are mine. My résumé says Sanganeriya. My email address says sanganeria, without the y. So did the address of the photography blog I kept as a teenager, and so did the name I signed under my blog posts. On GitHub I am saahilsanganeriya. On Letterboxd I am saahilsan, which is neither. And Sanganeriya is also the name of the spinning mill my father built.
+
+Anyone who knows me links every name in that list to me in a second, and leaves the mill out. A program sees a pile of strings that share some letters, and one of them is a company.
+
+That is the same-person problem. I think it is the hardest easy problem in data. It is easy because any of us can do it for a handful of records without thinking. It is hard because a program has to do it for millions of records with no idea what a person is.
+
+It is also my day job. At Mercor I built the entity resolution that links every name, email and handle in a company’s data to the real person behind it, so that each person can get [one consistent fake identity](/blog/redaction-is-not-enough). This post is about the problem, not about how our system works inside.
+
+## Two halves that pull against each other
+
+Different strings can be one person. People use nicknames, initials, married names, a work address and a personal one. They make typos. Names from where I grew up were written in another script first, so they have several English spellings. My own surname is the proof.
+
+The same string can be different people. Two John Smiths in one company are two people. A first name on its own links strangers all the time.
+
+Then there are things that look like identity and are not. A shared inbox like support@ is many people. So is a family email address, and a household phone number belongs to everyone in the house. Notification emails arrive from one address under many people’s names. “Same address, same person” is a guess about the world, and it is wrong often enough to hurt.
+
+Each half has an easy fix that breaks the other. Link only exact matches and you never join two strangers, but J. Lee and Jordan Lee stay two people forever. Link anything that looks close and the strangers start joining.
+
+## One bad link
+
+Linking has a trap built into it. If A is the same person as B, and B is the same person as C, then A is C. That is what “the same person” means. It is also why one wrong link joins two whole groups. A shared inbox can weld everyone who ever wrote from it into a single person.
+
+I have watched one noisy match pull strangers into one cluster, and it is the failure I worry about most. So a merge should need more than one piece of evidence. In the system I built, a merge needs agreeing votes, so one bad verdict cannot join two people.
+
+## Which mistake can you live with?
+
+There are only two ways to be wrong. You can split one person into two, or merge two people into one. Every method makes both mistakes. The real question is which one you can live with, and that depends on what the answer is for.
+
+If you are cleaning a mailing list, a split means someone gets two copies of a catalogue. A merge means someone stops getting it. If you are matching hospital records, a merge can put one patient’s allergies in another patient’s chart. In anonymization, a split leaves a seam: one person with two fake names, which reads a little oddly. A merge puts one person’s words and details on someone else’s fake identity, and once the data has shipped nobody can take that back. So when we are unsure, we split.
+
+Decide which mistake you can live with before you write any code. Every threshold and every rule after that is the same decision made again in small.
+
+## The honest way does not fit
+
+The honest way to do this is to compare every mention with every other one. At any real size that is impossible. One run of mine resolved 88 million mentions. Every pair among them comes to nearly four quadrillion comparisons.
+
+So you group likely matches first and compare only inside the groups. That makes the problem small enough to solve, and it adds a new way to fail, because two mentions that never land in the same group can never be linked. Every shortcut that makes the problem fit is also a place to lose a true match.
+
+## Knowing whether you got it right
+
+Measuring this is its own trap. Put every mention in one giant cluster and you have found every true match. Put every mention alone and you have made no wrong merge. Both answers are useless, and some popular scores rate one of them well.
+
+One failure looks clean. A system that links “Jordan Lee” to “Jordan Lee” wherever it appears, and nothing else, makes almost no wrong merges. It is resolving strings, not people, and it never learns that J. Lee is the same person.
+
+So I don’t trust a clustering score on its own. A number that cannot fail tells you nothing. I want to see how often the system split people and how often it merged them, side by side, and I want the two silly answers to score badly on the same measure.
+
+## Back to the mill
+
+My email still drops the y. Every system that decides whether that address and my byline are one person is doing this work, usually without anyone noticing. And somewhere there is a spinning mill with my surname on it, which no system should ever merge with me.

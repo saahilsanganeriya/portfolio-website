@@ -1,0 +1,71 @@
+---
+title: "swe-sim: a SWE simulator for coding-agent tasks"
+summary: "Turns real GitHub issues into graded coding-agent tasks where the agent can question a simulated stakeholder before it writes a patch."
+year: 2026
+status: "shipped"
+role: "Sole author"
+team: "solo"
+stack: ["Python", "Temporal", "Google Cloud Run", "Modal", "Harbor", "Terraform", "PostgreSQL"]
+featured: true
+order: 2
+links:
+  repo: "https://github.com/saahilsanganeriya/swe-sim"
+---
+
+Most GitHub issues leave something out. A bug report says a hook misbehaves when a test is skipped and
+never says which kind of skip. An engineer on the team would ask. Most coding benchmarks hand the agent a
+tidy spec instead, so they never find out whether it knows when to ask.
+
+swe-sim turns real issues into tasks that keep the gap. It removes chosen facts from the issue and gives
+them to a simulated stakeholder: an LLM that knows the missing facts and runs out of patience. The agent
+can question it, write a patch, and then hidden tests grade the patch in a separate offline container.
+Asking changes what the agent knows. It never changes the tests or the reward.
+
+## How a task gets made
+
+Each task runs in three conditions: the full brief, the brief with the gaps, and the brief with the gaps
+plus a channel to the stakeholder. Before a task is registered it passes automatic approval gates, then a
+set of controls that actually execute:
+
+- An empty patch must score zero, and the real fix must score one.
+- A plausible but wrong patch must fail.
+- Patches that tamper with the tests must earn exactly zero.
+- The real fix must not be reachable from inside the agent's container.
+
+Temporal runs task creation and every graded trial. Harbor builds the agent and verifier environments on
+Modal, and each trial is its own Cloud Run job. The repository is about 29,000 lines of Python with 20,600
+lines of tests.
+
+## The hard part
+
+Trust. The agent's code runs inside pytest, so it can try to fake its own results. The verifier gives
+credit only when four signals agree: the collected test ids, the JUnit file, the terminal summary and the
+exit status. A forged report gets caught when it disagrees with the others. That is a tested defence, not
+a proof, and the grading notes say exactly that.
+
+## First results, and the bug they found
+
+The first task through every gate came from a real pytest bug (`pytest-dev--pytest-7283`). I ran four
+models on it in all three conditions, two trials each, plus a screening run and a demo: 29 trials for
+$3.01 in total.
+
+Two models solved every trial they got, 7 of 7 and 6 of 6. The other two failed the full brief and solved
+the interactive one. Full scoring below the gapped brief should not happen, since full holds strictly more
+information.
+
+One stakeholder fact caused it. It described behaviour that only an existing, passing test covered, and
+that test punished implementing it. An agent that followed the fact broke the passing test, and the
+regression rule set its reward to zero. That was a bug in how I wrote the task, not a finding about
+asking questions. I added a gate the same day: a stakeholder fact may not claim behaviour outside the
+task's contract.
+
+The judge that decides whether an issue is underspecified enough to use is weaker than I would like.
+Against 145 issues with human labels it reached 0.634 agreement, where always answering "no" gets 0.566.
+Its recall is 0.46, so it misses more than half of what people called underspecified. For a filter that
+only needs enough good tasks, that is tolerable. For anything else it is not.
+
+## What I would change
+
+Every cell above has two to five trials, all on one task. Nothing here supports a claim across tasks or
+models, and nobody has yet read what the agents asked the stakeholder in the interactive runs. The next
+step is more tasks and an audit of those conversations, not more trials on this one.

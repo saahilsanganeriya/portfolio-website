@@ -1,0 +1,36 @@
+---
+title: "A knowledge chatbot and the CPS Analytics API at Coca-Cola"
+summary: "Three co-op terms of data engineering: a retrieval chatbot over internal knowledge, a self-serve data API and faster ETL."
+year: 2024
+years: "2023–2024"
+status: "shipped"
+role: "Data Engineer Co-op"
+team: "co-op on a Coca-Cola data engineering team; the work below is mine"
+stack: ["Python", "Haystack", "Elasticsearch", "RoBERTa", "Django REST Framework", "Azure Data Factory", "Databricks", "PySpark"]
+featured: false
+links:
+  page: "https://confused-locket-f0c.notion.site/CPS-Advanced-Analytics-API-5618147fdf0f4056abac5acb5dce3222"
+---
+
+Most questions inside a large company already have an answer somewhere. The hard part is finding it,
+or finding the person who can pull it. Over three co-op terms at Coca-Cola I worked on both
+the finding and the pulling.
+
+**The chatbot.** I built an internal assistant in Haystack with hybrid retrieval. BM25 keyword search over
+Elasticsearch finds candidate passages, and a RoBERTa reader picks the answer out of them. Employees could
+ask the internal knowledge bases questions in plain language instead of hunting through them.
+
+**The API.** Business-intelligence teams used to file a request for supply-chain data and wait. I designed
+Django REST APIs with create, read, update and delete endpoints over 300+ global supply-chain datasets, so
+those teams could run their own operational queries. The public write-up of the API is linked on this
+page.
+
+**The pipelines.** I rebuilt a Python data-access library and the monitoring platform around it, which
+cut support tickets by 63% and ETL runtime from 9 to 6.5 hours. I also built Azure Data Factory pipelines
+that process 300+ datasets daily with PySpark and SQL on Databricks, cut the transformation step's runtime
+by 60%, and added CI/CD with automated data validation.
+
+## What I can and cannot show
+
+The systems themselves are internal. The API write-up is the one piece that is public, and everything else
+on this page stays at the level of my résumé.

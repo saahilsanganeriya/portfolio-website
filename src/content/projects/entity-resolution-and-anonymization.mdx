@@ -1,0 +1,70 @@
+---
+title: "Entity resolution and anonymization at Mercor"
+summary: "Linking every name, email and handle to the real person behind it, then giving each person one consistent fake identity."
+year: 2026
+status: "shipped"
+role: "Software Engineer, Applied AI"
+team: "Data Acquisition team; I built or redesigned each system on this page"
+stack: ["Go", "Temporal", "Kubernetes (GKE, EKS)", "Rust", "LightGBM", "PyTorch", "ONNX", "FAISS", "LLM APIs"]
+featured: true
+order: 1
+links: {}
+---
+
+Picture a company's Slack, email and issue tracker. One engineer shows up as "Jordan", "J. Lee", a work
+address and a handle, often in the same thread. Before data like that can go to an AI lab for training,
+every real person in it has to disappear, and the conversation still has to make sense.
+
+I work on Mercor's Data Acquisition team, which delivers anonymized enterprise data to a frontier AI lab
+for post-training. I built the parts that decide who is who, and what each person becomes.
+
+## Why it is hard
+
+Blacking out names breaks the data. A thread where three people argue turns into a thread where nobody
+does. Swapping each name for a random fake breaks it a different way: "Jordan" in one message and "J. Lee"
+in the next become two strangers. The fix is to find every mention of a person, link them, and give that
+person one fake identity everywhere. The linking is the hard part.
+
+## What I built
+
+**Entity resolution.** It links every name, email and handle to the real person behind it. An LLM labels
+what kind of thing each mention is, FAISS embedding search finds likely matches, and Leiden graph
+clustering groups them. I built its eval suite as well. Accuracy on the labeled eval set went from 85% to
+95%.
+
+**Matching in blocks.** MinHash-LSH groups likely matches, one LLM call clusters each block, and a merge
+needs agreeing votes, so one bad verdict cannot join two people. A second mode uses correlation
+clustering. This lifted B-cubed F1, a clustering score that counts wrong merges and wrong splits, from
+0.34 to 0.84.
+
+**Learned scorers.** LightGBM and PyTorch match scorers sit on a 257-feature Rust library and are served
+through ONNX. They run in production shadow mode: beside the live system, logging answers, deciding nothing.
+
+**Scale.** I rebuilt resolution as a Go service with bounded memory that scales out on Temporal across GKE
+and EKS. One run resolved 88M mentions. Tuning its LLM judges halved the wall time, from 4h13m to 2h11m.
+
+**Staying up.** A run makes about 3M LLM calls. An adaptive concurrency controller cut provider failures
+22x, from 24.6 to 1.1 a minute at the same throughput. It is AIMD, the rule TCP uses: speed up slowly
+while calls succeed, back off hard when they fail. Versioned Temporal workers and a custom rollout
+controller let us deploy in the middle of a run.
+
+**Fake identities.** The generator gives each person one consistent persona. Format-preserving generators
+cover 90+ PII types, and an LLM writes names and addresses of the same length as the originals. Expert
+reviewers kept 95% of its replacements on 675 documents.
+
+**Synthetic data.** To measure any of this you need ground truth. In the synthetic-data engine an
+LLM agent designs a fictional company and writes its Slack, Gmail and Linear history, while code places
+every PII value, so the labels are exact by construction. Its 1.6M labeled mentions became the team's
+benchmark.
+
+**Code.** Anonymizing a repository means rewriting its git history too. I redesigned that step around
+tree-sitter and Aho-Corasick, then hand each repo to a sandboxed LLM coding agent that runs its tests. It
+runs ~200 repos at once on ECS, and a 55k-commit repo went from 3+ hours to 19 minutes.
+
+## What I took from it
+
+A wrong merge costs more than a missed one. Two people merged into one persona leak each other's details
+into the training data. One person split in two only reads a little oddly. Agreeing votes, and blocks
+small enough for a single call, are that idea written down.
+
+The details belong to Mercor, so this page stops where my résumé does.
