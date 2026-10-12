@@ -54,7 +54,7 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
   const defaultStatus: Record<AppId, string> = {
     projects: plural(index.projects.length, 'project'),
     blog: plural(index.posts.length, 'post'),
-    films: plural(index.films.entries.length, 'film'),
+    films: 'Films from the Letterboxd diary',
     story: `${plural(index.story.length, 'chapter')}, playing by itself`,
     terminal: 'Type help for the commands',
     about: '',

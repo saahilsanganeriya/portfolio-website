@@ -555,10 +555,11 @@ body.os-moving iframe {
 
 /* ---- Films: cards on a dark wall ---- */
 
+/* T4's cards are ink, so they hang on a walnut wall. */
 .os-films {
   min-height: 100%;
   padding: 16px 16px 24px;
-  background: var(--ink);
+  background: var(--walnut);
   color: var(--paper);
 }
 
@@ -617,6 +618,10 @@ body.os-moving iframe {
   height: 2px;
   margin-top: 8px;
   background: var(--thread);
+}
+
+.os-films-more {
+  margin-top: 20px;
 }
 
 .os-film-review {

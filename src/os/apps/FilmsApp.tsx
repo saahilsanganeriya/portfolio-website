@@ -3,7 +3,8 @@ import type { FilmEntry, FilmsData } from '../../lib/films';
 import { formatDay } from '../format';
 import type { OsApi } from '../types';
 import { useWindowStatus } from '../wm/Window';
-import { renderFilmCard } from './films/film-card';
+import { renderFilmCard } from './films/cards';
+import { DIARY_CARDS, windowDiary } from './films/diary';
 
 const isFilmsData = (value: unknown): value is FilmsData =>
   typeof value === 'object' && value !== null && Array.isArray((value as FilmsData).entries);
@@ -16,7 +17,7 @@ function useFilms(saved: FilmsData): { films: FilmsData; live: boolean } {
     fetch('/api/films.json', { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: unknown) => {
-        if (isFilmsData(data) && data.entries.length > 0) setState({ films: data, live: true });
+        if (isFilmsData(data) && data.entries.length > 0) setState({ films: windowDiary(data), live: true });
       })
       .catch(() => {});
     return () => controller.abort();
@@ -43,9 +44,7 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
   const updated = formatDay(films.fetchedAt.slice(0, 10));
 
   useEffect(() => {
-    setStatus(
-      live ? `${films.entries.length} films, updated ${updated}` : `${films.entries.length} films, saved ${updated}`,
-    );
+    setStatus(live ? `Updated ${updated} from Letterboxd` : `Saved ${updated}`);
   }, [live, films, updated, setStatus]);
 
   // `#films/<slug>` points at one film: bring its card into view and give it focus.
@@ -91,7 +90,7 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
           .
         </p>
         <ul className="os-film-grid">
-          {films.entries.map((entry) => {
+          {films.entries.slice(0, DIARY_CARDS).map((entry) => {
             // The first diary card of a film not on the wall answers `#films/<slug>`.
             const anchor = !onWall.has(entry.slug) && !firstSeen.has(entry.slug);
             firstSeen.add(entry.slug);
@@ -106,6 +105,13 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
             );
           })}
         </ul>
+        <p className="os-films-note os-films-more">
+          Older entries are on the{' '}
+          <a href="/films" target="_top">
+            Films page
+          </a>
+          .
+        </p>
       </section>
     </div>
   );

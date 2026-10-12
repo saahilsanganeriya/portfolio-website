@@ -44,10 +44,7 @@ export function bootLog(index: OsIndex, now: Date): TermLine[] {
     ['INFO', 'msg="projectionist starting" mode=terminal'],
     ['INFO', `msg="shelf mounted" shelf=projects items=${index.projects.length}`],
     ['INFO', `msg="shelf mounted" shelf=blog items=${index.posts.length}`],
-    [
-      'INFO',
-      `msg="diary synced" films=${index.films.entries.length}${latest ? ` last="${latest.title} (${latest.year})"` : ''}`,
-    ],
+    ['INFO', `msg="diary synced"${latest ? ` last="${latest.title} (${latest.year})"` : ''}`],
     ['INFO', 'msg="lamp warm" kelvin=2700'],
     ['WARN', 'msg="mango plant growing slowly" patience=required'],
     ['INFO', 'msg="serving" addr=crt:80'],
