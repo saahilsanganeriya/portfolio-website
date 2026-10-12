@@ -77,6 +77,8 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Desk lamp at night | story reel, chapter 5 background | https://unsplash.com/photos/lit-desk-lamp-on-top-of-desk-EH9f0TI5wco | JC Gellidon | Unsplash License | resized to 2000 px wide; toned, faded and grained on the page |
 | Sapling on a windowsill | story reel, chapter 6 background and the closing frame | https://unsplash.com/photos/a-potted-plant-sitting-on-a-window-sill-vD7Mi0rDqMI | Peter Heymans | Unsplash License | resized to 1600 px wide; toned, faded and grained on the page |
 | Portrait of Saahil Sanganeriya | story reel, closing frame; /about and /resume | the owner's professional headshot | Saahil Sanganeriya (his own photo) | used by the owner | resized to 640 px |
+| Photographs from the 2019 photo blog "A Narrative in a Frame" (22, src/assets/photography/) | the photography collection: the SaahilOS exhibit and the room's wall prints | https://saahilsanganeriaphotography.wordpress.com/ | Saahil Sanganeriya (his own work) | all rights reserved by the owner | all metadata stripped; AVIF and WebP copies at 480, 960, 1600 px and the original size up to 2400 px |
+| Photos of Saahil Sanganeriya (7, src/assets/me/) | beside the text on /about, in two chapters of The Thread, and for the SaahilOS opening window | the owner's own photos | Saahil Sanganeriya (his own photos) | all rights reserved by the owner | all metadata stripped; one cropped to remove a printed caption; AVIF and WebP copies at 480 to 2400 px; toned like film on the page |
 
 ## Fonts
 

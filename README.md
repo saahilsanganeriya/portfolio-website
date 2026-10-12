@@ -73,6 +73,42 @@ links:                    # each optional: repo, paper, demo, page, pypi
 The write-up.
 ```
 
+## Add photos in one step
+
+Put the photos in a folder (JPEG, PNG, WebP, AVIF or TIFF; export HEIC as JPEG first) and run:
+
+```sh
+npm run photos:ingest -- ~/photos/street --series Street      # --year 2019 sets the year of every new entry
+```
+
+For each photo it applies the camera's rotation, strips every metadata block (EXIF with GPS location, XMP, IPTC, ICC),
+writes AVIF and WebP copies at 480, 960 and 1600 px and the original size (up to 2400 px) on the long edge into
+`src/assets/photography/<name>/`, and writes `src/content/photography/<name>.yaml`. The file name is the `<name>`.
+Running it again skips photos already in, and never overwrites an entry, so edit the entries freely:
+
+```yaml
+file: "../../assets/photography/amer-fort/2400.webp"   # written by the script
+title: "amer fort"
+year: 2019                # default: --year, else the photo's own capture year, else this year
+place: "Amer Fort"        # optional
+series: "2019"            # default: --series, else the folder name ("street" becomes "Street")
+caption: "Amer Fort beyond a wall, in black and white."   # one line; it is also the alt text, so say what is in it
+featured: false           # the favourites
+onWall: false             # framed on the wall of the room
+order: 20                 # optional; lower comes first
+```
+
+`src/content/photography/` is for photography only, never photos of me. Those go through `--me`:
+
+```sh
+npm run photos:ingest -- ~/photos/me --me
+```
+
+which writes the sizes into `src/assets/me/<name>/` and adds `{ "file": "<name>", "alt": "", "use": "about" }` to
+`src/content/me.json`. Write the alt text and set `use` (`opening`, `about`, `thread` or `resume`) before building:
+an empty alt fails the build. A photo of me appears only where it is placed beside text: in an `.mdx` page with
+`<MePhoto file="<name>" side="right" />`, or in a story chapter with `photo: "<name>"`.
+
 ## Content
 
 | Collection | Files | Pages |
@@ -81,6 +117,7 @@ The write-up.
 | `blog` | `src/content/blog/<slug>.mdx` | `/blog`, `/blog/<slug>`, `/rss.xml` |
 | `pages` | `src/content/pages/{about,resume}.mdx` | `/about`, `/resume` |
 | `story` | `src/content/story/<nn>-<slug>.mdx` | `/story` |
+| `photography` | `src/content/photography/<name>.yaml` (`npm run photos:ingest`) | the photography exhibit (SaahilOS, the room) |
 
 The schemas are in `src/content.config.ts`. Every entry is also served as static JSON at
 `/content/<collection>/<slug>.json` (`{ data, html }`), which SaahilOS reader windows load.
@@ -122,6 +159,7 @@ favourites stays in `blender/posters/`.
 | `npm run check` | Type-checks the project (`astro check`). |
 | `npm run test:e2e` | Playwright tests in `tests/*.spec.ts`. They build with `SAMPLES=1` (draft posts included) and serve the build themselves. |
 | `node scripts/check-routes.mjs` | Builds, then checks every route: each entry has its page and JSON body, each page has a title, description, `og:title`, `og:image` and one `<h1>`, and no internal link is broken. `--samples` includes draft posts. |
+| `npm run photos:ingest -- <folder>` | Strips all metadata from the photos in a folder, writes AVIF and WebP sizes, and adds an entry per photo (see "Add photos in one step"). |
 | `npm run films` | Writes `src/content/films.json`: the archive and the cached copy, with the Letterboxd feed merged over them. When the feed fails, it keeps the cached copy and exits 0. |
 | `npm run posters [-- <slug> ...]` | Draws the hand-drawn posters into `blender/posters/` (SVG and 2048-px PNG). |
 | `npm run posters:runtime [-- <slug> ...]` | Writes the runtime copies of the favourites' posters to `public/room/posters/` (AVIF 683×1024 and KTX2 512×768, 120 KB or less each). |
