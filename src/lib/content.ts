@@ -1,11 +1,12 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
+import { comparePosts } from './post-order';
 
 // Draft posts build in dev, and in production only when SAMPLES=1 (tests and local previews of drafts).
 const includeDrafts = import.meta.env.DEV || process.env.SAMPLES === '1';
 
 export async function getPosts(): Promise<CollectionEntry<'blog'>[]> {
   const posts = await getCollection('blog', ({ data }) => includeDrafts || !data.draft);
-  return posts.sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+  return posts.sort((a, b) => comparePosts(a.data, b.data));
 }
 
 export async function getProjects(): Promise<{
