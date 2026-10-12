@@ -12,3 +12,6 @@ playwright-report/
 .DS_Store
 # The global ignore drops data/ folders; the films archive lives in src/data/.
 !src/data/
+
+# Henry Heffernan's models for local scene development only; never committed (PLAN 3.6)
+public/room-dev/

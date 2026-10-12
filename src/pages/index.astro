@@ -1,7 +1,9 @@
 ---
+import BootScreen from '../components/BootScreen.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import ThreadDivider from '../components/ThreadDivider.astro';
 import Base from '../layouts/Base.astro';
+import { HOTSPOTS } from '../scene/hotspots';
 import { SITE } from '../site';
 
 const index = [
@@ -17,7 +19,56 @@ const index = [
 ---
 
 <Base title={SITE.name} description={SITE.description} bare skipLabel="Skip the room">
-  {/* The 3D room renders above this text index; the index stays as its plain HTML equivalent. */}
+  {/*
+    Runs before the body renders and before any scene code loads. Phones, touch-first and small screens, and Save-Data
+    get SaahilOS; reduced motion gets a still of the room; no WebGL keeps the text index with a note. Crawlers keep the
+    text index. Without JavaScript none of these classes is set and the page is the text index alone.
+  */}
+  <script is:inline slot="head">
+    (function () {
+      var root = document.documentElement;
+      var media = function (q) { return window.matchMedia && window.matchMedia(q).matches; };
+      if (/bot|crawler|spider|slurp|lighthouse/i.test(navigator.userAgent)) return;
+      var saveData = (navigator.connection && navigator.connection.saveData) || media('(prefers-reduced-data: reduce)');
+      if (saveData || media('(pointer: coarse)') || media('(max-width: 767.98px)')) {
+        location.replace('/os');
+        return;
+      }
+      if (media('(prefers-reduced-motion: reduce)')) {
+        root.classList.add('room-still');
+        return;
+      }
+      var gl = null;
+      try {
+        var canvas = document.createElement('canvas');
+        gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      } catch (e) {}
+      if (!gl) {
+        root.classList.add('room-off');
+        return;
+      }
+      var lose = gl.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext();
+      root.classList.add('room');
+    })();
+  </script>
+
+  <section id="room" class="room-stage" aria-label="The room">
+    <div class="room-world" data-room-world></div>
+    <BootScreen />
+    <div class="room-controls" data-room-ui>
+      <button type="button" aria-pressed="false" data-room-mute>Mute</button>
+      <button type="button" aria-pressed="false" data-room-pause>Pause motion</button>
+    </div>
+    <figure class="room-still">
+      <img src="/room/poster.avif" width="1600" height="1000" alt="The room at dusk: a walnut desk with a cream computer and CRT, a projector throwing pale light on a small screen, four film posters, a NAS and a mango plant on the windowsill." />
+      <figcaption>
+        Motion is reduced on this device, so the room stays still. Everything in it is linked below, and
+        <a href="/os">SaahilOS</a> opens as a page.
+      </figcaption>
+    </figure>
+  </section>
+
   <div class="frame">
     <main id="content" class="home" tabindex="-1">
       <h1 class="home-name">{SITE.name}</h1>
@@ -25,6 +76,13 @@ const index = [
       <p class="home-line">
         I am a software engineer at Mercor, where I build the systems that anonymize enterprise data for AI
         post-training. I studied computer science at Georgia Tech.
+      </p>
+      <p class="room-note room-note-off">
+        The room on this page is 3D and needs WebGL, which this browser has turned off. Everything in it is linked
+        below, and <a href="/os">SaahilOS</a> works without it.
+      </p>
+      <p class="room-note room-note-failed">
+        The room did not load this time. Everything in it is linked below, and <a href="/os">SaahilOS</a> opens as a page.
       </p>
       <nav aria-label="Site index">
         <ul class="index">
@@ -38,10 +96,139 @@ const index = [
           }
         </ul>
       </nav>
+      <section class="in-the-room" aria-labelledby="in-the-room">
+        <h2 id="in-the-room">In the room</h2>
+        <p class="in-the-room-lead">Everything you can click in the room, as a plain link.</p>
+        <ul class="index">
+          {
+            HOTSPOTS.map(({ href, label, prop }) => (
+              <li>
+                <a href={href}>{label}</a>
+                <span>{prop}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
     </main>
     <SiteFooter />
   </div>
 </Base>
+
+<script>
+  import type { RoomHandle } from '../scene/main';
+
+  const root = document.documentElement;
+  const stage = document.querySelector<HTMLElement>('[data-room-world]');
+  const boot = document.querySelector<HTMLElement>('[data-boot]');
+
+  const LOG_LINES = 8;
+
+  function bootUi(bootEl: HTMLElement) {
+    const log = bootEl.querySelector<HTMLOListElement>('[data-boot-log]')!;
+    const status = bootEl.querySelector<HTMLElement>('[data-boot-status]')!;
+    const progress = bootEl.querySelector<HTMLElement>('[data-boot-progress]')!;
+    const bar = bootEl.querySelector<HTMLElement>('[data-boot-bar]')!;
+    let lastLabel = '';
+    return {
+      progress(p: number, label: string) {
+        const pct = Math.round(p * 100);
+        bar.style.width = `${pct}%`;
+        progress.setAttribute('aria-valuenow', String(pct));
+        status.textContent = pct >= 100 ? 'FINISHED LOADING RESOURCES' : `LOADING RESOURCES (${pct}%)`;
+        const line = `Loaded ${label.padEnd(26, ' ')} ... `;
+        const item = label === lastLabel && log.lastElementChild ? log.lastElementChild : log.appendChild(document.createElement('li'));
+        item.textContent = line;
+        const pctEl = document.createElement('span');
+        pctEl.className = 'pct';
+        pctEl.textContent = `${pct}%`;
+        item.appendChild(pctEl);
+        lastLabel = label;
+        while (log.children.length > LOG_LINES) log.firstElementChild?.remove();
+      },
+    };
+  }
+
+  async function bootRoom(world: HTMLElement, bootEl: HTMLElement) {
+    const ui = bootUi(bootEl);
+    const start = bootEl.querySelector<HTMLElement>('[data-boot-start]')!;
+    const button = bootEl.querySelector<HTMLButtonElement>('[data-boot-button]')!;
+    const mute = document.querySelector<HTMLButtonElement>('[data-room-mute]')!;
+    const pause = document.querySelector<HTMLButtonElement>('[data-room-pause]')!;
+    let room: RoomHandle | null = null;
+    let muted = false;
+    let paused = false;
+
+    mute.addEventListener('click', () => {
+      muted = !muted;
+      mute.setAttribute('aria-pressed', String(muted));
+      room?.setMuted(muted);
+    });
+    pause.addEventListener('click', () => {
+      paused = !paused;
+      pause.setAttribute('aria-pressed', String(paused));
+      root.classList.toggle('room-paused', paused);
+      room?.setPaused(paused);
+    });
+
+    const enter = () => {
+      if (!room || bootEl.dataset.state) return;
+      room.start();
+      // The room is the top of the page; START puts it back in full view.
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      bootEl.dataset.state = 'gone';
+      root.classList.add('room-started');
+      setTimeout(() => (bootEl.hidden = true), 400);
+      document.removeEventListener('keydown', onKey);
+    };
+    const skip = () => {
+      document.getElementById('content')?.focus();
+      document.getElementById('content')?.scrollIntoView();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') skip();
+      else if (event.key === 'Enter' && room && !(event.target as Element).closest('a, button')) enter();
+    };
+    document.addEventListener('keydown', onKey);
+    button.addEventListener('click', enter);
+
+    try {
+      const { startRoom } = await import('../scene/main');
+      room = await startRoom(world, { osUrl: '/os?embed=1', onProgress: ui.progress });
+      room.setMuted(muted);
+      room.setPaused(paused);
+      bootEl.dataset.ready = '';
+      start.hidden = false;
+    } catch (error) {
+      console.error('room: failed to load', error);
+      document.removeEventListener('keydown', onKey);
+      root.classList.replace('room', 'room-failed');
+    }
+  }
+
+  /** Resolves once the text has painted, so no scene request competes with it (a timer covers browsers without paint timing). */
+  function afterFirstPaint(run: () => void) {
+    let done = false;
+    const once = () => {
+      if (done) return;
+      done = true;
+      observer?.disconnect();
+      run();
+    };
+    let observer: PerformanceObserver | null = null;
+    try {
+      observer = new PerformanceObserver((list) => {
+        if (list.getEntriesByName('first-contentful-paint').length) once();
+      });
+      observer.observe({ type: 'paint', buffered: true });
+    } catch {
+      // no paint timing here
+    }
+    setTimeout(once, 1500);
+  }
+
+  if (root.classList.contains('room') && stage && boot) afterFirstPaint(() => void bootRoom(stage, boot));
+</script>
 
 <style>
   .home {
@@ -96,5 +283,166 @@ const index = [
       grid-template-columns: 15rem minmax(0, 1fr);
       align-items: baseline;
     }
+  }
+
+  .in-the-room h2 {
+    margin-top: var(--space-6);
+    font-size: var(--size-h2);
+    font-weight: 500;
+    line-height: var(--leading-tight);
+  }
+
+  .in-the-room-lead {
+    margin-top: var(--space-2);
+    font-family: var(--font-sans);
+    font-size: var(--size-ui);
+    color: var(--dust);
+  }
+
+  .in-the-room .index {
+    margin-top: var(--space-4);
+  }
+
+  .room-note {
+    display: none;
+    max-width: 34em;
+    margin-top: var(--space-4);
+    font-family: var(--font-sans);
+    font-size: var(--size-ui);
+    color: var(--dust);
+  }
+
+  :global(html.room-off) .room-note-off,
+  :global(html.room-failed) .room-note-failed {
+    display: block;
+  }
+
+  /* ---- The stage: only when the head script chose the room or its still ---- */
+
+  .room-stage {
+    display: none;
+    position: relative;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--ink);
+  }
+
+  :global(html.room) .room-stage,
+  :global(html.room-still) .room-stage {
+    display: block;
+  }
+
+  :global(html.room) :global(.skip-link),
+  :global(html.room-still) :global(.skip-link) {
+    left: auto;
+    right: var(--space-3);
+    transform: none;
+    background: transparent;
+    color: var(--paper);
+    text-decoration-line: underline;
+    text-decoration-color: var(--thread);
+    text-underline-offset: 0.22em;
+  }
+
+  .room-world {
+    position: absolute;
+    inset: 0;
+  }
+
+  .room-world :global(.room-css),
+  .room-world :global(.room-webgl) {
+    position: absolute;
+    inset: 0;
+  }
+
+  .room-world :global(.room-webgl) {
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .room-world :global(.room-monitor) {
+    background: #0c0b0a;
+  }
+
+  .room-world :global(.room-label) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    padding: 0.2rem 0.55rem;
+    background: var(--ink);
+    color: var(--paper);
+    border-bottom: 1px solid var(--thread);
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .room-controls {
+    position: absolute;
+    right: var(--space-3);
+    bottom: var(--space-3);
+    z-index: 4;
+    display: none;
+    gap: var(--space-2);
+  }
+
+  :global(html.room) .room-controls {
+    display: flex;
+  }
+
+  .room-controls button {
+    padding: 0.3rem 0.75rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    border-radius: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    cursor: pointer;
+  }
+
+  .room-controls button:hover {
+    border-color: var(--paper);
+  }
+
+  .room-controls button[aria-pressed='true'] {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  .room-still {
+    display: none;
+    position: absolute;
+    inset: 0;
+    margin: 0;
+  }
+
+  :global(html.room-still) .room-still {
+    display: block;
+  }
+
+  :global(html.room-still) :global(.boot) {
+    display: none;
+  }
+
+  .room-still img {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    object-fit: cover;
+  }
+
+  .room-still figcaption {
+    position: absolute;
+    left: var(--edge);
+    bottom: var(--space-4);
+    max-width: 30rem;
+    padding: var(--space-2) var(--space-3);
+    background: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--size-ui);
   }
 </style>
