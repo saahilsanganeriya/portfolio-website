@@ -1,5 +1,6 @@
-// The four room posters, drawn as one set: a 600 x 900 sheet (2:3), one graphic idea per film in the top
-// two thirds, and the same title and credit baselines on every sheet so they read as a set on the wall.
+// The room posters, drawn as one set: a 600 x 900 sheet (2:3), one graphic idea per film in the top two thirds,
+// and the same title and credit baselines on every sheet so they read as a set on the wall. The room hangs the
+// four in src/content/favorites.json; the older sheets stay for the Films app.
 import { setLine } from './type.mjs';
 
 export const W = 600;
@@ -402,4 +403,237 @@ function martySupreme() {
   });
 }
 
-export const POSTERS = [odyssey, laLaLand, chungkingExpress, martySupreme];
+// Yi Yi: a Taipei apartment block at night. Most windows are dark or lit by cool tube light; on one floor two
+// homes burn warm, side by side, and spell the Chinese title 一一 in light behind the iron grilles.
+function yiYi() {
+  const ground = '#161E1B';
+  const concrete = '#2A3631';
+  const slab = '#3A4842';
+  const glass = '#0F1613';
+  const tube = '#BCD1BA';
+  const tubeDim = '#748C7B';
+  const tungsten = '#EDC27A';
+  const roof = 62;
+  const floorH = 70;
+  const floors = 7;
+  const ribbonTop = 16;
+  const ribbonH = 40;
+  const mullion = 40;
+  const titleFloor = 3;
+
+  const rects = (list, fill) =>
+    `<path fill="${fill}" d="${list.map(([x, y, w, h]) => `M${n(x)} ${n(y)}h${n(w)}v${n(h)}h${n(-w)}Z`).join('')}"/>`;
+  const floorY = (i) => roof + i * floorH;
+
+  // Lit runs per floor as [x0, x1, colour]; the title floor holds the two warm strokes with a dark home between.
+  const lit = {
+    0: [[200, 280, tubeDim]],
+    1: [[40, 120, tubeDim]],
+    2: [[320, 360, '#9DB4C0']],
+    [titleFloor]: [[40, 260, tungsten], [340, 560, tungsten]],
+    4: [[440, 480, tube]],
+    5: [[240, 320, tubeDim]],
+    6: [[520, 600, tubeDim]],
+  };
+
+  const parts = [];
+  // Rooftop: a parapet, two water tanks on legs and an aerial against the sky.
+  const tank = (x) =>
+    rects([[x - 30, roof - 46, 60, 30], [x - 26, roof - 16, 4, 16], [x + 22, roof - 16, 4, 16]], '#34413B') +
+    `<ellipse cx="${x}" cy="${roof - 46}" rx="30" ry="5" fill="#435049"/>`;
+  parts.push(tank(118), tank(186));
+  parts.push(rects([[452, roof - 70, 2.5, 70], [438, roof - 58, 30, 2], [442, roof - 46, 22, 2]], '#435049'));
+  parts.push(rects([[0, roof - 8, W, floors * floorH + 8]], concrete));
+
+  for (let i = 0; i < floors; i += 1) {
+    const y = floorY(i);
+    parts.push(rects([[0, y, W, 8]], slab));
+    parts.push(rects([[0, y + ribbonTop, W, ribbonH]], glass));
+    for (const [x0, x1, colour] of lit[i] ?? []) parts.push(rects([[x0, y + ribbonTop, x1 - x0, ribbonH]], colour));
+    // Frames every 40 units, then iron grilles over the lower two thirds of the glass.
+    const frames = [];
+    for (let x = 0; x <= W; x += mullion) frames.push([x - 1.5, y + ribbonTop, 3, ribbonH]);
+    parts.push(rects(frames, concrete));
+    const grille = [[0, y + ribbonTop + 12, W, 2], [0, y + ribbonTop + ribbonH - 2, W, 3]];
+    for (let x = 6; x < W; x += 8) grille.push([x, y + ribbonTop + 12, 1.4, ribbonH - 12]);
+    parts.push(rects(grille, '#1B2420'));
+    // Air conditioners hang under a few windows.
+    const units = { 1: [92], 2: [452, 212], 4: [332], 5: [52], 6: [372] }[i] ?? [];
+    parts.push(rects(units.map((x) => [x, y + ribbonTop + ribbonH + 2, 34, 9]), '#56635C'));
+  }
+  parts.push(rects([[0, floorY(floors), W, 6]], slab));
+
+  return frame({
+    id: 'yi-yi',
+    label: 'Yi Yi (2000), directed by Edward Yang: a Taipei apartment block at night, two warm windows spelling 一一',
+    ground,
+    titleLines: ['YI', 'YI'],
+    titleInk: PAPER,
+    creditInk: mix(PAPER, DUST, 0.45),
+    director: 'Edward Yang',
+    year: 2000,
+    art: parts.join(''),
+  });
+}
+
+// Catmull-Rom through `points`, resampled every `step` units of arc length; each sample carries its heading.
+function along(points, step) {
+  const dense = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[Math.max(i - 1, 0)];
+    const [p1, p2] = [points[i], points[i + 1]];
+    const p3 = points[Math.min(i + 2, points.length - 1)];
+    for (let k = 0; k < 40; k += 1) {
+      const t = k / 40;
+      const [t2, t3] = [t * t, t * t * t];
+      dense.push([0, 1].map((c) =>
+        0.5 * (2 * p1[c] + (-p0[c] + p2[c]) * t + (2 * p0[c] - 5 * p1[c] + 4 * p2[c] - p3[c]) * t2 +
+          (-p0[c] + 3 * p1[c] - 3 * p2[c] + p3[c]) * t3)));
+    }
+  }
+  dense.push(points.at(-1));
+  const out = [];
+  let carried = 0;
+  for (let i = 1; i < dense.length; i += 1) {
+    const [a, b] = [dense[i - 1], dense[i]];
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const heading = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    for (let s = step - carried; s <= length; s += step) {
+      out.push({ x: a[0] + ((b[0] - a[0]) * s) / length, y: a[1] + ((b[1] - a[1]) * s) / length, heading });
+    }
+    carried = (carried + length) % step;
+  }
+  return out;
+}
+
+const stadium = (cx, cy, length, width, angle) => {
+  const r = width / 2;
+  const half = length / 2 - r;
+  const [c, s] = [Math.cos(angle), Math.sin(angle)];
+  const at = (u, v) => `${n(cx + u * c - v * s)} ${n(cy + u * s + v * c)}`;
+  return `M${at(-half, -r)}L${at(half, -r)}A${n(r)} ${n(r)} 0 0 1 ${at(half, r)}L${at(-half, r)}A${n(r)} ${n(r)} 0 0 1 ${at(-half, -r)}Z`;
+};
+
+// Normal People: Connell's silver chain, dropped on the sheet in one loop whose clasp and ring stop just short of
+// each other.
+function normalPeople() {
+  const steel = '#8B9394';
+  const steelDark = '#3E4547';
+  const shadow = mix(PAPER, INK, 0.11);
+  const route = [
+    [326, 518], [226, 528], [136, 484], [86, 388], [94, 266], [154, 160], [262, 100], [384, 106],
+    [472, 164], [516, 258], [498, 350], [456, 418], [466, 476], [404, 520],
+  ];
+  const links = along(route, 16);
+  const draw = (dx, dy, faceFill, edgeFill) =>
+    links
+      .map(({ x, y, heading }, i) =>
+        i % 2 === 0
+          ? `<path fill="${faceFill}" fill-rule="evenodd" d="${stadium(x + dx, y + dy, 27, 15, heading)}${stadium(x + dx, y + dy, 17, 6, heading)}"/>`
+          : `<path fill="${edgeFill}" d="${stadium(x + dx, y + dy, 26, 5, heading)}"/>`,
+      )
+      .join('');
+
+  // The lobster clasp hangs off the first link, the jump ring off the last; the gap between them is the picture.
+  const first = links[0];
+  const last = links.at(-1);
+  const back = first.heading + Math.PI;
+  const claspAt = { x: first.x + Math.cos(back) * 27, y: first.y + Math.sin(back) * 27 };
+  const clasp = (dx, dy, fill) =>
+    `<g transform="translate(${n(claspAt.x + dx)} ${n(claspAt.y + dy)}) rotate(${n((back * 180) / Math.PI)}) scale(1.5)">` +
+    `<path fill="${fill}" fill-rule="evenodd" d="M-12 0C-12 -9 2 -10 13 -4C17 -2 17 2 13 4C2 10 -12 9 -12 0Z` +
+    'M-7 0C-7 -4 1 -5 8 -2C10 -1 10 1 8 2C1 5 -7 4 -7 0Z"/>' +
+    `<path fill="${fill}" d="M-14 -2.5H-9V2.5H-14Z"/></g>`;
+  const ringAt = { x: last.x + Math.cos(last.heading) * 20, y: last.y + Math.sin(last.heading) * 20 };
+  const ring = (dx, dy, fill) =>
+    `<path fill="${fill}" fill-rule="evenodd" d="${circle(ringAt.x + dx, ringAt.y + dy, 10)}${circle(ringAt.x + dx, ringAt.y + dy, 5.6, false)}"/>`;
+
+  return frame({
+    id: 'normal-people-2020',
+    label: 'Normal People (2020), directed by Lenny Abrahamson and Hettie Macdonald: a silver chain in a loop that does not close',
+    ground: PAPER,
+    titleLines: ['NORMAL', 'PEOPLE'],
+    titleInk: INK,
+    creditInk: INK,
+    director: 'Lenny Abrahamson and Hettie Macdonald',
+    year: 2020,
+    art:
+      draw(3, 4, shadow, shadow) + clasp(3, 4, shadow) + ring(3, 4, shadow) +
+      draw(0, 0, steel, steelDark) + clasp(0, 0, steel) + ring(0, 0, steelDark),
+  });
+}
+
+// Black Swan: one swan feather, white at the quill and black at the tip, the change printed in steps along it.
+function blackSwan() {
+  const ground = '#7A2026';
+  const length = 600;
+  const bands = 9;
+  const vaneStart = 0.1;
+
+  // Feather coordinates: the quill runs along +x from the base and bows upward; the vane is wider above it
+  // and rounds off at the tip.
+  const quillY = (x) => -0.07 * length * (x / length) ** 2;
+  const halfWidth = (t, side) => {
+    const u = (t - vaneStart) / (1 - vaneStart);
+    return ((side < 0 ? 0.12 : 0.085) * length * Math.sqrt(1 - u ** 4) * u ** 0.4) / 0.78;
+  };
+  const samples = Array.from({ length: 121 }, (_, i) => vaneStart + ((1 - vaneStart) * i) / 120);
+  const vane = poly([
+    ...samples.map((t) => [t * length, quillY(t * length) - halfWidth(t, -1)]),
+    ...samples.toReversed().map((t) => [t * length, quillY(t * length) + halfWidth(t, 1)]),
+  ]);
+
+  const bandWidth = ((1 - vaneStart) * length) / bands;
+  const tone = (k) => mix(PAPER, INK, k / (bands - 1));
+  const steps = Array.from({ length: bands }, (_, k) =>
+    `<rect x="${n(vaneStart * length + k * bandWidth - 0.5)}" y="-120" width="${n(bandWidth + 1)}" height="240" fill="${tone(k)}"/>`,
+  ).join('');
+
+  // Barbs: the ground shows through between them, raked toward the tip on both sides of the quill. Where the
+  // vane has split, a thin wedge of ground runs out along the rake to the edge.
+  const reach = 0.14 * length;
+  const rake = (x, side, along) => [x + reach * 0.75 * along, quillY(x) + side * reach * 0.95 * along];
+  const barbs = [];
+  for (let x = vaneStart * length + 3; x < length; x += 5.5) {
+    for (const side of [-1, 1]) {
+      const [mx, my] = [x + reach * 0.35, quillY(x) + side * reach * 0.55];
+      const [ex, ey] = rake(x, side, 1);
+      barbs.push(`M${n(x)} ${n(quillY(x))}Q${n(mx)} ${n(my)} ${n(ex)} ${n(ey)}`);
+    }
+  }
+  const splits = [[0.38, -1], [0.62, -1], [0.52, 1]].map(([t, side]) => {
+    const x = t * length;
+    return poly([rake(x, side, 0.22), rake(x + 15, side, 1.2), rake(x - 3, side, 1.2)]);
+  });
+
+  const shaft = (x0, x1, w0, w1) =>
+    poly([[x0, quillY(x0) - w0], [x1, quillY(x1) - w1], [x1, quillY(x1) + w1], [x0, quillY(x0) + w0]]);
+  const shaftWidth = (x) => 3.6 * (1 - x / length) + 0.5;
+  const quill = [`<path fill="${mix(PAPER, DUST, 0.35)}" d="${shaft(-14, vaneStart * length, 4.2, shaftWidth(vaneStart * length))}"/>`];
+  for (let k = 0; k < bands; k += 1) {
+    const x0 = vaneStart * length + k * bandWidth;
+    const x1 = x0 + bandWidth;
+    const ink = mix(tone(k), k < bands / 2 ? INK : PAPER, 0.4);
+    quill.push(`<path fill="${ink}" d="${shaft(x0, x1, shaftWidth(x0), shaftWidth(x1))}"/>`);
+  }
+
+  const feather = `<clipPath id="vane"><path d="${vane}"/></clipPath>
+<g transform="translate(84 548) rotate(-47)">
+<g clip-path="url(#vane)">${steps}<path fill="none" stroke="${ground}" stroke-width="1.1" d="${barbs.join('')}"/><path fill="${ground}" d="${splits.join('')}"/></g>
+${quill.join('')}
+</g>`;
+
+  return frame({
+    id: 'black-swan',
+    label: 'Black Swan (2010), directed by Darren Aronofsky: a swan feather, white at the quill and black at the tip',
+    ground,
+    titleLines: ['BLACK', 'SWAN'],
+    titleInk: PAPER,
+    creditInk: mix(PAPER, DUST, 0.3),
+    director: 'Darren Aronofsky',
+    year: 2010,
+    art: feather,
+  });
+}
+
+export const POSTERS = [odyssey, laLaLand, chungkingExpress, martySupreme, yiYi, normalPeople, blackSwan];
