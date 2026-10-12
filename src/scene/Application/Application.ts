@@ -8,25 +8,41 @@ import { DPR_CAP, Quality, type QualityTier } from './Quality';
 import { loadRoom, ROOM_URL, type ProgressReporter } from './Resources';
 import { readRoom, type RoomNodes } from './RoomModel';
 import { RoomRenderer } from './Renderer';
-import { easeInOutQuint, easeIntoMonitor, easeOutExpo } from './tween';
+import { easeInOutQuint, easeIntoMonitor, easeOutExpo, type Easing } from './tween';
 
 export interface RoomOptions {
   /** The OS page shown on the monitor, e.g. `/os?embed=1`. */
   osUrl: string;
   onProgress: ProgressReporter;
+  /** Cut between framings instead of gliding (prefers-reduced-motion). */
+  reducedMotion?: boolean;
+}
+
+export interface StartOptions {
+  /** A SaahilOS window to open on the monitor (`projects/swe-sim`): the room ends on the monitor instead of the idle view. */
+  open?: string;
+  /** Cut to the end framing (the visitor's input skipped the intro). */
+  fast?: boolean;
 }
 
 export interface RoomHandle {
-  /** After START: unlock audio, glide to the idle view. Must run inside the click handler. */
-  start(): void;
-  open(target: string): void;
+  /** Leaves the boot framing: the intro glide to the idle view, or a short glide into the monitor with `open`. */
+  start(options?: StartOptions): void;
+  /** Glides to the monitor and opens that SaahilOS window; `fast` shortens the glide. */
+  openWindow(target: string, options?: { fast?: boolean }): void;
+  /** Lands the intro glide now; later glides are left alone. */
+  skipIntro(): void;
+  /** Starts the room's sound. Browsers only allow it inside a user gesture (a click, tap or key). */
+  unlockAudio(): void;
   setMuted(muted: boolean): void;
   setPaused(paused: boolean): void;
   dispose(): void;
 }
 
-// The OS iframe must not hold START back for ever; past this it keeps loading behind the boot screen.
+// The OS iframe must not hold the room back for ever; past this it keeps loading behind the boot screen.
 const OS_LOAD_TIMEOUT_MS = 8000;
+// A link to a window skips the slow intro: a short glide from the boot framing straight into the monitor.
+const FAST_GLIDE_MS = 1200;
 
 /** Debug and measurement hook: tests click real props by their projected screen position. */
 export interface RoomProbe {
@@ -57,6 +73,7 @@ export class Application implements RoomHandle {
   private audio!: RoomAudio;
   private interaction!: Interaction;
   private started = false;
+  private intro = false;
   private paused = false;
   private onScreen = true;
   private clock = 0;
@@ -100,7 +117,7 @@ export class Application implements RoomHandle {
     this.effects.setTier(this.quality.tier);
     this.audio = new RoomAudio(this.nodes.monitor.position, this.nodes.projector?.lens ?? null, this.nodes.framings.desk.target);
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
-      hotspot: (hotspot) => (hotspot.target ? this.open(hotspot.target) : this.enterMonitor()),
+      hotspot: (hotspot) => (hotspot.target ? this.openWindow(hotspot.target) : this.enterMonitor()),
       toggle: () => this.toggle(),
       enterMonitor: () => this.enterMonitor(),
       leaveMonitor: () => this.leaveMonitor(),
@@ -110,7 +127,7 @@ export class Application implements RoomHandle {
     this.resize();
     this.observe();
 
-    // Compile every shader and upload the textures now, so the first frame after START does not stall.
+    // Compile every shader and upload the textures now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
     this.render();
     report(0.9, 'shaders');
@@ -122,17 +139,29 @@ export class Application implements RoomHandle {
     this.loop();
   }
 
-  start() {
+  start({ open, fast = false }: StartOptions = {}) {
     if (this.started) return;
     this.started = true;
+    this.intro = true;
     this.monitor.iframe.removeAttribute('tabindex');
-    this.audio.unlock();
-    this.camera.goTo('idle', 2500, easeOutExpo);
+    const endIntro = () => (this.intro = false);
+    if (open) {
+      this.glide('monitor', fast ? 0 : FAST_GLIDE_MS, easeIntoMonitor, endIntro);
+      this.monitor.open(open);
+    } else this.glide('idle', fast ? 0 : 2500, easeOutExpo, endIntro);
   }
 
-  open(target: string) {
-    this.enterMonitor();
+  openWindow(target: string, { fast = false }: { fast?: boolean } = {}) {
+    if (this.started) this.glide('monitor', fast ? FAST_GLIDE_MS : 2000, easeIntoMonitor);
     this.monitor.open(target);
+  }
+
+  skipIntro() {
+    if (this.intro) this.camera.finish();
+  }
+
+  unlockAudio() {
+    this.audio.unlock();
   }
 
   setMuted(muted: boolean) {
@@ -158,17 +187,21 @@ export class Application implements RoomHandle {
   }
 
   private enterMonitor() {
-    if (this.started) this.camera.goTo('monitor', 2000, easeIntoMonitor);
+    if (this.started) this.glide('monitor', 2000, easeIntoMonitor);
   }
 
   private leaveMonitor() {
-    if (this.camera.destination === 'monitor') this.camera.goTo('desk', 1000, easeInOutQuint);
+    if (this.camera.destination === 'monitor') this.glide('desk', 1000, easeInOutQuint);
   }
 
   private toggle() {
     if (!this.started) return;
     const next = this.camera.destination === 'desk' ? 'idle' : 'desk';
-    this.camera.goTo(next, 1000, easeInOutQuint);
+    this.glide(next, 1000, easeInOutQuint);
+  }
+
+  private glide(phase: CameraPhase, ms: number, easing: Easing, onDone?: () => void) {
+    this.camera.goTo(phase, this.options.reducedMotion ? 0 : ms, easing, onDone);
   }
 
   private aspect() {
@@ -271,7 +304,7 @@ export class Application implements RoomHandle {
       },
       goto(phase) {
         if (phase === 'monitor') app.enterMonitor();
-        else app.camera.goTo(phase, 1000, easeInOutQuint);
+        else app.glide(phase, 1000, easeInOutQuint);
       },
     };
   }

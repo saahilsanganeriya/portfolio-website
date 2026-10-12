@@ -49,7 +49,7 @@ export class MonitorScreen {
     frame.style.height = `${heightPx}px`;
     this.iframe = document.createElement('iframe');
     this.iframe.title = 'SaahilOS, on the room’s monitor';
-    // Out of the tab order until START, while the boot screen still covers it.
+    // Out of the tab order until the room starts, while the boot screen still covers it.
     this.iframe.tabIndex = -1;
     this.iframe.style.cssText = `width:100%;height:100%;border:0;padding:${OVERSCAN_PX}px;box-sizing:border-box;display:block;background:transparent`;
     frame.appendChild(this.iframe);

@@ -67,9 +67,16 @@ export class RoomCamera {
     this.instance.updateProjectionMatrix();
   }
 
+  /** A duration of 0 cuts to the framing (reduced motion, a skipped intro). */
   goTo(phase: CameraPhase, duration = 1000, easing: Easing = easeInOutQuint, onDone?: () => void, now = performance.now()) {
     if (this.destination === phase && !this.transition) return;
     if (this.transition?.to === phase) return;
+    if (duration <= 0) {
+      this.transition = null;
+      this.phase = phase;
+      onDone?.();
+      return;
+    }
     this.transition = {
       from: { position: this.current.position.clone(), target: this.current.target.clone(), fov: this.current.fov },
       to: phase,
@@ -78,6 +85,15 @@ export class RoomCamera {
       easing,
       onDone,
     };
+  }
+
+  /** Lands the current glide at its framing now. */
+  finish() {
+    const t = this.transition;
+    if (!t) return;
+    this.transition = null;
+    this.phase = t.to;
+    t.onDone?.();
   }
 
   /** `pointer` is in [-1, 1] on both axes, +y up; `clock` is the ambient time in seconds (frozen while paused). */
