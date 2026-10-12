@@ -1,12 +1,11 @@
 import * as THREE from 'three';
 import { RoomAudio } from './Audio';
 import { RoomCamera, type CameraPhase } from './Camera';
-import { loadDevRoom } from './devRoom';
 import { Effects } from './Effects';
 import { Interaction } from './Interaction';
 import { MonitorScreen } from './MonitorScreen';
 import { DPR_CAP, Quality, type QualityTier } from './Quality';
-import type { ProgressReporter } from './Resources';
+import { loadRoom, ROOM_URL, type ProgressReporter } from './Resources';
 import { readRoom, type RoomNodes } from './RoomModel';
 import { RoomRenderer } from './Renderer';
 import { easeInOutQuint, easeIntoMonitor, easeOutExpo } from './tween';
@@ -89,7 +88,7 @@ export class Application implements RoomHandle {
 
   async load() {
     const report = this.options.onProgress;
-    const root = await loadDevRoom((p, label) => report(p * 0.8, label));
+    const root = await loadRoom(ROOM_URL, this.renderer.gl, (p, label) => report(p * 0.8, label));
     this.nodes = readRoom(root);
     this.scene.add(root);
 
