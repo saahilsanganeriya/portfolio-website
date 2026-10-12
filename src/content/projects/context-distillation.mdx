@@ -12,31 +12,37 @@ links:
   paper: "https://github.com/saahilsanganeriya/context_distillation/blob/main/Efficient_LLM_Context_Distillation-CS_7643.pdf"
 ---
 
-Put a few examples in a language model's prompt and it can often do a task it was never trained for. The
-examples cost context on every call, though. Context distillation, a method Anthropic described, tries to
-bake the effect of a prompt into the weights instead.
+One of our datasets looked like a win until we checked its labels. Only 40% of its answers were “true”, so answering “false” every time scored 60%.
 
-For a deep learning course, four of us tested it against plain fine-tuning, pattern-based fine-tuning and
-in-context learning, with and without BitFit, which trains only the bias terms. The models were OPT at
-125M, 350M and 1.3B parameters, the largest our hardware could hold. Each model saw 16 examples. We
-measured accuracy on three inference datasets and on harder out-of-domain sets, over up to 5 random seeds
-per setting.
+Put a few examples in a language model’s prompt and it can often do a task it was never trained for, but the examples cost context on every call. Context distillation, a method Anthropic described, tries to bake their effect into the weights instead. For a deep learning course, four of us tested it on small models.
 
-My part was the RTE dataset and its preprocessing, BitFit on RTE, and the plain and pattern-based
-fine-tuning runs on every dataset at all three sizes. I also wrote the paper's Approach section.
+## The setup
 
-## What we found
+We compared it with in-context learning, plain fine-tuning and pattern-based fine-tuning, with and without BitFit, which trains only the bias terms. The models were OPT at 125M, 350M and 1.3B parameters, the largest our hardware could hold. The 1.3B model fit only after we swapped the Adam optimiser for Adafactor. Each model saw 16 examples, and we measured accuracy on three inference datasets and their harder out-of-domain partners, over up to 5 random seeds per setting.
 
-Accuracy sat between 50% and 60%, barely above chance. One dataset looked better until we checked its
-labels: with 40% true labels, answering "false" every time scores 60%, and 72% on its out-of-domain
-partner. We found no evidence that context distillation helps at this scale. It also trains much more
-slowly, because its loss runs over the top 50 logits at every token instead of one label.
+<figure class="os-figure">
+
+```text
+ 16 labelled pairs -----------------> task loss
+   ("does B follow from A?" -> yes/no)     |
+                                           +-> update
+ general text --> the original model's     |   OPT
+   top 50 guesses at every token -------> context loss
+```
+
+<figcaption>Context distillation as we ran it: the model learns the task from 16 examples while a second loss keeps it close to what the original model predicts on ordinary text.</figcaption>
+</figure>
+
+My part was the RTE dataset and its preprocessing, BitFit on RTE, and the plain and pattern-based fine-tuning runs on every dataset at all three sizes. I also wrote the paper’s Approach section.
+
+## What it cost, and what we found
+
+Context distillation trains much more slowly, because its loss runs over the top 50 logits at every token instead of one label.
+
+For that price it bought nothing we could measure. Accuracy sat between 50% and 60%, barely above chance. The 60% dataset’s out-of-domain partner was even more lopsided: answering “false” every time scores 72% there. We found no evidence that context distillation helps at this scale. Pattern-based fine-tuning did pull ahead on one dataset at the two larger sizes, but we had borrowed its paper’s settings, which probably suited it best.
 
 ## What I would change
 
-We spent our time on careful comparisons at sizes too small to show any difference, and the original
-paper's gaps appear in larger models. One or two runs that worked at a large size would have taught us more
-than five seeds at three small ones.
+We spent our time on careful comparisons at sizes too small to show any difference, and the original paper’s gaps appear in larger models. One or two runs that worked at a large size would have taught us more than five seeds at three small ones.
 
-The linked repository holds the report and only the RTE scripts for plain and pattern-based fine-tuning.
-The code for the other experiments is not in it.
+The linked repository holds the report and only the RTE scripts for plain and pattern-based fine-tuning. The code for the other experiments is not in it.
