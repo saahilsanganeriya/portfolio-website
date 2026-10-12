@@ -16,7 +16,9 @@
     "measure:payload": "node scripts/measure-payload.mjs",
     "measure:fps": "node scripts/measure-fps.mjs",
     "astro": "astro",
-    "posters": "node scripts/posters/build.mjs"
+    "posters": "node scripts/posters/build.mjs",
+    "posters:runtime": "node scripts/posters/runtime.mjs",
+    "favorites": "node scripts/favorites.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^8.0.3",

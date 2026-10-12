@@ -1,0 +1,34 @@
+{
+  "source": "letterboxd profile.csv Favorite Films",
+  "updated": "2026-10-12T08:20:37.530Z",
+  "films": [
+    {
+      "slug": "la-la-land",
+      "title": "La La Land",
+      "year": 2016,
+      "director": "Damien Chazelle",
+      "poster": "/room/posters/la-la-land.avif"
+    },
+    {
+      "slug": "yi-yi",
+      "title": "Yi Yi",
+      "year": 2000,
+      "director": "Edward Yang",
+      "poster": "/room/posters/yi-yi.avif"
+    },
+    {
+      "slug": "normal-people-2020",
+      "title": "Normal People",
+      "year": 2020,
+      "director": "Lenny Abrahamson and Hettie Macdonald",
+      "poster": "/room/posters/normal-people-2020.avif"
+    },
+    {
+      "slug": "black-swan",
+      "title": "Black Swan",
+      "year": 2010,
+      "director": "Darren Aronofsky",
+      "poster": "/room/posters/black-swan.avif"
+    }
+  ]
+}
