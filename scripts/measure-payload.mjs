@@ -10,7 +10,9 @@
 //              must stay lazy and low-res (480 px on the wall, 960 px in the album and the program; PLAN 12.3). Each
 //              on-demand request is put in a kind by its path, and pictures by the step of the visit that asked for
 //              them. Window pictures this visit never asked for are listed with their file sizes.
-// Also checks "text before 3D": first contentful paint happens before the first .glb/.ktx2 response ends.
+// Also checks "text before 3D": first contentful paint happens before the first .glb/.ktx2 response ends (PLAN 3.9),
+// and before the first byte of any 3D response arrives (PLAN 12.3): the models, textures, the Basis transcoder and the
+// scene's code chunk.
 //
 //   node scripts/measure-payload.mjs [--no-build] [--url https://…]
 import { readdir, stat } from 'node:fs/promises';
@@ -87,12 +89,18 @@ try {
 
   const rows = [];
   let firstModelEnd = Infinity;
+  let first3dByte = { at: Infinity, pathname: '' };
   for (const request of finished) {
     const timing = request.timing();
     // A response served from the memory cache reports zero (or a small negative) body size: nothing crossed the wire.
     const sizes = await request.sizes();
     const { pathname } = new URL(request.url());
     if (/\.(glb|ktx2)$/.test(pathname)) firstModelEnd = Math.min(firstModelEnd, timing.startTime + timing.responseEnd);
+    const is3d = /\.(glb|ktx2)$/.test(pathname) || pathname.startsWith('/room/basis/') || /^\/_astro\/main\.[^/]+\.js$/.test(pathname);
+    // A memory-cache hit reports no response start (-1); it carried no bytes over the wire.
+    if (is3d && timing.responseStart >= 0 && timing.startTime + timing.responseStart < first3dByte.at) {
+      first3dByte = { at: timing.startTime + timing.responseStart, pathname };
+    }
     if (timing.startTime >= fcpEpoch) {
       const asked = steps.filter((s) => s.at <= timing.startTime).at(-1)?.name ?? 'by itself';
       rows.push({ pathname, type: request.resourceType(), bytes: Math.max(0, sizes.responseBodySize), initial: timing.startTime < interactiveEpoch, step: asked });
@@ -105,6 +113,7 @@ try {
   const reel = sum(rows.filter((r) => r.pathname === '/room/reel.mp4'));
   const music = sum(rows.filter((r) => r.pathname.startsWith('/audio/music/')));
   const textFirst = fcpEpoch < firstModelEnd;
+  const textBeforeFirstByte = fcpEpoch < first3dByte.at;
 
   console.log('bytes      type        when       step        request (made after first contentful paint)');
   for (const r of rows) {
@@ -158,8 +167,9 @@ try {
   console.log(`total bytes: ${sum(rows)}`);
   console.log(`first contentful paint: ${fcp.toFixed(0)} ms; room interactive: ${interactiveAt.toFixed(0)} ms`);
   console.log(`first .glb/.ktx2 response end: ${Number.isFinite(firstModelEnd) ? (firstModelEnd - origin).toFixed(0) + ' ms' : 'none'}`);
-  console.log(`text-before-3D: ${textFirst}`);
-  ok = sum(initial) <= BUDGET && reel <= REEL_CAP && music <= MUSIC_CAP && textFirst;
+  console.log(`first 3D byte: ${Number.isFinite(first3dByte.at) ? `${(first3dByte.at - origin).toFixed(0)} ms (${first3dByte.pathname})` : 'none'}`);
+  console.log(`text-before-3D: ${textFirst}; text before the first 3D byte: ${textBeforeFirstByte}`);
+  ok = sum(initial) <= BUDGET && reel <= REEL_CAP && music <= MUSIC_CAP && textFirst && textBeforeFirstByte;
   console.log(ok ? 'payload: pass' : 'payload: FAIL');
 } finally {
   await browser.close();
