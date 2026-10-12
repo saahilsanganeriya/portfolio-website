@@ -33,6 +33,22 @@ function haloTexture() {
   return texture;
 }
 
+/**
+ * Additive light that leaves the canvas alpha alone. three.js's AdditiveBlending also adds alpha, which would
+ * make the monitor's alpha hole opaque wherever a glow, halo, beam or mote crosses the screen.
+ */
+const ADD_LIGHT = {
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.CustomBlending,
+  blendEquation: THREE.AddEquation,
+  blendSrc: THREE.SrcAlphaFactor,
+  blendDst: THREE.OneFactor,
+  blendEquationAlpha: THREE.AddEquation,
+  blendSrcAlpha: THREE.ZeroFactor,
+  blendDstAlpha: THREE.OneFactor,
+} as const;
+
 /** Cheap deterministic hash in [0, 1). */
 const hash = (n: number) => {
   const x = Math.sin(n * 127.1) * 43758.5453;
@@ -69,12 +85,7 @@ export class Effects {
 
     if (nodes.crtGlow) {
       // Drawn additively without writing depth, so the glow brightens the screen instead of covering the OS.
-      this.glowMaterial = new THREE.MeshBasicMaterial({
-        color: PROJECTOR.clone().multiplyScalar(0.05),
-        blending: THREE.AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-      });
+      this.glowMaterial = new THREE.MeshBasicMaterial({ color: PROJECTOR.clone().multiplyScalar(0.014), ...ADD_LIGHT });
       nodes.crtGlow.material = this.glowMaterial;
       nodes.crtGlow.renderOrder = 2;
       this.addHalo(scene, nodes.monitor.position, 0.7, PROJECTOR, 0.12);
@@ -116,12 +127,12 @@ export class Effects {
     });
 
     if (this.lampMaterial) this.lampMaterial.color.copy(TUNGSTEN).multiplyScalar(0.985 + 0.015 * Math.sin(clock * 2.3));
-    if (this.glowMaterial) this.glowMaterial.color.copy(PROJECTOR).multiplyScalar(0.05 + 0.008 * Math.sin(clock * 0.9));
+    if (this.glowMaterial) this.glowMaterial.color.copy(PROJECTOR).multiplyScalar(0.014 + 0.003 * Math.sin(clock * 0.9));
   }
 
   private addHalo(scene: THREE.Scene, position: THREE.Vector3, sizeMetres: number, color: THREE.Color, opacity: number) {
     const halo = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: this.haloMap, color, opacity, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }),
+      new THREE.SpriteMaterial({ map: this.haloMap, color, opacity, ...ADD_LIGHT }),
     );
     halo.position.copy(position);
     halo.scale.setScalar(sizeMetres * WORLD_SCALE);
@@ -163,10 +174,8 @@ export class Effects {
         uFlicker: { value: 1 },
         uNoiseScale: { value: 7 / WORLD_SCALE },
       },
-      transparent: true,
-      depthWrite: false,
       side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      ...ADD_LIGHT,
     });
     this.beam = new THREE.Mesh(geometry, material);
     // Local axes: x = frame width, -y = along the beam, z = frame height.
@@ -198,9 +207,7 @@ export class Effects {
           uHalfStart: { value: halfStart },
           uHalfEnd: { value: halfEnd },
         },
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
+        ...ADD_LIGHT,
       }),
     );
     this.motes.frustumCulled = false;
