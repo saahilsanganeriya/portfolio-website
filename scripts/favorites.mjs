@@ -16,16 +16,17 @@ if (!input) {
   console.error('usage: npm run favorites -- <unzipped Letterboxd export folder | profile.csv>');
   process.exit(2);
 }
-const profilePath = statSync(input).isDirectory() ? join(input, 'profile.csv') : input;
 
 try {
+  const profilePath = statSync(input).isDirectory() ? join(input, 'profile.csv') : input;
   const links = parseFavoriteLinks(await readFile(profilePath, 'utf8'));
   const films = [];
   for (const link of links) {
     const film = await resolveFavorite(link);
     const art = `room/posters/${film.slug}.avif`;
-    films.push({ ...film, poster: existsSync(new URL(`public/${art}`, root)) ? `/${art}` : null });
-    console.log(`favorites: ${link} → ${film.title} (${film.year}), ${film.director}${films.at(-1).poster ? '' : ' [drawn at runtime]'}`);
+    const poster = existsSync(new URL(`public/${art}`, root)) ? `/${art}` : null;
+    films.push({ ...film, poster });
+    console.log(`favorites: ${link} → ${film.title} (${film.year}), ${film.director}${poster ? '' : ' [drawn at runtime]'}`);
   }
   const previous = await readFile(OUT, 'utf8').then(JSON.parse, () => null);
   const next = buildFavorites(films, previous, new Date());
