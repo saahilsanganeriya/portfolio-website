@@ -3,10 +3,10 @@
     blender -b blender/room.blend -P blender/scripts/bake.py                     # final: full size, 512 samples
     blender -b blender/room.blend -P blender/scripts/bake.py -- --scale 0.25 --samples 32 --atlas desk   # test
 
-Each atlas gets a second UV map "bake" (smart project, islands scaled by area and packed together with a
-8-16 px margin at the final size), one Combined bake (diffuse and glossy direct + indirect, emission; AO comes from
-the global illumination), then OIDN denoising and the scene's AgX view transform, so the PNG in
-blender/.cache/bake/<atlas>.png already looks like the Cycles render and is shown unlit on the site.
+Each atlas gets a second UV map "bake" (an object's own clean UVs or a smart projection, scaled by area and
+packed together with an 8-16 px margin at the final size), one Combined bake (diffuse and glossy, direct and
+indirect, emission; AO comes from the global illumination), then OIDN denoising and the scene's AgX view transform,
+so the PNG in blender/.cache/bake/<atlas>.png already looks like the Cycles render and is shown unlit on the site.
 """
 
 import argparse

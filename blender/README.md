@@ -40,7 +40,8 @@ blender -b --factory-startup -P blender/scripts/build_room.py
 Downloads Henry Heffernan's three models (pinned commit, checked by sha256) and the CC0 textures and HDRI from
 Poly Haven into `blender/.cache/`, then builds the scene and overwrites `room.blend`. Props are appended from
 `blender/props/<name>.blend` (root collection named after the prop) and posters read from
-`blender/posters/<id>.png`; a missing file gets a placeholder of the same size. Re-bake after a rebuild.
+`blender/posters/<id>.png`; a missing file gets a placeholder of the same size (set `ROOM_PROPS_DIR` to read
+props from another checkout). Re-bake after a rebuild.
 
 ## What the glb holds
 

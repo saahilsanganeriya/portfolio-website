@@ -622,7 +622,7 @@ def build_window(mats):
     add_box(bm, (w + 2 * a, t, a), (cx, Y_BACK - t / 2, WIN_Z1 + a / 2), bevel=0.005)
     for x in (WIN_X0 - a / 2, WIN_X1 + a / 2):
         add_box(bm, (a, t, h), (x, Y_BACK - t / 2, cz), bevel=0.005)
-    # Frame in the reveal, two sashes, glazing bars (a 2 x 3 grid per sash).
+    # Frame in the reveal, two sashes, glazing bars (2 x 2 panes per sash).
     f = 0.05
     add_box(bm, (w, 0.06, f), (cx, depth_mid, WIN_Z1 - f / 2), bevel=0.004)
     add_box(bm, (w, 0.06, f), (cx, depth_mid, WIN_Z0 + f / 2), bevel=0.004)
@@ -640,7 +640,7 @@ def build_window(mats):
 
     build_curtains(mats, cx, w)
 
-    # Interior sill: a walnut board resting on the reveal, standing 6 cm proud of the wall.
+    # Interior sill: a walnut board resting on the reveal, 16 cm proud of the wall so the mango pot fits.
     bm = bmesh.new()
     sill_front, sill_back = Y_BACK - 0.16, Y_BACK + WALL_T * 0.55
     add_box(bm, (w + 0.16, sill_back - sill_front, 0.028), (cx, (sill_front + sill_back) / 2, WIN_Z0 - 0.014),
@@ -814,7 +814,7 @@ def build_lamp(mats):
     aim = (Vector((-0.58, -0.24, 0.732)) - LAMP_BULB).normalized()
     rot = aim.to_track_quat("Z", "Y").to_matrix()
     sbm = bmesh.new()
-    cone = bmesh.ops.create_cone(sbm, cap_ends=False, segments=48, radius1=0.035, radius2=0.085, depth=0.15)
+    bmesh.ops.create_cone(sbm, cap_ends=False, segments=48, radius1=0.035, radius2=0.085, depth=0.15)
     bmesh.ops.solidify(sbm, geom=list(sbm.faces), thickness=0.0025)
     cap = bmesh.ops.create_cone(sbm, cap_ends=True, segments=48, radius1=0.04, radius2=0.03, depth=0.04)
     for v in cap["verts"]:
