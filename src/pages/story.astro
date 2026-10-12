@@ -2,6 +2,7 @@
 import { Image } from 'astro:assets';
 import { getCollection, render } from 'astro:content';
 import SiteFooter from '../components/SiteFooter.astro';
+import MePhoto from '../components/MePhoto.astro';
 import Base from '../layouts/Base.astro';
 import { SITE } from '../site';
 import headshot from '../assets/story/headshot.webp';
@@ -138,6 +139,9 @@ const photoSizes = '(min-aspect-ratio: 1/1) 80vw, 100vw';
                     {entry.data.title}
                   </h2>
                   <div class="scene-body">
+                    {entry.data.photo && (
+                      <MePhoto file={entry.data.photo} side={direction.side === 'left' ? 'right' : 'left'} variant="reel" />
+                    )}
                     <Content />
                   </div>
                 </div>

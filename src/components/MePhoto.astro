@@ -1,0 +1,84 @@
+---
+import { mePhoto } from '../lib/me-photos';
+
+interface Props {
+  /** The `file` of an entry in src/content/me.json. */
+  file: string;
+  /** The side of the text column the print floats to. */
+  side?: 'left' | 'right';
+  /** `page` for article text on ink; `reel` for a scene of The Thread, which is smaller. */
+  variant?: 'page' | 'reel';
+}
+
+const { file, side = 'right', variant = 'page' } = Astro.props;
+const photo = mePhoto(file);
+const width = variant === 'reel' ? 'clamp(4.75rem, 19cqmin, 8.25rem)' : 'clamp(6.5rem, 30%, 10.5rem)';
+const sizes = variant === 'reel' ? '(min-width: 48rem) 8.25rem, 5rem' : '(min-width: 48rem) 10.5rem, 6.5rem';
+const gap = variant === 'reel' ? '1.1em' : '1.5em';
+// The layout and the film tone are inline so the print still sits beside the text where this HTML is reused without
+// the page's stylesheet (the OS reader windows render the JSON body of /about).
+const style = [
+  `float: ${side}`,
+  `width: ${width}`,
+  `margin: 0.35em ${side === 'right' ? '0' : gap} 0.6em ${side === 'right' ? gap : '0'}`,
+  `transform: rotate(${side === 'right' ? 1.4 : -1.2}deg)`,
+].join('; ');
+---
+
+<figure class:list={['me-photo', `me-photo--${variant}`]} style={style}>
+  <picture class="me-photo-film">
+    <source type="image/avif" srcset={photo.avifSrcset} sizes={sizes} />
+    <img
+      src={photo.fallback.src}
+      srcset={photo.webpSrcset}
+      sizes={sizes}
+      width={photo.fallback.width}
+      height={photo.fallback.height}
+      alt={photo.alt}
+      loading="lazy"
+      decoding="async"
+      style="display: block; width: 100%; height: auto; filter: sepia(0.32) saturate(0.72) contrast(1.06) brightness(0.95)"
+    />
+  </picture>
+  {photo.caption && <figcaption>{photo.caption}</figcaption>}
+</figure>
+
+<style is:global>
+  .me-photo {
+    padding: 0.32rem;
+    background: #e8dfcd;
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.25) inset,
+      0 12px 20px -12px rgb(0 0 0 / 0.75);
+  }
+
+  .me-photo-film {
+    display: block;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Grain and a soft vignette over the print, as on a film snapshot. */
+  .me-photo-film::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.45 0 0 0 0 0.4 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)'/%3E%3C/svg%3E");
+    box-shadow: inset 0 0 1.4rem rgb(20 17 15 / 0.45);
+    mix-blend-mode: multiply;
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  .me-photo figcaption {
+    margin-top: 0.3rem;
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .prose .me-photo img {
+    width: 100%;
+  }
+</style>

@@ -1,6 +1,7 @@
 import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
+import mePhotos from './content/me.json';
 
 function entries(collection: string) {
   return glob({
@@ -79,6 +80,8 @@ const story = defineCollection({
         sourceUrl: z.url(),
         placeholder: z.boolean().optional(),
       }),
+      /** A photo of the owner shown beside the chapter text: the `file` of an entry in src/content/me.json. */
+      photo: z.enum(mePhotos.map((photo) => photo.file) as [string, ...string[]]).optional(),
     }),
 });
 
