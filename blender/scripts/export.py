@@ -81,13 +81,15 @@ def private_copy(mesh: bpy.types.Mesh) -> bpy.types.Mesh:
 
 
 def prepare_meshes() -> list[bpy.types.Object]:
-    for name in ["proxy", *RUNTIME_MESHES.values(), "nas_led", *(f"room_{a}" for a in ATLASES)]:
+    for name in ["proxy", *RUNTIME_MESHES.values(), "nas_led", "room_props_leaves", *(f"room_{a}" for a in ATLASES)]:
         if name in bpy.data.materials:
             bpy.data.materials[name].name = f"{name}_scene"
     images = {atlas: atlas_image(atlas) for atlas in ATLASES}
     materials = {atlas: unlit_material(f"room_{atlas}", images[atlas]) for atlas in ATLASES}
-    # Leaves and other single-sided prop surfaces must show from both sides.
-    materials["props"].use_backface_culling = False
+    # Only open, single-layer surfaces (the mango leaves) are double-sided: on thin closed shells such as the screen
+    # fabric, a double-sided material let the dark back layer z-fight through the front from afar.
+    leaves = unlit_material("room_props_leaves", images["props"])
+    leaves.use_backface_culling = False
     runtime = {}
     proxy = unlit_material("proxy", None)
     exported = []
@@ -112,6 +114,8 @@ def prepare_meshes() -> list[bpy.types.Object]:
                 if mat_name not in runtime:
                     runtime[mat_name] = unlit_material(mat_name, images[atlas])
                 mat = runtime[mat_name]
+            elif obj.get("double_sided"):
+                mat = leaves
             else:
                 mat = materials[atlas]
             obj.data.materials.clear()

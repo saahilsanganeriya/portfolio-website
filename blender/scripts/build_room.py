@@ -983,6 +983,8 @@ def place_props(mats):
         for obj in meshes:
             if not obj.name.startswith(("nas_led_", "props_")):
                 obj.name = f"props_{obj.name.split('.')[0]}"
+            if obj.name == "props_mango_plant_leaves":
+                obj["double_sided"] = True  # single-layer leaves; export gives them a double-sided material
         placed[name] = meshes
         anchors[name] = {"root": root, **found}
     # One more 35 mm canister on the lower shelf beside the cameras (its origin sits 7.5 cm off the set's).
@@ -1035,8 +1037,11 @@ def build_posters(mats):
                     obj.data = obj.data.copy()
                     template = obj.data.materials[0]
                     obj.data.materials[0] = poster_material(poster_id, template)
+                    # The print sits 0.3 mm off the backing board, which z-fights in the browser from afar.
+                    obj.matrix_world = Matrix.Translation((0.002, 0, 0)) @ obj.matrix_world
                 else:
                     obj.name = f"props_poster_frame_{poster_id}"
+                    drop_faces_behind_print(obj)
                     if frame_materials is None:
                         frame_materials = list(obj.data.materials)
                     else:
@@ -1064,6 +1069,19 @@ def build_posters(mats):
         frame = new_object(f"props_poster_frame_{poster_id}", fbm, "posters", "posters", [mats["walnut"]])
         frame["poster"] = poster_id
         smooth_by_angle(frame)
+
+
+def drop_faces_behind_print(frame):
+    """Remove the backing board's front faces, which the poster print covers completely."""
+    bm = bmesh.new()
+    bm.from_mesh(frame.data)
+    world = frame.matrix_world
+    normal_matrix = world.to_3x3().inverted().transposed()
+    hidden = [f for f in bm.faces if (normal_matrix @ f.normal).normalized().x > 0.95
+              and frame.data.materials[f.material_index].name.startswith("hardboard")]
+    bmesh.ops.delete(bm, geom=hidden, context="FACES")
+    bm.to_mesh(frame.data)
+    bm.free()
 
 
 def screen_frame(anchors):
