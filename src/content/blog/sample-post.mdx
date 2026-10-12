@@ -1,0 +1,43 @@
+---
+title: How a post looks
+date: 2026-10-12
+summary: A sample post that shows every element a post can use. It is a draft, so it never reaches the live site.
+tags: [sample]
+draft: true
+---
+
+This is a sample. It shows how each element of a post renders, and it doubles as the template for a new post: copy
+this file, change the frontmatter, write. Drafts appear in `npm run dev` and never in the production build.
+
+## A section heading
+
+Paragraphs run to about sixty-eight characters a line, set in Newsreader with generous leading. Quotes and dashes
+come out typographic without any effort: "like this" -- and like this.
+
+<aside>An aside becomes a sidenote in the right margin on a wide screen, and an indented note on a phone.</aside>
+
+A link to [the projects page](/projects) carries a thin thread under it. Lists look like this:
+
+- a first point, kept short
+- a second point that runs a little longer, to show how a wrapped line sits under the first
+- a third
+
+### A smaller heading
+
+> A quotation sits in italic with a quiet rule on its left.
+
+Code uses IBM Plex Mono, inline as `npm run dev`, and in blocks:
+
+```ts
+export function stars(rating: number): string {
+  return '★'.repeat(Math.floor(rating)) + (rating % 1 ? '½' : '');
+}
+```
+
+---
+
+| Element | Font |
+| --- | --- |
+| Headings and essays | Newsreader |
+| Interface | IBM Plex Sans |
+| Code | IBM Plex Mono |
