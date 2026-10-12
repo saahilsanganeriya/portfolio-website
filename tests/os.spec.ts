@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page } from '@playwright/test';
 
 const APPS = ['Projects', 'Blog', 'Films', 'A Narrative in a Frame', 'Terminal', 'About', 'Résumé', 'Credits'];
+const PROJECT = { slug: 'real-time-streaming', title: 'A real-time streaming pipeline (Amazon internship)' };
 
 async function seriousAxeViolations(page: Page): Promise<string[]> {
   const { violations } = await new AxeBuilder({ page })
@@ -24,10 +25,10 @@ test.describe('desktop', () => {
 
   /** Catches deep links (`#projects/<slug>`, the room's `#films/<id>`) that open the wrong window or none. */
   test('a hash opens and fills that window', async ({ page }) => {
-    await page.goto('/os#projects/sample-project');
-    const reader = page.getByRole('dialog', { name: 'Sample project' });
+    await page.goto(`/os#projects/${PROJECT.slug}`);
+    const reader = page.getByRole('dialog', { name: PROJECT.title });
     await expect(reader.getByRole('heading', { level: 2, name: 'What it does' })).toBeVisible();
-    await expect(page).toHaveURL(/#projects\/sample-project$/);
+    await expect(page).toHaveURL(new RegExp(`#projects/${PROJECT.slug}$`));
 
     await page.goto('/os#films/la-la-land');
     await expect(page.getByRole('dialog', { name: 'Films' }).locator('#film-la-la-land')).toBeFocused();
@@ -35,25 +36,25 @@ test.describe('desktop', () => {
 
   /** Catches links inside the monitor that would load a page into the iframe instead of a tab or a window. */
   test('links: other sites in a new tab, "Open as page" in the whole tab, site pages in a window', async ({ page }) => {
-    await page.goto('/os#projects/sample-project');
-    const reader = page.getByRole('dialog', { name: 'Sample project' });
+    await page.goto(`/os#projects/${PROJECT.slug}`);
+    const reader = page.getByRole('dialog', { name: PROJECT.title });
     const source = reader.getByRole('link', { name: 'Source code' });
     await expect(source).toHaveAttribute('target', '_blank');
     await expect(source).toHaveAttribute('rel', 'noopener');
     const asPage = reader.getByRole('link', { name: 'Open as page ↗' });
     await expect(asPage).toHaveAttribute('target', '_top');
-    await expect(asPage).toHaveAttribute('href', '/projects/sample-project');
+    await expect(asPage).toHaveAttribute('href', `/projects/${PROJECT.slug}`);
     await asPage.click();
-    await expect(page).toHaveURL(/\/projects\/sample-project$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Sample project' })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT.slug}$`));
+    await expect(page.getByRole('heading', { level: 1, name: PROJECT.title })).toBeVisible();
 
-    await page.goto('/os#blog/sample-post');
+    await page.goto('/os#blog/redaction-is-not-enough');
     await page
-      .getByRole('dialog', { name: 'How a post looks' })
-      .getByRole('link', { name: 'the projects page' })
+      .getByRole('dialog', { name: 'Redaction is not enough' })
+      .getByRole('link', { name: 'separately' })
       .click();
-    await expect(page.getByRole('dialog', { name: 'Projects' })).toBeVisible();
-    await expect(page).toHaveURL(/\/os#projects$/);
+    await expect(page.getByRole('dialog', { name: 'The same-person problem' })).toBeVisible();
+    await expect(page).toHaveURL(/\/os#blog\/the-same-person-problem$/);
   });
 
   /** Catches a Terminal whose commands stop reaching the content or the window manager. */
@@ -62,10 +63,10 @@ test.describe('desktop', () => {
     const prompt = page.getByRole('textbox', { name: 'Command' });
     await prompt.fill('ls projects');
     await prompt.press('Enter');
-    await expect(page.getByRole('log', { name: 'Terminal output' })).toContainText('sample-project');
-    await prompt.fill('open sample-project');
+    await expect(page.getByRole('log', { name: 'Terminal output' })).toContainText(PROJECT.slug);
+    await prompt.fill(`open ${PROJECT.slug}`);
     await prompt.press('Enter');
-    await expect(page.getByRole('dialog', { name: 'Sample project' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: PROJECT.title })).toBeVisible();
   });
 
   /** Catches a break in the contract the room relies on: os-ready, open messages, forwarded pointer events. */
@@ -97,7 +98,7 @@ test.describe('desktop', () => {
 
   /** Catches contrast, naming and ARIA failures in the chrome and in a reader window. */
   test('axe finds no serious violations', async ({ page }) => {
-    await page.goto('/os#projects/sample-project');
+    await page.goto(`/os#projects/${PROJECT.slug}`);
     await expect(page.getByRole('heading', { level: 2, name: 'What it does' })).toBeVisible();
     await page.getByRole('button', { name: 'Start' }).click();
     expect(await seriousAxeViolations(page)).toEqual([]);

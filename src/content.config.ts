@@ -2,15 +2,10 @@ import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
-// Samples in src/content/_samples/ load only in dev or when SAMPLES=1; production builds never see them.
-const includeSamples = process.env.NODE_ENV !== 'production' || process.env.SAMPLES === '1';
-
 function entries(collection: string) {
-  const patterns = [`${collection}/[^_]*.{md,mdx}`];
-  if (includeSamples) patterns.push(`_samples/${collection}/[^_]*.{md,mdx}`);
   return glob({
     base: './src/content',
-    pattern: patterns,
+    pattern: `${collection}/[^_]*.{md,mdx}`,
     generateId: ({ entry }) => entry.split('/').pop()!.replace(/\.mdx?$/, ''),
   });
 }

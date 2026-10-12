@@ -1,6 +1,6 @@
 // Builds the site, then checks the output: every content entry has its page and JSON body, every page carries the
 // tags a shared link needs (title, description, og:title, og:image) and one <h1>, and no internal link or anchor is broken.
-// Usage: node scripts/check-routes.mjs [--samples] [--no-build]   (--samples builds with SAMPLES=1: drafts and samples)
+// Usage: node scripts/check-routes.mjs [--samples] [--no-build]   (--samples builds with SAMPLES=1: draft posts too)
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -31,15 +31,12 @@ const pending = new Set();
 // ---- content entries → expected files ----
 
 const entryIds = (collection) => {
-  const dirs = [join(CONTENT, collection), ...(withSamples ? [join(CONTENT, '_samples', collection)] : [])];
-  return dirs
-    .filter((dir) => existsSync(dir))
-    .flatMap((dir) =>
-      readdirSync(dir)
-        .filter((file) => /^[^_].*\.mdx?$/.test(file))
-        .filter((file) => withSamples || !/^draft:\s*true\s*$/m.test(frontmatter(join(dir, file))))
-        .map((file) => file.replace(/\.mdx?$/, '')),
-    );
+  const dir = join(CONTENT, collection);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((file) => /^[^_].*\.mdx?$/.test(file))
+    .filter((file) => withSamples || !/^draft:\s*true\s*$/m.test(frontmatter(join(dir, file))))
+    .map((file) => file.replace(/\.mdx?$/, ''));
 };
 
 const frontmatter = (path) => readFileSync(path, 'utf8').match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '';

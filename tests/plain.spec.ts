@@ -1,7 +1,20 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-const PLAIN_PAGES = ['/', '/blog', '/blog/sample-post', '/projects', '/projects/sample-project', '/films', '/credits', '/about', '/resume', '/404'];
+const POST = { slug: 'redaction-is-not-enough', title: 'Redaction is not enough', h2: 'What a black bar breaks' };
+const PLAIN_PAGES = [
+  '/',
+  '/blog',
+  `/blog/${POST.slug}`,
+  '/blog/oppenheimer', // a film review: the film line with its star rating
+  '/projects',
+  '/projects/real-time-streaming',
+  '/films',
+  '/credits',
+  '/about',
+  '/resume',
+  '/404',
+];
 
 /** Catches a home page whose text index or skip link is missing, which leaves no-WebGL and keyboard visitors stuck. */
 test('home shows the text index and "Skip the room" is the first tab stop', async ({ page }) => {
@@ -16,18 +29,18 @@ test('home shows the text index and "Skip the room" is the first tab stop', asyn
 });
 
 /** Catches the post index dropping posts, e.g. a broken draft filter or collection glob. */
-test('/blog lists the sample post', async ({ page }) => {
+test('/blog lists the posts', async ({ page }) => {
   await page.goto('/blog');
   await expect(page.getByRole('heading', { level: 1, name: 'Writing' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'How a post looks' })).toHaveAttribute('href', '/blog/sample-post');
+  await expect(page.getByRole('link', { name: POST.title })).toHaveAttribute('href', `/blog/${POST.slug}`);
 });
 
 /** Catches a post page that renders without its MDX body or without the tags a shared link needs. */
 test('a post renders its body and share tags', async ({ page }) => {
-  await page.goto('/blog/sample-post');
-  await expect(page.getByRole('heading', { level: 1, name: 'How a post looks' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2, name: 'A section heading' })).toBeVisible();
-  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'How a post looks');
+  await page.goto(`/blog/${POST.slug}`);
+  await expect(page.getByRole('heading', { level: 1, name: POST.title })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: POST.h2 })).toBeVisible();
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', POST.title);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^https:\/\/.+\/og\/default\.png$/);
 });
 
@@ -45,14 +58,14 @@ test('/rss.xml is valid XML with the post in it', async ({ page, request }) => {
     };
   }, xml);
   expect(result.parseError).toBeNull();
-  expect(result.titles).toContain('How a post looks');
+  expect(result.titles).toContain(POST.title);
 });
 
 /** Catches the reader-window endpoint returning frontmatter without the rendered body, which leaves OS windows empty. */
 test('/content/<collection>/<slug>.json carries frontmatter and rendered HTML', async ({ request }) => {
-  const body = await (await request.get('/content/blog/sample-post.json')).json();
-  expect(body.data.title).toBe('How a post looks');
-  expect(body.html).toContain('<h2 id="a-section-heading">A section heading</h2>');
+  const body = await (await request.get(`/content/blog/${POST.slug}.json`)).json();
+  expect(body.data.title).toBe(POST.title);
+  expect(body.html).toContain(`<h2 id="what-a-black-bar-breaks">${POST.h2}</h2>`);
 });
 
 /** Catches WCAG A/AA failures (contrast, names, landmarks) on every plain page; accessibility must score 100. */

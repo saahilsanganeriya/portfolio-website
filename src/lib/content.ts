@@ -1,6 +1,6 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
 
-// Draft posts build in dev, and in production only when SAMPLES=1 (tests and local previews of the samples).
+// Draft posts build in dev, and in production only when SAMPLES=1 (tests and local previews of drafts).
 const includeDrafts = import.meta.env.DEV || process.env.SAMPLES === '1';
 
 export async function getPosts(): Promise<CollectionEntry<'blog'>[]> {
