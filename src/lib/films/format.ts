@@ -6,6 +6,3 @@ export function stars(rating: number): string {
 export function ratingLabel(rating: number): string {
   return `Rated ${rating} out of 5`;
 }
-
-/** One diary row per film and watched day; the page and its client refresh match rows by it. */
-export const diaryKey = (film: { slug: string; watchedDate: string }) => `${film.slug}|${film.watchedDate}`;

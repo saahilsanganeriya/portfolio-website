@@ -23,25 +23,6 @@ export async function getProjects(): Promise<{
   return { featured, archive };
 }
 
-export function groupByYear<T>(items: readonly T[], yearOf: (item: T) => number): [number, T[]][] {
-  const groups = new Map<number, T[]>();
-  for (const item of items) {
-    const year = yearOf(item);
-    const group = groups.get(year);
-    if (group) group.push(item);
-    else groups.set(year, [item]);
-  }
-  return [...groups.entries()];
-}
-
-const longDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
-const shortDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-
-// Frontmatter dates are calendar days parsed as UTC midnight, so format them in UTC to keep the day.
-export function formatDate(date: Date, style: 'long' | 'short' = 'long'): string {
-  return (style === 'long' ? longDate : shortDate).format(date);
-}
-
 export function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
