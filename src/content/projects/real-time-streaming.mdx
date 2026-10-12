@@ -10,6 +10,8 @@ featured: true
 order: 6
 links:
   repo: "https://github.com/saahilsanganeriya/real_time_streaming"
+cover: "../../assets/projects/real-time-streaming.png"
+coverAlt: "Pipeline diagram: an SNS topic feeds a Lambda processor with a dead-letter queue and replay, then a Kinesis stream and a Flink job that writes three OpenSearch indexes and an optional S3 copy, read by OpenSearch Dashboards."
 ---
 
 The data behind a set of workforce dashboards ran through an hourly batch job. Whatever happened just
