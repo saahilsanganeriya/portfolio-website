@@ -1,7 +1,7 @@
 // One-step photo ingest. For each image in a folder: apply its EXIF rotation, strip every metadata block (EXIF with
 // GPS, XMP, IPTC, ICC), write AVIF and WebP copies at a few long-edge sizes, and add an entry the owner can edit.
 // Re-running is safe: photos already ingested are skipped, and an existing entry is never overwritten.
-// Usage: npm run photos:ingest -- <folder> [--series <name>] [--year <yyyy>]   (photography collection)
+// Usage: npm run photos:ingest -- <folder> [--series <name>] [--year <yyyy>]   (photography; series defaults to the year)
 //        npm run photos:ingest -- <folder> --me                                (photos of the owner, src/content/me.json)
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
@@ -119,7 +119,6 @@ export async function ingestFolder({ folder, series = null, year = null, me = fa
   const entriesDir = join(root, 'src/content/photography');
   const meJsonPath = join(root, 'src/content/me.json');
   const meEntries = me && existsSync(meJsonPath) ? JSON.parse(await readFile(meJsonPath, 'utf8')) : [];
-  const defaultSeries = series ?? titleFromSlug(slugify(basename(resolve(folder))));
 
   const results = [];
   for (const [slug, name] of slugs) {
@@ -144,14 +143,15 @@ export async function ingestFolder({ folder, series = null, year = null, me = fa
         meEntries.push({ file: slug, alt: '', use: 'about' });
       } else {
         const inputMeta = await sharp(inputPath).metadata();
+        const entryYear = year ?? exifYear(inputMeta.exif) ?? new Date().getUTCFullYear();
         await mkdir(entriesDir, { recursive: true });
         await writeFile(
           entryPath,
           yamlEntry({
             file: `../../assets/photography/${slug}/${Math.max(...edges)}.webp`,
             title: titleFromSlug(slug),
-            year: year ?? exifYear(inputMeta.exif) ?? new Date().getUTCFullYear(),
-            series: defaultSeries,
+            year: entryYear,
+            series: series ?? String(entryYear),
             caption: '',
             featured: false,
             onWall: false,

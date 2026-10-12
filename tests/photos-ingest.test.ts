@@ -27,7 +27,7 @@ async function phoneJpeg(path: string, width: number, height: number) {
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'photos-ingest-'));
-  folder = join(root, 'incoming', 'street');
+  folder = join(root, 'incoming', 'photos');
   await mkdir(folder, { recursive: true });
   await phoneJpeg(join(folder, 'Amer Fort.JPG'), 1200, 600);
   await phoneJpeg(join(folder, 'tiny.jpg'), 300, 200);
@@ -68,7 +68,7 @@ describe('photos:ingest', () => {
         'file: "../../assets/photography/amer-fort/1200.webp"',
         'title: "Amer fort"',
         'year: 2018',
-        'series: "Street"',
+        'series: "2018"',
         'caption: ""',
         'featured: false',
         'onWall: false',

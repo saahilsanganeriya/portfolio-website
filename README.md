@@ -78,7 +78,7 @@ The write-up.
 Put the photos in a folder (JPEG, PNG, WebP, AVIF or TIFF; export HEIC as JPEG first) and run:
 
 ```sh
-npm run photos:ingest -- ~/photos/street --series Street      # --year 2019 sets the year of every new entry
+npm run photos:ingest -- path/to/photos --series 2019 --year 2019    # both optional
 ```
 
 For each photo it applies the camera's rotation, strips every metadata block (EXIF with GPS location, XMP, IPTC, ICC),
@@ -91,7 +91,7 @@ file: "../../assets/photography/amer-fort/2400.webp"   # written by the script
 title: "amer fort"
 year: 2019                # default: --year, else the photo's own capture year, else this year
 place: "Amer Fort"        # optional
-series: "2019"            # default: --series, else the folder name ("street" becomes "Street")
+series: "2019"            # default: --series, else the year; name a series by year, place or what the photos share
 caption: "Amer Fort beyond a wall, in black and white."   # one line; it is also the alt text, so say what is in it
 featured: false           # the favourites
 onWall: false             # framed on the wall of the room
