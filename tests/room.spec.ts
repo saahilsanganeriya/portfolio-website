@@ -84,6 +84,14 @@ test('a project address ends on the monitor with that project open', async ({ pa
   expect(await seriousAxeViolations(page)).toEqual([]);
 });
 
+/** Catches a bare /os landing on the room's idle view instead of the monitor's desktop. */
+test('a bare /os ends on the monitor with SaahilOS', async ({ page }) => {
+  await page.goto('/os');
+  await expect(page).toHaveURL(/\/#os$/);
+  await settled(page, 'monitor', 60_000);
+  await expect(os(page).locator('.os-desktop')).toBeVisible();
+});
+
 /** Catches an intro the visitor has to sit through: any key lands the glide at once. */
 test('a key press during the intro skips it', async ({ page }) => {
   await page.goto('/');
