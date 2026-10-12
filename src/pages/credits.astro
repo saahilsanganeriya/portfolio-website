@@ -29,7 +29,7 @@ const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
                 <p class="meta">
                   {row.author}, {row.licence}
                 </p>
-                {row.changes && <p class="meta">{row.changes}</p>}
+                {row.changes && <p class="meta roll-changes">{row.changes}</p>}
               </dd>
             </div>
           ))}
@@ -51,6 +51,11 @@ const slug = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     font-family: var(--font-sans);
     font-size: var(--size-meta);
     color: var(--dust);
+  }
+
+  .roll-row dt::first-letter,
+  .roll-changes::first-letter {
+    text-transform: uppercase;
   }
 
   .roll-row dd {
