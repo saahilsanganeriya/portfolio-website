@@ -1,6 +1,6 @@
 ---
 title: "Tideman voting, extended"
-summary: "A CS50 ranked-pairs voting exercise grown into a 1,300-line C tool that compares voting methods across simulated elections."
+summary: "A CS50 ranked-pairs voting exercise grown into a 1,300-line C tool that compares voting methods, and the two numbers it gets wrong."
 year: 2025
 status: "archived"
 role: "Sole author"
@@ -11,24 +11,37 @@ links:
   repo: "https://github.com/saahilsanganeriya/tideman-voting-algorithm-implementation"
 ---
 
-Ranked-pairs voting, also called Tideman, takes every voter's full ranking and asks, for each pair of
-candidates, which one more voters preferred. It locks in those head-to-head wins from the biggest margin
-down, skipping any win that would create a cycle, and the candidate nobody beats wins. When one candidate
-beats everyone head to head, ranked pairs always picks them.
+Simulate two elections in which Tideman and plurality pick different winners both times, and my voting tool reports that they agreed 100% of the time.
 
-Writing it was a CS50 problem set. Afterwards I kept going. The program now sets Tideman beside plurality,
-Borda count and Condorcet results, runs Monte Carlo simulations over many random elections, and saves and
-loads elections. Its menu mode can load a saved election or run simulations, though running a new election
-from the menu was never finished. `tideman.c` has grown to 1,323 lines.
+The tool started as the Tideman problem in Harvard’s CS50. Afterwards I kept going. It now sets ranked pairs beside plurality, the Borda count and the Condorcet winner, simulates random elections, and saves and loads them. `tideman.c` has grown to 1,323 lines. The comparisons are the whole point of it, so a wrong comparison is the bug that matters most.
 
-## What is wrong with it
+## How ranked pairs works
 
-Its "plurality winner" is not plurality. Plurality counts first choices. The program keeps only the
-pairwise preference table, so it estimates first-place votes by adding up each candidate's head-to-head
-support and dividing by the number of opponents. That is a Borda score scaled down, so the plurality and
-Borda columns will nearly always agree, and comparing them says little. The fix is to record each ballot's
-first choice as the votes come in.
+Every voter ranks every candidate. For each pair of candidates, the method asks which one more voters preferred, then locks in those head-to-head wins from the biggest margin down, skipping any that would close a loop.
 
-The simulation's "agreement" figure has a similar problem. It compares how often each method picked each
-candidate across all runs, not whether two methods picked the same winner in the same election. Both are
-small fixes, and both matter more than any feature the tool gained.
+<figure class="os-figure">
+
+```text
+ head-to-head wins, biggest margin first
+
+ A beats B by 7   lock it    A --> B
+ B beats C by 5   lock it    A --> B --> C
+ C beats A by 3   skip it:   C --> A would close a loop
+
+ nobody points at A, so A wins
+```
+
+<figcaption>An invented three-candidate example: the two biggest wins are locked in, the third would make a circle, so it is skipped and the candidate nobody beats wins.</figcaption>
+</figure>
+
+When one candidate beats everyone head to head, ranked pairs always picks them. That part of the program is right.
+
+## Where the shortcut broke
+
+Plurality counts first choices. My program keeps only the table of head-to-head counts, not the ballots, so it estimates first-place votes by adding up a candidate’s head-to-head support and dividing by the number of opponents. That is the Borda score scaled down. In the program’s own 9-voter demo, the true first-choice counts are 4, 3 and 2. The estimate ties the top two at 5. So the plurality and Borda columns nearly always agree, and comparing them says little.
+
+The simulation’s agreement figure has the same kind of problem. It counts how often each method picked each candidate across all runs, then matches those totals. If Tideman picks A and then B while plurality picks B and then A, both totals are one win each, and the figure says 100%.
+
+## What I would change
+
+Both fixes are small. Record each ballot’s first choice as the votes come in, and compare winners election by election. Both matter more than any feature the tool gained, and the menu still cannot run a new election, which I never finished.
