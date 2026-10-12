@@ -21,13 +21,14 @@ Pac-Man.
 
 It mostly did not work, and the reason was the interesting part. The skills collapsed into the same
 behaviour. t-SNE plots of the representation showed no structure, and silhouette scores against the skill
-labels stayed at or below 0.2. The representation barely moved from one frame to the next: the step
-between consecutive states was around 1e-9. With almost no change to measure, the intrinsic reward was
-almost zero, and the policy fell back to choosing one action.
+labels stayed at or below 0.2. The representation barely moved from one frame to the next: in the team's
+logged runs, the mean step between consecutive states was 2.9e-8 to 6.4e-8. With almost no change to
+measure, the intrinsic reward was almost zero, and the policy fell back to choosing one action.
 
 A warm-up phase that trained the encoder alone collapsed again as soon as policy training resumed. A
-deeper pixel encoder, a ResNet-18, moved the step from about 1e-9 to about 1e-3. That was the change that
-mattered, though even then the skills did not separate cleanly.
+deeper pixel encoder, a ResNet-18, raised the step to between 1.1e-3 and 1.0e-2, about five orders of
+magnitude. That was the change that mattered, though even then the skills did not separate: silhouette
+scores stayed between -0.10 and 0.05.
 
 ## What I would change
 
@@ -35,5 +36,6 @@ We also widened the skill space from 4 to 24 dimensions and tried continuous ski
 because the representation was the bottleneck all along. I would measure the representation first and
 tune everything around it second.
 
-The code is in a shared team repository whose commits are my teammates', and the report was a course
-paper that is not online, so this page links neither.
+The team's code and the training logs these numbers come from are in a
+[shared repository](https://github.com/saahilsanganeriya/Scratch-Implementation); every code commit there
+is a teammate's. The report was a course paper and is not online.
