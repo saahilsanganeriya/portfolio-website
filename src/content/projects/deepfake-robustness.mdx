@@ -3,34 +3,57 @@ title: "Deepfake detection under real-world edits"
 summary: "Retrained a fake-image detector so it still works after the compression, sharpening and colour filters that social media apply."
 year: 2025
 status: "research"
-role: "Team member: fine-tuning and evaluation"
-team: "team of 3; I fine-tuned the detector on edited images and measured the results"
+role: "Team member: fine-tuning, evaluation and the sharpening experiment"
+team: "team of 3; I fine-tuned the detector on edited images, ran the sharpening experiment and measured the results"
 stack: ["Python", "PyTorch", "ResNet-50"]
 featured: false
 links: {}
 ---
 
-A detector that catches AI-generated images in a lab can fail the moment someone posts the image.
-Platforms recompress it, people sharpen it and add filters, and the faint traces a detector relies on get
-smoothed away.
+We pointed a published fake-image detector at about 19,000 modern real and AI-generated images. It caught 3.8% of the fakes.
 
-We started from a published universal detector, a ResNet-50 trained on GAN images. On a modern set of
-about 19,000 real and AI-generated images it reached 51% accuracy, a coin flip, and caught 3.8% of the
-fakes.
+Its overall accuracy was 51%, a coin flip. The detector came from a well-known paper, “CNN-generated images are surprisingly easy to spot… for now”: a ResNet-50 trained on GAN images, with random blur and JPEG compression added so it would survive light editing. Modern generators, and the way platforms recompress, sharpen and filter what people post, had moved past it.
 
-We fine-tuned it on the same kind of images with social-media edits applied: WebP compression in place of
-the JPEG compression from its original training, colour jitter, and sharpening. The best version reached
-83% accuracy while still catching over 93% of the fakes. Sharpening helped the real-image side the most,
-perhaps because it brings out genuine detail in real photos as well as artifacts in fakes. That is our
-guess, and the paper does not prove it.
+## Edits a platform might make
+
+For a machine-learning security course, three of us fine-tuned that detector on a modern dataset, once on clean images and once per kind of edit.
+
+<figure class="os-figure">
+
+```text
+ about 19,000 modern real and fake images
+                    |
+       one kind of edit per experiment:
+   colour jitter | sharpening x2 | WebP, not JPEG
+                    |
+                    v
+   fine-tune the published ResNet-50 detector
+                    |
+                    v
+             real or fake?
+```
+
+<figcaption>The experiment: the same detector fine-tuned on images edited the way social media edits them, one kind of edit at a time.</figcaption>
+</figure>
+
+| Detector | Accuracy | Fakes caught |
+|---|---:|---:|
+| Published, as is | 51% | 3.8% |
+| Fine-tuned on clean images | 71–77% | 98–99% |
+| Fine-tuned on colour-jittered images | 73.7% | 98.1% |
+| Fine-tuned on sharpened images | 82.6% | 99.2% |
+| Fine-tuned with WebP compression | 82.9% | 93.6% |
+
+Most of the jump came from fine-tuning on modern images at all. The edits added about 3 to 10 points on top, depending on the edit. Sharpening, my experiment, helped the real-image side most, perhaps because it brings out genuine detail in real photos as well as artifacts in fakes. That is our guess, and the paper does not prove it.
+
+## What the 83% gives up
+
+The 83% on my résumé is the WebP model, and it catches fewer fakes than the sharpened one, 93.6% against 99.2%, at almost the same accuracy. If a missed fake is the expensive mistake, the sharpened model is the one to ship.
 
 ## What I would change
 
-We fine-tuned and tested on splits of one dataset. So 83% says the detector adapts to this kind of image.
-It does not say the detector would catch images from a generator it has never seen, which is the case
-that matters. I would test on a held-out generator first.
+We fine-tuned and tested on splits of one dataset. So these numbers say the detector adapts to this kind of image, not that it would catch a generator it has never seen, which is the case that matters. I would hold out a whole generator first.
 
-The code lives in a teammate's fork of the original detector, and its main branch is their work and the
-original authors'. Mine is one commit, on the unmerged
-[`sharpening` branch](https://github.com/saahilsanganeriya/DeepFakeDetection/tree/sharpening) of my copy:
-the paper's sharpening experiment. The write-up was a course paper and is not online.
+One thing in our own tables bothers me now. In the colour and sharpening experiments, every model scored exactly the same on the edited test images as on the untouched ones, to a tenth of a percent. Edits that leave a score untouched are possible, but identical scores for every model deserved a second look before we leaned on them.
+
+The code lives in a teammate’s fork of the original detector, and its main branch is their work and the original authors’. Mine is one commit, on the unmerged [`sharpening` branch](https://github.com/saahilsanganeriya/DeepFakeDetection/tree/sharpening) of my copy: the sharpening experiment. The write-up was a course paper and is not online.
