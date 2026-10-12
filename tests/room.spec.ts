@@ -129,7 +129,7 @@ test('clicking the projector screen glides to it; clicked there, it opens Films 
   await settled(page, 'idle');
   const screen = await screenPoint(page, 'hit_projector_screen');
   await page.mouse.move(screen.x, screen.y);
-  await expect(page.locator('.room-label')).toHaveText('Films');
+  await expect(page.locator('.room-label')).toHaveText('The Reel');
   await page.mouse.click(screen.x, screen.y);
   await page.waitForFunction(() => window.__room?.phase === 'projector' && !window.__room.moving, null, { timeout: 30_000 });
   await expect(os(page).getByRole('dialog', { name: 'Films' })).toHaveCount(0);
