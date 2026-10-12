@@ -6,6 +6,7 @@ import { Interaction } from './Interaction';
 import { MonitorScreen } from './MonitorScreen';
 import { DPR_CAP, Quality, type QualityTier } from './Quality';
 import { loadRoom, ROOM_URL, type ProgressReporter } from './Resources';
+import { Reel, type ReelFilm, type ReelState } from './Reel';
 import { readRoom, type RoomNodes } from './RoomModel';
 import { RoomRenderer } from './Renderer';
 import { easeInOutQuint, easeIntoMonitor, easeOutExpo, type Easing } from './tween';
@@ -16,6 +17,8 @@ export interface RoomOptions {
   onProgress: ProgressReporter;
   /** Cut between framings instead of gliding (prefers-reduced-motion). */
   reducedMotion?: boolean;
+  /** The newest diary entries in the build, for the reel's cards until the live diary answers. */
+  films: ReelFilm[];
 }
 
 export interface StartOptions {
@@ -51,6 +54,9 @@ export interface RoomProbe {
   readonly tier: number;
   point(name: string): { x: number; y: number } | null;
   goto(phase: 'idle' | 'desk' | 'monitor'): void;
+  readonly reel: { state: ReelState; time: number; inView: boolean } | null;
+  /** Plays the reel whenever the room runs, in view or not (worst-case frame rate). */
+  forceReel(on: boolean): void;
   /** Renders the room's sound offline as heard from a framing; see RoomAudio.renderOffline. */
   renderSound(
     seconds: number,
@@ -76,6 +82,7 @@ export class Application implements RoomHandle {
   private monitor!: MonitorScreen;
   private effects!: Effects;
   private audio!: RoomAudio;
+  private reel: Reel | null = null;
   private interaction!: Interaction;
   private started = false;
   private intro = false;
@@ -125,6 +132,9 @@ export class Application implements RoomHandle {
       projector: this.nodes.projector?.lens ?? null,
       desk: this.nodes.framings.desk.target,
     });
+    if (this.nodes.projection) {
+      this.reel = new Reel(this.nodes.projection, this.nodes.screenSurface, this.scene, this.options.films);
+    }
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
       hotspot: (hotspot) => (hotspot.target ? this.openWindow(hotspot.target) : this.enterMonitor()),
       toggle: () => this.toggle(),
@@ -153,6 +163,7 @@ export class Application implements RoomHandle {
     this.started = true;
     this.intro = true;
     this.monitor.iframe.removeAttribute('tabindex');
+    void this.reel?.load();
     const endIntro = () => (this.intro = false);
     if (open !== undefined) {
       this.glide('monitor', fast ? 0 : FAST_GLIDE_MS, easeIntoMonitor, endIntro);
@@ -189,6 +200,7 @@ export class Application implements RoomHandle {
     this.interaction?.dispose();
     this.monitor?.dispose();
     this.audio?.dispose();
+    this.reel?.dispose();
     this.effects?.dispose();
     this.renderer.dispose();
     for (const el of this.layers) el.remove();
@@ -244,6 +256,7 @@ export class Application implements RoomHandle {
     const visibility = new IntersectionObserver(([entry]) => {
       this.onScreen = entry.isIntersecting;
       if (this.onScreen) this.loop();
+      else this.reel?.suspend();
     });
     visibility.observe(this.container);
     this.observers.push(resize, visibility);
@@ -268,6 +281,7 @@ export class Application implements RoomHandle {
     this.interaction.update();
     if (!this.paused) this.effects.update(this.clock, this.renderer.gl.getPixelRatio());
     this.monitor.update(this.clock, this.camera.instance);
+    this.reel?.update(this.camera.instance, this.started && !this.paused, dt);
     this.audio.update(this.camera.instance, now, this.monitor.frontWindow.startsWith('films'));
 
     // While paused, a still camera means a still frame: skip the work entirely.
@@ -314,6 +328,13 @@ export class Application implements RoomHandle {
       goto(phase) {
         if (phase === 'monitor') app.enterMonitor();
         else app.glide(phase, 1000, easeInOutQuint);
+      },
+      get reel() {
+        const reel = app.reel;
+        return reel ? { state: reel.state, time: reel.time, inView: reel.inView } : null;
+      },
+      forceReel(on) {
+        app.reel?.force(on);
       },
       renderSound(seconds, { view, filmsOpen, clicks }) {
         const framing = app.nodes.framings[view];

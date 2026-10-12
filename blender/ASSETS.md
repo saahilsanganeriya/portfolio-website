@@ -84,7 +84,7 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
 |---|---|---|---|---|---|
-| Newsreader (variable, optical sizes) | headings and essays on the plain pages | https://github.com/productiontype/Newsreader | The Newsreader Project Authors (Production Type) | SIL OFL 1.1 | none; self-hosted WOFF2 subsets from Fontsource (@fontsource-variable/newsreader 5.3.0) |
+| Newsreader (variable, optical sizes) | headings and essays on the plain pages; the projector reel's intertitle cards | https://github.com/productiontype/Newsreader | The Newsreader Project Authors (Production Type) | SIL OFL 1.1 | none; self-hosted WOFF2 subsets from Fontsource (@fontsource-variable/newsreader 5.3.0) |
 | IBM Plex Sans | interface text: navigation, dates, notes | https://github.com/IBM/plex | IBM Corp. | SIL OFL 1.1 | none; self-hosted WOFF2 subsets from Fontsource (@fontsource/ibm-plex-sans 5.3.0) |
 | IBM Plex Mono | code | https://github.com/IBM/plex | IBM Corp. | SIL OFL 1.1 | none; self-hosted WOFF2 subsets from Fontsource (@fontsource/ibm-plex-mono 5.3.0) |
 | League Gothic | titles on the room posters, hand-drawn and drawn at runtime | https://github.com/theleagueof/league-gothic | The League Gothic Project Authors (The League of Moveable Type) | SIL OFL 1.1 | outlined to SVG paths in the poster files, and to the glyph table src/lib/poster-glyphs.ts for runtime posters (@fontsource-variable/league-gothic 5.3.0, default width) |
@@ -103,6 +103,15 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Mouse button (`mouse-down`, `mouse-up`) | clicking in SaahilOS on the monitor | https://github.com/henryjeff/portfolio-website/tree/c53c5a50183655eb83d70048403a5084f5d1214c/static/audio/mouse | Henry Heffernan | MIT, used with his permission | as the key clicks |
 | 8mm projector sound (`projector.webm`, `.m4a`) | the projector, heard up close or while Films is the front window | https://freesound.org/people/videofueralle/sounds/241886/ | videofueralle (Freesound) | CC0 1.0 | from the sound page's high-quality preview (Ogg Vorbis, 48 kHz); mono, low-passed at 11 kHz, loudness-normalised to −23 LUFS, an 11.9 s loop from 0:40 with a 1 s crossfade |
 
+## Video
+
+| Asset | Used for | Source URL | Author | Licence | Changes |
+|---|---|---|---|---|---|
+| The Arrival of a Train (L’Arrivée d’un train en gare de La Ciotat), 1895 | 12 s of the projector's reel (`public/room/reel.mp4`) | https://commons.wikimedia.org/wiki/File:Arrival_of_a_Train_at_La_Ciotat_%28The_Lumi%C3%A8re_Brothers%2C_1895%29.webm | Auguste and Louis Lumière | public domain: published 1895, so public domain in the US; the authors died in 1948 and 1954 (Commons: PD-old-70-expired) | 0:04–0:16, cropped to 4:3, 320 × 240, 18 fps, grey, denoised, levels normalised, silent; H.264 (scripts/media/build-reel.mjs) |
+| Workers Leaving the Lumière Factory (La Sortie de l’usine Lumière à Lyon, first version), 1895 | 10 s of the projector's reel | https://commons.wikimedia.org/wiki/File:La_Sortie_de_l%27Usine_Lumi%C3%A8re_%C3%A0_Lyon_I_1895.webm | Louis Lumière | public domain: published 1895 (Commons: PD-1923, US) and the author died in 1948 (Commons: PD-France) | from Commons' 480p transcode, 0:01–0:11, then as above |
+| A Trip to the Moon (Le Voyage dans la Lune), 1902 | 13 s of the projector's reel: the rocket lands in the Moon's eye | https://commons.wikimedia.org/wiki/File:Le_Voyage_dans_la_Lune_%281902%29.webm | Georges Méliès | public domain: published 1902, so public domain in the US; the author died in 1938 (Commons: PD-old-auto-expired) | from Commons' 480p transcode, 6:04–6:17, then as above |
+| Intertitle cards (now showing, clip titles, also lately) | the reel's cards between the clips; two show the newest films in the owner's Letterboxd diary | none (drawn at runtime by src/scene/Application/Reel.ts) | Saahil Sanganeriya (made for this site) | own work | — |
+
 ## Code
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
@@ -114,4 +123,4 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | three.js r186 | 3D rendering, glTF loading, the CSS3D monitor | https://github.com/mrdoob/three.js | three.js authors | MIT | npm dependency, unmodified |
 | meshoptimizer decoder (meshopt_decoder.module.js, shipped with three.js) | decoding the room's compressed geometry | https://github.com/zeux/meshoptimizer | Arseny Kapoulkine | MIT | bundled unmodified |
 | Basis Universal transcoder (basis_transcoder.js and .wasm, shipped with three.js) | decoding the room's KTX2 textures | https://github.com/BinomialLLC/basis_universal | Binomial LLC | Apache 2.0 | copied unmodified to public/room/basis/ |
-| Hash without Sine (hash12, hash13) | film grain, CRT noise and the projector beam's air in the room's shaders | https://www.shadertoy.com/view/4djSRW | Dave Hoskins | MIT | two functions, copied into the shaders |
+| Hash without Sine (hash12, hash13) | film grain, CRT noise, the projector beam's air and the reel's grain, flicker and gate weave in the room's shaders | https://www.shadertoy.com/view/4djSRW | Dave Hoskins | MIT | two functions, copied into the shaders |

@@ -36,7 +36,14 @@ export interface RoomNodes {
   leds: THREE.Mesh[];
   crtGlow: THREE.Mesh | null;
   lampBulb: THREE.Mesh | null;
+  /** The projected picture baked on the projector screen (`props_projection`); the reel plays over it. */
+  projection: THREE.Mesh | null;
+  /** The screen's fabric (`props_projector_screen_surface`), baked lit by the projector's open gate. */
+  screenSurface: THREE.Mesh | null;
 }
+
+/** The projector screen has no proxy in room.glb; this one, made from the screen's bounds, also opens Films. */
+export const SCREEN_PROXY = 'hit_projector_screen';
 
 /** Reads the PLAN 3.6 node contract from a loaded room (metres), after scaling it to world units. Throws on a missing required node. */
 export function readRoom(root: THREE.Object3D): RoomNodes {
@@ -105,5 +112,28 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
     return node instanceof THREE.Mesh ? node : null;
   };
 
-  return { root, framings, monitor, projector, proxies, leds, crtGlow: mesh('crt_glow'), lampBulb: mesh('lamp_bulb') };
+  const screenSurface = mesh('props_projector_screen_surface');
+  if (screenSurface) {
+    const box = new THREE.Box3().setFromObject(screenSurface);
+    const proxy = new THREE.Mesh(new THREE.BoxGeometry(...box.getSize(new THREE.Vector3()).divideScalar(WORLD_SCALE).toArray()));
+    proxy.name = SCREEN_PROXY;
+    proxy.position.copy(root.worldToLocal(box.getCenter(new THREE.Vector3())));
+    proxy.visible = false;
+    root.add(proxy);
+    proxy.updateMatrixWorld();
+    proxies.push(proxy);
+  }
+
+  return {
+    root,
+    framings,
+    monitor,
+    projector,
+    proxies,
+    leds,
+    crtGlow: mesh('crt_glow'),
+    lampBulb: mesh('lamp_bulb'),
+    projection: mesh('props_projection'),
+    screenSurface,
+  };
 }

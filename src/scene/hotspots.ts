@@ -30,7 +30,8 @@ export const HOTSPOTS: readonly Hotspot[] = [
     href: '/story',
   },
   { proxies: ['hit_super8'], prop: 'The Super 8 camera', label: 'Play the story reel', target: 'story', href: '/story' },
-  { proxies: ['hit_projector'], prop: 'The projector', label: 'Films', target: 'films', href: '/films' },
+  // The screen's proxy is made at runtime (RoomModel's SCREEN_PROXY): the reel playing on it opens Films too.
+  { proxies: ['hit_projector', 'hit_projector_screen'], prop: 'The projector', label: 'Films', target: 'films', href: '/films' },
   ...POSTERS.map(({ id, title }) => ({
     proxies: [`hit_poster_${id}`],
     prop: `The ${title} poster`,

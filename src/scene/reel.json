@@ -1,0 +1,40 @@
+{
+  "duration": 55,
+  "segments": [
+    { "start": 0, "end": 5, "card": { "kind": "now-showing" } },
+    {
+      "start": 5,
+      "end": 8.5,
+      "card": {
+        "kind": "title",
+        "title": "The Arrival of a Train",
+        "original": "L’Arrivée d’un train en gare de La Ciotat",
+        "credit": "Auguste and Louis Lumière, 1895"
+      }
+    },
+    { "start": 8.5, "end": 20.5, "clip": "train" },
+    {
+      "start": 20.5,
+      "end": 24,
+      "card": {
+        "kind": "title",
+        "title": "Workers Leaving the Factory",
+        "original": "La Sortie de l’usine Lumière à Lyon",
+        "credit": "Louis Lumière, 1895"
+      }
+    },
+    { "start": 24, "end": 34, "clip": "factory" },
+    {
+      "start": 34,
+      "end": 37.5,
+      "card": {
+        "kind": "title",
+        "title": "A Trip to the Moon",
+        "original": "Le Voyage dans la Lune",
+        "credit": "Georges Méliès, 1902"
+      }
+    },
+    { "start": 37.5, "end": 50.5, "clip": "moon" },
+    { "start": 50.5, "end": 55, "card": { "kind": "lately" } }
+  ]
+}
