@@ -62,7 +62,7 @@ PROPS = {
     "fujifilm_xt": ((-0.62, 0.30, 1.6475), -12, (0.135, 0.065, 0.095)),
     "fujica_st": ((-0.25, 0.31, 1.6475), 8, (0.145, 0.09, 0.095)),
     "super8_camera": ((0.12, 0.30, 1.6475), -20, (0.07, 0.24, 0.17)),
-    "film_canister": ((-0.42, 0.30, 2.0075), 0, (0.18, 0.18, 0.06)),
+    "film_canister": ((-1.60, -2.34, 0.0), 25, (0.27, 0.14, 0.05)),
     "books_stack": ((-0.88, 0.30, 2.0075), 90, (0.16, 0.24, 0.20)),
     "projector_8mm": ((-1.95, -2.08, 0.55), "projector_screen", (0.21, 0.33, 0.33)),
     "projector_screen": ((-1.86, -0.12, 0.0), "projector_8mm", (1.09, 0.92, 1.80)),
@@ -564,7 +564,7 @@ def build_shell(mats):
 def build_ghosts(mats):
     """Camera-invisible ceiling, front and right walls: the room bounces light like a closed room while every
     camera sees an open cutaway. Ghosts carry no atlas, so they are never baked or exported."""
-    ceiling = Mat("ghost_ceiling").set(base=srgb("#D8D0C2"), rough=0.9).mat
+    ceiling = Mat("ghost_ceiling").set(base=srgb("#A39B8E"), rough=0.9).mat
     for name, size, centre, mat in (
         ("ghost_ceiling", (X_RIGHT - X_LEFT + 0.4, Y_BACK - Y_FRONT + 0.4, 0.1),
          ((X_LEFT + X_RIGHT) / 2, (Y_FRONT + Y_BACK) / 2, WALL_H + 0.05), ceiling),
@@ -734,7 +734,7 @@ def build_shelf(mats):
 
 
 PICTURE_LIGHT = Vector((X_LEFT + 0.13, sum(POSTER_Y) / len(POSTER_Y), POSTER_Z + POSTER_SIZE[1] / 2 + 0.16))
-SHELF_LIGHT = Vector((-0.36, Y_BACK - 0.205, 1.962))
+SHELF_LIGHT = Vector((-0.36, Y_BACK - 0.12, 1.962))
 
 
 def build_fixtures(mats):
@@ -784,6 +784,7 @@ def build_rug(mats):
 
 LAMP_BASE = Vector((-0.90, 0.25, 0.732))
 LAMP_BULB = Vector((-0.64, -0.06, 1.13))
+LAMP_AIM = Vector((-0.34, -0.38, 0.732))  # between the keyboard and the camera on the desk
 
 
 def build_lamp(mats):
@@ -811,7 +812,7 @@ def build_lamp(mats):
     collection("desk").objects.link(neck)
 
     # Shade: an open brass cone aimed at the front-left of the desk, with the bulb inside.
-    aim = (Vector((-0.58, -0.24, 0.732)) - LAMP_BULB).normalized()
+    aim = (LAMP_AIM - LAMP_BULB).normalized()
     rot = aim.to_track_quat("Z", "Y").to_matrix()
     sbm = bmesh.new()
     bmesh.ops.create_cone(sbm, cap_ends=False, segments=48, radius1=0.035, radius2=0.085, depth=0.15)
@@ -984,6 +985,13 @@ def place_props(mats):
                 obj.name = f"props_{obj.name.split('.')[0]}"
         placed[name] = meshes
         anchors[name] = {"root": root, **found}
+    # One more 35 mm canister on the lower shelf beside the cameras (its origin sits 7.5 cm off the set's).
+    meshes, _ = place_one("film_canister", Matrix.Translation((-0.785, 0.30, 1.6475)), "props", "props", mats)
+    for obj in meshes:
+        if obj.name.split(".")[0] == "film_canister_a":
+            obj.name = "props_film_canister_shelf"
+        else:
+            bpy.data.objects.remove(obj, do_unlink=True)
     return placed, anchors
 
 
@@ -1164,11 +1172,21 @@ def build_markers(placed, anchors, screen_centre):
 def build_lights(lens, beam, picture, screen_centre, mats):
     lights = collection("lights")
 
-    lamp = bpy.data.lights.new("lamp_tungsten", "POINT")
+    # Desk lamp: a spot inside the shade throws the warm pool; a faint point light fills the shade itself.
+    lamp = bpy.data.lights.new("lamp_tungsten", "SPOT")
     lamp.color = (1.0, 0.56, 0.24)  # ~2700 K blackbody
-    lamp.energy = 150.0
+    lamp.energy = 260.0
+    lamp.spot_size = math.radians(62)
+    lamp.spot_blend = 0.55
     lamp.shadow_soft_size = 0.02
     obj = bpy.data.objects.new("light_lamp", lamp)
+    obj.location = LAMP_BULB
+    obj.rotation_mode = "QUATERNION"
+    obj.rotation_quaternion = (LAMP_AIM - LAMP_BULB).normalized().to_track_quat("-Z", "Y")
+    lights.objects.link(obj)
+    glow = bpy.data.lights.new("lamp_glow", "POINT")
+    glow.color, glow.energy, glow.shadow_soft_size = (1.0, 0.56, 0.24), 10.0, 0.02
+    obj = bpy.data.objects.new("light_lamp_glow", glow)
     obj.location = LAMP_BULB
     lights.objects.link(obj)
 
@@ -1185,15 +1203,18 @@ def build_lights(lens, beam, picture, screen_centre, mats):
     obj.rotation_quaternion = beam.to_track_quat("-Z", "Y")
     lights.objects.link(obj)
 
-    for name, loc, size, tilt, energy in (
-        ("picture_light", PICTURE_LIGHT + Vector((0, 0, -0.03)), (0.04, 1.55), Euler((0, math.radians(-38), 0)), 28.0),
-        ("shelf_light", SHELF_LIGHT + Vector((0, 0, -0.014)), (1.05, 0.02), Euler((0, 0, 0)), 9.0),
+    # The shelf light's narrow spread keeps it on the lower shelf; wider, it spilled past the shelf's front edge
+    # and flooded the desk, flattening the lamp's pool.
+    for name, loc, size, tilt, energy, spread in (
+        ("picture_light", PICTURE_LIGHT + Vector((0, 0, -0.03)), (0.04, 1.55), Euler((0, math.radians(-38), 0)), 28.0,
+         120),
+        ("shelf_light", SHELF_LIGHT + Vector((0, 0, -0.014)), (1.05, 0.02), Euler((0, 0, 0)), 7.0, 70),
     ):
         light = bpy.data.lights.new(name, "AREA")
         light.shape, light.size, light.size_y = "RECTANGLE", *size
         light.color = (1.0, 0.62, 0.32)  # ~2900 K
         light.energy = energy
-        light.spread = math.radians(120)
+        light.spread = math.radians(spread)
         obj = bpy.data.objects.new(f"light_{name}", light)
         obj.location = loc
         obj.rotation_euler = tilt
@@ -1203,7 +1224,7 @@ def build_lights(lens, beam, picture, screen_centre, mats):
     win = bpy.data.lights.new("window_dusk", "AREA")
     win.shape, win.size, win.size_y = "RECTANGLE", WIN_X1 - WIN_X0, WIN_Z1 - WIN_Z0
     win.color = (0.78, 0.62, 0.72)
-    win.energy = 35.0
+    win.energy = 25.0
     win.spread = math.radians(110)
     obj = bpy.data.objects.new("light_window", win)
     obj.location = ((WIN_X0 + WIN_X1) / 2, Y_BACK + WALL_T + 0.01, (WIN_Z0 + WIN_Z1) / 2)
@@ -1235,7 +1256,7 @@ def setup_world_and_render():
     scene.render.resolution_x, scene.render.resolution_y = 1600, 1000
     scene.view_settings.view_transform = "AgX"
     scene.view_settings.look = "AgX - Medium High Contrast"
-    scene.view_settings.exposure = 1.45
+    scene.view_settings.exposure = 1.65
 
     cam = bpy.data.objects.new("render_cam", bpy.data.cameras.new("render_cam"))
     cam.data.sensor_fit = "VERTICAL"
