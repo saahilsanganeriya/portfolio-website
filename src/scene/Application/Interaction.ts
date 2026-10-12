@@ -13,6 +13,8 @@ export interface InteractionHandlers {
   click(kind: ClickKind): void;
   /** Whether props can be hovered now (not while inside the monitor). */
   canHover(): boolean;
+  /** Whether this click ends a drag of the view, which must not also click what is under it. */
+  endedDrag(): boolean;
 }
 
 // A pointer that only crosses the monitor on its way somewhere should not pull the camera in.
@@ -27,6 +29,7 @@ export class Interaction {
   private readonly clientPointer = { x: 0, y: 0, inside: false };
   private pressedInMonitor = false;
   private heldKey = '';
+  private touch = false;
   private overMonitor = false;
   private dwell = 0;
   private readonly abort = new AbortController();
@@ -50,6 +53,7 @@ export class Interaction {
       { signal },
     );
     stage.addEventListener('pointerleave', () => (this.clientPointer.inside = false), { signal });
+    stage.addEventListener('pointerdown', (e) => (this.touch = e.pointerType === 'touch'), { signal });
     stage.addEventListener('click', (e) => this.onClick(e), { signal });
     iframe.addEventListener('pointerenter', () => !this.overMonitor && this.onMonitorPointer(true), { signal });
     iframe.addEventListener('pointerleave', () => this.overMonitor && this.onMonitorPointer(false), { signal });
@@ -106,11 +110,13 @@ export class Interaction {
   }
 
   private onClick(event: MouseEvent) {
-    if ((event.target as Element).closest('a, button, input, [data-room-ui]')) return;
+    if ((event.target as Element).closest('a, button, input, [data-room-ui]') || this.handlers.endedDrag()) return;
     this.movePointer(event.clientX, event.clientY);
     const hit = this.handlers.canHover() ? this.pick() : null;
     if (hit) this.handlers.hotspot(hit);
     else this.handlers.toggle();
+    // A finger leaves the glass after a tap; nothing stays hovered under where it was.
+    if (this.touch) this.clientPointer.inside = false;
   }
 
   private onMonitorPointer(over: boolean) {

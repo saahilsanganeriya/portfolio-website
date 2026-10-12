@@ -1,8 +1,10 @@
-// PLAN 3.7: every clickable thing in the room, its SaahilOS target, and the plain page it mirrors.
-// The room zooms into the monitor and opens `target` there; the home page lists the same entries as real links.
+// PLAN 3.7: every clickable thing in the room, its SaahilOS target, and the address that opens the same window.
+// A hotspot with `fly` first takes the camera to that framing; a click there (or a hotspot without one) zooms into the
+// monitor and opens `target`.
+import type { StationName } from './Application/RoomModel';
 
 export interface Hotspot {
-  /** Proxy boxes in room.glb (PLAN 3.6) that open this hotspot. The monitor has none: it is the iframe itself. */
+  /** Proxy boxes in room.glb (PLAN 3.6) that open this hotspot. */
   proxies: readonly string[];
   /** What it is in the room. */
   prop: string;
@@ -10,6 +12,8 @@ export interface Hotspot {
   label: string;
   /** SaahilOS window to open (`<app>[/<slug>]`), or null to only zoom into the monitor. */
   target: string | null;
+  /** The framing the camera flies to on the first click (owner 07:56Z: the projector glides to its screen). */
+  fly?: StationName;
   href: string;
 }
 
@@ -30,8 +34,16 @@ export const HOTSPOTS: readonly Hotspot[] = [
     href: '/story',
   },
   { proxies: ['hit_super8'], prop: 'The Super 8 camera', label: 'Play the story reel', target: 'story', href: '/story' },
-  // The screen's proxy is made at runtime (RoomModel's SCREEN_PROXY): the reel playing on it opens Films too.
-  { proxies: ['hit_projector', 'hit_projector_screen'], prop: 'The projector', label: 'Films', target: 'films', href: '/films' },
+  // The screen's proxy is made at runtime (RoomModel's SCREEN_PROXY). Both fly the camera to the screen first;
+  // clicked there, they open Films.
+  {
+    proxies: ['hit_projector', 'hit_projector_screen'],
+    prop: 'The projector',
+    label: 'Films',
+    target: 'films',
+    fly: 'projector',
+    href: '/films',
+  },
   ...POSTERS.map(({ id, title }) => ({
     proxies: [`hit_poster_${id}`],
     prop: `The ${title} poster`,

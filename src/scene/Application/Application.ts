@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Navigation } from '../Camera/Navigation';
 import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
 import type { Hotspot } from '../hotspots';
 import { RoomAudio, type ClickKind } from './Audio';
@@ -35,7 +36,7 @@ export interface RoomHandle {
   openWindow(target: string, options?: { fast?: boolean }): void;
   /** Flies the camera to a framing (idle, window, desk, monitor, projector, shelf, photos); false if the room lacks it. */
   fly(station: StationName): boolean;
-  /** Lands the intro glide now; later glides are left alone. */
+  /** Lands the intro glide now and ends the first drift; later glides are left alone. */
   skipIntro(): void;
   /** Starts the room's sound. Browsers only allow it inside a user gesture (a click, tap or key). */
   unlockAudio(): void;
@@ -54,6 +55,9 @@ export interface RoomProbe {
   readonly destination: CameraPhase;
   readonly moving: boolean;
   readonly tier: number;
+  /** The stations arrow keys and the wheel step through, in order. */
+  readonly stations: readonly StationName[];
+  readonly drifting: boolean;
   /** How far the free look has turned the view from its framing (radians). */
   readonly look: { yaw: number; pitch: number };
   point(name: string): { x: number; y: number } | null;
@@ -88,6 +92,7 @@ export class Application implements RoomHandle {
   private audio!: RoomAudio;
   private reel: Reel | null = null;
   private interaction!: Interaction;
+  private navigation!: Navigation;
   private started = false;
   private intro = false;
   private paused = false;
@@ -139,6 +144,11 @@ export class Application implements RoomHandle {
     if (this.nodes.projection) {
       this.reel = new Reel(this.nodes.projection, this.nodes.screenSurface, this.scene, this.options.films);
     }
+    this.navigation = new Navigation(this.container, this.camera, this.nodes, {
+      fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
+      canSteer: () => this.started,
+      takeOver: () => this.takeOver(),
+    });
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
       hotspot: (hotspot) => this.onHotspot(hotspot),
       toggle: () => this.toggle(),
@@ -146,6 +156,7 @@ export class Application implements RoomHandle {
       leaveMonitor: () => this.leaveMonitor(),
       click: (kind) => this.audio.click(kind),
       canHover: () => this.started && this.camera.destination !== 'monitor',
+      endedDrag: () => this.navigation.endedDrag(),
     });
     this.resize();
     this.observe();
@@ -173,7 +184,10 @@ export class Application implements RoomHandle {
       this.glide(
         'idle',
         'intro',
-        endIntro,
+        () => {
+          endIntro();
+          this.afterIntro();
+        },
         fast,
       );
     // The intro runs as long as its flight does; a cut has already landed it.
@@ -187,12 +201,14 @@ export class Application implements RoomHandle {
 
   fly(station: StationName) {
     if (!this.camera.has(station)) return false;
+    this.takeOver();
     this.flyTo(station, 'step');
     return true;
   }
 
   skipIntro() {
     if (this.intro) this.camera.finish();
+    this.takeOver();
   }
 
   unlockAudio() {
@@ -203,15 +219,17 @@ export class Application implements RoomHandle {
     this.audio.setMuted(muted);
   }
 
-  /** Stops every motion that runs by itself (sway, dust, LEDs, grain); the camera still answers clicks. */
+  /** Stops every motion that runs by itself (sway, dust, LEDs, grain, the first drift); the camera still answers clicks. */
   setPaused(paused: boolean) {
     this.paused = paused;
+    if (paused) this.takeOver();
     this.dirty = true;
   }
 
   dispose() {
     cancelAnimationFrame(this.raf);
     for (const observer of this.observers) observer.disconnect();
+    this.navigation?.dispose();
     this.interaction?.dispose();
     this.monitor?.dispose();
     this.audio?.dispose();
@@ -222,9 +240,20 @@ export class Application implements RoomHandle {
     delete window.__room;
   }
 
+  /** After the intro lands on the wide view: the slow drift past the corners. */
+  private afterIntro() {
+    if (!this.options.reducedMotion && !this.paused) this.navigation.drift();
+  }
+
+  /** The visitor took over: nothing moves the camera by itself any more. */
+  private takeOver() {
+    this.navigation.stopDrift();
+  }
+
   private onHotspot(hotspot: Hotspot) {
-    if (hotspot.target) this.openWindow(hotspot.target);
-    else this.enterMonitor();
+    if (hotspot.fly && this.camera.destination !== hotspot.fly && this.camera.has(hotspot.fly)) this.fly(hotspot.fly);
+    else if (hotspot.target) this.openWindow(hotspot.target);
+    else if (!hotspot.fly) this.enterMonitor();
   }
 
   private enterMonitor() {
@@ -347,6 +376,10 @@ export class Application implements RoomHandle {
       },
       get tier() {
         return app.quality.index;
+      },
+      stations: this.navigation.tour,
+      get drifting() {
+        return app.navigation.drifting;
       },
       get look() {
         return app.camera.lookAngles;
