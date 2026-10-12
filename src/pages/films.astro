@@ -119,12 +119,15 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
     list-style: none;
   }
 
+  /* The diary is hundreds of rows; rows off screen skip layout and paint until they scroll near. */
   :global(.diary li) {
     display: grid;
     grid-template-columns: 4.5rem minmax(0, 1fr) auto;
     gap: 0 var(--space-3);
     align-items: baseline;
     padding-block: var(--space-2);
+    content-visibility: auto;
+    contain-intrinsic-size: auto 2.75rem;
   }
 
   :global(.diary-film) {
