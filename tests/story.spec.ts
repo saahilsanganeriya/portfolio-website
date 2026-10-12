@@ -66,11 +66,13 @@ test('with reduced motion every frame is a static, readable sequence', async ({ 
   }
 });
 
-/** Catches a background photo or the closing portrait shipped without alt text. */
+/** Catches a background photo, the closing portrait or a chapter's photo of the owner shipped without alt text. */
 test('every image has alt text', async ({ page }) => {
   await page.goto('/story');
   const alts = await page.locator('main img').evaluateAll((imgs) => imgs.map((img) => img.getAttribute('alt') ?? ''));
-  expect(alts).toHaveLength(CHAPTERS.length + 2);
+  const ownerPhotos = await page.locator('main figure.me-photo img').count();
+  expect(ownerPhotos, 'the owner allows a photo of him in at most three chapters').toBeLessThanOrEqual(3);
+  expect(alts).toHaveLength(CHAPTERS.length + 2 + ownerPhotos);
   for (const alt of alts) expect(alt.trim().length).toBeGreaterThan(10);
 });
 
