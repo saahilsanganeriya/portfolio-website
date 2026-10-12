@@ -58,10 +58,10 @@ test.describe('the framed documents, opened on their own', () => {
     await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('dialog', { name: 'Terminal' })).toBeVisible();
   });
 
-  /** Catches /story playing the reel as a page of its own instead of in SaahilOS's Story window. */
-  test('/story becomes the room with the Story window open', async ({ page }) => {
+  /** Catches /story playing the reel as a page of its own instead of in SaahilOS's The Thread window. */
+  test('/story becomes the room with The Thread window open', async ({ page }) => {
     await page.goto('/story');
     await expect(page).toHaveURL(/\/#story$/);
-    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('dialog', { name: 'A Narrative in a Frame' })).toBeVisible();
+    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('dialog', { name: 'The Thread' })).toBeVisible();
   });
 });
