@@ -345,7 +345,7 @@ export class Application implements RoomHandle {
   }
 
   private enterMonitor() {
-    if (this.started) this.toMonitor('monitor', null);
+    if (this.started && this.camera.destination !== 'monitor') this.toMonitor('monitor', null);
   }
 
   private leaveMonitor() {

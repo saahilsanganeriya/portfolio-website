@@ -63,8 +63,10 @@ export class Interaction {
     if (!iframe) return;
     iframe.addEventListener('pointerenter', () => !this.overMonitor && this.onMonitorPointer(true), { signal });
     iframe.addEventListener('pointerleave', () => this.overMonitor && this.onMonitorPointer(false), { signal });
-    // Tabbing into the OS takes the camera to it; tabbing out goes back to the desk.
+    // Tabbing into the OS takes the camera to it; tabbing out goes back to the desk. Tab from the page into the frame
+    // focuses only the frame's window (Chromium sends the element no focus event), so the page losing focus to it counts.
     iframe.addEventListener('focus', () => handlers.enterMonitor(), { signal });
+    window.addEventListener('blur', () => setTimeout(() => document.activeElement === iframe && handlers.enterMonitor()), { signal });
     iframe.addEventListener('blur', () => !this.overMonitor && handlers.leaveMonitor(), { signal });
   }
 
