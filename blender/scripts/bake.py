@@ -70,7 +70,7 @@ def make_bake_uvs(objs, size: int, margin_px: int):
         mesh = obj.data
         source = next((uv for uv in mesh.uv_layers if uv.active_render and uv.name != "bake"), None)
         bake_uv = mesh.uv_layers.get("bake") or mesh.uv_layers.new(name="bake")
-        if source is not None and overlap_fraction(mesh, source) < 0.01:
+        if source is not None and obj.get("bake_uv") != "project" and overlap_fraction(mesh, source) < 0.01:
             coords = np.empty(len(mesh.loops) * 2, dtype=np.float32)
             source.data.foreach_get("uv", coords)
             bake_uv.data.foreach_set("uv", coords)

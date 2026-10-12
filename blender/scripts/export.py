@@ -75,8 +75,13 @@ def atlas_image(atlas: str) -> bpy.types.Image:
 
 
 def prepare_meshes() -> list[bpy.types.Object]:
+    for name in ["proxy", *RUNTIME_MESHES.values(), "nas_led", *(f"room_{a}" for a in ATLASES)]:
+        if name in bpy.data.materials:
+            bpy.data.materials[name].name = f"{name}_scene"
     images = {atlas: atlas_image(atlas) for atlas in ATLASES}
     materials = {atlas: unlit_material(f"room_{atlas}", images[atlas]) for atlas in ATLASES}
+    # Leaves and other single-sided prop surfaces must show from both sides.
+    materials["props"].use_backface_culling = False
     runtime = {}
     proxy = unlit_material("proxy", None)
     exported = []

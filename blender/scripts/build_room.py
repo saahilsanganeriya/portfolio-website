@@ -80,7 +80,7 @@ CAMERAS = {
     "cam_idle": ((3.75, -4.95, 2.7), (-0.25, -0.9, 0.98)),
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
-    "cam_shelf": ((-0.25, -1.05, 1.62), (-0.30, 0.30, 1.72)),
+    "cam_shelf": ((-0.36, -1.12, 1.78), (-0.36, 0.30, 1.84)),
     "cam_projector": ((-0.55, -2.65, 1.25), (-1.80, -1.05, 0.95)),
 }
 CAMERA_FOV_DEG = 35.0
@@ -450,7 +450,7 @@ def build_materials() -> dict[str, bpy.types.Material]:
     mats["nas_led"] = m.mat
 
     m = Mat("projection")
-    m.set(base=(0.9, 0.9, 0.9, 1), emit=srgb("#9DB4C0"), emit_strength=0.75, rough=0.9)
+    m.set(base=(0.9, 0.9, 0.9, 1), emit=srgb("#9DB4C0"), emit_strength=0.45, rough=0.9)
     mats["projection"] = m.mat
 
     proxy = Mat("proxy").set(base=(1, 0, 1, 1))
@@ -1174,7 +1174,7 @@ def build_lights(lens, beam, picture, screen_centre, mats):
 
     proj = bpy.data.lights.new("projector", "SPOT")
     proj.color = srgb("#9DB4C0")[:3]
-    proj.energy = 12.0
+    proj.energy = 8.0
     half_diag = math.hypot(*picture) / 2
     proj.spot_size = 2 * math.atan(half_diag / (screen_centre - lens).length) * 1.15
     proj.spot_blend = 0.25
@@ -1276,9 +1276,10 @@ def tune_atlas_objects():
         name = obj.name
         weight = TEXEL_WEIGHTS.get(name)
         if weight is None and name.startswith("props_poster_frame_"):
-            weight = 0.6
+            weight = 0.25
         elif weight is None and name.startswith("props_poster_"):
-            weight = 3.0
+            weight = 4.0
+            obj["bake_uv"] = "project"  # T2's art UV is a unit square on a 2:3 quad; project for true aspect
         elif weight is None and obj.get("prop") in ("fujifilm_x100", "fujifilm_xt", "fujica_st", "super8_camera"):
             weight = 1.6
         if weight is not None:
