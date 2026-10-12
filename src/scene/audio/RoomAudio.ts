@@ -4,8 +4,7 @@ import type { Hotspot } from '../hotspots';
 import { KEYS, LOOPS, RoomMix, SHOTS, type BedName, type ClickKind, type Listener, type LoopName, type Placement, type SoundPositions } from './mix';
 import { cityDay, MUSIC_MIX, stateFor, STEMS, volumeGain, type AudioState, type City, type Stem } from './state';
 
-export type { ClickKind, Listener, SoundPositions } from './mix';
-export type { AudioState } from './state';
+export type { ClickKind } from './mix';
 
 const AUDIO_URL = '/audio/';
 const OFFLINE_RATE = 48000;
@@ -214,14 +213,22 @@ export class RoomAudio implements AudioHandle {
   }
 
   sfx(name: SfxName, position?: THREE.Vector3) {
+    this.play(name, position, 1);
+  }
+
+  /** A prop's or city's recording at `gain` times its own level. */
+  private play(name: SfxName, position: THREE.Vector3 | undefined, gain: number) {
     const ctx = this.ctx;
     const mix = this.mix;
     if (!ctx || !mix) return;
     const effect: Effect = EFFECTS[name];
     const file = effect.files[Math.floor(Math.random() * effect.files.length)];
     const at = position ?? this.anchorOf(effect.anchors);
+    // A prop's sound needs the prop: a room without an oven makes no oven sound. Only the whoosh is the camera's own.
+    if (!at && effect.anchors.length) return;
     const placement: Placement | null = at ? { position: at, ref: effect.ref ?? EFFECT_REF_M } : null;
-    const play = (buffer: AudioBuffer | null) => buffer && this.mix === mix && mix.shot(buffer, effect.level, placement, ctx.currentTime, 0.98 + Math.random() * 0.04);
+    const play = (buffer: AudioBuffer | null) =>
+      buffer && this.mix === mix && mix.shot(buffer, effect.level * gain, placement, ctx.currentTime, 0.98 + Math.random() * 0.04);
     const buffer = this.buffers.get(`${effect.dir}/${file}`);
     if (buffer) play(buffer);
     else void this.fetch(ctx, effect.dir, file).then(play);
@@ -283,8 +290,9 @@ export class RoomAudio implements AudioHandle {
       else if (t >= due) {
         this.nextEvent.set(city, t + between(CITY_EVENTS[city].everyS));
         const choices = cityDay(city, new Date()) >= 0.5 ? CITY_EVENTS[city].day : CITY_EVENTS[city].night;
+        // As far forward as the city's bed: faint from the room, full at the window.
         const level = MUSIC_MIX[this.current].city;
-        if (choices.length && level > 0.05) this.sfx(choices[Math.floor(Math.random() * choices.length)]);
+        if (choices.length && level > 0.05) this.play(choices[Math.floor(Math.random() * choices.length)], undefined, level);
       }
     }
     for (const { name, everyS } of AMBIENT) {
@@ -346,8 +354,9 @@ export class RoomAudio implements AudioHandle {
     }
     for (const { at, name } of effects) {
       const effect: Effect = EFFECTS[name];
-      const buffer = this.buffers.get(`${effect.dir}/${effect.files[0]}`) ?? (await this.fetch(ctx, effect.dir, effect.files[0]));
       const where = this.anchorOf(effect.anchors);
+      if (!where && effect.anchors.length) continue;
+      const buffer = await this.fetch(ctx, effect.dir, effect.files[0]);
       if (buffer) mix.shot(buffer, effect.level, where ? { position: where, ref: effect.ref ?? EFFECT_REF_M } : null, at);
     }
     const rendered = await ctx.startRendering();

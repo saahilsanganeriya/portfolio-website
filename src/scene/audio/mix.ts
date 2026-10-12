@@ -72,7 +72,7 @@ const clamp = THREE.MathUtils.clamp;
  * Moves an AudioParam to `to` along a weighted curve (never a linear ramp). A new glide starts from wherever the last
  * one had got to; `seconds` 0 sets the value now (offline renders, the first frame).
  */
-export function glide(ctx: BaseAudioContext, param: AudioParam, to: number, seconds: number, shape: 'power' | 'log' = 'power') {
+function glide(ctx: BaseAudioContext, param: AudioParam, to: number, seconds: number, shape: 'power' | 'log' = 'power') {
   const t = ctx.currentTime;
   param.cancelScheduledValues(t);
   if (seconds <= 0 || Math.abs(param.value - to) < 1e-4) {

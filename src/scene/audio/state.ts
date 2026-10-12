@@ -3,7 +3,6 @@
 
 /** What the visitor is doing, as far as the sound cares. */
 export type AudioState = 'room' | 'projector' | 'os' | 'story' | 'window';
-export const AUDIO_STATES: readonly AudioState[] = ['room', 'projector', 'os', 'story', 'window'];
 
 /**
  * The state for the framing the camera rests at or flies to, and SaahilOS's front window (the monitor's hash).
@@ -51,13 +50,13 @@ export const FILTER_FADE_S = 1.6;
 // ---- the two cities outside the window ----
 
 export type City = 'sf' | 'delhi';
-export const CITY_ZONES: Record<City, string> = { sf: 'America/Los_Angeles', delhi: 'Asia/Kolkata' };
+const CITY_ZONES: Record<City, string> = { sf: 'America/Los_Angeles', delhi: 'Asia/Kolkata' };
 const DAWN_H = 6;
 const DUSK_H = 19;
 const TWILIGHT_H = 0.75;
 
 /** The hour of day (0–24, fractional) in a time zone. */
-export function localHour(timeZone: string, date: Date): number {
+function localHour(timeZone: string, date: Date): number {
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
   const value = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
   return value('hour') + value('minute') / 60;
@@ -81,7 +80,7 @@ export interface SoundSettings {
   volume: number;
   muted: boolean;
 }
-export const DEFAULT_SETTINGS: SoundSettings = { volume: 1, muted: false };
+const DEFAULT_SETTINGS: SoundSettings = { volume: 1, muted: false };
 export const SETTINGS_KEY = 'room-sound';
 
 /** The remembered settings; anything missing or malformed falls back to the defaults. */

@@ -91,7 +91,7 @@ export interface RoomProbe {
   /** Renders the room's sound offline as heard from a framing; see RoomAudio.renderOffline. */
   renderSound(seconds: number, options: OfflineOptions & { view: string }): Promise<Float32Array[]>;
   /** The sound's graph state (music stems, filter, beds, master) and its controls. */
-  readonly audio: Pick<RoomAudio, 'graph' | 'setState' | 'sfx'> | null;
+  readonly audio: Pick<RoomAudio, 'graph' | 'setState' | 'sfx'>;
 }
 
 declare global {
@@ -531,7 +531,7 @@ export class Application implements RoomHandle {
         return app.audio.renderOffline(seconds, listener, options);
       },
       get audio() {
-        return app.audio ?? null;
+        return app.audio;
       },
     };
   }
