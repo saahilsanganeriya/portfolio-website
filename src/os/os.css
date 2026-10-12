@@ -1,0 +1,1041 @@
+/* SaahilOS: Win98 chrome rebuilt in the room's materials. Cream plastic faces, walnut desk, ink edges. */
+@font-face {
+  font-family: 'Pixel Operator';
+  src: url('./assets/fonts/PixelOperator.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Pixel Operator';
+  src: url('./assets/fonts/PixelOperator-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+.os {
+  --os-face: var(--paper);
+  --os-light: #fbf7ef;
+  --os-shade: var(--dust);
+  --os-dark: var(--ink);
+  --os-desk: var(--walnut);
+  /* Secondary text on cream: 6:1 on the face, 7:1 on the light well. */
+  --os-muted: #5f5145;
+  --os-chrome: 'Pixel Operator', 'IBM Plex Sans', sans-serif;
+  --os-raised: inset -1px -1px var(--os-dark), inset 1px 1px var(--os-light), inset -2px -2px var(--os-shade),
+    inset 2px 2px var(--os-face);
+  --os-sunken: inset 1px 1px var(--os-shade), inset -1px -1px var(--os-light), inset 2px 2px var(--os-dark),
+    inset -2px -2px var(--os-face);
+  --os-pressed: inset 1px 1px var(--os-dark), inset -1px -1px var(--os-light), inset 2px 2px var(--os-shade),
+    inset -2px -2px var(--os-face);
+  --taskbar: 32px;
+
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--os-desk);
+  color: var(--os-dark);
+  font-family: var(--os-chrome);
+  font-size: 16px;
+  line-height: 1.25;
+  -webkit-font-smoothing: none;
+  user-select: none;
+}
+
+.os :where(button) {
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+.os :where(button, a):focus-visible {
+  outline: 1px dotted currentColor;
+  outline-offset: -4px;
+}
+
+body.os-moving iframe {
+  pointer-events: none;
+}
+
+/* ---- Desktop ---- */
+
+.os-desktop {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  outline: none;
+}
+
+.os-icons {
+  position: absolute;
+  top: 12px;
+  left: 8px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(auto-fill, 88px);
+  gap: 0 4px;
+  height: calc(100% - 24px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.os-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 88px;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: var(--paper);
+  text-align: center;
+}
+
+.os-icon-art {
+  position: relative;
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+
+/* Selected icons get Win98's dither, in thread, masked to the icon's own pixels. */
+.os-icon[data-selected] .os-icon-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: conic-gradient(var(--thread) 25%, transparent 0 50%, var(--thread) 0 75%, transparent 0);
+  background-size: 2px 2px;
+  mask: var(--icon-mask) center / 100% 100% no-repeat;
+  opacity: 0.85;
+}
+
+.os-icon-label {
+  padding: 0 2px;
+  overflow-wrap: anywhere;
+}
+
+.os-icon[data-selected] .os-icon-label {
+  background: var(--thread);
+  color: var(--os-light);
+}
+
+.os-desktop-hint {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  margin: 0;
+  color: var(--dust);
+}
+
+.os-phonebar {
+  display: none;
+}
+
+/* ---- Windows ---- */
+
+.os-window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 3px;
+  background: var(--os-face);
+  box-shadow: var(--os-raised), 6px 8px 0 rgb(20 17 15 / 0.35);
+  outline: none;
+}
+
+.os-titlebar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 2px 0 4px;
+  background: var(--os-shade);
+  color: var(--os-dark);
+  touch-action: none;
+}
+
+.os-window[data-active] .os-titlebar {
+  background: var(--os-desk);
+  color: var(--paper);
+}
+
+.os-titlebar-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.os-titlebar-buttons {
+  display: flex;
+}
+
+.os-button,
+.os-start,
+.os-tab,
+.os-tool,
+.os-back {
+  border: 0;
+  background: var(--os-face);
+  box-shadow: var(--os-raised);
+}
+
+/* Each control is a 24 px target (WCAG 2.5.8) around Win98's 18x16 key, which ::before draws. */
+.os-control {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -1px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.os-control::before {
+  content: '';
+  position: absolute;
+  inset: 4px 3px;
+  background: var(--os-face);
+  box-shadow: var(--os-raised);
+}
+
+.os-control:active::before {
+  box-shadow: var(--os-pressed);
+}
+
+.os-control svg {
+  position: relative;
+}
+
+.os-button:active,
+.os-tool:active,
+.os-back:active {
+  box-shadow: var(--os-pressed);
+}
+
+.os-toolbar {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 4px 0 2px;
+}
+
+.os-tool,
+.os-button {
+  display: inline-block;
+  padding: 4px 10px;
+  color: var(--os-dark);
+  text-decoration: none;
+}
+
+.os-well {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin-top: 2px;
+  padding: 2px;
+  overflow: auto;
+  background: var(--os-light);
+  box-shadow: var(--os-sunken);
+  user-select: text;
+}
+
+.os-statusbar {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  height: 22px;
+  margin-top: 3px;
+}
+
+.os-status-cell {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 6px;
+  box-shadow: inset 1px 1px var(--os-shade), inset -1px -1px var(--os-light);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.os-status-cell:first-child {
+  flex: 1;
+}
+
+/* The resize grip: Win98's three diagonal ridges, drawn in the bevel colours. */
+.os-status-grip {
+  width: 22px;
+  padding: 0;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 0 52%,
+    var(--os-light) 52% 57%,
+    var(--os-shade) 57% 64%,
+    transparent 64% 70%,
+    var(--os-light) 70% 75%,
+    var(--os-shade) 75% 82%,
+    transparent 82%
+  );
+}
+
+/* ---- Lists (Win98 "Details" view) ---- */
+
+.os-list {
+  padding: 4px 4px 12px;
+}
+
+.os-details + .os-details {
+  margin-top: 12px;
+}
+
+.os-details-heading {
+  display: grid;
+  grid-template-columns: 1fr 6.5rem;
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.os-details-heading > span {
+  padding: 3px 8px;
+  background: var(--os-face);
+  box-shadow: var(--os-raised);
+}
+
+.os-details-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.os-row {
+  display: grid;
+  grid-template-columns: 1fr 6.5rem;
+  gap: 2px 0;
+  padding: 6px 8px;
+  color: var(--os-dark);
+  text-decoration: none;
+}
+
+.os-row:hover,
+.os-row:focus-visible {
+  background: var(--os-desk);
+  color: var(--paper);
+}
+
+.os-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.os-row-meta {
+  padding-left: 8px;
+}
+
+.os-row-summary {
+  grid-column: 1 / -1;
+  padding-left: 22px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--os-muted);
+}
+
+.os-row:hover .os-row-summary,
+.os-row:focus-visible .os-row-summary {
+  color: var(--os-shade);
+}
+
+.os-note {
+  margin: 0;
+  padding: 16px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ---- Readers: the quiet part. Newsreader on light paper, no effects over the words. ---- */
+
+.os-reader {
+  max-width: 40rem;
+  padding: 20px clamp(16px, 4%, 32px) 32px;
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: auto;
+}
+
+.os-reader-head {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--thread);
+}
+
+.os-reader-title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.os-reader-lead {
+  margin: 8px 0 0;
+  font-size: 1.1875rem;
+  line-height: 1.45;
+}
+
+.os-reader-meta,
+.os-facts,
+.os-reader-links {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--os-muted);
+}
+
+.os-reader-meta {
+  margin: 8px 0 0;
+}
+
+.os-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 16px;
+  margin: 14px 0 0;
+}
+
+.os-facts dt {
+  color: var(--os-dark);
+}
+
+.os-facts dd {
+  margin: 0;
+}
+
+.os-reader-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.os-reader a,
+.os-films-note a {
+  color: inherit;
+  text-decoration-color: var(--thread);
+  text-underline-offset: 0.2em;
+}
+
+.os-prose > * + * {
+  margin-top: 0.9em;
+}
+
+.os-prose :is(h2, h3) {
+  margin-top: 1.6em;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.os-prose h2 {
+  font-size: 1.375rem;
+}
+
+.os-prose h3 {
+  font-size: 1.1875rem;
+}
+
+.os-prose :is(ul, ol) {
+  padding-left: 1.4em;
+}
+
+.os-prose blockquote {
+  margin-inline: 0;
+  padding-left: 1em;
+  border-left: 1px solid var(--os-shade);
+  font-style: italic;
+}
+
+.os-prose aside {
+  padding-left: 1em;
+  border-left: 1px solid var(--thread);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--os-muted);
+}
+
+.os-prose code {
+  padding: 0.05em 0.25em;
+  background: var(--os-face);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.os-prose pre {
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: var(--walnut);
+  color: var(--paper);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.os-prose pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.os-prose table {
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.os-prose :is(th, td) {
+  padding: 4px 12px 4px 0;
+  border-bottom: 1px solid var(--os-shade);
+  text-align: left;
+}
+
+.os-prose hr {
+  border: 0;
+  border-top: 1px solid var(--thread);
+}
+
+.os-prose img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* The loading thread: drawn once across the window, the site's loading line. */
+.os-loading {
+  padding: 8px 0;
+}
+
+.os-thread-line {
+  display: block;
+  height: 1px;
+  background: var(--thread);
+  transform-origin: left;
+  animation: os-thread-draw 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes os-thread-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* ---- Films: cards on a dark wall ---- */
+
+.os-films {
+  min-height: 100%;
+  padding: 16px 16px 24px;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.os-films-heading {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.os-films-note {
+  margin: 2px 0 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--dust);
+}
+
+/* Scoped to the films body: windows are sections too. */
+.os-films > section + section .os-films-heading {
+  margin-top: 24px;
+}
+
+.os-film-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 16px 12px;
+  align-items: start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.os-film-wall {
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+
+.os-film-card {
+  display: block;
+  outline-offset: 3px;
+}
+
+.os-film-card svg {
+  width: 100%;
+  height: auto;
+  box-shadow: 3px 4px 0 rgb(0 0 0 / 0.45);
+}
+
+.os-film-card:focus-visible {
+  outline: 1px dotted var(--paper);
+  outline-offset: 3px;
+}
+
+/* The film a hotspot pointed at hangs a thread under it. */
+.os-film-grid [data-selected] .os-film-card::after {
+  content: '';
+  display: block;
+  height: 2px;
+  margin-top: 8px;
+  background: var(--thread);
+}
+
+.os-film-review {
+  margin: 8px 0 0;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--dust);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  user-select: text;
+}
+
+/* ---- Story ---- */
+
+.os-story-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--ink);
+}
+
+/* ---- Terminal: a CRT inside the CRT, so the projector light is allowed here ---- */
+
+.os-terminal {
+  min-height: 100%;
+  padding: 10px 12px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: auto;
+}
+
+.os-terminal-log p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.os-term-muted,
+.os-term-info {
+  color: var(--dust);
+}
+
+.os-term-warn {
+  color: #c9a66b;
+}
+
+.os-term-echo {
+  color: var(--paper);
+}
+
+.os-terminal-prompt {
+  display: flex;
+  gap: 1ch;
+}
+
+.os-term-ps1 {
+  flex: none;
+  color: var(--projector);
+}
+
+.os-terminal-prompt input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--paper);
+  font: inherit;
+  caret-color: var(--projector);
+  outline: none;
+}
+
+/* ---- Credits ---- */
+
+.os-credits-section h3 {
+  margin: 20px 0 6px;
+  font-size: 1.1875rem;
+  font-weight: 500;
+}
+
+.os-credits-section dl {
+  margin: 0;
+}
+
+.os-credits-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 2px 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid #e3d9c6;
+}
+
+.os-credits-row dt {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--os-muted);
+}
+
+.os-credits-row dt::first-letter {
+  text-transform: uppercase;
+}
+
+.os-credits-row dd {
+  margin: 0;
+}
+
+.os-credits-licence {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--os-muted);
+}
+
+/* ---- Taskbar and Start menu ---- */
+
+.os-taskbar {
+  position: relative;
+  z-index: 100000;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: var(--taskbar);
+  padding: 2px 2px 0;
+  background: var(--os-face);
+  box-shadow: inset 0 1px var(--os-face), inset 0 2px var(--os-light);
+}
+
+.os-start {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px 0 4px;
+  font-weight: 700;
+}
+
+.os-start[aria-expanded='true'],
+.os-tab[aria-pressed='true'] {
+  box-shadow: var(--os-pressed);
+}
+
+/* Win98's pressed tab: a fine cream checker behind the label. */
+.os-tab[aria-pressed='true'] {
+  background: conic-gradient(var(--os-light) 25%, var(--os-face) 0 50%, var(--os-light) 0 75%, var(--os-face) 0) 0 0 / 2px 2px;
+}
+
+.os-tabs {
+  display: flex;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.os-tabs li {
+  flex: 0 1 180px;
+  min-width: 0;
+}
+
+.os-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 24px;
+  padding: 0 6px 0 4px;
+  text-align: left;
+}
+
+.os-tab span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.os-tray {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 24px;
+  margin: 0 2px 0 0;
+  padding: 0 10px;
+  box-shadow: inset 1px 1px var(--os-shade), inset -1px -1px var(--os-light);
+}
+
+.os-start-menu {
+  position: absolute;
+  bottom: calc(var(--taskbar) - 4px);
+  left: 2px;
+  display: flex;
+  min-width: 232px;
+  padding: 3px;
+  background: var(--os-face);
+  box-shadow: var(--os-raised), 4px 4px 0 rgb(20 17 15 / 0.35);
+}
+
+.os-start-banner {
+  display: flex;
+  align-items: flex-end;
+  width: 28px;
+  margin: 0;
+  padding: 6px 0;
+  background: var(--os-desk);
+  /* The thread runs down the banner, beside the name. */
+  background-image: linear-gradient(var(--thread), var(--thread));
+  background-size: 1px 100%;
+  background-position: 22px 0;
+  background-repeat: no-repeat;
+  color: var(--paper);
+}
+
+.os-start-banner span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 24px;
+  padding-top: 4px;
+}
+
+.os-start-menu nav {
+  flex: 1;
+}
+
+.os-start-menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.os-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 12px 6px 8px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.os-menu-item:hover,
+.os-menu-item:focus-visible {
+  background: var(--os-desk);
+  color: var(--paper);
+}
+
+.os-menu-rule {
+  height: 2px;
+  margin: 3px 2px;
+  box-shadow: inset 0 1px var(--os-shade), inset 0 -1px var(--os-light);
+}
+
+/* ---- Shutdown ---- */
+
+.os-shutdown {
+  flex: 1;
+  padding: clamp(24px, 8vh, 64px) clamp(16px, 8vw, 64px);
+  background: var(--ink);
+  color: var(--paper);
+  outline: none;
+}
+
+.os-shutdown-log {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.os-off {
+  display: grid;
+  place-content: center;
+  gap: 24px;
+  height: 100%;
+  text-align: center;
+}
+
+.os-off-line {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #c9a66b;
+}
+
+.os-off-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  margin: 0;
+}
+
+.os-off-actions a {
+  color: var(--paper);
+  text-decoration-color: var(--thread);
+  text-underline-offset: 0.2em;
+}
+
+/* ---- Phones: full-screen apps, a home grid of icons, a back bar (Alana Goyal's layout) ---- */
+
+.os-phone-window {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--os-light);
+}
+
+.os-backbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px 8px;
+  padding-top: max(6px, env(safe-area-inset-top));
+  background: var(--os-face);
+  box-shadow: inset 0 -1px var(--os-shade), inset 0 -2px var(--os-dark);
+}
+
+.os-back {
+  flex: none;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.os-backbar-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.os-backbar .os-tool {
+  flex: none;
+  padding: 8px 10px;
+}
+
+.os-phone-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  user-select: text;
+}
+
+.os-phone-body > .os-terminal,
+.os-phone-body > .os-films {
+  min-height: 100%;
+}
+
+@media (max-width: 767.98px), (pointer: coarse) {
+  html:not([data-embedded]) .os-taskbar {
+    display: none;
+  }
+
+  html:not([data-embedded]) .os-phonebar {
+    display: flex;
+    flex: none;
+    justify-content: space-between;
+    padding: 8px 16px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    color: var(--paper);
+  }
+
+  html:not([data-embedded]) .os-phonebar p {
+    margin: 0;
+  }
+
+  html:not([data-embedded]) .os-icons {
+    position: static;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    grid-template-rows: none;
+    gap: 16px 4px;
+    height: auto;
+    padding: 24px 12px;
+  }
+
+  html:not([data-embedded]) .os-icon {
+    width: 100%;
+    min-height: 88px;
+  }
+
+  html:not([data-embedded]) .os-icon-art {
+    width: 48px;
+    height: 48px;
+  }
+
+  html:not([data-embedded]) .os-icon-art svg {
+    width: 48px;
+    height: 48px;
+  }
+
+  html:not([data-embedded]) .os-desktop {
+    overflow-y: auto;
+  }
+
+  html:not([data-embedded]) .os-desktop-hint {
+    position: static;
+    padding: 0 16px 24px;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-thread-line {
+    animation: none;
+  }
+}
