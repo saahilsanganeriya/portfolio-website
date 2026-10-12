@@ -1,6 +1,7 @@
 // The room's payload (PLAN 3.9): the transfer size of every request `/` makes after the text index paints (models,
-// textures, decoders, scene code, the monitor's OS), on the production build, through START to the idle view, and
-// everything START itself loads (the room's sound, the projector reel, the live diary for the reel's cards).
+// textures, decoders, scene code, the monitor's OS), on the production build, while the room hands over to the idle
+// view by itself, plus what follows: the projector reel and the live diary for its cards (loaded when the room
+// starts) and the room's sound (loaded on the first input; here a press of the Sound button).
 // Also checks "text before 3D": first contentful paint happens before the first .glb/.ktx2 response ends.
 //
 //   node scripts/measure-payload.mjs [--no-build] [--url https://…]
@@ -21,11 +22,10 @@ try {
   page.on('requestfinished', (request) => finished.push(request));
 
   await page.goto(new URL('/', server.url).href);
-  await page.locator('[data-boot-button]').waitFor({ state: 'visible', timeout: 180_000 });
+  await page.waitForFunction(() => window.__room && window.__room.phase === 'idle' && !window.__room.moving, null, { timeout: 180_000 });
   const startEpoch = await page.evaluate(() => performance.timeOrigin + performance.now());
-  await page.locator('[data-boot-button]').click();
-  await page.waitForFunction(() => window.__room && window.__room.phase === 'idle' && !window.__room.moving, null, { timeout: 60_000 });
-  // START's own loads: every sound, and the reel (which loads once, then plays in view).
+  await page.locator('[data-room-sound]').click();
+  // Every sound, and the reel (which loads once, then plays in view).
   await page.waitForFunction(
     () =>
       ['playing', 'paused', 'failed'].includes(window.__room.reel?.state ?? 'failed') &&
@@ -57,11 +57,11 @@ try {
   const total = rows.reduce((sum, r) => sum + r.bytes, 0);
   const textFirst = fcpEpoch < firstModelEnd;
 
-  console.log('bytes      type        when          request (made after first contentful paint)');
-  for (const r of rows) console.log(`${String(r.bytes).padStart(9)}  ${r.type.padEnd(10)}  ${r.afterStart ? 'after START ' : 'before START'}  ${r.pathname}`);
+  console.log('bytes      type        when             request (made after first contentful paint)');
+  for (const r of rows) console.log(`${String(r.bytes).padStart(9)}  ${r.type.padEnd(10)}  ${r.afterStart ? 'after idle view' : 'to idle view   '}  ${r.pathname}`);
   const afterStart = rows.filter((r) => r.afterStart);
-  console.log(`requests: ${rows.length} (${afterStart.length} after START)`);
-  console.log(`bytes before START: ${total - afterStart.reduce((sum, r) => sum + r.bytes, 0)}; after START: ${afterStart.reduce((sum, r) => sum + r.bytes, 0)}`);
+  console.log(`requests: ${rows.length} (${afterStart.length} after the idle view)`);
+  console.log(`bytes to the idle view: ${total - afterStart.reduce((sum, r) => sum + r.bytes, 0)}; after it: ${afterStart.reduce((sum, r) => sum + r.bytes, 0)}`);
   console.log(`total bytes: ${total} (budget ${BUDGET})`);
   console.log(`first contentful paint: ${fcp.toFixed(0)} ms`);
   console.log(`first .glb/.ktx2 response end: ${Number.isFinite(firstModelEnd) ? (firstModelEnd - origin).toFixed(0) + ' ms' : 'none'}`);

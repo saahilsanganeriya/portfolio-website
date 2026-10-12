@@ -28,10 +28,8 @@ try {
     const info = gl?.getExtension('WEBGL_debug_renderer_info');
     return info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : 'unknown';
   });
-  await page.locator('[data-boot-button]').waitFor({ state: 'visible', timeout: 180_000 });
-  await page.locator('[data-boot-button]').click();
+  await page.waitForFunction(() => window.__room?.phase === 'idle' && !window.__room.moving, null, { timeout: 180_000 });
   const settle = () => page.waitForFunction(() => window.__room && !window.__room.moving, null, { timeout: 30_000 });
-  await settle();
   await page.waitForFunction(() => window.__room.reel?.state !== 'loading' && window.__room.reel?.state !== 'waiting', null, { timeout: 60_000 });
   if (flag('--reel-always')) await page.evaluate(() => window.__room.forceReel(true));
 
