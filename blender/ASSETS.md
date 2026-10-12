@@ -46,6 +46,13 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Chungking Express poster (a tin of pineapple stamped 1 May) | framed poster on the room wall (baked texture); typographic design, no studio art | blender/posters/chungking-express.svg, drawn by scripts/posters/ | Saahil Sanganeriya (made for this site) | own work | none |
 | Marty Supreme poster (a pimpled hardbat, the ball and the net) | framed poster on the room wall (baked texture); typographic design, no studio art | blender/posters/marty-supreme.svg, drawn by scripts/posters/ | Saahil Sanganeriya (made for this site) | own work | none |
 | SaahilOS pixel icons (14 icons on 16 x 16 and 8 x 7 grids, in src/os/assets/icons.ts) | SaahilOS desktop, Start menu, taskbar and window controls | none (drawn in code) | Saahil Sanganeriya (made for this site) | own work | none |
+| Lodhi Garden road, New Delhi | story reel, chapter 1 background | https://unsplash.com/photos/a-street-with-a-sign-on-the-side-of-it-p1YOV49anMQ | Siddharth Sabron | Unsplash License | resized to 2000 px wide; toned, faded and grained on the page |
+| Ring-spinning hall, Vazhani, Kerala | story reel, chapter 2 background | https://unsplash.com/photos/a-large-room-with-rows-of-machines-and-spools-of-thread-pM2kkL8Vu9E | Prince Prabhakaran | Unsplash License | resized to 1600 px wide; toned, faded and grained on the page |
+| Plane window at sunset | story reel, chapter 3 background (stand-in for the owner's own "first day in the US" photo) | https://unsplash.com/photos/airplane-window-view-of-white-clouds-during-daytime-1dCiPJpAWEE | Saman Tsang | Unsplash License | resized to 1600 px wide; toned, faded and grained on the page |
+| Tech Tower at night, Georgia Tech | story reel, chapter 4 background | https://unsplash.com/photos/a-clock-tower-with-a-neon-sign-on-top-of-it-slr9Z9kMmPY | Sid Suratia | Unsplash License | drone light trail above the spire removed; resized to 2000 px wide; toned, faded and grained on the page |
+| Desk lamp at night | story reel, chapter 5 background | https://unsplash.com/photos/lit-desk-lamp-on-top-of-desk-EH9f0TI5wco | JC Gellidon | Unsplash License | resized to 2000 px wide; toned, faded and grained on the page |
+| Sapling on a windowsill | story reel, chapter 6 background and the closing frame | https://unsplash.com/photos/a-potted-plant-sitting-on-a-window-sill-vD7Mi0rDqMI | Peter Heymans | Unsplash License | resized to 1600 px wide; toned, faded and grained on the page |
+| Portrait of Saahil Sanganeriya | story reel, closing frame | the owner's professional headshot | Saahil Sanganeriya (his own photo) | used by the owner | resized to 640 px |
 
 ## Fonts
 
