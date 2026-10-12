@@ -28,7 +28,8 @@ HENRY_MODELS = {
 METRES_PER_UNIT = 0.26
 FLOOR_Z_UNITS = -3.316
 
-# Henry's mesh name -> our name and atlas. His background backdrop and floor plant are dropped.
+# Henry's mesh name -> our name and atlas. His backdrop, floor plant and binders are dropped (the NAS takes
+# the binders' place on the desk).
 KEEP = {
     "desk": ("desk_desk", "desk"),
     "chair_base": ("desk_chair_base", "desk"),
@@ -44,8 +45,6 @@ KEEP = {
     "paper_holder_top": ("desk_tray_top", "desk"),
     "paper_stack_1": ("desk_papers_a", "desk"),
     "paper_stack_2": ("desk_papers_b", "desk"),
-    "binder_1": ("desk_binder_a", "desk"),
-    "binder_2": ("desk_binder_b", "desk"),
 }
 
 

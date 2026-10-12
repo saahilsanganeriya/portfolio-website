@@ -22,6 +22,8 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Black SLR-style digital camera (`fujifilm_xt`) | prop `fujifilm_xt` | blender/scripts/props_fujifilm_xt.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font, Inter (SIL OFL 1.1), not the maker's logo |
 | 1970s film SLR (`fujica_st`) | prop `fujica_st` | blender/scripts/props_fujica_st.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font, Inter (SIL OFL 1.1), not the maker's logo |
 | Super 8 cine camera (`super8_camera`) | prop `super8_camera` | blender/scripts/props_super8_camera.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | unbranded; "SUPER 8" set in Blender's built-in font, Inter (SIL OFL 1.1) |
+| Desk, chair, computer, CRT, keyboard, mouse, cables, mug, papers, letter tray (`environment.glb`, `computer_setup.glb`, `decor.glb`) | room desk group (`desk_*` in `public/room/room.glb`) | https://github.com/henryjeff/portfolio-website/tree/b49482d6da1133cac0c7291a06dbedf89cb3a15f/static/models | Henry Heffernan | MIT | geometry only: rescaled to metres (0.26 m per unit), every material rebuilt, relit and rebaked; his baked textures, backdrop, floor plant and binders not used |
+| The room: walls, floor, window and curtains, radiator, shelf, picture and shelf lights, desk lamp, rug, side table, CRT glass | `blender/room.blend`, `public/room/room.glb` | blender/scripts/build_room.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
 
 ## Textures and HDRIs
 
@@ -36,6 +38,12 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Leather 026 | camera leatherette | https://ambientcg.com/view?id=Leather026 | ambientCG (Lennart Demes) | CC0 1.0 | 1K height and roughness maps, box-projected |
 | Metal 009 | satin aluminium of the camera plates | https://ambientcg.com/view?id=Metal009 | ambientCG (Lennart Demes) | CC0 1.0 | 1K roughness map, box-projected |
 | Studio Small 09 (HDRI) | lighting of the prop review renders in `blender/renders/props/` only; not shipped, not in the bake | https://polyhaven.com/a/studio_small_09 | Sergej Majboroda (Poly Haven) | CC0 1.0 | 1K, rotated |
+| Joburg Central Sunset (`sunset_jhbcentral`, 4K HDR) | the city at dusk through the room's window, and the window's light in the bake | https://polyhaven.com/a/sunset_jhbcentral | Dimitrios Savva (photography), Greg Zaal (processing) | CC0 1.0 | shown on a card outside the window, turned −14°; baked into the room atlas |
+| Black Walnut Veneer 02 | walnut desk, shelf, skirting, dado rail, sill, letter tray, side table | https://polyhaven.com/a/black_walnut_veneer_02 | Jenelle van Heerden | CC0 1.0 | 2K colour and roughness, darkened and tinted; baked into the room atlases |
+| Old Wooden Floor 03 | floorboards | https://polyhaven.com/a/old_wooden_floor_03 | Charlotte Baglioni (scanning), Jenelle van Heerden (processing) | CC0 1.0 | 2K colour and roughness, darkened; baked |
+| Plastered Wall 04 | texture under the teal wall paint | https://polyhaven.com/a/plastered_wall_04 | Rob Tuytel | CC0 1.0 | 2K colour as a value map for the paint and its bump; baked |
+| Fabric Leather 02 | chair seat | https://polyhaven.com/a/fabric_leather_02 | Rob Tuytel | CC0 1.0 | 2K colour and roughness, tinted toward oxblood; baked |
+| Poly Wool Herringbone | rug weave | https://polyhaven.com/a/poly_wool_herringbone | colormass (photography), Rico Cilliers (processing) | CC0 1.0 | 2K colour as a value map, recoloured oxblood with a plain border; baked |
 
 ## Images
 

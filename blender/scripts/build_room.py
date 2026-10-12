@@ -65,7 +65,7 @@ PROPS = {
     "books_stack": ((-0.88, 0.30, 2.0075), 90, (0.16, 0.24, 0.20)),
     "projector_8mm": ((-1.95, -2.08, 0.55), "projector_screen", (0.21, 0.33, 0.33)),
     "projector_screen": ((-1.86, -0.12, 0.0), "projector_8mm", (1.09, 0.92, 1.80)),
-    "nas_4bay": ((0.93, -0.20, 0.0), -24, (0.20, 0.23, 0.17)),
+    "nas_4bay": ((0.585, 0.15, 0.7325), -14, (0.20, 0.23, 0.17)),
     "mango_plant": ((1.10, 0.36, 0.92), 0, (0.38, 0.41, 0.41)),
 }
 POSTER_IDS = ["the-odyssey-2026", "la-la-land", "chungking-express", "marty-supreme"]
@@ -389,8 +389,6 @@ def build_materials() -> dict[str, bpy.types.Material]:
     m.set(rough=0.9, sheen=0.5)
     mats["linen"] = m.mat
     mats["ceramic"] = Mat("ceramic").set(base=srgb("#E3DACA"), rough=0.22, spec=0.6).mat
-    mats["cloth_oxblood"] = Mat("cloth_oxblood").set(base=srgb("#4E211C"), rough=0.75, sheen=0.3).mat
-    mats["cloth_ink"] = Mat("cloth_ink").set(base=srgb("#24211E"), rough=0.75, sheen=0.3).mat
     mats["placeholder"] = Mat("placeholder").set(base=srgb("#8A8378"), rough=0.6).mat
 
     m = Mat("rug")
@@ -508,8 +506,6 @@ HENRY_MATERIALS = {
     "desk_tray_top": ["walnut"],
     "desk_papers_a": ["paper_stack"],
     "desk_papers_b": ["paper_stack"],
-    "desk_binder_a": ["cloth_oxblood"],
-    "desk_binder_b": ["cloth_ink"],
 }
 
 
