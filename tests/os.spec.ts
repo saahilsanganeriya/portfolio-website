@@ -52,7 +52,7 @@ test.describe('desktop', () => {
   });
 
   /** Catches a project window without its repository button, or one that is too small or out of the Tab order. */
-  test('a project window has a View source button next to Open as page', async ({ page }) => {
+  test('a project window has a View source button next to Copy link', async ({ page }) => {
     await page.goto(`/os#projects/${PROJECT.slug}`);
     const reader = page.getByRole('dialog', { name: PROJECT.title });
     const source = reader.getByRole('link', { name: 'View source' });
@@ -68,7 +68,7 @@ test.describe('desktop', () => {
     for (let i = 0; i < 4; i++) await page.keyboard.press('Tab');
     await expect(source).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(reader.getByRole('link', { name: 'Open as page ↗' })).toBeFocused();
+    await expect(reader.getByRole('button', { name: 'Copy link' })).toBeFocused();
   });
 
   /** Catches the CC BY paper figure showing without its credit, and a project cover that never loads. */
@@ -85,30 +85,34 @@ test.describe('desktop', () => {
 
   /** Catches a Films window that stops explaining its list: the label, the stars and when the diary last updated. */
   test('Films labels the diary and shows when it last updated', async ({ page }) => {
-    const entry = {
-      title: 'Test Film', year: 2026, rating: 3.5, rewatch: false, liked: false, watchedDate: '2026-10-11',
-      review: null, url: 'https://letterboxd.com/film/test-film/', slug: 'test-film',
-    };
+    // One more entry than the window shows at first, so the older entries are one button away.
+    const entries = Array.from({ length: 61 }, (_, i) => ({
+      title: `Test Film ${i}`, year: 2026, rating: 3.5, rewatch: false, liked: false, watchedDate: '2026-10-11',
+      review: null, url: `https://letterboxd.com/film/test-film-${i}/`, slug: `test-film-${i}`,
+    }));
     const fetchedAt = '2026-10-11T18:05:00.000Z';
     await page.route('**/api/films.json', (route) =>
-      route.fulfill({ json: { fetchedAt, profile: 'https://letterboxd.com/', posters: [], entries: [entry] } }),
+      route.fulfill({ json: { fetchedAt, profile: 'https://letterboxd.com/', posters: [], entries } }),
     );
     await page.goto('/os#films');
     const films = page.getByRole('dialog', { name: 'Films' });
     await expect(films.locator('.os-films-epigraph')).toHaveText('I love movies about making greatness happen.');
-    await expect(films.getByRole('heading', { name: 'My four favourites' })).toBeVisible();
+    await expect(films.getByRole('heading', { name: 'Four favourites — from Letterboxd' })).toBeVisible();
     await expect(films.getByRole('heading', { name: 'Diary — from Letterboxd, updates every hour' })).toBeVisible();
     await expect(films.getByText(/The stars are my rating out of five/)).toBeVisible();
     const updated = films.locator('.os-films-updated time');
     await expect(updated).toHaveAttribute('datetime', fetchedAt);
     await expect(updated).toContainText('2026');
-    await expect(films.locator('#film-test-film')).toBeVisible();
+    await expect(films.locator('#film-test-film-0')).toBeVisible();
+    await expect(films.locator('#film-test-film-60')).toHaveCount(0);
+    await films.getByRole('button', { name: 'Show older entries' }).click();
+    await expect(films.locator('#film-test-film-60')).toBeVisible();
 
     // A failed live diary says so instead of passing the saved copy off as current.
     await page.unroute('**/api/films.json');
     await page.route('**/api/films.json', (route) => route.fulfill({ status: 503, body: '' }));
     await page.reload();
-    await expect(page.getByRole('dialog', { name: 'Films' }).getByText(/The live diary did not load/)).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Films' }).getByText(/Letterboxd did not answer/)).toBeVisible();
   });
 
   /** Catches the wallpaper going missing, which leaves the flat walnut colour the owner ruled out. */
@@ -119,18 +123,22 @@ test.describe('desktop', () => {
   });
 
   /** Catches links inside the monitor that would load a page into the iframe instead of a tab or a window. */
-  test('links: other sites in a new tab, "Open as page" in the whole tab, site pages in a window', async ({ page }) => {
+  test('links: other sites in a new tab, site pages in a window, Copy link copies the window address', async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto(`/os#projects/${PROJECT.slug}`);
     const reader = page.getByRole('dialog', { name: PROJECT.title });
     const source = reader.getByRole('link', { name: 'View source' });
     await expect(source).toHaveAttribute('target', '_blank');
     await expect(source).toHaveAttribute('rel', 'noopener');
-    const asPage = reader.getByRole('link', { name: 'Open as page ↗' });
-    await expect(asPage).toHaveAttribute('target', '_top');
-    await expect(asPage).toHaveAttribute('href', `/projects/${PROJECT.slug}`);
-    await asPage.click();
-    await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT.slug}$`));
-    await expect(page.getByRole('heading', { level: 1, name: PROJECT.title })).toBeVisible();
+    // The site has no plain pages: the window's address (which opens the room and this window) goes to the clipboard.
+    await reader.getByRole('button', { name: 'Copy link' }).click();
+    await expect(reader.getByRole('button', { name: 'Link copied' })).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${baseURL}/projects/${PROJECT.slug}`);
+    await expect(page).toHaveURL(new RegExp(`/os#projects/${PROJECT.slug}$`));
 
     await page.goto('/os#blog/redaction-is-not-enough');
     await page

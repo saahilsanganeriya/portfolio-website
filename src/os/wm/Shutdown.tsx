@@ -84,9 +84,6 @@ export function Shutdown({ phase, onDone, onRestart }: ShutdownProps) {
             <button ref={restartRef} type="button" className="os-button" onClick={onRestart}>
               Restart SaahilOS
             </button>
-            <a href="/projects" target="_top">
-              Read the site as plain pages
-            </a>
           </p>
         </div>
       )}

@@ -20,8 +20,8 @@ export function windowIdFor(route: Route): string {
   return route.slug && (route.app === 'projects' || route.app === 'blog') ? formatRoute(route) : route.app;
 }
 
-/** The plain page that shows the same thing, for "Open as page". */
-export function plainHref(route: Route): string | null {
+/** The window's own address on the site; visiting it loads the room and opens this window on the monitor. */
+export function windowHref(route: Route): string | null {
   switch (route.app) {
     case 'projects':
     case 'blog':

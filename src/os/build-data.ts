@@ -4,6 +4,7 @@ import type { ImageMetadata } from 'astro';
 import { getImage } from 'astro:assets';
 import { z } from 'astro/zod';
 import projectionistArchitecture from '../assets/projects/projectionist-architecture.png';
+import ovenFile from '../content/oven.json';
 import samcellPipeline from '../assets/projects/samcell-paper-figure-3.jpg';
 import wallpaper from './assets/wallpaper/wallpaper.jpg';
 import type { OsFavourite, OsFigure, OsImage, OsWallpaper, OvenList } from './types';
@@ -11,7 +12,7 @@ import type { OsFavourite, OsFigure, OsImage, OsWallpaper, OvenList } from './ty
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}/);
 
 const ovenSchema = z.object({
-  items: z.array(z.object({ title: z.string().min(1), note: z.string().min(1), link: z.url().optional() })).min(1),
+  items: z.array(z.object({ title: z.string().min(1), note: z.string().min(1), link: z.string().regex(/^(\/|https?:\/\/)/, 'a site path or an http(s) URL').optional() })).min(1),
   updated: isoDay,
 });
 
@@ -30,22 +31,7 @@ const favouritesSchema = z.object({
     .min(1),
 });
 
-// Stand-ins until those files are written; each matches its file's schema.
-const OVEN_PLACEHOLDER: OvenList = {
-  items: [
-    {
-      title: 'This site, round two',
-      note: 'A window onto San Francisco and Delhi, a lava lamp, an oven and music for the room; more pictures in SaahilOS.',
-    },
-    {
-      title: 'saahil-brain',
-      note: 'Memory for coding agents: notes that a nightly job files, links and checks, and up to three hints per prompt.',
-      link: 'https://github.com/saahilsanganeriya/saahil-brain',
-    },
-  ],
-  updated: '2026-10-12',
-};
-
+// The stand-in until favorites.json is written; it matches that file's schema.
 // From the profile's Favorite Films in the Letterboxd export of 2026-10-12.
 const FAVOURITES_FALLBACK: OsFavourite[] = [
   { slug: 'la-la-land', title: 'La La Land', year: 2016, director: 'Damien Chazelle', poster: null },
@@ -61,12 +47,11 @@ const FAVOURITES_FALLBACK: OsFavourite[] = [
 ];
 
 // A literal glob matches nothing until the file exists, so the build passes either way.
-const ovenFile = Object.values(import.meta.glob('../content/oven.json', { eager: true, import: 'default' }))[0];
 const favouritesFile = Object.values(
   import.meta.glob('../content/favorites.json', { eager: true, import: 'default' }),
 )[0];
 
-export const ovenList = (): OvenList => (ovenFile === undefined ? OVEN_PLACEHOLDER : ovenSchema.parse(ovenFile));
+export const ovenList = (): OvenList => ovenSchema.parse(ovenFile);
 
 export const favourites = (): OsFavourite[] =>
   favouritesFile === undefined ? FAVOURITES_FALLBACK : favouritesSchema.parse(favouritesFile).films;

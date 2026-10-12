@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { IconName } from '../assets/icons';
 import { formatDay } from '../format';
-import { plainHref } from '../routes';
+import { windowHref } from '../routes';
 import type { AppId, OsApi, OsIndex, Route } from '../types';
 import { FilmsApp } from './FilmsApp';
 import { BlogApp, ProjectsApp } from './Lists';
@@ -29,13 +29,13 @@ export interface WindowDescription {
   title: string;
   icon: IconName;
   defaultStatus: string;
-  pageHref: string | null;
+  shareHref: string | null;
   /** The project's repository, for the window's "View source" button. */
   sourceHref: string | null;
 }
 
 export function describeWindow(route: Route, index: OsIndex): WindowDescription {
-  const pageHref = plainHref(route);
+  const shareHref = windowHref(route);
   const app = APPS[route.app];
   if (route.app === 'projects' && route.slug) {
     const project = index.projects.find((p) => p.slug === route.slug);
@@ -43,7 +43,7 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
       title: project?.title ?? route.slug,
       icon: 'page',
       defaultStatus: project?.stack.join(', ') ?? '',
-      pageHref,
+      shareHref,
       sourceHref: project?.links.repo ?? null,
     };
   }
@@ -53,7 +53,7 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
       title: post?.title ?? route.slug,
       icon: 'page',
       defaultStatus: post ? formatDay(post.date) : '',
-      pageHref,
+      shareHref,
       sourceHref: null,
     };
   }
@@ -68,7 +68,7 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     resume: '',
     credits: 'Every file is used under the licence shown',
   };
-  return { title: app.label, icon: app.icon, defaultStatus: defaultStatus[route.app], pageHref, sourceHref: null };
+  return { title: app.label, icon: app.icon, defaultStatus: defaultStatus[route.app], shareHref, sourceHref: null };
 }
 
 export function AppBody({ route, os }: { route: Route; os: OsApi }): ReactNode {

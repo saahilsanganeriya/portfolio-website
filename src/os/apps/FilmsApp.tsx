@@ -4,30 +4,30 @@ import { formatDay } from '../format';
 import type { OsApi, OsFavourite } from '../types';
 import { useWindowStatus } from '../wm/Window';
 import { renderFilmCard } from './films/cards';
-import { DIARY_CARDS, latestEntry, windowDiary } from './films/diary';
+import { DIARY_CARDS, latestEntry } from './films/diary';
 
 const isFilmsData = (value: unknown): value is FilmsData =>
   typeof value === 'object' && value !== null && Array.isArray((value as FilmsData).entries);
 
 type Source = 'loading' | 'live' | 'saved';
 
-// The live diary (/api/films.json, refreshed at most hourly on the server); the build's copy stands in when it fails.
-function useFilms(saved: FilmsData, favourites: OsFavourite[]): { films: FilmsData; source: Source } {
+// The live diary (/api/films.json, refreshed at most hourly on the server) carries the whole archive; the build's
+// copy (the latest entries plus the favourites) stands in while it loads and when it fails.
+function useFilms(saved: FilmsData): { films: FilmsData; source: Source } {
   const [state, setState] = useState<{ films: FilmsData; source: Source }>({ films: saved, source: 'loading' });
   useEffect(() => {
     const controller = new AbortController();
     fetch('/api/films.json', { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: unknown) => {
-        if (isFilmsData(data) && data.entries.length > 0)
-          setState({ films: windowDiary(data, favourites), source: 'live' });
+        if (isFilmsData(data) && data.entries.length > 0) setState({ films: data, source: 'live' });
         else setState((s) => ({ ...s, source: 'saved' }));
       })
       .catch(() => {
         if (!controller.signal.aborted) setState((s) => ({ ...s, source: 'saved' }));
       });
     return () => controller.abort();
-  }, [favourites]);
+  }, []);
   return state;
 }
 
@@ -36,7 +36,7 @@ const fetchedTime = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
   month: 'long',
   year: 'numeric',
-  hour: 'numeric',
+  hour: '2-digit',
   minute: '2-digit',
   timeZoneName: 'short',
 });
@@ -93,13 +93,17 @@ function Favourite({ film, entry }: { film: OsFavourite; entry?: FilmEntry }) {
 
 export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
   const { favourites } = os.index;
-  const { films, source } = useFilms(os.index.films, favourites);
+  const { films, source } = useFilms(os.index.films);
+  const [shown, setShown] = useState(DIARY_CARDS);
   const setStatus = useWindowStatus();
-  const updatedDay = formatDay(films.fetchedAt.slice(0, 10));
+
+  // The build's copy ends with the favourites' older entries, which belong on the wall, not in the diary.
+  const diary = source === 'live' ? films.entries : films.entries.slice(0, DIARY_CARDS);
+  const visible = diary.slice(0, shown);
 
   useEffect(() => {
-    setStatus(source === 'live' ? `Updated ${updatedDay} from Letterboxd` : `Saved ${updatedDay}`);
-  }, [source, updatedDay, setStatus]);
+    setStatus(source === 'live' ? `${visible.length} of ${diary.length} diary entries` : null);
+  }, [source, visible.length, diary.length, setStatus]);
 
   // `#films/<slug>` points at one film and `#films/favourites` at the four: bring it into view and focus it.
   useEffect(() => {
@@ -110,9 +114,8 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
   }, [slug, films]);
 
   const favouriteSlugs = new Set(favourites.map((film) => film.slug));
-  const favouriteEntries = favourites.map((film) => latestEntry(films.entries, film));
-  const pinned = new Set(favouriteEntries.map((entry) => entry?.slug));
   const firstSeen = new Set<string>();
+  const updated = <time dateTime={films.fetchedAt}>{fetchedTime.format(new Date(films.fetchedAt))}</time>;
 
   return (
     <div className="os-films">
@@ -128,15 +131,16 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
         data-selected={slug === 'favourites' || undefined}
       >
         <h2 className="os-films-heading" id="os-films-favourites">
-          {favourites.length === 4 ? 'My four favourites' : 'My favourites'}
+          {favourites.length === 4 ? 'Four favourites' : 'Favourites'}{' '}
+          <span className="os-films-heading-aside">— from Letterboxd</span>
         </h2>
         <p className="os-films-note">
-          The favourites on my Letterboxd profile. Their posters hang on the wall of the room.
+          The {favourites.length === 4 ? 'four ' : ''}films on my Letterboxd profile. Their posters hang in the room.
         </p>
         <ul className="os-film-grid os-film-wall">
-          {favourites.map((film, i) => (
+          {favourites.map((film) => (
             <li key={film.slug} data-selected={film.slug === slug || undefined}>
-              <Favourite film={film} entry={favouriteEntries[i]} />
+              <Favourite film={film} entry={latestEntry(films.entries, film)} />
             </li>
           ))}
         </ul>
@@ -147,17 +151,20 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
           Diary <span className="os-films-heading-aside">— from Letterboxd, updates every hour</span>
         </h2>
         <p className="os-films-note">
-          Every film I log, most recent first. The stars are my rating out of five, and ½ is half a star; a card with
-          no stars has no rating.
+          Every film I log, newest first. The stars are my rating out of five, and ½ is half a star. No stars means I
+          logged it without a rating. “Rewatch” means I had seen it before.
         </p>
         <p className="os-films-note os-films-updated">
-          Last updated <time dateTime={films.fetchedAt}>{fetchedTime.format(new Date(films.fetchedAt))}</time>
-          {source === 'saved' && '. The live diary did not load, so this is the copy saved with the site.'}
+          {source === 'saved' ? (
+            <>Letterboxd did not answer. This is the copy saved on {formatDay(films.fetchedAt.slice(0, 10))}.</>
+          ) : (
+            <>Last updated {updated}, from Letterboxd.</>
+          )}
         </p>
         <ul className="os-film-grid">
-          {films.entries.slice(0, DIARY_CARDS).map((entry) => {
+          {visible.map((entry) => {
             // The first diary card of a film that is not a favourite answers `#films/<slug>`.
-            const anchor = !favouriteSlugs.has(entry.slug) && !pinned.has(entry.slug) && !firstSeen.has(entry.slug);
+            const anchor = !favouriteSlugs.has(entry.slug) && !firstSeen.has(entry.slug);
             firstSeen.add(entry.slug);
             return (
               <li
@@ -170,13 +177,13 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
             );
           })}
         </ul>
-        <p className="os-films-note os-films-more">
-          Older entries are on the{' '}
-          <a href="/films" target="_top">
-            Films page
-          </a>
-          .
-        </p>
+        {visible.length < diary.length && (
+          <p className="os-films-more">
+            <button type="button" className="os-tool" onClick={() => setShown((n) => n + DIARY_CARDS)}>
+              Show older entries
+            </button>
+          </p>
+        )}
       </section>
     </div>
   );

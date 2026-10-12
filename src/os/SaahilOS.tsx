@@ -126,8 +126,8 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
     return () => window.removeEventListener('message', onMessage);
   }, [open]);
 
-  // Links to anything with a window open that window. A link with its own target ("Open as page", other
-  // sites) keeps it, so the plain page still loads in the whole tab.
+  // Links to anything with a window open that window, never a page in the monitor. A link with its own target
+  // (other sites, files) keeps it.
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
     if (
       event.defaultPrevented ||

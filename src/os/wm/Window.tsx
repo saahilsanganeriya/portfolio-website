@@ -51,9 +51,34 @@ export const useWindowStatus = () => useContext(WindowStatusContext);
 
 export const windowDomId = (id: string) => `os-win-${id.replace(/[^a-z0-9-]/gi, '-')}`;
 
-/** The window's toolbar: the project's repository and the plain page that shows the same thing. */
-export function WindowTools({ pageHref, sourceHref }: { pageHref: string | null; sourceHref: string | null }) {
-  if (!pageHref && !sourceHref) return null;
+/** Copies a window's own address; visiting it loads the room and opens this window on the monitor. */
+function CopyLink({ href }: { href: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  useEffect(() => {
+    if (state === 'idle') return;
+    const timer = setTimeout(() => setState('idle'), 2400);
+    return () => clearTimeout(timer);
+  }, [state]);
+  const label = { idle: 'Copy link', copied: 'Link copied', failed: 'Could not copy' }[state];
+  return (
+    <button
+      type="button"
+      className="os-tool"
+      onClick={() =>
+        navigator.clipboard.writeText(new URL(href, window.location.origin).href).then(
+          () => setState('copied'),
+          () => setState('failed'),
+        )
+      }
+    >
+      <span aria-live="polite">{label}</span>
+    </button>
+  );
+}
+
+/** The window's toolbar: the project's repository, and a link to this window to share. */
+export function WindowTools({ shareHref, sourceHref }: { shareHref: string | null; sourceHref: string | null }) {
+  if (!shareHref && !sourceHref) return null;
   return (
     <div className="os-toolbar">
       {sourceHref && (
@@ -62,11 +87,7 @@ export function WindowTools({ pageHref, sourceHref }: { pageHref: string | null;
           View source
         </a>
       )}
-      {pageHref && (
-        <a className="os-tool" href={pageHref} target="_top">
-          Open as page ↗
-        </a>
-      )}
+      {shareHref && <CopyLink href={shareHref} />}
     </div>
   );
 }
@@ -76,7 +97,7 @@ interface WindowProps {
   title: string;
   icon: IconName;
   defaultStatus: string;
-  pageHref: string | null;
+  shareHref: string | null;
   sourceHref: string | null;
   active: boolean;
   desktopRef: RefObject<HTMLElement | null>;
@@ -92,7 +113,7 @@ export function Window({
   title,
   icon,
   defaultStatus,
-  pageHref,
+  shareHref,
   sourceHref,
   active,
   desktopRef,
@@ -219,7 +240,7 @@ export function Window({
           </button>
         </div>
       </div>
-      <WindowTools pageHref={pageHref} sourceHref={sourceHref} />
+      <WindowTools shareHref={shareHref} sourceHref={sourceHref} />
       {/* Focusable, so a keyboard can scroll a body that has no links of its own (WCAG 2.1.1). */}
       <div className="os-well" tabIndex={0}>
         <WindowStatusContext value={setStatus}>{children}</WindowStatusContext>

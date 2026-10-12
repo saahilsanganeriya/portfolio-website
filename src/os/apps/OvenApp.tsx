@@ -2,9 +2,12 @@ import { formatDay } from '../format';
 import type { OsApi } from '../types';
 import { linkAttributes } from './content';
 
-// A link reads as where it goes: a path on this site, or the other site's address without the scheme.
-const linkLabel = (href: string) =>
-  href.startsWith('/') ? 'Read about it' : href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+// A link reads as where it goes: the write-up it opens here, or the other site's address without the scheme.
+function linkLabel(href: string): string {
+  if (href.startsWith('/projects/')) return 'Read the write-up';
+  if (href.startsWith('/blog/')) return 'Read the post';
+  return href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+}
 
 /** What is being built right now, from src/content/oven.json. */
 export function OvenApp({ os }: { os: OsApi }) {

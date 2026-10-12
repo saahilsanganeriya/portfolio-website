@@ -1130,12 +1130,6 @@ body.os-moving iframe {
   margin: 0;
 }
 
-.os-off-actions a {
-  color: var(--paper);
-  text-decoration-color: var(--thread);
-  text-underline-offset: 0.2em;
-}
-
 /* ---- Phones: full-screen apps, a home grid of icons, a back bar (Alana Goyal's layout) ---- */
 
 .os-phone-window {

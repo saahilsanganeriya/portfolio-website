@@ -18,7 +18,7 @@ interface PhoneWindowProps {
 function PhoneWindow({ win, covered, os, onBack }: PhoneWindowProps) {
   const reduceMotion = useReducedMotion();
   const titleId = useId();
-  const { title, pageHref, sourceHref } = describeWindow(win.route, os.index);
+  const { title, shareHref, sourceHref } = describeWindow(win.route, os.index);
   return (
     <m.section
       id={windowDomId(win.id)}
@@ -40,7 +40,7 @@ function PhoneWindow({ win, covered, os, onBack }: PhoneWindowProps) {
           {title}
         </p>
       </div>
-      <WindowTools pageHref={pageHref} sourceHref={sourceHref} />
+      <WindowTools shareHref={shareHref} sourceHref={sourceHref} />
       <div className="os-phone-body" tabIndex={0}>
         <AppBody route={win.route} os={os} />
       </div>
