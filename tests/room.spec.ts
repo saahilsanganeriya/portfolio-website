@@ -115,6 +115,46 @@ test('hovering the mango plant labels it, and clicking it opens About in SaahilO
   await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
 });
 
+/** Catches the projector screen, which has no proxy in room.glb, not opening Films like the projector does. */
+test('clicking the projector screen opens Films in SaahilOS', async ({ page }) => {
+  await page.goto('/');
+  await settled(page, 'idle');
+  const screen = await screenPoint(page, 'hit_projector_screen');
+  await page.mouse.move(screen.x, screen.y);
+  await expect(page.locator('.room-label')).toHaveText('Films');
+  await page.mouse.click(screen.x, screen.y);
+  await page.waitForFunction(() => window.__room?.phase === 'monitor', null, { timeout: 15_000 });
+  await expect(os(page).getByRole('dialog', { name: 'Films' })).toBeVisible();
+});
+
+/** Catches a reel that never plays on the projector screen, or one that keeps playing in a hidden tab or out of view. */
+test('the projector reel plays while its screen is in view, and pauses in a hidden tab and out of view', async ({ page }) => {
+  await page.goto('/');
+  await settled(page, 'idle');
+  const reel = () => page.evaluate(() => window.__room!.reel!);
+  await page.waitForFunction(() => window.__room?.reel?.state === 'playing', null, { timeout: 30_000 });
+  expect((await reel()).inView).toBe(true);
+  const started = (await reel()).time;
+  await page.waitForFunction((t) => window.__room!.reel!.time > t + 0.5, started, { timeout: 15_000 });
+
+  // Headless Chromium never hides a tab, so the test sets what the page reads and fires the event it listens for.
+  const setHidden = (hidden: boolean) =>
+    page.evaluate((hidden) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, hidden);
+  await setHidden(true);
+  await page.waitForFunction(() => window.__room?.reel?.state === 'paused', null, { timeout: 5_000 });
+  await setHidden(false);
+  await page.waitForFunction(() => window.__room?.reel?.state === 'playing', null, { timeout: 5_000 });
+
+  // The desk framing looks away from the screen.
+  await page.evaluate(() => window.__room!.goto('desk'));
+  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 15_000 });
+  expect(await reel()).toMatchObject({ inView: false, state: 'paused' });
+});
+
 /** Catches a keyboard or screen-reader visitor with no way into SaahilOS (Review Focus 3), or motion that cannot be paused. */
 test('"Open SaahilOS" is the first tab stop and opens it on the monitor; motion can be paused', async ({ page }) => {
   await page.goto('/');
