@@ -14,48 +14,109 @@ cover: "../../assets/projects/referral-network.png"
 coverAlt: "A five-user referral tree beside a table of reach, ancestors and flow for each user: a is first by reach, c is first by flow."
 ---
 
-A referral program grows like a family tree. One person brings in three friends, one of those friends
-brings in two more, and after a few months the questions that matter are about shape: who brought in the
-most people, directly or not, and who sits on the most chains. Then there is money. How big a bonus does
-it take to hit a growth target?
+A refers B. B refers C. Months later a form somewhere records that C referred A. If the system accepts
+that, A now sits below A, every count that walks up the chain walks forever, and the question "who
+brought in the most people?" has no answer.
+
+A referral program grows like a family tree, and most of the questions about it are about shape. Who
+brought in the most people, directly or not? Who sits on the most referral chains? And the one with money
+in it: how big a bonus does it take to grow the network to a target size?
 
 referral-network answers those questions in about 200 lines of Python.
 
-## The rules
+## The rules that make it a tree
 
-Each candidate has exactly one referrer. Nobody can refer themselves, and no referral may close a loop. To
-check for a loop, the library walks up from the referrer toward the root. If it meets the candidate on the
-way, the referral would make a cycle, and it refuses with a clear error.
+Each person has exactly one referrer. Nobody can refer themselves, and no referral may close a loop.
 
-Those rules make the network a forest: a set of trees. Everything below depends on that.
+<figure class="os-figure">
 
-## Reach and flow
+```text
+ add a referral: d refers a?
 
-A person's reach is how many people sit below them, at any depth. The library keeps reach current on
-every insert by adding the new candidate's subtree size to each ancestor, so asking for the top people
-by reach never has to walk the whole network.
+    a   <-- the walk reaches a, the candidate,
+    |       so this referral would close a loop:
+    b       refused, with a clear error
+    |
+    c       the check walks up from the referrer:
+    |       d -> c -> b -> a
+    d
+```
+
+<figcaption>The loop check: walk up from the referrer to the top of its tree, and refuse if the walk meets the person being referred.</figcaption>
+</figure>
+
+Those three rules make the network a forest: a set of trees with no loops. Everything below depends on
+that.
+
+## Who brought in the most
+
+A person's reach is how many people sit below them, at any depth. The obvious way to rank by reach is to
+walk every person's subtree whenever someone asks. That walks the whole network for every question.
+
+Instead the library keeps reach current as people join. A new person adds their own subtree, plus
+themselves, to the reach of everyone above them. Asking for the top people then means reading numbers that
+are already there.
+
+## Who sits on the most chains
 
 The more interesting measure is flow centrality: how many pairs of people have this person on the
-referral chain that runs from one to the other. In a general graph that means finding shortest paths between every pair. In a forest there
-is at most one path between two people, so a person sits on the path from someone above them to someone
-below them, and nowhere else. Flow centrality is just the number of people above times the number of
-people below. One multiplication replaces a search over every pair.
+referral chain between them. In a general graph that means finding shortest paths between every pair of
+people, which grows with the square of the network at best.
 
-## Growth and bonuses
+In a forest there is at most one path between two people. A person sits on the path from someone above
+them to someone below them, and on no other path. So flow centrality is just the number of people above
+times the number of people below. One multiplication replaces a search over every pair.
 
-The last part is a small model. Start with 100 referrers, each able to make 10 successful referrals. Every
-day each active referrer succeeds with probability p, uses up one of their referrals, and each new person
-joins the next day with a full allowance of their own. The library tracks the expected number of
-referrers at each remaining allowance, which gives the expected network size after any number of days
-without simulating anyone.
+## How big a bonus
 
-On top of that it finds the smallest bonus, in $10 steps, whose adoption rate reaches a target size. It
-doubles the bonus until the target is reachable, then binary-searches back down. It gives up if the
-adoption rate stops rising for 5 doublings in a row, since more money would buy nothing.
+The last part is a small model of growth. Start with 100 referrers, each able to make 10 successful
+referrals. Every day each active referrer succeeds with probability p and uses up one referral, and each
+new person joins the next day with a full allowance of their own. Rather than simulate people, the library
+tracks the expected number of referrers at each remaining allowance, which gives the expected network size
+after any number of days in one pass.
 
-## What I would change
+On top of that sits a search for the smallest bonus, in $10 steps, that reaches a target size. You pass in
+how likely a person is to join at a given bonus. Checking every $10 step would ask that question far too
+often, so the search doubles first and then narrows.
 
-Keeping ancestor counts current walks the new candidate's whole subtree on every insert. That is fine for
-thousands of people and quadratic for one long chain. The bonus search also trusts that adoption only rises
-with the bonus, and nothing checks it. And the first version shipped with no tests at all, which for code
-this easy to get subtly wrong was a mistake.
+<figure class="os-figure">
+
+```text
+ 1. double until the target is reachable
+    $10    $20    $40    $80    $160
+    no     no     no     no     yes
+
+ 2. binary search from $0 to $160, in $10 steps
+    $80 no    $120 yes    $100 no    $110 yes
+
+    answer: $110, the smallest step that reaches it
+```
+
+<figcaption>One run of the bonus search, with an adoption curve that first reaches the target at $110; each bonus is asked about once.</figcaption>
+</figure>
+
+It gives up if adoption stops rising for 5 doublings in a row, since more money would buy nothing.
+
+## What it costs
+
+Keeping reach current makes every question cheap and every insert dearer. Each new person walks up to the
+top of their tree twice, once for the loop check and once to update reach. For a bushy tree that is a few
+steps. For one long chain it adds up to quadratic time. I measured it: building a chain of 2,000 people
+took 235 ms and a chain of 4,000 took 949 ms, four times as long for twice the people. A bushy tree of
+4,000, ten referrals each, took 5 ms.
+
+The rankings are sorted lazily, on the first question after a change. That is cheap when people join in
+a batch and then someone asks. It is not cheap when every insert is followed by a question: the same bushy
+tree of 4,000 took 3,027 ms when I asked for the top three after every insert.
+
+The growth model gives the expected size and nothing else. It cannot say how likely the network is to fall
+well short of that.
+
+## What I'd change
+
+The bonus search trusts that adoption only rises as the bonus rises, and nothing checks that. Its binary
+search also starts again from $0, although, if adoption does rise with the bonus, the doubling has
+already ruled out everything up to the last bonus that fell short. A chain-heavy network needs a different way to keep reach current.
+
+And the first version had no tests at all, which for code this easy to get subtly wrong was a mistake.
+Tests came almost nine months later, when I published it.
