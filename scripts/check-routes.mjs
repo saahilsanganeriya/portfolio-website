@@ -7,7 +7,8 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const DIST = join(ROOT, 'dist');
+// /api/films.json is rendered on demand, so the build is in server mode and the prerendered pages land in dist/client.
+const DIST = join(ROOT, 'dist', 'client');
 const CONTENT = join(ROOT, 'src/content');
 const withSamples = process.argv.includes('--samples');
 

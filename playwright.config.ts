@@ -14,8 +14,9 @@ export default defineConfig({
   use: { baseURL },
   projects: [{ name: 'desktop', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    // The production build with SAMPLES=1, so the draft sample post and the samples are on the pages under test.
-    command: `SAMPLES=1 npx astro build && npx astro preview --ignore-lock --host 127.0.0.1 --port ${port}`,
+    // The production build with SAMPLES=1, so the draft sample post and the samples are on the pages under test;
+    // scripts/preview.mjs serves it because `astro preview` does not support the Vercel adapter's on-demand route.
+    command: `SAMPLES=1 npx astro build && node scripts/preview.mjs --host 127.0.0.1 --port ${port}`,
     url: baseURL,
     reuseExistingServer: false,
     timeout: 180_000,

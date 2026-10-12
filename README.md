@@ -89,19 +89,25 @@ The schemas are in `src/content.config.ts`. Every entry is also served as static
 Samples for projects, pages and the story are in `src/content/_samples/`. They load only in `npm run dev` or in a build
 with `SAMPLES=1`; a production build never contains them.
 
-Films come from `src/content/films.json` (from the Letterboxd diary of `saahilsan`).
+Films come from the Letterboxd diary of `saahilsan`. The archive is the export in `src/data/letterboxd/` (diary,
+ratings, reviews, watched; the Tags column is removed). `/api/films.json`, the only server route, merges the public RSS
+feed over it per film and watched date, at most once an hour (Vercel ISR), at most one Letterboxd request per 2 s. When
+the feed fails, it serves the archive and the last good copy. `src/content/films.json` is the same merge, written by
+each build as the static fallback. Set `FILMS_PRIVATE_NAMES` (comma-separated, in Vercel) to drop the text of any live
+review that names one of those people.
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Dev server at http://localhost:4321. |
-| `npm run build` | Production build into `dist/` and `.vercel/output/`. |
-| `npm run preview` | Serves the last build. |
+| `npm run build` | Writes `src/content/films.json` (archive + Letterboxd feed), then builds into `dist/` and `.vercel/output/`. |
+| `npm run preview` | Serves the last build from `.vercel/output/`, `/api/films.json` included (`astro preview` does not support the Vercel adapter). |
 | `npm run check` | Type-checks the project (`astro check`). |
 | `npm run test:e2e` | Playwright tests in `tests/*.spec.ts`. They build with `SAMPLES=1` and serve the build themselves. |
 | `node scripts/check-routes.mjs` | Builds, then checks every route: each entry has its page and JSON body, each page has a title, description, `og:title`, `og:image` and one `<h1>`, and no internal link is broken. `--samples` includes the samples. |
-| `npm run films` | Refreshes `src/content/films.json` from Letterboxd. |
+| `npm run films` | Writes `src/content/films.json`: the archive and the cached copy, with the Letterboxd feed merged over them. When the feed fails, it keeps the cached copy and exits 0. |
+| `npm run posters` | Draws the four room posters into `blender/posters/` (SVG and 2048-px PNG). |
 | `npm run measure:payload`, `npm run measure:fps` | Measure the room's 3D payload and frame rate. |
 
 ## Deploy
