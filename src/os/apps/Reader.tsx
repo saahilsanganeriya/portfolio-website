@@ -54,7 +54,11 @@ const LINK_LABELS: Record<keyof OsProject['links'], string> = {
   pypi: 'PyPI package',
 };
 
-const STATUS_LABELS: Record<OsProject['status'], string> = { shipped: 'Shipped', research: 'Research', archived: 'Archived' };
+const STATUS_LABELS: Record<OsProject['status'], string> = {
+  shipped: 'Shipped',
+  research: 'Research',
+  archived: 'Archived',
+};
 
 export function ProjectReader({ slug, os }: { slug: string; os: OsApi }) {
   const project = os.index.projects.find((p) => p.slug === slug);

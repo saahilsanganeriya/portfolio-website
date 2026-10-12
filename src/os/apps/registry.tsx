@@ -35,11 +35,21 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
   const app = APPS[route.app];
   if (route.app === 'projects' && route.slug) {
     const project = index.projects.find((p) => p.slug === route.slug);
-    return { title: project?.title ?? route.slug, icon: 'page', defaultStatus: project?.stack.join(', ') ?? '', pageHref };
+    return {
+      title: project?.title ?? route.slug,
+      icon: 'page',
+      defaultStatus: project?.stack.join(', ') ?? '',
+      pageHref,
+    };
   }
   if (route.app === 'blog' && route.slug) {
     const post = index.posts.find((p) => p.slug === route.slug);
-    return { title: post?.title ?? route.slug, icon: 'page', defaultStatus: post ? formatDay(post.date) : '', pageHref };
+    return {
+      title: post?.title ?? route.slug,
+      icon: 'page',
+      defaultStatus: post ? formatDay(post.date) : '',
+      pageHref,
+    };
   }
   const defaultStatus: Record<AppId, string> = {
     projects: plural(index.projects.length, 'project'),

@@ -22,11 +22,14 @@
   /* Secondary text on cream: 6:1 on the face, 7:1 on the light well. */
   --os-muted: #5f5145;
   --os-chrome: 'Pixel Operator', 'IBM Plex Sans', sans-serif;
-  --os-raised: inset -1px -1px var(--os-dark), inset 1px 1px var(--os-light), inset -2px -2px var(--os-shade),
+  --os-raised:
+    inset -1px -1px var(--os-dark), inset 1px 1px var(--os-light), inset -2px -2px var(--os-shade),
     inset 2px 2px var(--os-face);
-  --os-sunken: inset 1px 1px var(--os-shade), inset -1px -1px var(--os-light), inset 2px 2px var(--os-dark),
+  --os-sunken:
+    inset 1px 1px var(--os-shade), inset -1px -1px var(--os-light), inset 2px 2px var(--os-dark),
     inset -2px -2px var(--os-face);
-  --os-pressed: inset 1px 1px var(--os-dark), inset -1px -1px var(--os-light), inset 2px 2px var(--os-shade),
+  --os-pressed:
+    inset 1px 1px var(--os-dark), inset -1px -1px var(--os-light), inset 2px 2px var(--os-shade),
     inset -2px -2px var(--os-face);
   --taskbar: 32px;
 
@@ -145,7 +148,9 @@ body.os-moving iframe {
   flex-direction: column;
   padding: 3px;
   background: var(--os-face);
-  box-shadow: var(--os-raised), 6px 8px 0 rgb(20 17 15 / 0.35);
+  box-shadow:
+    var(--os-raised),
+    6px 8px 0 rgb(20 17 15 / 0.35);
   outline: none;
 }
 
@@ -266,7 +271,9 @@ body.os-moving iframe {
   align-items: center;
   margin: 0;
   padding: 0 6px;
-  box-shadow: inset 1px 1px var(--os-shade), inset -1px -1px var(--os-light);
+  box-shadow:
+    inset 1px 1px var(--os-shade),
+    inset -1px -1px var(--os-light);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -743,7 +750,9 @@ body.os-moving iframe {
   height: var(--taskbar);
   padding: 2px 2px 0;
   background: var(--os-face);
-  box-shadow: inset 0 1px var(--os-face), inset 0 2px var(--os-light);
+  box-shadow:
+    inset 0 1px var(--os-face),
+    inset 0 2px var(--os-light);
 }
 
 .os-start {
@@ -763,7 +772,8 @@ body.os-moving iframe {
 
 /* Win98's pressed tab: a fine cream checker behind the label. */
 .os-tab[aria-pressed='true'] {
-  background: conic-gradient(var(--os-light) 25%, var(--os-face) 0 50%, var(--os-light) 0 75%, var(--os-face) 0) 0 0 / 2px 2px;
+  background: conic-gradient(var(--os-light) 25%, var(--os-face) 0 50%, var(--os-light) 0 75%, var(--os-face) 0) 0 0 /
+    2px 2px;
 }
 
 .os-tabs {
@@ -804,7 +814,9 @@ body.os-moving iframe {
   height: 24px;
   margin: 0 2px 0 0;
   padding: 0 10px;
-  box-shadow: inset 1px 1px var(--os-shade), inset -1px -1px var(--os-light);
+  box-shadow:
+    inset 1px 1px var(--os-shade),
+    inset -1px -1px var(--os-light);
 }
 
 .os-start-menu {
@@ -815,7 +827,9 @@ body.os-moving iframe {
   min-width: 232px;
   padding: 3px;
   background: var(--os-face);
-  box-shadow: var(--os-raised), 4px 4px 0 rgb(20 17 15 / 0.35);
+  box-shadow:
+    var(--os-raised),
+    4px 4px 0 rgb(20 17 15 / 0.35);
 }
 
 .os-start-banner {
@@ -872,7 +886,9 @@ body.os-moving iframe {
 .os-menu-rule {
   height: 2px;
   margin: 3px 2px;
-  box-shadow: inset 0 1px var(--os-shade), inset 0 -1px var(--os-light);
+  box-shadow:
+    inset 0 1px var(--os-shade),
+    inset 0 -1px var(--os-light);
 }
 
 /* ---- Shutdown ---- */
@@ -943,7 +959,9 @@ body.os-moving iframe {
   padding: 6px 8px;
   padding-top: max(6px, env(safe-area-inset-top));
   background: var(--os-face);
-  box-shadow: inset 0 -1px var(--os-shade), inset 0 -2px var(--os-dark);
+  box-shadow:
+    inset 0 -1px var(--os-shade),
+    inset 0 -2px var(--os-dark);
 }
 
 .os-back {

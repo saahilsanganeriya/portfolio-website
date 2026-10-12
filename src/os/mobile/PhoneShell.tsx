@@ -1,4 +1,5 @@
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, useReducedMotion } from 'motion/react';
+import * as m from 'motion/react-m';
 import { useId } from 'react';
 import { AppBody, describeWindow } from '../apps/registry';
 import type { OsApi } from '../types';
@@ -19,7 +20,7 @@ function PhoneWindow({ win, covered, os, onBack }: PhoneWindowProps) {
   const titleId = useId();
   const { title, pageHref } = describeWindow(win.route, os.index);
   return (
-    <motion.section
+    <m.section
       id={windowDomId(win.id)}
       className="os-phone-window"
       role="dialog"
@@ -47,11 +48,19 @@ function PhoneWindow({ win, covered, os, onBack }: PhoneWindowProps) {
       <div className="os-phone-body">
         <AppBody route={win.route} os={os} />
       </div>
-    </motion.section>
+    </m.section>
   );
 }
 
-export function PhoneWindows({ windows, os, onBack }: { windows: WindowState[]; os: OsApi; onBack: (id: string) => void }) {
+export function PhoneWindows({
+  windows,
+  os,
+  onBack,
+}: {
+  windows: WindowState[];
+  os: OsApi;
+  onBack: (id: string) => void;
+}) {
   const stack = windows.filter((w) => !w.minimized).sort((a, b) => a.z - b.z);
   const topId = stack.at(-1)?.id;
   return (

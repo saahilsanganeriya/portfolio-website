@@ -4,7 +4,9 @@ import { PageReader } from './Reader';
 
 // The reel always autoplays in a window (it pauses with its own control); /story itself is scroll-driven.
 export function StoryApp() {
-  return <iframe className="os-story-frame" src="/story?embed=1#autoplay" title="A Narrative in a Frame, the story reel" />;
+  return (
+    <iframe className="os-story-frame" src="/story?embed=1#autoplay" title="A Narrative in a Frame, the story reel" />
+  );
 }
 
 export const RESUME_PDF = '/resume/saahil-sanganeriya-resume.pdf';

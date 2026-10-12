@@ -1,7 +1,7 @@
 import { useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 
-// `~` marks a pause, so the log reads like a machine doing the work rather than text appearing.
+// Typed a character at a time, `~` a pause; the key=value log line prints whole, as a log does.
 const SCRIPT = [
   'Saving the open windows… done.',
   'Rewinding the reels~.~.~.~ done.',
@@ -10,10 +10,22 @@ const SCRIPT = [
   'time={now} level=INFO msg="run finished" stage=shutdown',
   '',
   'Goodnight.',
-].join('\n');
+];
 
-const CHAR_MS = 16;
-const PAUSE_MS = 320;
+const CHAR_MS = 12;
+const PAUSE_MS = 180;
+const OFF_AFTER_MS = 500;
+
+type Step = { text: string; wait: number };
+
+function steps(lines: string[]): Step[] {
+  return lines.flatMap((line) => {
+    const typed: Step[] = line.startsWith('time=')
+      ? [{ text: line, wait: CHAR_MS }]
+      : [...line].map((ch) => (ch === '~' ? { text: '', wait: PAUSE_MS } : { text: ch, wait: CHAR_MS }));
+    return [...typed, { text: '\n', wait: PAUSE_MS }];
+  });
+}
 
 interface ShutdownProps {
   phase: 'shutting' | 'off';
@@ -23,41 +35,35 @@ interface ShutdownProps {
 
 export function Shutdown({ phase, onDone, onRestart }: ShutdownProps) {
   const reduceMotion = useReducedMotion();
-  const script = useRef(SCRIPT.replace('{now}', new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')));
   const [shown, setShown] = useState('');
   const restartRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (phase !== 'shutting') return;
-    const text = script.current;
-    const finish = () => {
-      setShown(text.replaceAll('~', ''));
-      window.setTimeout(onDone, reduceMotion ? 0 : 900);
-    };
-    if (reduceMotion) {
-      finish();
-      return;
-    }
-    let i = 0;
+    const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const queue = steps(SCRIPT.map((line) => line.replace('{now}', now)));
     let timer = 0;
-    const step = () => {
-      const ch = text[i++];
-      if (ch === undefined) return finish();
-      if (ch !== '~') setShown((prev) => prev + ch);
-      timer = window.setTimeout(step, ch === '~' || ch === '\n' ? PAUSE_MS : CHAR_MS);
-    };
-    step();
-    // Any key or click skips to the end.
-    const skip = () => {
+    let i = 0;
+    const finish = () => {
       window.clearTimeout(timer);
-      finish();
+      setShown(queue.map((step) => step.text).join(''));
+      timer = window.setTimeout(onDone, reduceMotion ? 0 : OFF_AFTER_MS);
     };
-    window.addEventListener('keydown', skip, { once: true });
-    window.addEventListener('pointerdown', skip, { once: true });
+    const next = () => {
+      const step = queue[i++];
+      if (!step) return finish();
+      setShown((prev) => prev + step.text);
+      timer = window.setTimeout(next, step.wait);
+    };
+    if (reduceMotion) finish();
+    else next();
+    // Any key or click skips to the end.
+    window.addEventListener('keydown', finish, { once: true });
+    window.addEventListener('pointerdown', finish, { once: true });
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener('keydown', skip);
-      window.removeEventListener('pointerdown', skip);
+      window.removeEventListener('keydown', finish);
+      window.removeEventListener('pointerdown', finish);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -68,10 +74,9 @@ export function Shutdown({ phase, onDone, onRestart }: ShutdownProps) {
 
   return (
     <main id="content" className="os-shutdown" tabIndex={-1}>
+      <h1 className="visually-hidden">{phase === 'shutting' ? 'SaahilOS is shutting down' : 'SaahilOS is off'}</h1>
       {phase === 'shutting' ? (
-        <pre className="os-shutdown-log">
-          {shown}
-        </pre>
+        <pre className="os-shutdown-log">{shown}</pre>
       ) : (
         <div className="os-off">
           <p className="os-off-line">It is now safe to turn off your computer.</p>

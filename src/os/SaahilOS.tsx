@@ -1,5 +1,14 @@
-import { AnimatePresence, MotionConfig } from 'motion/react';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
+import { AnimatePresence, LazyMotion, MotionConfig, domAnimation } from 'motion/react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent,
+} from 'react';
 import { AppBody, describeWindow } from './apps/registry';
 import { PhoneWindows } from './mobile/PhoneShell';
 import './os.css';
@@ -58,11 +67,17 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
       id: windowIdFor(route),
       route,
       focus,
-      desktop: { width: desktop?.clientWidth ?? window.innerWidth, height: desktop?.clientHeight ?? window.innerHeight },
+      desktop: {
+        width: desktop?.clientWidth ?? window.innerWidth,
+        height: desktop?.clientHeight ?? window.innerHeight,
+      },
     });
   }, []);
 
-  const os: OsApi = useMemo(() => ({ index, embedded, phone, open: (target) => open(target) }), [index, embedded, phone, open]);
+  const os: OsApi = useMemo(
+    () => ({ index, embedded, phone, open: (target) => open(target) }),
+    [index, embedded, phone, open],
+  );
 
   // Boot: a hash opens its window; otherwise the desktop opens Projects, the way Henry's opened his showcase.
   useEffect(() => {
@@ -113,7 +128,15 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
 
   // Links to anything with a window open that window; the rest keep their own target (see routes.classifyLink).
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
     const anchor = (event.target as Element).closest('a[href]');
     if (!anchor || anchor.getAttribute('target') === '_blank') return;
     const link = classifyLink(anchor.getAttribute('href')!, window.location.origin);
@@ -125,7 +148,8 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
   const close = (id: string) => {
     const next = topWindow({ ...state, windows: state.windows.filter((w) => w.id !== id) });
     dispatch({ type: 'close', id });
-    if (next) requestAnimationFrame(() => document.getElementById(windowDomId(next.id))?.focus({ preventScroll: true }));
+    if (next)
+      requestAnimationFrame(() => document.getElementById(windowDomId(next.id))?.focus({ preventScroll: true }));
   };
 
   const shutDown = () => {
@@ -139,66 +163,75 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
   };
 
   return (
-    <MotionConfig reducedMotion="user">
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-      <div className="os" data-embedded={embedded || undefined} onClick={onClick}>
-        <h1 className="visually-hidden">SaahilOS</h1>
-        {power === 'on' ? (
-          <>
-            <header className="os-phonebar">
-              <p>SaahilOS</p>
-              <p>
-                <time>{clock}</time>
-              </p>
-            </header>
-            <main
-              id="content"
-              ref={desktopRef}
-              className="os-desktop"
-              tabIndex={-1}
-              onPointerDown={(event) => event.target === event.currentTarget && setSelectedIcon(null)}
-            >
-              <DesktopIcons phone={phone} selected={selectedIcon} onSelect={setSelectedIcon} onOpen={(id) => open(id)} />
-              <p className="os-desktop-hint">{phone ? 'Tap an app to open it.' : 'Double-click an icon to open it.'}</p>
-              {phone ? (
-                <PhoneWindows windows={state.windows} os={os} onBack={close} />
-              ) : (
-                <AnimatePresence>
-                  {state.windows.map((win) => {
-                    const description = describeWindow(win.route, index);
-                    return (
-                      <Window
-                        key={win.id}
-                        win={win}
-                        {...description}
-                        active={win.id === top?.id}
-                        desktopRef={desktopRef}
-                        onFocus={() => dispatch({ type: 'focus', id: win.id })}
-                        onClose={() => close(win.id)}
-                        onMinimize={() => dispatch({ type: 'minimize', id: win.id })}
-                        onToggleMaximize={() => dispatch({ type: 'toggleMaximize', id: win.id })}
-                      >
-                        <AppBody route={win.route} os={os} />
-                      </Window>
-                    );
-                  })}
-                </AnimatePresence>
-              )}
-            </main>
-            <Taskbar
-              windows={state.windows}
-              activeId={top?.id}
-              index={index}
-              clock={clock}
-              onTab={(id) => dispatch({ type: 'taskbar', id })}
-              onOpen={(id) => open(id)}
-              onShutDown={shutDown}
-            />
-          </>
-        ) : (
-          <Shutdown phase={power} onDone={() => setPower('off')} onRestart={restart} />
-        )}
-      </div>
-    </MotionConfig>
+    <LazyMotion features={domAnimation} strict>
+      <MotionConfig reducedMotion="user">
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+        <div className="os" data-embedded={embedded || undefined} onClick={onClick}>
+          {power === 'on' ? (
+            <>
+              <header className="os-phonebar">
+                <p>SaahilOS</p>
+                <p>
+                  <time>{clock}</time>
+                </p>
+              </header>
+              <main
+                id="content"
+                ref={desktopRef}
+                className="os-desktop"
+                tabIndex={-1}
+                onPointerDown={(event) => event.target === event.currentTarget && setSelectedIcon(null)}
+              >
+                <h1 className="visually-hidden">SaahilOS</h1>
+                <DesktopIcons
+                  phone={phone}
+                  selected={selectedIcon}
+                  onSelect={setSelectedIcon}
+                  onOpen={(id) => open(id)}
+                />
+                <p className="os-desktop-hint">
+                  {phone ? 'Tap an app to open it.' : 'Double-click an icon to open it.'}
+                </p>
+                {phone ? (
+                  <PhoneWindows windows={state.windows} os={os} onBack={close} />
+                ) : (
+                  <AnimatePresence>
+                    {state.windows.map((win) => {
+                      const description = describeWindow(win.route, index);
+                      return (
+                        <Window
+                          key={win.id}
+                          win={win}
+                          {...description}
+                          active={win.id === top?.id}
+                          desktopRef={desktopRef}
+                          onFocus={() => dispatch({ type: 'focus', id: win.id })}
+                          onClose={() => close(win.id)}
+                          onMinimize={() => dispatch({ type: 'minimize', id: win.id })}
+                          onToggleMaximize={() => dispatch({ type: 'toggleMaximize', id: win.id })}
+                        >
+                          <AppBody route={win.route} os={os} />
+                        </Window>
+                      );
+                    })}
+                  </AnimatePresence>
+                )}
+              </main>
+              <Taskbar
+                windows={state.windows}
+                activeId={top?.id}
+                index={index}
+                clock={clock}
+                onTab={(id) => dispatch({ type: 'taskbar', id })}
+                onOpen={(id) => open(id)}
+                onShutDown={shutDown}
+              />
+            </>
+          ) : (
+            <Shutdown phase={power} onDone={() => setPower('off')} onRestart={restart} />
+          )}
+        </div>
+      </MotionConfig>
+    </LazyMotion>
   );
 }

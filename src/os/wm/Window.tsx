@@ -1,4 +1,5 @@
-import { animate, motion, useDragControls, useMotionValue, useReducedMotion } from 'motion/react';
+import { animate, useMotionValue, useReducedMotion } from 'motion/react';
+import * as m from 'motion/react-m';
 import {
   createContext,
   useContext,
@@ -17,6 +18,32 @@ import type { WindowState } from './windows';
 
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 200;
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
+
+// Drags and resizes follow the captured pointer. Iframes (the story reel) would swallow it mid-move,
+// so they ignore pointers while body has .os-moving.
+function followPointer(
+  event: ReactPointerEvent<HTMLElement>,
+  onMove: (dx: number, dy: number) => void,
+  onEnd: () => void,
+) {
+  const target = event.currentTarget;
+  const start = { x: event.clientX, y: event.clientY };
+  target.setPointerCapture(event.pointerId);
+  document.body.classList.add('os-moving');
+  const move = (e: PointerEvent) => onMove(e.clientX - start.x, e.clientY - start.y);
+  const end = () => {
+    document.body.classList.remove('os-moving');
+    target.removeEventListener('pointermove', move);
+    target.removeEventListener('pointerup', end);
+    target.removeEventListener('pointercancel', end);
+    onEnd();
+  };
+  target.addEventListener('pointermove', move);
+  target.addEventListener('pointerup', end);
+  target.addEventListener('pointercancel', end);
+}
 
 /** Lets an app set the text in its window's status bar (e.g. "12 projects", "Updated 12 Oct"). */
 export const WindowStatusContext = createContext<(status: string | null) => void>(() => {});
@@ -56,9 +83,9 @@ export function Window({
   const reduceMotion = useReducedMotion();
   const spring = springOrInstant(reduceMotion);
   const titleId = useId();
-  const dragControls = useDragControls();
   const sectionRef = useRef<HTMLElement>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [lifted, setLifted] = useState(false);
 
   // Position and size live in motion values, so drags and resizes never re-render the window body.
   const x = useMotionValue(win.frame.x);
@@ -87,44 +114,48 @@ export function Window({
   useEffect(() => {
     // An app may already have put focus inside (the Terminal's prompt); leave it there.
     const section = sectionRef.current;
-    if (win.focusRequest > 0 && section && !section.contains(document.activeElement)) section.focus({ preventScroll: true });
+    if (win.focusRequest > 0 && section && !section.contains(document.activeElement))
+      section.focus({ preventScroll: true });
   }, [win.focusRequest]);
 
-  const startDrag = (event: ReactPointerEvent) => {
-    if (win.maximized || event.button !== 0) return;
-    if ((event.target as Element).closest('button')) return;
-    dragControls.start(event);
+  // A window lifts a little while it moves and settles back on the spring when let go.
+  const startDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (win.maximized || event.button !== 0 || (event.target as Element).closest('button')) return;
+    event.preventDefault();
+    const desktop = desktopRef.current;
+    const from = { x: x.get(), y: y.get() };
+    const maxX = desktop ? desktop.clientWidth - width.get() : Infinity;
+    const maxY = desktop ? desktop.clientHeight - height.get() : Infinity;
+    setLifted(true);
+    followPointer(
+      event,
+      (dx, dy) => {
+        x.set(clamp(from.x + dx, 0, Math.max(0, maxX)));
+        y.set(clamp(from.y + dy, 0, Math.max(0, maxY)));
+      },
+      () => setLifted(false),
+    );
   };
 
-  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const startResize = (event: ReactPointerEvent<HTMLElement>) => {
     if (win.maximized || event.button !== 0) return;
     event.preventDefault();
-    event.stopPropagation();
-    onFocus();
-    const grip = event.currentTarget;
-    grip.setPointerCapture(event.pointerId);
-    document.body.classList.add('os-moving');
-    const start = { px: event.clientX, py: event.clientY, width: width.get(), height: height.get() };
     const desktop = desktopRef.current;
+    const from = { width: width.get(), height: height.get() };
     const maxWidth = desktop ? desktop.clientWidth - x.get() : Infinity;
     const maxHeight = desktop ? desktop.clientHeight - y.get() : Infinity;
-    const onMove = (move: PointerEvent) => {
-      width.set(Math.min(maxWidth, Math.max(MIN_WIDTH, start.width + move.clientX - start.px)));
-      height.set(Math.min(maxHeight, Math.max(MIN_HEIGHT, start.height + move.clientY - start.py)));
-    };
-    const onUp = () => {
-      document.body.classList.remove('os-moving');
-      grip.removeEventListener('pointermove', onMove);
-      grip.removeEventListener('pointerup', onUp);
-      grip.removeEventListener('pointercancel', onUp);
-    };
-    grip.addEventListener('pointermove', onMove);
-    grip.addEventListener('pointerup', onUp);
-    grip.addEventListener('pointercancel', onUp);
+    followPointer(
+      event,
+      (dx, dy) => {
+        width.set(clamp(from.width + dx, MIN_WIDTH, Math.max(MIN_WIDTH, maxWidth)));
+        height.set(clamp(from.height + dy, MIN_HEIGHT, Math.max(MIN_HEIGHT, maxHeight)));
+      },
+      () => {},
+    );
   };
 
   return (
-    <motion.section
+    <m.section
       ref={sectionRef}
       id={windowDomId(win.id)}
       className="os-window"
@@ -134,20 +165,14 @@ export function Window({
       tabIndex={-1}
       inert={win.minimized}
       style={{ x, y, width, height, zIndex: win.z }}
-      drag={!win.maximized}
-      dragControls={dragControls}
-      dragListener={false}
-      dragMomentum={false}
-      dragElastic={0}
-      dragConstraints={desktopRef}
       initial={{ opacity: 0, scale: 0.94 }}
-      animate={win.minimized ? { opacity: 0, scale: 0.86, transitionEnd: { visibility: 'hidden' } } : { opacity: 1, scale: 1, visibility: 'visible' }}
+      animate={
+        win.minimized
+          ? { opacity: 0, scale: 0.86, transitionEnd: { visibility: 'hidden' } }
+          : { opacity: 1, scale: lifted ? 1.012 : 1, visibility: 'visible' }
+      }
       exit={{ opacity: 0, scale: 0.96 }}
-      whileDrag={{ scale: 1.012 }}
       transition={spring}
-      // Iframes (the story reel) would swallow the pointer mid-drag; they ignore it while a window moves.
-      onDragStart={() => document.body.classList.add('os-moving')}
-      onDragEnd={() => document.body.classList.remove('os-moving')}
       onPointerDownCapture={onFocus}
     >
       <div className="os-titlebar" onPointerDown={startDrag} onDoubleClick={onToggleMaximize}>
@@ -188,6 +213,6 @@ export function Window({
         </p>
         <div className="os-status-cell os-status-grip" onPointerDown={startResize} aria-hidden="true" />
       </div>
-    </motion.section>
+    </m.section>
   );
 }

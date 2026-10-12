@@ -245,7 +245,9 @@ export const ICONS = Object.fromEntries(
 
 export function iconSvgMarkup(name: IconName): string {
   const { width, height, rects } = ICONS[name];
-  const body = rects.map((r) => `<rect x="${r.x}" y="${r.y}" width="${r.width}" height="1" fill="${r.fill}"/>`).join('');
+  const body = rects
+    .map((r) => `<rect x="${r.x}" y="${r.y}" width="${r.width}" height="1" fill="${r.fill}"/>`)
+    .join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">${body}</svg>`;
 }
 

@@ -40,7 +40,9 @@ const update = (state: WindowsState, id: string, change: (w: WindowState) => Par
   state.windows.map((w) => (w.id === id ? { ...w, ...change(w) } : w));
 
 export function topWindow(state: WindowsState): WindowState | undefined {
-  return state.windows.filter((w) => !w.minimized).reduce<WindowState | undefined>((top, w) => (!top || w.z > top.z ? w : top), undefined);
+  return state.windows
+    .filter((w) => !w.minimized)
+    .reduce<WindowState | undefined>((top, w) => (!top || w.z > top.z ? w : top), undefined);
 }
 
 export function windowsReducer(state: WindowsState, action: WindowsAction): WindowsState {

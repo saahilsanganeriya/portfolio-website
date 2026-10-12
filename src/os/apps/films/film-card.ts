@@ -52,7 +52,12 @@ function stars(rating: number, id: string): string {
   return out;
 }
 
-const shortDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const shortDate = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
 
 export function cardLabel(entry: FilmEntry): string {
   const parts = [`${entry.title} (${entry.year})`];

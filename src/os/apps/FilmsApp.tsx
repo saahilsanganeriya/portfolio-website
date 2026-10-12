@@ -43,7 +43,9 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
   const updated = formatDay(films.fetchedAt.slice(0, 10));
 
   useEffect(() => {
-    setStatus(live ? `${films.entries.length} films, updated ${updated}` : `${films.entries.length} films, saved ${updated}`);
+    setStatus(
+      live ? `${films.entries.length} films, updated ${updated}` : `${films.entries.length} films, saved ${updated}`,
+    );
   }, [live, films, updated, setStatus]);
 
   // `#films/<slug>` points at one film: bring its card into view and give it focus.
@@ -82,7 +84,11 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
           Diary
         </h2>
         <p className="os-films-note">
-          Most recent first, from <a href={films.profile} target="_blank" rel="noopener">Letterboxd</a>.
+          Most recent first, from{' '}
+          <a href={films.profile} target="_blank" rel="noopener">
+            Letterboxd
+          </a>
+          .
         </p>
         <ul className="os-film-grid">
           {films.entries.map((entry) => {
@@ -90,7 +96,10 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
             const anchor = !onWall.has(entry.slug) && !firstSeen.has(entry.slug);
             firstSeen.add(entry.slug);
             return (
-              <li key={`${entry.slug}-${entry.watchedDate}`} data-selected={(anchor && entry.slug === slug) || undefined}>
+              <li
+                key={`${entry.slug}-${entry.watchedDate}`}
+                data-selected={(anchor && entry.slug === slug) || undefined}
+              >
                 <Card entry={entry} id={anchor ? `film-${entry.slug}` : undefined} />
                 {entry.review && <p className="os-film-review">{entry.review}</p>}
               </li>

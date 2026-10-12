@@ -4,8 +4,12 @@ import { devices, expect, test, type Page } from '@playwright/test';
 const APPS = ['Projects', 'Blog', 'Films', 'A Narrative in a Frame', 'Terminal', 'About', 'Résumé', 'Credits'];
 
 async function seriousAxeViolations(page: Page): Promise<string[]> {
-  const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
-  return violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id} (${v.nodes.length})`);
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  return violations
+    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+    .map((v) => `${v.id} (${v.nodes.length})`);
 }
 
 test.describe('desktop', () => {
@@ -41,7 +45,10 @@ test.describe('desktop', () => {
     await expect(asPage).toHaveAttribute('href', '/projects/sample-project');
 
     await page.goto('/os#blog/sample-post');
-    await page.getByRole('dialog', { name: 'How a post looks' }).getByRole('link', { name: 'the projects page' }).click();
+    await page
+      .getByRole('dialog', { name: 'How a post looks' })
+      .getByRole('link', { name: 'the projects page' })
+      .click();
     await expect(page.getByRole('dialog', { name: 'Projects' })).toBeVisible();
     await expect(page).toHaveURL(/\/os#projects$/);
   });
