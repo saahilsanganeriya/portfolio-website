@@ -10,3 +10,5 @@ blender/.cache/
 test-results/
 playwright-report/
 .DS_Store
+# The global ignore drops data/ folders; the films archive lives in src/data/.
+!src/data/
