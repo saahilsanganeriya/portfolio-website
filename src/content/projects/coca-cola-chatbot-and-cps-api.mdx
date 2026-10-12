@@ -12,25 +12,42 @@ links:
   page: "https://confused-locket-f0c.notion.site/CPS-Advanced-Analytics-API-5618147fdf0f4056abac5acb5dce3222"
 ---
 
-Most questions inside a large company already have an answer somewhere. The hard part is finding it,
-or finding the person who can pull it. Over three co-op terms at Coca-Cola I worked on both
-the finding and the pulling.
+When a business-intelligence team at Coca-Cola needed supply-chain data, they filed a request and waited for someone to pull it. Over three co-op terms I worked on making that wait go away, for data and for documents.
 
-**The chatbot.** I built an internal assistant in Haystack with hybrid retrieval. BM25 keyword search over
-Elasticsearch finds candidate passages, and a RoBERTa reader picks the answer out of them. Employees could
-ask the internal knowledge bases questions in plain language instead of hunting through them.
+The scale was the problem. There were more than 300 global supply-chain datasets behind those requests, and the ETL run took 9 hours.
 
-**The API.** Business-intelligence teams used to file a request for supply-chain data and wait. I designed
-Django REST APIs with create, read, update and delete endpoints over 300+ global supply-chain datasets, so
-those teams could run their own operational queries. The public write-up of the API is linked on this
-page.
+## The API
 
-**The pipelines.** I rebuilt a Python data-access library and the monitoring platform around it, which
-cut support tickets by 63% and ETL runtime from 9 to 6.5 hours. I also built Azure Data Factory pipelines
-that process 300+ datasets daily with PySpark and SQL on Databricks, cut the transformation step's runtime
-by 60%, and added CI/CD with automated data validation.
+People were the interface: every request was handled by hand. I designed Django REST APIs with create, read, update and delete endpoints over the 300+ datasets, so business-intelligence teams could run their own operational queries. The public write-up of the API is linked on this page.
+
+## The chatbot
+
+Documents had the same problem as data. I built an internal assistant in Haystack so employees could ask the internal knowledge bases questions in plain language instead of hunting through them.
+
+<figure class="os-figure">
+
+```text
+ a question in plain words
+            |
+            v
+ BM25 keyword search over Elasticsearch
+            |   a short list of candidate passages
+            v
+ RoBERTa reader: picks the answer out of them
+            |
+            v
+ the answer
+```
+
+<figcaption>The chatbot's two stages: a fast keyword search narrows the knowledge bases to a few passages, then a reading model picks the answer from those passages.</figcaption>
+</figure>
+
+This design has limits. Keyword search misses a passage that uses different words from the question, and a reader like this can only answer with words that are already in a document.
+
+## The pipelines
+
+I rebuilt a Python data-access library and the monitoring platform around it. Support tickets fell by 63%, and the ETL runtime went from 9 hours to 6.5. I also built Azure Data Factory pipelines that process 300+ datasets daily with PySpark and SQL on Databricks, cut the transformation step’s runtime by 60%, and added CI/CD with automated data validation.
 
 ## What I can and cannot show
 
-The systems themselves are internal. The API write-up is the one piece that is public, and everything else
-on this page stays at the level of my résumé.
+The chatbot has no number I can publish, so this page gives it none. The systems themselves are internal. The API write-up is the one piece that is public, and everything else here stays at the level of my résumé.
