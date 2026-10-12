@@ -2,13 +2,14 @@
 
     blender -b --factory-startup -P blender/scripts/build_room.py
 
-Every object that gets baked carries a custom property "atlas" (env, desk, props, posters); bake.py and export.py
-read it. Props come from blender/props/<name>.blend and posters from blender/posters/<id>.png when they exist;
-otherwise a placeholder block or card of the same size stands in.
+Every object that gets baked carries a custom property "atlas" (env, desk, props, or window_sf / window_delhi for
+the view); bake.py and export.py read it. Props come from blender/props/<name>.blend (a missing file gets a
+placeholder block of the same size); room_dressing.py adds the lived-in layer and window_view.py the view.
 """
 
 import math
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,18 +21,16 @@ sys.dont_write_bytecode = True  # keep __pycache__ out of blender/scripts
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_henry  # noqa: E402
 from import_henry import CACHE, REPO, fetch_cached  # noqa: E402
+import room_dressing  # noqa: E402
+import window_view  # noqa: E402
+from room_lib import (DADO_Z, FLOOR_T, WALL_H, WALL_T, WIN_X0, WIN_X1, WIN_Z0, WIN_Z1, X_LEFT, X_RIGHT,  # noqa: E402
+                      Y_BACK, Y_FRONT, Mat, add_box, add_cylinder, collection, new_object, smooth_by_angle, socket,
+                      srgb)
 
 BLEND = REPO / "blender" / "room.blend"
 # ROOM_PROPS_DIR points at another checkout's props while they are on an unmerged branch.
 PROPS_DIR = Path(os.environ.get("ROOM_PROPS_DIR", REPO / "blender" / "props"))
 POSTERS_DIR = REPO / "blender" / "posters"
-
-# ---- Room dimensions (metres, Blender Z up; the viewer stands at -Y looking toward +Y) ----
-X_LEFT, X_RIGHT = -2.55, 2.35  # left wall inner face, open right end of the back wall
-Y_FRONT, Y_BACK = -2.75, 0.42  # open front edge, back wall inner face
-WALL_T, WALL_H, FLOOR_T = 0.12, 2.62, 0.06
-WIN_X0, WIN_X1, WIN_Z0, WIN_Z1 = 0.88, 1.78, 0.92, 2.12
-DADO_Z = 0.88
 
 POLYHAVEN = "https://dl.polyhaven.org/file/ph-assets"
 TEXTURES = {
@@ -62,17 +61,30 @@ PROPS = {
     "fujifilm_xt": ((-0.62, 0.30, 1.6475), -12, (0.135, 0.065, 0.095)),
     "fujica_st": ((-0.25, 0.31, 1.6475), 8, (0.145, 0.09, 0.095)),
     "super8_camera": ((0.12, 0.30, 1.6475), -20, (0.07, 0.24, 0.17)),
-    "film_canister": ((-1.60, -2.34, 0.0), 25, (0.27, 0.14, 0.05)),
+    "film_canister": ((-1.97, -2.06, 0.211), 25, (0.27, 0.14, 0.05)),
     "books_stack": ((-0.88, 0.30, 2.0075), 90, (0.16, 0.24, 0.20)),
     "projector_8mm": ((-1.95, -2.08, 0.55), "projector_screen", (0.21, 0.33, 0.33)),
     "projector_screen": ((-1.86, -0.12, 0.0), "projector_8mm", (1.09, 0.92, 1.80)),
-    "nas_4bay": ((0.585, 0.15, 0.7325), -14, (0.20, 0.23, 0.17)),
-    "mango_plant": ((1.10, 0.36, 0.92), 0, (0.38, 0.41, 0.41)),
+    "nas_4bay": ((0.545, 0.135, 0.7325), 30, (0.27, 0.31, 0.23)),
+    "mango_plant": ((0.98, 0.355, 0.92), 0, (0.45, 0.40, 0.45)),
+    # Kitchen corner on the sideboard under the posters (fronts turned to the room, +X); the fan hangs from the
+    # ceiling line (its origin is its mount).
+    "countertop_oven": ((-2.355, -1.03, 0.76), 90, (0.40, 0.33, 0.23)),
+    "espresso_machine": ((-2.395, -1.45, 0.76), 90, (0.23, 0.38, 0.55)),
+    "lava_lamp": ((-2.42, -1.745, 0.76), 90, (0.15, 0.15, 0.41)),
+    "ceiling_fan": ((-1.45, -1.55, 2.62), 12, (1.14, 1.14, 0.62)),
 }
+PROP_SCALE = {"nas_4bay": 1.35}  # owner round 2: bigger, so it reads from cam_idle
+# Nodes named in the round-2 contract keep their own names; every other prop mesh gets the props_ prefix.
+CONTRACT_NAMES = {"lava_lamp", "lava_lamp_glass", "ceiling_fan", "ceiling_fan_blades", "espresso_machine",
+                  "countertop_oven", "oven_glow", "mango_fruit"}
+# Poster click proxies keep their T3 names; slot i is the i-th frame from the left as seen from the room.
 POSTER_IDS = ["the-odyssey-2026", "la-la-land", "chungking-express", "marty-supreme"]
 POSTER_SIZE = (0.40, 0.60)  # visible art, 2:3
 POSTER_Y = [-0.95, -1.43, -1.91, -2.39]
 POSTER_Z = 1.66
+# Art shown in the stills only (the site draws poster_art_<slot> from src/content/favorites.json at runtime).
+STILL_POSTERS = ["la-la-land", "yi-yi", "normal-people-2020", "black-swan"]
 
 CAMERAS = {
     # name: (position, target) in metres; vertical field of view is 35 degrees for every framing.
@@ -81,182 +93,13 @@ CAMERAS = {
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
     "cam_shelf": ((-0.36, -1.12, 1.78), (-0.36, 0.30, 1.84)),
-    "cam_projector": ((-0.55, -2.65, 1.25), (-1.80, -1.05, 0.95)),
+    "cam_window": ((1.33, -0.95, 1.46), (1.33, 1.40, 1.36)),
+    "cam_photos": ((-1.78, -0.86, 2.17), (-1.78, 0.42, 2.17)),
 }
+# cam_projector is set square-on to the screen from the screen's own frame (see build_markers).
+PROJECTOR_CAM_DISTANCE = 1.85
 CAMERA_FOV_DEG = 35.0
-
-
-# ---- Small helpers ----
-
-def collection(name: str) -> bpy.types.Collection:
-    coll = bpy.data.collections.get(name) or bpy.data.collections.new(name)
-    if coll.name not in bpy.context.scene.collection.children:
-        bpy.context.scene.collection.children.link(coll)
-    return coll
-
-
-def new_object(name: str, bm: bmesh.types.BMesh, coll: str, atlas: str | None, materials=()) -> bpy.types.Object:
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    for mat in materials:
-        mesh.materials.append(mat)
-    obj = bpy.data.objects.new(name, mesh)
-    collection(coll).objects.link(obj)
-    if atlas:
-        obj["atlas"] = atlas
-    return obj
-
-
-def add_box(bm, size, center, bevel=0.0, segments=2, mat=0):
-    """Add an axis-aligned box (optionally bevelled) to bm; returns its faces."""
-    geom = bmesh.ops.create_cube(bm, size=1.0)
-    verts = geom["verts"]
-    for v in verts:
-        v.co = Vector((v.co.x * size[0], v.co.y * size[1], v.co.z * size[2])) + Vector(center)
-    faces = list({f for v in verts for f in v.link_faces})
-    if bevel > 0:
-        edges = list({e for f in faces for e in f.edges})
-        result = bmesh.ops.bevel(bm, geom=edges, offset=bevel, segments=segments, profile=0.5,
-                                 affect="EDGES", clamp_overlap=True)
-        faces = list(set(faces) | set(result["faces"]))
-        faces = [f for f in faces if f.is_valid]
-    for f in faces:
-        f.material_index = mat
-    return faces
-
-
-def add_cylinder(bm, radius, depth, center, segments=32, mat=0, radius_top=None, axis="Z"):
-    geom = bmesh.ops.create_cone(bm, cap_ends=True, segments=segments, radius1=radius,
-                                 radius2=radius if radius_top is None else radius_top, depth=depth)
-    rot = {"Z": Matrix.Identity(3), "X": Matrix.Rotation(math.pi / 2, 3, "Y"),
-           "Y": Matrix.Rotation(math.pi / 2, 3, "X")}[axis]
-    for v in geom["verts"]:
-        v.co = rot @ v.co + Vector(center)
-    faces = list({f for v in geom["verts"] for f in v.link_faces})
-    for f in faces:
-        f.material_index = mat
-    return faces
-
-
-def smooth_by_angle(obj, degrees=35.0):
-    obj.data.shade_smooth()
-    obj.data.set_sharp_from_angle(angle=math.radians(degrees))
-
-
-def socket(node, name, kind=None, output=False):
-    sockets = node.outputs if output else node.inputs
-    for s in sockets:
-        if s.name == name and (kind is None or s.type == kind) and s.enabled:
-            return s
-    for s in sockets:
-        if s.name == name and (kind is None or s.type == kind):
-            return s
-    raise KeyError(f"{node.bl_idname} has no socket {name} ({kind})")
-
-
-def srgb(hex_colour: str, alpha=1.0):
-    """Hex sRGB -> linear RGBA for node colour inputs."""
-    def lin(c):
-        c /= 255.0
-        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-    h = hex_colour.lstrip("#")
-    return (lin(int(h[0:2], 16)), lin(int(h[2:4], 16)), lin(int(h[4:6], 16)), alpha)
-
-
-# ---- Materials ----
-
-class Mat:
-    """Thin builder over a node material with a Principled BSDF."""
-
-    def __init__(self, name: str):
-        self.mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
-        self.nt = self.mat.node_tree
-        self.nt.nodes.clear()
-        self.out = self.node("ShaderNodeOutputMaterial", (600, 0))
-        self.bsdf = self.node("ShaderNodeBsdfPrincipled", (300, 0))
-        self.link(self.bsdf.outputs["BSDF"], self.out.inputs["Surface"])
-
-    def node(self, kind, loc=(0, 0), **props):
-        n = self.nt.nodes.new(kind)
-        n.location = loc
-        for k, v in props.items():
-            setattr(n, k, v)
-        return n
-
-    def link(self, a, b):
-        self.nt.links.new(a, b)
-
-    def set(self, **inputs):
-        names = {"base": "Base Color", "rough": "Roughness", "metal": "Metallic", "coat": "Coat Weight",
-                 "coat_rough": "Coat Roughness", "emit": "Emission Color", "emit_strength": "Emission Strength",
-                 "spec": "Specular IOR Level", "sheen": "Sheen Weight"}
-        for key, value in inputs.items():
-            self.bsdf.inputs[names[key]].default_value = value
-        return self
-
-    def image(self, path: Path, non_color=False, scale=1.0, loc=(-700, 0)):
-        """Box-projected image texture on object coordinates; scale = real-world tile size in metres."""
-        coords = self.node("ShaderNodeTexCoord", (loc[0] - 400, loc[1]))
-        mapping = self.node("ShaderNodeMapping", (loc[0] - 200, loc[1]))
-        mapping.inputs["Scale"].default_value = (1 / scale, 1 / scale, 1 / scale)
-        tex = self.node("ShaderNodeTexImage", loc)
-        tex.image = bpy.data.images.load(str(path), check_existing=True)
-        tex.image.colorspace_settings.name = "Non-Color" if non_color else "sRGB"
-        tex.projection = "BOX"
-        tex.projection_blend = 0.2
-        self.link(coords.outputs["Object"], mapping.inputs["Vector"])
-        self.link(mapping.outputs["Vector"], tex.inputs["Vector"])
-        return tex
-
-    def mix(self, a, b, blend="MULTIPLY", fac=1.0, loc=(-200, 0)):
-        m = self.node("ShaderNodeMix", loc, data_type="RGBA", blend_type=blend)
-        socket(m, "Factor", "VALUE").default_value = fac
-        for slot, value in (("A", a), ("B", b)):
-            target = socket(m, slot, "RGBA")
-            if isinstance(value, bpy.types.NodeSocket):
-                self.link(value, target)
-            else:
-                target.default_value = value
-        return socket(m, "Result", "RGBA", output=True)
-
-    def bump(self, height_socket, strength=0.2, distance=0.002):
-        b = self.node("ShaderNodeBump", (100, -400))
-        b.inputs["Strength"].default_value = strength
-        b.inputs["Distance"].default_value = distance
-        self.link(height_socket, b.inputs["Height"])
-        self.link(b.outputs["Normal"], self.bsdf.inputs["Normal"])
-
-    def remap(self, value_socket, lo, hi, loc=(-200, -300)):
-        r = self.node("ShaderNodeMapRange", loc)
-        self.link(value_socket, r.inputs["Value"])
-        r.inputs["To Min"].default_value = lo
-        r.inputs["To Max"].default_value = hi
-        return r.outputs["Result"]
-
-    def grime(self, colour_socket, grime_colour, distance=0.03, amount=0.6):
-        """Darken crevices with an AO-driven dirt colour (Cycles evaluates AO during the bake)."""
-        ao = self.node("ShaderNodeAmbientOcclusion", (-500, 300), samples=8)
-        ao.inputs["Distance"].default_value = distance
-        inv = self.node("ShaderNodeMath", (-300, 300), operation="SUBTRACT")
-        inv.inputs[0].default_value = 1.0
-        self.link(ao.outputs["AO"], inv.inputs[1])
-        fac = self.node("ShaderNodeMath", (-150, 300), operation="MULTIPLY")
-        self.link(inv.outputs["Value"], fac.inputs[0])
-        fac.inputs[1].default_value = amount
-        m = self.node("ShaderNodeMix", (0, 300), data_type="RGBA", blend_type="MIX")
-        self.link(fac.outputs["Value"], socket(m, "Factor", "VALUE"))
-        self.link(colour_socket, socket(m, "A", "RGBA"))
-        socket(m, "B", "RGBA").default_value = grime_colour
-        return socket(m, "Result", "RGBA", output=True)
-
-    def noise(self, scale=8.0, detail=4.0, loc=(-700, -500)):
-        coords = self.node("ShaderNodeTexCoord", (loc[0] - 200, loc[1]))
-        n = self.node("ShaderNodeTexNoise", loc)
-        n.inputs["Scale"].default_value = scale
-        n.inputs["Detail"].default_value = detail
-        self.link(coords.outputs["Object"], n.inputs["Vector"])
-        return n
+EXPOSURE = 2.15  # owner round 2: about +0.5 EV over T3's 1.65, same lights and mood
 
 
 def texture_path(name: str, kind: str) -> Path:
@@ -657,8 +500,12 @@ def build_window(mats):
     for face in bm.faces:
         if face.normal.y > 0:
             face.normal_flip()
-    sky = new_object("env_sky", bm, "env", "env", [mats["sky"]])
+    # Since round two the view is the window_view_* diorama; the card stays as a camera-invisible emitter that lights
+    # the room through the window in the room bake. It has no atlas, so it is never baked or exported.
+    sky = new_object("env_sky", bm, "env", None, [mats["sky"]])
     sky.visible_shadow = False
+    sky.visible_camera = False
+    sky["room_light_only"] = True
 
 
 def build_curtains(mats, cx, w):
@@ -978,13 +825,24 @@ def place_one(name, root, coll, atlas, mats):
 def place_props(mats):
     placed, anchors = {}, {}
     for name, (loc, _, _) in PROPS.items():
-        root = Matrix.Translation(loc) @ Matrix.Rotation(prop_rotation(name), 4, "Z")
+        scale = PROP_SCALE.get(name, 1.0)
+        root = (Matrix.Translation(loc) @ Matrix.Rotation(prop_rotation(name), 4, "Z")
+                @ Matrix.Diagonal((scale, scale, scale, 1.0)))
         meshes, found = place_one(name, root, "props", "props", mats)
         for obj in meshes:
-            if not obj.name.startswith(("nas_led_", "props_")):
-                obj.name = f"props_{obj.name.split('.')[0]}"
+            base = obj.name.split(".")[0]
+            if base in CONTRACT_NAMES:
+                obj.name = base
+            elif not obj.name.startswith(("nas_led_", "props_")):
+                obj.name = f"props_{base}"
             if obj.name == "props_mango_plant_leaves":
                 obj["double_sided"] = True  # single-layer leaves; export gives them a double-sided material
+        if name == "film_canister":
+            # The flat 8 mm tin read as a bagel from the wide framing (owner, round 2): only the 35 mm canister and
+            # cassette stay, on the side table's lower shelf.
+            for obj in [o for o in meshes if o.name.endswith("film_canister_c")]:
+                meshes.remove(obj)
+                bpy.data.objects.remove(obj, do_unlink=True)
         placed[name] = meshes
         anchors[name] = {"root": root, **found}
     # One more 35 mm canister on the lower shelf beside the cameras (its origin sits 7.5 cm off the set's).
@@ -997,78 +855,78 @@ def place_props(mats):
     return placed, anchors
 
 
-def poster_material(poster_id: str, template: bpy.types.Material | None) -> bpy.types.Material:
-    """Single-user art material per poster: T2's 'poster_art' with its 'poster_image' node, or a plain one."""
-    png = POSTERS_DIR / f"{poster_id}.png"
-    image = bpy.data.images.load(str(png), check_existing=True) if png.exists() else None
-    if template is not None:
-        mat = template.copy()
-        mat.name = f"poster_{poster_id}"
-        node = mat.node_tree.nodes.get("poster_image")
-        if image is not None and node is not None:
-            node.image = image
-        return mat
-    m = Mat(f"poster_{poster_id}")
-    if image is not None:
-        tex = m.node("ShaderNodeTexImage", (-400, 0))
-        tex.image = image
-        m.link(tex.outputs["Color"], m.bsdf.inputs["Base Color"])
-    else:
-        m.set(base=srgb("#D9CDB6"))
-    return m.set(rough=0.7).mat
+def still_poster_image(slug: str) -> bpy.types.Image | None:
+    """T34's poster for a favourite (public/room/posters/<slug>.avif), converted once to PNG for Cycles."""
+    src = REPO / "public" / "room" / "posters" / f"{slug}.avif"
+    if not src.exists():
+        return None
+    png = CACHE / "posters" / f"{slug}.png"
+    if not png.exists() or png.stat().st_mtime < src.stat().st_mtime:
+        png.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), str(png)], check=True)
+    return bpy.data.images.load(str(png), check_existing=True)
+
+
+def poster_art_material(slot: int, template: bpy.types.Material | None) -> bpy.types.Material:
+    """The art on poster_art_<slot>: T34's poster for the stills, switched to white paper (light_probe = 1) while
+    bake.py bakes the light that falls on it; the site draws its own art over that light at runtime."""
+    mat = template.copy() if template is not None else Mat(f"poster_art_{slot}").mat
+    mat.name = f"poster_art_{slot}"
+    nt = mat.node_tree
+    image = still_poster_image(STILL_POSTERS[slot])
+    node = nt.nodes.get("poster_image")
+    if image is not None and node is not None:
+        node.image = image
+    out = next(n for n in nt.nodes if n.bl_idname == "ShaderNodeOutputMaterial")
+    art = out.inputs["Surface"].links[0].from_socket
+    white = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    white.inputs["Base Color"].default_value = (0.8, 0.8, 0.8, 1.0)
+    white.inputs["Roughness"].default_value = 0.9
+    probe = nt.nodes.new("ShaderNodeValue")
+    probe.name = probe.label = "light_probe"
+    probe.outputs[0].default_value = 0.0
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    nt.links.new(probe.outputs[0], mix.inputs["Fac"])
+    nt.links.new(art, mix.inputs[1])
+    nt.links.new(white.outputs["BSDF"], mix.inputs[2])
+    nt.links.new(mix.outputs["Shader"], out.inputs["Surface"])
+    return mat
 
 
 def build_posters(mats):
-    """Four framed posters on the left wall, facing +X; T2's frame when it exists, else a walnut placeholder."""
-    w, h = POSTER_SIZE
+    """Four framed posters on the left wall, facing +X. The frames are baked; each picture is its own mesh,
+    poster_art_<slot> (slot 0 is the leftmost seen from the room), which the site textures at runtime."""
     frame_materials = None
+    order = sorted(POSTER_Y)
     for poster_id, y in zip(POSTER_IDS, POSTER_Y):
+        slot = order.index(y)
         # The frame's front is -Y; a +90 degree turn about Z points it at the room (+X).
         root = Matrix.Translation((X_LEFT, y, POSTER_Z - 0.319)) @ Matrix.Rotation(math.pi / 2, 4, "Z")
-        if (PROPS_DIR / "poster_frame.blend").exists():
-            meshes, _ = place_one("poster_frame", root, "posters", "posters", mats)
-            for obj in meshes:
-                base = obj.name.split(".")[0]
-                if base == "poster_frame_glass":
-                    bpy.data.objects.remove(obj, do_unlink=True)
-                    continue
-                if base == "poster_frame_art":
-                    obj.name = f"props_poster_{poster_id}"
-                    obj.data = obj.data.copy()
-                    template = obj.data.materials[0]
-                    obj.data.materials[0] = poster_material(poster_id, template)
-                    # The print sits 0.3 mm off the backing board, which z-fights in the browser from afar.
-                    obj.matrix_world = Matrix.Translation((0.002, 0, 0)) @ obj.matrix_world
+        meshes, _ = place_one("poster_frame", root, "props", "props", mats)
+        for obj in meshes:
+            base = obj.name.split(".")[0]
+            if base == "poster_frame_glass":
+                bpy.data.objects.remove(obj, do_unlink=True)
+                continue
+            if base == "poster_frame_art":
+                obj.name = f"poster_art_{slot}"
+                obj.data = obj.data.copy()
+                obj.data.materials[0] = poster_art_material(slot, obj.data.materials[0])
+                # The print sits 0.3 mm off the backing board, which z-fights in the browser from afar.
+                obj.matrix_world = Matrix.Translation((0.002, 0, 0)) @ obj.matrix_world
+                obj["runtime_art"] = "poster"
+                w, h = POSTER_SIZE
+                obj["width_m"], obj["height_m"] = w, h
+            else:
+                obj.name = f"props_poster_frame_{slot}"
+                drop_faces_behind_print(obj)
+                if frame_materials is None:
+                    frame_materials = list(obj.data.materials)
                 else:
-                    obj.name = f"props_poster_frame_{poster_id}"
-                    drop_faces_behind_print(obj)
-                    if frame_materials is None:
-                        frame_materials = list(obj.data.materials)
-                    else:
-                        for i, mat in enumerate(frame_materials):
-                            obj.data.materials[i] = mat
-                obj["poster"] = poster_id
-            continue
-        bm = bmesh.new()
-        uv = bm.loops.layers.uv.new("UVMap")
-        x = X_LEFT + 0.02
-        # Seen from the room (looking toward -X) +Y is to the right, so this order faces +X, unmirrored.
-        corners = [(y - w / 2, POSTER_Z - h / 2), (y + w / 2, POSTER_Z - h / 2),
-                   (y + w / 2, POSTER_Z + h / 2), (y - w / 2, POSTER_Z + h / 2)]
-        face = bm.faces.new([bm.verts.new((x, cy, cz)) for cy, cz in corners])
-        for loop, coord in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
-            loop[uv].uv = coord
-        art = new_object(f"props_poster_{poster_id}", bm, "posters", "posters", [poster_material(poster_id, None)])
-        art["poster"] = poster_id
-        fbm = bmesh.new()
-        fw, d = 0.032, 0.025
-        for cz in (POSTER_Z - h / 2 - fw / 2, POSTER_Z + h / 2 + fw / 2):
-            add_box(fbm, (d, w + 2 * fw, fw), (X_LEFT + d / 2, y, cz), bevel=0.004)
-        for cy in (y - w / 2 - fw / 2, y + w / 2 + fw / 2):
-            add_box(fbm, (d, fw, h), (X_LEFT + d / 2, cy, POSTER_Z), bevel=0.004)
-        frame = new_object(f"props_poster_frame_{poster_id}", fbm, "posters", "posters", [mats["walnut"]])
-        frame["poster"] = poster_id
-        smooth_by_angle(frame)
+                    for i, mat in enumerate(frame_materials):
+                        obj.data.materials[i] = mat
+            obj["poster"] = poster_id
+            obj["poster_slot"] = slot
 
 
 def drop_faces_behind_print(frame):
@@ -1145,15 +1003,32 @@ def add_proxy(name, lo, hi, mats, pad=0.02):
     return obj
 
 
-def build_proxies(placed, mats):
+def build_proxies(placed, dressing, mats):
     bpy.context.view_layer.update()
     for hit, prop in HOTSPOTS.items():
         add_proxy(hit, *world_bounds(placed[prop]), mats)
     for poster_id in POSTER_IDS:
-        objs = [o for o in bpy.data.objects if o.name.startswith(("props_poster_", "props_poster_frame_"))
-                and o.name.endswith(poster_id)]
-        lo, hi = world_bounds(objs)
-        add_proxy(f"hit_poster_{poster_id}", lo, hi, mats, pad=0.01)
+        objs = [o for o in bpy.data.objects if o.get("poster") == poster_id]
+        hit = add_proxy(f"hit_poster_{poster_id}", *world_bounds(objs), mats, pad=0.01)
+        hit["poster_slot"] = objs[0]["poster_slot"]
+    for hit, prop in (("hit_lava_lamp", "lava_lamp"), ("hit_espresso", "espresso_machine"), ("hit_oven", "countertop_oven")):
+        add_proxy(hit, *world_bounds(placed[prop]), mats)
+    # The fan's proxy covers the whole disc its blades sweep.
+    blades = bpy.data.objects["ceiling_fan_blades"]
+    hub = blades.matrix_world.translation
+    lo, hi = world_bounds(placed["ceiling_fan"])
+    reach = max((blades.matrix_world @ v.co - hub).to_2d().length for v in blades.data.vertices)
+    add_proxy("hit_fan", Vector((hub.x - reach, hub.y - reach, lo.z)), Vector((hub.x + reach, hub.y + reach, hi.z)),
+              mats, pad=0.0)
+    add_proxy("hit_window", Vector((WIN_X0, Y_BACK - 0.02, WIN_Z0)), Vector((WIN_X1, Y_BACK + WALL_T, WIN_Z1)), mats,
+              pad=0.0)
+    screen = [o for o in placed["projector_screen"] if o.name == "props_projector_screen_surface"]
+    add_proxy("hit_projector_screen", *world_bounds(screen + [bpy.data.objects["props_projection"]]), mats, pad=0.01)
+    add_proxy("hit_plaque", *world_bounds([dressing["plaque"]]), mats, pad=0.01)
+    add_proxy("hit_photo_wall", *world_bounds(dressing["frames"]), mats, pad=0.01)
+    add_proxy("hit_album", *world_bounds([dressing["album"]]), mats, pad=0.015)
+    dial = [dressing["dial"], bpy.data.objects["props_projector_dial_plate"]]
+    add_proxy("hit_projector_dial", *world_bounds(dial), mats, pad=0.02)
 
 
 def add_empty(name, location, rotation=None, coll="markers", **props):
@@ -1179,9 +1054,22 @@ def build_markers(placed, anchors, screen_centre):
     beam = (screen_centre - lens).normalized()
     add_empty("projector_lens", lens, beam.to_track_quat("Y", "Z"))
     add_empty("projector_screen_center", screen_centre)
-    for name, (pos, target) in CAMERAS.items():
+    add_empty("lava_lamp_light", anchors["lava_lamp"]["lava_lamp_light"])
+    add_empty("espresso_steam", anchors["espresso_machine"]["espresso_steam"])
+    cameras = dict(CAMERAS)
+    # Square-on to the screen: back along the screen's normal (its prop faces -Y) at the picture's height.
+    normal = (anchors["projector_screen"]["root"].to_3x3() @ Vector((0, -1, 0))).normalized()
+    normal.z = 0
+    cameras["cam_projector"] = (tuple(screen_centre + normal.normalized() * PROJECTOR_CAM_DISTANCE),
+                                tuple(screen_centre))
+    for name, (pos, target) in cameras.items():
         add_empty(name, pos, coll="cameras", fov_deg=CAMERA_FOV_DEG)
         add_empty(f"{name}_target", target, coll="cameras")
+    # Where the opened album floats: 0.55 m in front of cam_desk, facing it (local +Z toward the camera, like
+    # monitor_screen), sized for an open spread.
+    eye, target = Vector(CAMERAS["cam_desk"][0]), Vector(CAMERAS["cam_desk"][1])
+    view = (target - eye).normalized()
+    add_empty("album_open_anchor", eye + view * 0.55, (-view).to_track_quat("Z", "Y"), width_m=0.46, height_m=0.31)
     return lens, beam
 
 
@@ -1250,6 +1138,51 @@ def build_lights(lens, beam, picture, screen_centre, mats):
     lights.objects.link(obj)
 
 
+def build_round2_lights(dressing):
+    """The lights that came with the round-two props, each with its source in the room."""
+    lights = collection("lights")
+
+    def add(name, kind, loc, color, energy, size=0.02, rot=None, **extra):
+        data = bpy.data.lights.new(name, kind)
+        data.color, data.energy = color, energy
+        if kind == "AREA":
+            data.shape = "RECTANGLE"
+            data.size, data.size_y = size
+            data.spread = math.radians(extra.get("spread", 120))
+        else:
+            data.shadow_soft_size = size
+        obj = bpy.data.objects.new(f"light_{name}", data)
+        obj.location = loc
+        if rot is not None:
+            obj.rotation_mode = "QUATERNION"
+            obj.rotation_quaternion = rot
+        lights.objects.link(obj)
+        return obj
+
+    # Lava lamp: a warm red-orange glow from the liquid washes the lower posters, the plaque and the sideboard.
+    lava = bpy.data.objects["lava_lamp_light"].location
+    add("lava_lamp", "POINT", lava + Vector((0.03, 0, 0)), (1.0, 0.32, 0.10), 9.0, size=0.045)
+    # Oven: the elements' glow spills from the door window onto the sideboard top.
+    oven = bpy.data.objects["oven_glow"]
+    lo, hi = world_bounds([oven])
+    add("oven_glow", "POINT", Vector((hi.x + 0.04, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2)), (1.0, 0.42, 0.12), 2.5,
+        size=0.05)
+    # Darkroom safelight beside the prints, and a small picture lamp over them.
+    safelight = bpy.data.objects["props_safelight"]
+    lo, hi = world_bounds([safelight])
+    add("safelight", "AREA", Vector(((lo.x + hi.x) / 2, lo.y - 0.004, (lo.z + hi.z) / 2 + 0.05)),
+        (1.0, 0.06, 0.02), 2.2, size=(0.10, 0.12), rot=Vector((0, -1, 0)).to_track_quat("-Z", "Y"), spread=150)
+    p = dressing["photo_light"]
+    aim = Vector((p.x, Y_BACK, p.z - 0.35)) - p
+    add("photo_light", "AREA", p + Vector((0, 0.0, -0.022)), (1.0, 0.62, 0.32), 16.0, size=(0.60, 0.03),
+        rot=aim.normalized().to_track_quat("-Z", "Y"), spread=110)
+    # Paper lantern in the reading corner: a warm bulb inside the globe, pooling on the floor and the chair.
+    add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 9.0, size=0.12)
+    # Fairy lights along the top shelf: a long faint strip under the string, so the books catch their glow.
+    add("fairy_lights", "AREA", Vector((-0.36, 0.165, 1.975)), (1.0, 0.62, 0.30), 6.0, size=(1.25, 0.03),
+        rot=Vector((0, 0.55, -1)).normalized().to_track_quat("-Z", "Y"), spread=160)
+
+
 def setup_world_and_render():
     scene = bpy.context.scene
     world = bpy.data.worlds.new("ink")
@@ -1274,7 +1207,7 @@ def setup_world_and_render():
     scene.render.resolution_x, scene.render.resolution_y = 1600, 1000
     scene.view_settings.view_transform = "AgX"
     scene.view_settings.look = "AgX - Medium High Contrast"
-    scene.view_settings.exposure = 1.65
+    scene.view_settings.exposure = EXPOSURE
 
     cam = bpy.data.objects.new("render_cam", bpy.data.cameras.new("render_cam"))
     cam.data.sensor_fit = "VERTICAL"
@@ -1293,37 +1226,71 @@ def aim_camera(name: str):
     cam.rotation_euler = (target - pos).to_track_quat("-Z", "Y").to_euler()
 
 
+# Room-only triangle reduction (the prop files keep their full detail): the share of triangles each dense mesh keeps,
+# so the glb's geometry stays near 100k vertices with the round-two dressing (PLAN 11.3, room.glb <= 4.3 MB).
+DECIMATE = {
+    "props_fujifilm_xt": 0.4, "props_fujifilm_x100": 0.4, "props_fujica_st": 0.4, "props_super8_camera": 0.4,
+    "props_projector_8mm": 0.3, "props_projector_8mm_reel_front": 0.4, "props_projector_8mm_reel_rear": 0.4,
+    "props_projector_screen": 0.35, "props_nas_4bay": 0.5, "espresso_machine": 0.55, "ceiling_fan": 0.5,
+    "ceiling_fan_blades": 0.55, "countertop_oven": 0.7, "props_alarm_clock": 0.45, "props_pothos": 0.8,
+    "props_haworthia": 0.5, "props_vase": 0.5, "props_tea_tin": 0.6, "props_lota": 0.6, "props_pen_cup": 0.7,
+    "props_books_stack": 0.7, "props_film_canister_b": 0.6, "lava_lamp": 0.7, "desk_keyboard": 0.7,
+    "env_radiator": 0.6, "props_mango_plant": 0.6,
+}
+
+
+def reduce_geometry():
+    for name, ratio in DECIMATE.items():
+        obj = bpy.data.objects.get(name)
+        if obj is None or obj.type != "MESH":
+            continue
+        if obj.data.users > 1:
+            obj.data = obj.data.copy()
+        mod = obj.modifiers.new("decimate", "DECIMATE")
+        mod.ratio = ratio
+        mod.use_collapse_triangulate = True
+        bpy.context.view_layer.objects.active = obj
+        with bpy.context.temp_override(object=obj, active_object=obj):
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+
+
 # Share of its atlas per object relative to its surface area (1 = by area): the poster type, the city view and
 # the CRT get more texels, the large dark walls fewer.
 TEXEL_WEIGHTS = {
     "env_wall_back": 0.6, "env_wall_left": 0.6, "env_floor": 0.7, "env_rug": 0.8, "env_curtains": 0.8,
-    "env_sky": 2.5, "env_window_frame": 1.3,
+    "env_window_frame": 1.3, "env_sideboard": 1.1,
+    "poster_plaque": 6.0, "desk_notebook": 2.2, "desk_sticky_notes": 1.6, "photo_album": 1.4,
+    "props_books_top": 1.3, "props_books_low": 1.3, "props_records": 0.9, "props_fairy_lights": 1.5,
+    "props_jacket": 0.9, "props_lounge_chair": 0.8, "props_lantern": 0.9, "props_floor_books": 1.0,
+    "espresso_machine": 1.4, "countertop_oven": 1.4, "lava_lamp": 1.4, "lava_lamp_glass": 1.8, "oven_glow": 1.6,
+    "ceiling_fan": 0.8, "ceiling_fan_blades": 0.7, "projector_dial": 2.0, "props_projector_dial_plate": 2.0,
     "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_crt": 1.6, "crt_glow": 2.0, "desk_keyboard": 1.6,
     "desk_computer": 1.3, "desk_lamp_shade": 1.3,
     "props_projector_screen": 0.6, "props_projector_screen_surface": 0.8, "props_projection": 0.3,
     "props_mango_plant_leaves": 1.4,
 }
-SUPPORT_Z = (0.0, 0.732, 0.55, 0.92, 1.6475, 2.0075)
+SUPPORT_Z = (0.0, 0.732, 0.55, 0.76, 0.92, 0.987, 1.6475, 2.0075)
 
 
 def tune_atlas_objects():
     """Set texel weights, and drop faces no framing can see: downward faces below 0.8 m (every camera is above
     1.1 m) and bottoms resting on the floor, desk, side table, sill or shelves."""
     for obj in bpy.context.scene.objects:
-        if obj.type != "MESH" or "atlas" not in obj:
+        if obj.type != "MESH" or "atlas" not in obj or obj["atlas"].startswith("window_"):
             continue
         name = obj.name
         weight = TEXEL_WEIGHTS.get(name)
-        if weight is None and name.startswith("props_poster_frame_"):
-            weight = 0.25
-        elif weight is None and name.startswith("props_poster_"):
-            weight = 4.0
-            obj["bake_uv"] = "project"  # T2's art UV is a unit square on a 2:3 quad; project for true aspect
+        if weight is None and name.startswith(("props_poster_frame_", "props_photo_frame_")):
+            weight = 0.35
+        elif obj.get("runtime_art"):
+            # Only the light on the picture is baked (the site draws the art), and light is smooth.
+            weight = 0.45
+            obj["bake_uv"] = "project"  # the art UV is a unit square; project for the true aspect
         elif weight is None and obj.get("prop") in ("fujifilm_x100", "fujifilm_xt", "fujica_st", "super8_camera"):
             weight = 1.6
         if weight is not None:
             obj["texel"] = weight
-        if name in ("lamp_bulb", "crt_glow", "env_sky") or name.startswith("nas_led_"):
+        if name in ("lamp_bulb", "crt_glow", "lava_lamp_glass", "oven_glow") or name.startswith("nas_led_"):
             continue
         bm = bmesh.new()
         bm.from_mesh(obj.data)
@@ -1350,6 +1317,7 @@ def main():
     build_shell(mats)
     build_ghosts(mats)
     build_window(mats)
+    window_view.build_window_view()
     build_radiator(mats)
     build_shelf(mats)
     build_fixtures(mats)
@@ -1359,10 +1327,13 @@ def main():
     build_crt_glass(mats)
     placed, anchors = place_props(mats)
     build_posters(mats)
+    dressing = room_dressing.build_dressing(mats, placed)
     screen_centre, picture = build_projection(mats, anchors)
-    build_proxies(placed, mats)
+    build_proxies(placed, dressing, mats)
     lens, beam = build_markers(placed, anchors, screen_centre)
     build_lights(lens, beam, picture, screen_centre, mats)
+    build_round2_lights(dressing)
+    reduce_geometry()
     tune_atlas_objects()
     setup_world_and_render()
     bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
