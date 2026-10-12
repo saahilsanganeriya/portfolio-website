@@ -397,9 +397,11 @@ class Builder:
         return self._wrap(before, xform(loc, rot), mat)
 
     def text(self, body, size, loc=(0, 0, 0), rot=(0, 0, 0), mat=None, align="CENTER", resolution=3,
-             spacing=1.0, extrude=0.0, font_weight=None, matrix=None):
+             spacing=1.0, extrude=0.0, font_weight=None, matrix=None, font=None):
         """Flat (or slightly extruded) lettering in the XY plane, facing +Z before `rot`."""
         cu = bpy.data.curves.new("tmp_text", "FONT")
+        if font is not None:
+            cu.font = font
         cu.body = body
         cu.size = size
         cu.align_x = align

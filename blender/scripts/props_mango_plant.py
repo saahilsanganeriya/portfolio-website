@@ -25,7 +25,7 @@ SEED = 20181207
 GOLDEN = math.radians(137.5)
 TRUNK_H = 0.17
 # Branches from the fork: (azimuth, length, rise) in degrees and metres; azimuth 270 faces the room (-Y).
-BRANCHES = [(285, 0.13, 30), (35, 0.10, 54), (150, 0.11, 46), (220, 0.085, 64)]
+BRANCHES = [(290, 0.11, 34), (40, 0.085, 58), (150, 0.09, 50), (220, 0.075, 66)]
 FRUIT_BRANCH, YOUNG_BRANCH = 0, 3
 STALK_DROP = 0.085
 FRUIT_L, FRUIT_R = 0.100, 0.036
@@ -41,7 +41,7 @@ def leaf_halfwidth(t, width):
 
 
 def add_leaf(builder, leaf_uv, base, direction_az, pitch_deg, length, width, droop, mat, petiole_mat, rng,
-             fold=0.22, twist_deg=0.0, rows=12, petiole=0.025, hang=False):
+             fold=0.22, twist_deg=0.0, rows=8, petiole=0.025, hang=False):
     """One leaf: petiole from `base`, then a lance-shaped keeled blade that arches down along its length."""
     az = math.radians(direction_az)
     pitch = math.radians(pitch_deg)
@@ -49,7 +49,7 @@ def add_leaf(builder, leaf_uv, base, direction_az, pitch_deg, length, width, dro
     side = Vector((-math.sin(az), math.cos(az), 0.0))
     up = fwd.cross(side).normalized()
     pet_end = base + fwd * petiole + Vector((0, 0, -petiole * 0.15))
-    builder.tube([base, base.lerp(pet_end, 0.5) + up * 0.002, pet_end], 0.0011, sides=4, mat=petiole_mat, cap=False)
+    builder.tube([base, base.lerp(pet_end, 0.5) + up * 0.002, pet_end], 0.0011, sides=3, mat=petiole_mat, cap=False)
 
     across = (-1.0, -0.5, 0.0, 0.5, 1.0)
     wave_phase = rng.uniform(0, math.tau)
