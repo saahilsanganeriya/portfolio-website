@@ -106,7 +106,7 @@ export async function runCommand(input: string, ctx: TermContext): Promise<TermR
         const width = Math.max(...index.posts.map((p) => p.slug.length)) + 2;
         return { lines: index.posts.map((p) => line(`${p.date}  ${pad(p.slug, width)}${p.title}`)) };
       }
-      if (arg === '') return { lines: [line('projects/  blog/  about  resume  films  story  credits')] };
+      if (arg === '') return { lines: [line('welcome  projects/  blog/  photography  films  story  game  oven  about  resume  credits')] };
       return { lines: [line(`ls: ${arg}: no such shelf. Try ls projects or ls blog.`, 'warn')] };
     case 'cat': {
       if (arg !== 'about') return { lines: [line(`cat: ${arg || '(nothing)'}: no such file. Try cat about.`, 'warn')] };

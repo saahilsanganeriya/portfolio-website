@@ -2,13 +2,26 @@
 // project figures and the wallpaper. Imported by src/pages/os.astro only, so zod and astro:assets stay out of the island.
 import type { ImageMetadata } from 'astro';
 import { getImage } from 'astro:assets';
+import { getCollection } from 'astro:content';
 import { z } from 'astro/zod';
+import headshot from '../assets/headshot/saahil-sanganeriya.webp';
 import projectionistArchitecture from '../assets/projects/projectionist-architecture.png';
 import samcellPipeline from '../assets/projects/samcell-paper-figure-3.jpg';
 import favouritesFile from '../content/favorites.json';
+import meFile from '../content/me.json';
 import ovenFile from '../content/oven.json';
+import { mePhoto } from '../lib/me-photos';
 import wallpaper from './assets/wallpaper/wallpaper.jpg';
-import type { OsFavourite, OsFigure, OsImage, OsWallpaper, OvenList } from './types';
+import type {
+  OsFavourite,
+  OsFigure,
+  OsImage,
+  OsMePhoto,
+  OsPhotograph,
+  OsPicture,
+  OsWallpaper,
+  OvenList,
+} from './types';
 
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}/);
 
@@ -90,4 +103,82 @@ export async function osWallpaper(): Promise<OsWallpaper> {
     getImage({ src: wallpaper, widths, format: 'webp', quality: 70 }),
   ]);
   return { avif: avif.srcSet.attribute, webp: webp.srcSet.attribute, src: webp.src };
+}
+
+// ---- Photos of the owner and his photography: sizes made ahead of time by `npm run photos:ingest` ----
+
+export async function welcomePictures(): Promise<{ headshot: OsImage; opening: OsMePhoto[] }> {
+  const opening = meFile
+    .filter((entry) => entry.use === 'opening')
+    .map((entry) => {
+      const photo = mePhoto(entry.file, 960);
+      return {
+        file: entry.file,
+        avif: photo.avifSrcset,
+        webp: photo.webpSrcset,
+        src: photo.fallback.src,
+        width: photo.fallback.width,
+        height: photo.fallback.height,
+        alt: photo.alt,
+        caption: photo.caption,
+      };
+    });
+  const portrait = await getImage({ src: headshot, widths: [160, 320, 480], format: 'webp', quality: 80 });
+  return {
+    headshot: {
+      src: portrait.src,
+      srcset: portrait.srcSet.attribute,
+      width: headshot.width,
+      height: headshot.height,
+      alt: 'Saahil Sanganeriya',
+    },
+    opening,
+  };
+}
+
+const photographSizes = import.meta.glob<ImageMetadata>('/src/assets/photography/*/*.{avif,webp}', {
+  eager: true,
+  import: 'default',
+});
+
+// Each photograph's folder holds the same picture at several long edges (480, 960, 1600 and the largest).
+function picture(slug: string, maxEdge: number): OsPicture | null {
+  const sizes = (format: 'avif' | 'webp') =>
+    Object.entries(photographSizes)
+      .filter(([path]) => path.startsWith(`/src/assets/photography/${slug}/`) && path.endsWith(`.${format}`))
+      .map(([, image]) => image)
+      .filter((image) => Math.max(image.width, image.height) <= maxEdge)
+      .sort((a, b) => a.width - b.width);
+  const webp = sizes('webp');
+  if (webp.length === 0) return null;
+  const srcset = (images: ImageMetadata[]) => images.map((image) => `${image.src} ${image.width}w`).join(', ');
+  const largest = webp.at(-1)!;
+  return { avif: srcset(sizes('avif')), webp: srcset(webp), src: largest.src, width: largest.width, height: largest.height };
+}
+
+export async function photographs(): Promise<OsPhotograph[]> {
+  const entries = await getCollection('photography');
+  return entries
+    .map(({ id, data }) => {
+      const thumb = picture(id, 960);
+      const full = picture(id, Infinity);
+      if (!thumb || !full) throw new Error(`photography/${id}: no ingested sizes in src/assets/photography/${id}/`);
+      return {
+        slug: id,
+        title: data.title,
+        year: data.year,
+        place: data.place,
+        series: data.series,
+        caption: data.caption,
+        featured: data.featured,
+        order: data.order ?? Number.MAX_SAFE_INTEGER,
+        thumb,
+        full,
+      };
+    })
+    .sort(
+      (a, b) =>
+        Number(b.featured) - Number(a.featured) || a.series.localeCompare(b.series) || a.order - b.order,
+    )
+    .map(({ order: _order, ...photo }) => photo);
 }

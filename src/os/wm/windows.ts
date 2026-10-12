@@ -103,6 +103,9 @@ export interface AppWindowSize {
 }
 
 const SIZES: Record<AppId | 'reader', AppWindowSize> = {
+  welcome: { width: 800, height: 640 },
+  photography: { width: 860, height: 640 },
+  game: { width: 460, height: 720 },
   projects: { width: 640, height: 500 },
   oven: { width: 560, height: 620 },
   blog: { width: 600, height: 440 },

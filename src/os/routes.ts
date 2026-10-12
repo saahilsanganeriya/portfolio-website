@@ -15,7 +15,7 @@ export function formatRoute(route: Route): string {
   return route.slug ? `${route.app}/${route.slug}` : route.app;
 }
 
-// Projects and posts open one reader window per slug; a films slug only points at a card inside the Films window.
+// Projects and posts open one reader window per slug; a films or photography slug points inside that app's one window.
 export function windowIdFor(route: Route): string {
   return route.slug && (route.app === 'projects' || route.app === 'blog') ? formatRoute(route) : route.app;
 }
@@ -33,6 +33,9 @@ export function windowHref(route: Route): string | null {
     case 'resume':
     case 'credits':
       return `/${route.app}`;
+    case 'photography':
+    case 'welcome':
+    case 'game':
     case 'terminal':
     case 'oven':
       return null;

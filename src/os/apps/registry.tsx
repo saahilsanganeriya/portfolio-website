@@ -4,19 +4,25 @@ import { formatDay } from '../format';
 import { windowHref } from '../routes';
 import type { AppId, OsApi, OsIndex, Route } from '../types';
 import { FilmsApp } from './FilmsApp';
+import { GameApp } from './game/GameApp';
 import { BlogApp, ProjectsApp } from './Lists';
 import { OvenApp } from './OvenApp';
+import { PhotographyApp } from './photography/PhotographyApp';
 import { PageReader, PostReader, ProjectReader } from './Reader';
 import { CreditsApp, ResumeApp, StoryApp } from './SmallApps';
 import { TerminalApp } from './TerminalApp';
+import { WelcomeApp } from './welcome/WelcomeApp';
 
-/** Desktop order: the work first (finished, then in progress), then the story, then the machine itself. */
+/** Desktop order: the welcome, the work (finished, then in progress), the pictures and the story, then the machine. */
 export const APPS: Record<AppId, { label: string; icon: IconName }> = {
+  welcome: { label: 'Welcome', icon: 'card' },
   projects: { label: 'Projects', icon: 'projects' },
   oven: { label: 'In the oven', icon: 'oven' },
-  blog: { label: 'Blog', icon: 'page' },
+  blog: { label: 'Writing', icon: 'page' },
+  photography: { label: 'A Narrative in a Frame', icon: 'camera' },
   films: { label: 'Films', icon: 'films' },
-  story: { label: 'A Narrative in a Frame', icon: 'story' },
+  story: { label: 'The Thread', icon: 'story' },
+  game: { label: 'Daily word', icon: 'tiles' },
   terminal: { label: 'Terminal', icon: 'terminal' },
   about: { label: 'About', icon: 'about' },
   resume: { label: 'Résumé', icon: 'resume' },
@@ -58,6 +64,9 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     };
   }
   const defaultStatus: Record<AppId, string> = {
+    welcome: '',
+    photography: plural(index.photography.length, 'photograph'),
+    game: 'A new word every day',
     projects: plural(index.projects.length, 'project'),
     oven: `${plural(index.oven.items.length, 'thing')} in the oven`,
     blog: plural(index.posts.length, 'post'),
@@ -73,6 +82,12 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
 
 export function AppBody({ route, os }: { route: Route; os: OsApi }): ReactNode {
   switch (route.app) {
+    case 'welcome':
+      return <WelcomeApp os={os} />;
+    case 'photography':
+      return <PhotographyApp slug={route.slug} os={os} />;
+    case 'game':
+      return <GameApp />;
     case 'projects':
       return route.slug ? <ProjectReader slug={route.slug} os={os} /> : <ProjectsApp os={os} />;
     case 'oven':

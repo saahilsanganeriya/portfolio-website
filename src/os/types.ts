@@ -10,6 +10,38 @@ export interface OsImage {
   alt: string;
 }
 
+/** A picture with AVIF and WebP source sets built from sizes ingested ahead of time (photographs, photos of the owner). */
+export interface OsPicture {
+  avif: string;
+  webp: string;
+  src: string;
+  width: number;
+  height: number;
+}
+
+/** A photo of the owner, shown only beside the text it belongs to. */
+export interface OsMePhoto extends OsPicture {
+  /** The entry's `file` in src/content/me.json. */
+  file: string;
+  alt: string;
+  caption?: string;
+}
+
+/** One of the owner's photographs (src/content/photography). */
+export interface OsPhotograph {
+  slug: string;
+  title: string;
+  year: number;
+  place?: string;
+  series: string;
+  /** One line in his voice; also the picture's alt text. */
+  caption: string;
+  featured: boolean;
+  /** Small sizes for the browse view; the full set loads only when a photograph is opened. */
+  thumb: OsPicture;
+  full: OsPicture;
+}
+
 export interface OsFigure extends OsImage {
   caption: string;
   /** Where the picture comes from, with its licence; the text links to the source. */
@@ -95,9 +127,26 @@ export interface OsIndex {
   oven: OvenList;
   credits: AssetSection[];
   wallpaper: OsWallpaper;
+  /** The welcome window's portrait and the photos of him it places beside its text. */
+  me: { headshot: OsImage; opening: OsMePhoto[] };
+  /** Ordered: featured first, then by series and `order`. */
+  photography: OsPhotograph[];
 }
 
-export const APP_IDS = ['projects', 'oven', 'blog', 'films', 'story', 'terminal', 'about', 'resume', 'credits'] as const;
+export const APP_IDS = [
+  'welcome',
+  'projects',
+  'oven',
+  'blog',
+  'photography',
+  'films',
+  'story',
+  'game',
+  'terminal',
+  'about',
+  'resume',
+  'credits',
+] as const;
 export type AppId = (typeof APP_IDS)[number];
 
 /** A window address, written `<app>` or `<app>/<slug>` in the hash and in `open` messages. */

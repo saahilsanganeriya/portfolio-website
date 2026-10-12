@@ -5,7 +5,15 @@ import { parseAssetsRegister } from '../lib/assets-register';
 import { getPosts, getProjects, isoDay } from '../lib/content';
 import { filmsData } from '../lib/films';
 import { windowDiary } from '../os/apps/films/diary';
-import { favourites as loadFavourites, osImage, osWallpaper, ovenList, projectFigures } from '../os/build-data';
+import {
+  favourites as loadFavourites,
+  osImage,
+  osWallpaper,
+  ovenList,
+  photographs,
+  projectFigures,
+  welcomePictures,
+} from '../os/build-data';
 import SaahilOS from '../os/SaahilOS';
 import pixelFont from '../os/assets/fonts/PixelOperator.woff2?url';
 import type { OsIndex } from '../os/types';
@@ -43,6 +51,8 @@ const index: OsIndex = {
   oven: ovenList(),
   credits: parseAssetsRegister().filter((section) => section.rows.length > 0),
   wallpaper: await osWallpaper(),
+  me: await welcomePictures(),
+  photography: await photographs(),
 };
 ---
 

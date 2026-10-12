@@ -290,6 +290,7 @@ body.os-moving iframe {
 }
 
 .os-well {
+  container-type: size;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -829,6 +830,614 @@ body.os-moving iframe {
   margin: 4px 0 0;
 }
 
+/* ---- Welcome: Henry Heffernan's showcase, rebuilt on paper. Name large, the ways in as buttons, prints beside text ---- */
+
+.os-welcome {
+  max-width: 46rem;
+  padding: 28px clamp(16px, 5%, 40px) 36px;
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: auto;
+}
+
+.os-welcome-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 22px;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 2px solid var(--thread);
+}
+
+.os-welcome-portrait {
+  display: block;
+  width: 136px;
+  height: 136px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 4px var(--os-light),
+    0 0 0 5px var(--os-shade),
+    3px 4px 0 5px rgb(20 17 15 / 0.16);
+}
+
+.os-welcome-name {
+  margin: 0;
+  font-size: clamp(2.25rem, 6vw, 3.5rem);
+  font-weight: 300;
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+}
+
+.os-welcome-role {
+  margin: 10px 0 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--os-muted);
+}
+
+.os-welcome-ways ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.os-welcome-way {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 116px;
+  min-height: 84px;
+  padding: 10px 6px 8px;
+  background: var(--os-face);
+  box-shadow: var(--os-raised);
+  color: var(--os-dark);
+  font-family: var(--os-chrome);
+  font-size: 15px;
+  line-height: 1.15;
+  text-align: center;
+  text-decoration: none;
+  -webkit-font-smoothing: none;
+}
+
+.os-welcome-way:active {
+  box-shadow: var(--os-pressed);
+}
+
+.os-welcome-way:focus-visible {
+  outline: 1px dotted var(--os-dark);
+  outline-offset: -5px;
+}
+
+.os-welcome-text {
+  margin-top: 18px;
+}
+
+.os-welcome-text::after {
+  content: '';
+  display: block;
+  clear: both;
+}
+
+.os-welcome-text p {
+  margin: 0 0 0.9em;
+}
+
+.os-welcome-text a {
+  color: inherit;
+  text-decoration-color: var(--thread);
+  text-underline-offset: 0.2em;
+}
+
+/* A small print, film-toned and a little crooked, as if set down beside the paragraph. */
+.os-welcome-print {
+  width: clamp(7.5rem, 30%, 11rem);
+  margin: 0.3em 0 0.8em 1.4em;
+  float: right;
+  transform: rotate(1.4deg);
+}
+
+.os-welcome-print[data-side='left'] {
+  margin: 0.3em 1.4em 0.8em 0;
+  float: left;
+  transform: rotate(-1.2deg);
+}
+
+.os-welcome-print img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 5px solid #fbf7ef;
+  border-bottom-width: 14px;
+  box-shadow:
+    0 0 0 1px var(--os-shade),
+    3px 4px 0 rgb(20 17 15 / 0.22);
+  filter: sepia(0.32) saturate(0.72) contrast(1.06) brightness(0.95);
+}
+
+.os-welcome-print figcaption {
+  margin-top: 6px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--os-muted);
+}
+
+/* ---- Daily word: guesses as strips of film on a light table ---- */
+
+.os-word {
+  --frame-dark: #2b221b;
+  --frame-absent: #3a2f26;
+  --frame-correct: #c9a66b;
+  --frame-present: var(--projector);
+
+  min-height: 100%;
+  padding: 12px 16px 16px;
+  background: var(--os-light);
+  font-family: var(--os-chrome);
+  text-align: center;
+}
+
+.os-word-head {
+  max-width: 24rem;
+  margin: 0 auto 12px;
+}
+
+.os-word-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.os-word-title span {
+  font-weight: 400;
+}
+
+.os-word-intro {
+  margin: 6px 0 10px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--os-muted);
+}
+
+.os-word-key {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  list-style: none;
+}
+
+.os-word-key li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.os-word-board {
+  display: grid;
+  gap: 5px;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A strip of film: ink base, a row of sprocket holes along each edge where the light table shows through. */
+.os-word-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 46px);
+  gap: 5px;
+  padding: 9px 6px;
+  background:
+    repeating-linear-gradient(90deg, var(--os-light) 0 5px, transparent 5px 10px) left 6px top 3px / calc(100% - 12px) 4px no-repeat,
+    repeating-linear-gradient(90deg, var(--os-light) 0 5px, transparent 5px 10px) left 6px bottom 3px / calc(100% - 12px) 4px no-repeat,
+    var(--ink);
+  border-radius: 2px;
+}
+
+.os-word-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 34px;
+  border-radius: 2px;
+  background: var(--frame-dark);
+  color: var(--paper);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.os-word-frame[data-filled] {
+  background: #d9cfbd;
+  color: var(--ink);
+}
+
+.os-word-frame[data-mark='correct'] {
+  background: var(--frame-correct);
+  color: var(--ink);
+}
+
+.os-word-frame[data-mark='present'] {
+  background: var(--frame-present);
+  color: var(--ink);
+}
+
+.os-word-frame[data-mark='absent'] {
+  background: var(--frame-absent);
+  color: var(--dust);
+}
+
+/* Shape as well as colour: a filled corner for the right place, a ring for in the word. */
+.os-word-frame[data-mark='correct']::after,
+.os-word-frame[data-mark='present']::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+}
+
+.os-word-frame[data-mark='correct']::after {
+  background: var(--ink);
+}
+
+.os-word-frame[data-mark='present']::after {
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+}
+
+.os-word-frame-mini {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+}
+
+.os-word-frame-mini::after {
+  top: 2px !important;
+  right: 2px !important;
+  width: 5px !important;
+  height: 5px !important;
+}
+
+/* Marked frames light up one after another, like frames passing the gate. */
+.os-word-strip .os-word-frame[data-mark] {
+  animation: os-word-light 260ms ease-out backwards;
+}
+
+@keyframes os-word-light {
+  from {
+    background: var(--frame-dark);
+    color: transparent;
+  }
+}
+
+.os-word-strip[data-shake] {
+  animation: os-word-shake 320ms ease-in-out;
+}
+
+@keyframes os-word-shake {
+  20%,
+  60% {
+    transform: translateX(-5px);
+  }
+  40%,
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+.os-word-message {
+  min-height: 1.4em;
+  margin: 8px auto 6px;
+  max-width: 24rem;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--os-dark);
+}
+
+.os-word-keys {
+  display: grid;
+  gap: 6px;
+  max-width: 26rem;
+  margin: 0 auto;
+}
+
+.os-word-keyrow {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.os-word-keycap {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 36px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: var(--os-face);
+  box-shadow: var(--os-raised);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.os-word-keycap:active {
+  box-shadow: var(--os-pressed);
+}
+
+.os-word-wide {
+  max-width: 62px;
+  flex-grow: 1.7;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.os-word-keycap[data-mark='correct'] {
+  background: var(--frame-correct);
+}
+
+.os-word-keycap[data-mark='present'] {
+  background: var(--frame-present);
+}
+
+.os-word-keycap[data-mark='absent'] {
+  background: var(--frame-absent);
+  color: var(--dust);
+}
+
+.os-word-end {
+  max-width: 24rem;
+  margin: 4px auto 0;
+}
+
+.os-word-projector {
+  display: block;
+  width: 168px;
+  height: 64px;
+  margin: 0 auto 4px;
+  overflow: visible;
+}
+
+.os-word-beam {
+  fill: var(--projector);
+  opacity: 0.45;
+  animation: os-word-flicker 180ms steps(2) infinite;
+}
+
+.os-word-screen {
+  fill: var(--ink);
+  font-family: var(--os-chrome);
+  font-size: 15px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.os-word-reel {
+  animation: os-word-spin 1.4s linear infinite;
+}
+
+.os-word-reel circle,
+.os-word-reel path,
+.os-word-legs {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+
+.os-word-body {
+  fill: var(--ink);
+}
+
+@keyframes os-word-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes os-word-flicker {
+  50% {
+    opacity: 0.36;
+  }
+}
+
+.os-word-end-line {
+  margin: 0 0 8px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+
+.os-word-end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--os-muted);
+}
+
+/* ---- A Narrative in a Frame: prints on a darkroom wall ---- */
+
+.os-darkroom {
+  min-height: 100%;
+  padding: 16px 18px 24px;
+  background: #1a1512;
+  color: var(--paper);
+}
+
+.os-darkroom-intro {
+  margin: 0 0 18px;
+  max-width: 34rem;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--dust);
+}
+
+.os-darkroom-heading {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.os-darkroom section + section {
+  margin-top: 26px;
+}
+
+.os-prints {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 18px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.os-prints[data-large] {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+
+.os-print {
+  display: block;
+  color: var(--paper);
+  text-decoration: none;
+  outline-offset: 4px;
+}
+
+.os-print:focus-visible {
+  outline: 1px dotted var(--paper);
+}
+
+.os-print-paper {
+  display: block;
+  aspect-ratio: 1;
+  padding: 6px;
+  background: #f3ece0;
+  box-shadow: 3px 4px 0 rgb(0 0 0 / 0.5);
+}
+
+.os-print-paper img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.os-print-title {
+  display: block;
+  margin-top: 9px;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.3;
+  -webkit-font-smoothing: auto;
+}
+
+.os-print-year {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--dust);
+}
+
+.os-photo {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+
+.os-photo-figure {
+  margin: 0;
+}
+
+.os-photo-figure img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 62cqh;
+  margin: 0 auto;
+  border: 8px solid #f3ece0;
+  box-shadow: 4px 5px 0 rgb(0 0 0 / 0.5);
+}
+
+.os-photo-text {
+  max-width: 36rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.os-photo-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.2;
+  -webkit-font-smoothing: auto;
+}
+
+.os-photo-meta {
+  margin: 4px 0 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--dust);
+}
+
+.os-photo-caption {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: auto;
+}
+
+.os-photo-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* A wide window hangs the text beside the print, so the whole photograph and its words fit without scrolling. */
+@container (min-width: 680px) {
+  .os-photo {
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    grid-template-rows: 1fr auto;
+    align-items: center;
+    min-height: 100cqh;
+  }
+
+  .os-photo-figure {
+    grid-row: 1 / span 2;
+  }
+
+  .os-photo-figure img {
+    max-height: calc(100cqh - 48px);
+  }
+
+  .os-photo-text {
+    text-align: left;
+  }
+
+  .os-photo-nav {
+    align-self: end;
+    justify-content: flex-start;
+  }
+}
+
 /* ---- Story ---- */
 
 .os-story-frame {
@@ -1182,6 +1791,7 @@ body.os-moving iframe {
 }
 
 .os-phone-body {
+  container-type: size;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -1241,6 +1851,24 @@ body.os-moving iframe {
     overflow-y: auto;
   }
 
+  html:not([data-embedded]) .os-welcome-head {
+    gap: 14px;
+  }
+
+  html:not([data-embedded]) .os-welcome-portrait {
+    width: 96px;
+    height: 96px;
+  }
+
+  html:not([data-embedded]) .os-welcome-way {
+    width: calc(33.3% - 6px);
+    min-width: 96px;
+  }
+
+  html:not([data-embedded]) .os-word-strip {
+    grid-template-columns: repeat(5, minmax(0, 46px));
+  }
+
   html:not([data-embedded]) .os-details[data-large] .os-thumb {
     width: 88px;
     height: 55px;
@@ -1254,7 +1882,11 @@ body.os-moving iframe {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .os-thread-line {
+  .os-thread-line,
+  .os-word-strip .os-word-frame[data-mark],
+  .os-word-strip[data-shake],
+  .os-word-beam,
+  .os-word-reel {
     animation: none;
   }
 }

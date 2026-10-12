@@ -1,9 +1,24 @@
 import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page } from '@playwright/test';
+import { answerFor } from '../src/os/apps/game/words';
 
 // Opened on its own, /os becomes the room; ?embed=1 is the document the monitor frames (desktop layout), and
 // ?embed=0 the same document unframed, for the phone layout here (linked nowhere).
-const APPS = ['Projects', 'In the oven', 'Blog', 'Films', 'A Narrative in a Frame', 'Terminal', 'About', 'Résumé', 'Credits'];
+
+const APPS = [
+  'Welcome',
+  'Projects',
+  'In the oven',
+  'Writing',
+  'A Narrative in a Frame',
+  'Films',
+  'The Thread',
+  'Daily word',
+  'Terminal',
+  'About',
+  'Résumé',
+  'Credits',
+];
 const PROJECT = {
   slug: 'real-time-streaming',
   title: 'A real-time streaming pipeline (Amazon internship)',
@@ -117,6 +132,85 @@ test.describe('desktop', () => {
     await expect(page.getByRole('dialog', { name: 'Films' }).getByText(/Letterboxd did not answer/)).toBeVisible();
   });
 
+  /** Catches a boot that opens anything but the welcome, or a welcome without his portrait, words and ways in. */
+  test('the welcome window opens first with the headshot, the text and the ways in', async ({ page }) => {
+    await page.goto('/os?embed=1');
+    const welcome = page.getByRole('dialog', { name: 'Welcome' });
+    await expect(welcome.getByRole('heading', { level: 2, name: 'Saahil Sanganeriya' })).toBeVisible();
+    const portrait = welcome.getByRole('img', { name: 'Saahil Sanganeriya' });
+    await expect.poll(() => portrait.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    await expect(welcome.getByText(/^Welcome\. This computer sits on the desk/)).toBeVisible();
+    // The photos of him sit beside the paragraphs they illustrate, inside the text column, never in a strip of their own.
+    await expect(welcome.locator('.os-welcome-text > figure img')).toHaveCount(2);
+    const ways = welcome.getByRole('navigation', { name: 'Start here' }).getByRole('link');
+    await expect(ways).toHaveText(['Projects', 'Writing', 'Films', 'The Thread', 'A Narrative in a Frame']);
+    await ways.filter({ hasText: 'The Thread' }).click();
+    await expect(page.getByRole('dialog', { name: 'The Thread' })).toBeVisible();
+  });
+
+  /** Catches a Daily word that refuses a real guess, accepts a non-word, or never reaches its win state. */
+  test('the Daily word accepts a guess and shows the win', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const day0 = new Date(2026, 9, 12, 10, 0);
+    const { word } = answerFor(0);
+    await page.clock.setFixedTime(day0);
+    await page.goto('/os?embed=1#game');
+    const game = page.getByRole('dialog', { name: 'Daily word' });
+    await expect(game.getByRole('heading', { name: /^Word 1,/ })).toBeVisible();
+    const strips = game.getByRole('list', { name: 'Your guesses' }).getByRole('listitem');
+
+    await game.focus();
+    await page.keyboard.type('XQZVJ');
+    await page.keyboard.press('Enter');
+    await expect(game.locator('.os-word-message')).toHaveText('XQZVJ is not in the word list.');
+    await expect(game.getByRole('status')).toHaveText('XQZVJ is not in the word list.');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('Backspace');
+
+    // On-screen keys play the same game as the keyboard.
+    const guess = word === 'CRANE' ? 'SLATE' : 'CRANE';
+    for (const letter of guess) await game.getByRole('button', { name: letter, exact: true }).click();
+    await game.getByRole('button', { name: 'Enter' }).click();
+    await expect(strips.first()).toHaveAttribute('aria-label', new RegExp(`^Guess 1, ${guess}: `));
+
+    await game.focus();
+    await page.keyboard.type(word);
+    await page.keyboard.press('Enter');
+    const end = game.getByRole('region', { name: 'You won' });
+    await expect(end).toContainText('Got it in 2 of 6.');
+    await end.getByRole('button', { name: 'Copy result' }).click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^Daily word 1, 2\/6\n[🟧🟦⬛]{5}\n🟧{5}$/u);
+  });
+
+  /** Catches a photograph's deep link opening the wrong one, and full-size files loading before a photograph is opened. */
+  test('A Narrative in a Frame: thumbnails first, the full photograph on open', async ({ page }) => {
+    await page.goto('/os?embed=1#photography');
+    const exhibit = page.getByRole('dialog', { name: 'A Narrative in a Frame' });
+    await expect(exhibit.getByRole('heading', { name: 'Favourites' })).toBeVisible();
+    const thumbs = exhibit.locator('.os-print img');
+    await expect.poll(() => thumbs.first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    // The widest file each <picture> may choose from, across its sources.
+    const widestOffered = (pictures: Element[]) =>
+      Math.max(
+        ...pictures.flatMap((picture) =>
+          [...picture.querySelectorAll('source, img')].flatMap((el) =>
+            (el.getAttribute('srcset') ?? '').split(',').map((part) => Number.parseInt(part.trim().split(' ')[1], 10)),
+          ),
+        ),
+      );
+    expect(await exhibit.locator('.os-print picture').evaluateAll(widestOffered)).toBeLessThanOrEqual(960);
+
+    await page.goto('/os?embed=1#photography/sweat-and-toil');
+    const photo = page.getByRole('dialog', { name: 'A Narrative in a Frame' });
+    await expect(photo.getByRole('heading', { level: 2, name: 'sweat and toil' })).toBeVisible();
+    const full = photo.locator('.os-photo-figure img');
+    await expect(full).toHaveAttribute('alt', /Rainbow light across a face/);
+    await expect.poll(() => full.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    expect(await photo.locator('.os-photo-figure picture').evaluateAll(widestOffered)).toBeGreaterThan(960);
+    await photo.getByRole('link', { name: 'Next ›' }).click();
+    await expect(page).toHaveURL(/#photography\/[a-z0-9-]+$/);
+    await expect(photo.getByRole('heading', { level: 2, name: 'sweat and toil' })).toBeHidden();
+  });
+
   /** Catches the wallpaper going missing, which leaves the flat walnut colour the owner ruled out. */
   test('the desktop shows its wallpaper', async ({ page }) => {
     await page.goto('/os?embed=1');
@@ -198,7 +292,15 @@ test.describe('desktop', () => {
     expect(await seriousAxeViolations(page)).toEqual([]);
 
     // The windows with their own colours: Films on walnut, the oven list, and the project pictures.
-    for (const [hash, name] of [['films', 'Films'], ['oven', 'In the oven'], ['projects', 'Projects']]) {
+    for (const [hash, name] of [
+      ['films', 'Films'],
+      ['oven', 'In the oven'],
+      ['projects', 'Projects'],
+      ['welcome', 'Welcome'],
+      ['game', 'Daily word'],
+      ['photography', 'A Narrative in a Frame'],
+      ['photography/sweat-and-toil', 'A Narrative in a Frame'],
+    ]) {
       await page.goto(`/os?embed=1#${hash}`);
       // Measured once the open spring has settled; mid-fade, every colour reads lighter than it is.
       await expect(page.getByRole('dialog', { name })).toHaveCSS('opacity', '1');
@@ -224,5 +326,22 @@ test.describe('iPhone 13', () => {
     await app.getByRole('button', { name: '‹ Back' }).tap();
     await expect(app).toBeHidden();
     await expect(page.getByRole('button', { name: 'Films', exact: true })).toBeVisible();
+  });
+
+  /** Catches the welcome, the Daily word or the photographs failing axe, or spilling sideways, on a phone. */
+  test('the welcome, the Daily word and the photographs fit a phone and pass axe', async ({ page }) => {
+    for (const [hash, name] of [
+      ['welcome', 'Welcome'],
+      ['game', 'Daily word'],
+      ['photography', 'A Narrative in a Frame'],
+      ['photography/cansupport', 'A Narrative in a Frame'],
+    ]) {
+      await page.goto(`/os?embed=0#${hash}`);
+      const app = page.getByRole('dialog', { name });
+      await expect.poll(() => app.boundingBox()).toEqual({ x: 0, y: 0, ...iPhone13.viewport });
+      const body = app.locator('.os-phone-body');
+      expect(await body.evaluate((el) => el.scrollWidth - el.clientWidth), hash).toBeLessThanOrEqual(0);
+      expect(await seriousAxeViolations(page), hash).toEqual([]);
+    }
   });
 });
