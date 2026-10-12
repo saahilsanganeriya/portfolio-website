@@ -12,7 +12,7 @@ const mePhotoSchema = z.object({
   caption: z.string().optional(),
 });
 
-export type MePhotoEntry = z.infer<typeof mePhotoSchema>;
+type MePhotoEntry = z.infer<typeof mePhotoSchema>;
 
 const photos = z.array(mePhotoSchema).parse(entries);
 

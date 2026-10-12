@@ -73,9 +73,8 @@ async function writeSizes(inputPath, outDir) {
   const edges = edgesFor(Math.max(width, height));
   const source = sharp(inputPath, { failOn: 'error' }).autoOrient();
   await mkdir(outDir, { recursive: true });
-  const written = [];
   for (const edge of edges) {
-    const resized = source.clone().resize(edge, edge, { fit: 'inside', withoutEnlargement: true });
+    const resized = source.clone().resize(edge, edge, { fit: 'inside' });
     for (const [format, options] of [
       ['avif', AVIF],
       ['webp', WEBP],
@@ -84,10 +83,9 @@ async function writeSizes(inputPath, outDir) {
       await resized.clone()[format](options).toFile(path);
       // sharp drops metadata unless asked to keep it; this check fails the run if that ever stops being true.
       if (hasMetadata(await sharp(path).metadata())) throw new Error(`metadata left in ${path}`);
-      written.push(path);
     }
   }
-  return { edges, written };
+  return edges;
 }
 
 const yamlEntry = (fields) =>
@@ -136,7 +134,7 @@ export async function ingestFolder({ folder, series = null, year = null, me = fa
       continue;
     }
 
-    const edges = hasImages ? existingEdges : (await writeSizes(inputPath, outDir)).edges;
+    const edges = hasImages ? existingEdges : await writeSizes(inputPath, outDir);
 
     if (!hasEntry) {
       if (me) {
