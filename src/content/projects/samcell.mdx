@@ -19,49 +19,124 @@ coverAlt: "The samcell-napari plugin in napari: a phase-contrast image of cells,
 
 A phase-contrast image of kidney cells looks like grey cobblestones pressed together. A biologist who
 wants to count them, or measure each one, needs an outline around every cell, and one image can hold
-about 300. Segment Anything, Meta's general segmentation model, will outline almost anything you click
-on. Clicking 300 times per image is the problem.
+about 300. Segment Anything, Meta's general segmentation model, will outline almost anything you click on.
+Clicking 300 times per image is the problem.
 
-## What it does
+## Why the outlines matter
 
-SAMCell fine-tunes Segment Anything so it needs no clicks at all. Instead of masks, it predicts a distance
-map: for every pixel, how far it sits from the nearest cell border. Two thresholds turn that map into
-cells. A high one leaves one seed inside each cell, a low one marks every pixel that belongs to some cell,
-and a watershed grows each seed until it meets its neighbours. That last step is what pulls apart cells
-that touch.
+Cell counts and cell sizes are the measurements a lab draws conclusions from. A segmentation that merges
+two touching cells into one does not just look wrong. It undercounts the cells and inflates their average
+size, and both errors flow straight into the science.
+
+And there is a lot to outline. Cells in culture routinely number in the hundreds per image, so drawing them
+by hand is the slow part of the whole experiment.
+
+## The two obvious versions
+
+**Segment Anything as it ships.** Its automatic mode scatters prompt points over a grid and outlines what
+each one hits. On densely packed cells it outlines clumps instead of cells, and it happily segments empty
+patches of the cover slip. A biologist can fix that by clicking every cell, which is the work we were
+trying to remove.
+
+**Fine-tune it to paint masks.** Earlier work adapted Segment Anything to medical images by teaching it to
+label each pixel: cell or background, or cell, border and background. On cells with faint edges, that
+merges neighbours along the weak boundary. Weighting the loss toward boundary pixels, the usual fix,
+did not save it.
+
+## The design: predict distance, not class
+
+The idea is borrowed from Cellpose, which already treats segmentation as regression. Instead of asking
+"is this pixel a cell?", SAMCell predicts how far each pixel sits from the edge of its cell, scaled so the
+middle of every cell reads 1. Touching cells then stop being one blob: between them the target map dips
+to zero, which gives the model a reason to keep them apart even where the edge in the image is faint.
+
+<figure class="os-figure">
+
+```text
+           cell A        cell B
+  1.0 |        /\            /\
+      |       /  \          /  \
+      |      /    \        /    \
+ 0.47 |-----/------\------/------\-----  peak: one seed
+      |    /        \    /        \  inside each cell
+ 0.09 |---/----------\--/----------\---  fill: every pixel
+  0.0 |__/            \/            \__  of some cell
+                      ^
+           where A and B touch, the map
+           dips, and watershed splits them
+```
+
+<figcaption>A schematic slice through the predicted distance map across two touching cells, with the two thresholds that turn it into outlines.</figcaption>
+</figure>
+
+Two thresholds turn the map into cells. A high one, 0.47, leaves one small seed inside each cell. A low
+one, 0.09, marks every pixel that belongs to some cell. Watershed, a classic algorithm, then floods out from
+each seed until it meets the cell's edge or a neighbour's flood. That last step is what pulls touching
+cells apart.
+
+We fine-tuned the image encoder and the mask decoder and froze the prompt encoder, which has nothing left
+to do. Training used 5,000+ LIVECell images, with CLAHE contrast enhancement. One small trick helped
+generalisation: inverting images at random, because phase contrast shows dark cells on a light background
+and dark-field microscopy shows the opposite.
 
 ## My part
 
-I proposed the distance-map regression with watershed post-processing, and I trained the model. We
-fine-tuned the image encoder and mask decoder and froze the prompt encoder, which has nothing left to do.
-Training used 5,000+ LIVECell images in PyTorch, with CLAHE contrast enhancement and inference over
-256×256 sliding windows.
+The paper has seven authors. Alexandra VandeLoo and Nathan Malta are joint first authors, and I am third.
+I proposed the distance-map regression with watershed post-processing, trained the model, built both new
+test datasets and wrote the napari plugin. An expert biologist among the co-authors annotated those
+datasets by hand, cell by cell. The public code lives in my fork of Nathan's repository, where
+17 of the 22 commits are mine.
 
-The hard part was generalisation. Every LIVECell image comes from the same microscope, so a model can ace
-the test set and fall apart on someone else's bench. I built two new datasets for that question, PBL-HEK
-and PBL-N2a: phase-contrast images of two common cell lines, taken on different microscopes, 5 images
-each with about 300 cells per image. We used them only for zero-shot testing.
+## What it costs
+
+Segment Anything's encoder is large. An image is cut into 256×256 windows that overlap by 32 pixels, and
+each window is scaled up to the encoder's 1024×1024 input. That is a lot of compute per image, and a
+lighter model with the same distance-map head is an open question the paper lists for future work.
+
+Watershed was a choice too. Simple connected components cannot split touching cells. Marker-controlled
+watershed needs more precise markers, and graph cuts need more tuning. Plain watershed with two fixed
+thresholds is predictable, at the price of struggling with odd shapes such as dividing cells.
 
 ## Results
 
-On LIVECell, SAMCell scored 0.77 OP-CSB against 0.68 for Cellpose, the strongest baseline. On PBL-HEK, a
-microscope and cell line it had never seen, it nearly doubled Cellpose: 0.60 against 0.32.
+Every image in LIVECell, the standard training set, comes from the same microscope. A model can ace its
+test set and fall apart on someone else's bench. So I built two new datasets for that question, PBL-HEK and
+PBL-N2a: phase-contrast images of two common cell lines, taken on different microscopes, 5 images each with
+about 300 cells per image. We used them only for zero-shot testing.
 
-A model only helps biologists if they can run it. I shipped [samcell-napari](https://github.com/saahilsanganeriya/samcell-napari), a plugin for the napari image
+<figure class="os-figure">
+
+```text
+ OP-CSB, higher is better
+
+ LIVECell test set
+   SAMCell   0.77  ######################################
+   Cellpose  0.68  ##################################
+ PBL-HEK: new microscope, never trained on
+   SAMCell   0.60  ##############################
+   Cellpose  0.32  ################
+```
+
+<figcaption>SAMCell against Cellpose, the strongest baseline: on the standard test set, and zero-shot on a microscope and cell line it never saw.</figcaption>
+</figure>
+
+On LIVECell, SAMCell beat Cellpose and StarDist. On PBL-HEK it nearly doubled Cellpose's score.
+
+The new datasets are small, 10 images in all. That is enough to show the zero-shot gap, not enough to rank
+two close methods. Every method also scored much higher on PBL-N2a, whose round, high-contrast cells are
+easier, so a single average across the two would hide where the difficulty is.
+
+A model only helps biologists if they can run it. I shipped
+[samcell-napari](https://github.com/saahilsanganeriya/samcell-napari), a plugin for the napari image
 viewer: point it at a model, set the two thresholds, and the cells come back as a labels layer. It is on
-PyPI, and `pip install "napari[all]" samcell-napari` installs it with napari. The public code lives in my fork of the first author's repository, where 17 of the 22 commits are
-mine.
+PyPI, and `pip install "napari[all]" samcell-napari` installs it with napari.
 
 The paper is VandeLoo AD, Malta NJ (joint first authors), Sanganeriya S, Aponte E, van Zyl C, Xu D,
 Forest C, *SAMCell: Generalized label-free biological cell segmentation with segment anything*, PLOS ONE,
 2025.
 
-## What I would change
+## What's next
 
-The two new datasets are small, 10 images in all. That is enough to show the zero-shot gap, not enough to
-rank two close methods. Every method also scored much higher on PBL-N2a, whose round, high-contrast cells
-are easier, so a single average would hide where the real difficulty is.
-
-[DINOCell](https://github.com/saahilsanganeriya/DINOCell) is my follow-up: the same distance-map head on a DINOv3 self-supervised backbone, pretrained on
-Cell Painting images streamed from a public bucket. It has no results yet. I list it because it is where
-the idea goes next, not because it works.
+[DINOCell](https://github.com/saahilsanganeriya/DINOCell) is my follow-up: the same distance-map head on a
+DINOv3 self-supervised backbone, pretrained on Cell Painting images streamed from a public bucket. It has
+no results yet. I list it because it is where the idea goes next, not because it works.
