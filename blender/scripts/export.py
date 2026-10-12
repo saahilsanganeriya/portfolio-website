@@ -74,6 +74,12 @@ def atlas_image(atlas: str) -> bpy.types.Image:
     return image
 
 
+def private_copy(mesh: bpy.types.Mesh) -> bpy.types.Mesh:
+    """Copy a mesh for export, moving the original aside so the copy can take the object's exact name."""
+    mesh.name = f"{mesh.name}_scene"
+    return mesh.copy()
+
+
 def prepare_meshes() -> list[bpy.types.Object]:
     for name in ["proxy", *RUNTIME_MESHES.values(), "nas_led", *(f"room_{a}" for a in ATLASES)]:
         if name in bpy.data.materials:
@@ -90,7 +96,7 @@ def prepare_meshes() -> list[bpy.types.Object]:
             continue
         atlas = obj.get("atlas")
         if obj.name.startswith("hit_"):
-            obj.data = obj.data.copy()
+            obj.data = private_copy(obj.data)
             obj.data.materials.clear()
             obj.data.materials.append(proxy)
             for uv in list(obj.data.uv_layers):
@@ -98,7 +104,7 @@ def prepare_meshes() -> list[bpy.types.Object]:
         elif atlas in ATLASES and not obj.hide_render:
             if "bake" not in obj.data.uv_layers:
                 raise SystemExit(f"export: {obj.name} has no 'bake' UV map; run bake.py first")
-            obj.data = obj.data.copy()
+            obj.data = private_copy(obj.data)
             for uv in [uv for uv in obj.data.uv_layers if uv.name != "bake"]:
                 obj.data.uv_layers.remove(uv)
             if obj.name in RUNTIME_MESHES or obj.name.startswith("nas_led_"):
@@ -216,10 +222,16 @@ def render_stills(samples: int, threads: int):
                "-filter_complex", "[0][1]overlay=format=auto", "-frames:v", "1", flat)
         if stem == "poster":
             OUT_DIR.mkdir(parents=True, exist_ok=True)
-            ffmpeg("-i", flat, "-c:v", "libaom-av1", "-still-picture", "1", "-crf", "30", "-cpu-used", "4",
-                   "-pix_fmt", "yuv420p", OUT_DIR / "poster.avif")
+            ffmpeg(*avif_args(flat), OUT_DIR / "poster.avif")
             ffmpeg("-i", flat, "-q:v", "3", OUT_DIR / "poster.jpg")
         print(f"export: still {stem} from {framing}")
+
+
+def avif_args(src):
+    """Full-range BT.709 4:4:4 tagged as sRGB, so browsers show the same colours as the PNG (about 44.7 dB)."""
+    return ("-i", src, "-vf", "scale=out_color_matrix=bt709:out_range=full,format=yuv444p", "-c:v", "libaom-av1",
+            "-still-picture", "1", "-crf", "24", "-cpu-used", "4", "-color_primaries", "bt709",
+            "-color_trc", "iec61966-2-1", "-colorspace", "bt709", "-color_range", "pc")
 
 
 def ffmpeg(*args):
