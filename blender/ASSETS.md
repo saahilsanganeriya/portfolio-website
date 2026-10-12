@@ -63,6 +63,7 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
 |---|---|---|---|---|---|
+| Room sound: CRT mains hum and 15.7 kHz line whine, projector motor and shutter, room tone, key and mouse clicks, CRT power-on | the room on the home page | none: synthesised in the browser by src/scene/Application/Audio.ts | Saahil Sanganeriya (made for this site) | original | procedural WebAudio, no recordings; pink noise uses Paul Kellet's published economy filter |
 
 ## Code
 
@@ -71,3 +72,6 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | portfolio-website | room scene structure (camera framings, CSS3D monitor, audio model) | https://github.com/henryjeff/portfolio-website | Henry Heffernan | MIT | ported to current three.js, heavily edited |
 | portfolio-inner-site | SaahilOS structure (desktop, windows, taskbar) | https://github.com/henryjeff/portfolio-inner-site | Henry Heffernan | used with permission | rebuilt in React 19, restyled, new apps |
 | alanagoyal | ideas: window URLs, phone layout | https://github.com/alanagoyal/alanagoyal | Alana Goyal | MIT | ideas only |
+| three.js r186 | 3D rendering, glTF loading, the CSS3D monitor | https://github.com/mrdoob/three.js | three.js authors | MIT | npm dependency, unmodified |
+| meshoptimizer decoder (meshopt_decoder.module.js, shipped with three.js) | decoding the room's compressed geometry | https://github.com/zeux/meshoptimizer | Arseny Kapoulkine | MIT | bundled unmodified |
+| Hash without Sine (hash12, hash13) | film grain, CRT noise and the projector beam's air in the room's shaders | https://www.shadertoy.com/view/4djSRW | Dave Hoskins | MIT | two functions, copied into the shaders |

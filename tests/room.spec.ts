@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page } from '@playwright/test';
+import type {} from '../src/scene/Application/Application';
 import { HOTSPOTS } from '../src/scene/hotspots';
 
 // Headless Chromium only has WebGL through SwiftShader; the room needs it.

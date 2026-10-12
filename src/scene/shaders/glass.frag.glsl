@@ -6,6 +6,7 @@ uniform float uLines;
 uniform vec3 uTint;
 varying vec2 vUv;
 
+// Dave Hoskins' hash12 (Hash without Sine, MIT).
 float hash(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);

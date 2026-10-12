@@ -1,4 +1,5 @@
-// Builds the site (optional) and serves the production output with `astro preview` on a free local port.
+// Builds the site (optional) and serves the production output with scripts/preview.mjs (the Vercel build, gzipped like
+// Vercel's edge) on a free local port.
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -23,8 +24,8 @@ export async function serveBuild({ build = true } = {}) {
   }
   const port = await freePort();
   const url = `http://127.0.0.1:${port}/`;
-  // Its own process group, so closing it also stops the server npx starts.
-  const child = spawn('npx', ['astro', 'preview', '--ignore-lock', '--host', '127.0.0.1', '--port', String(port)], {
+  // Its own process group, so closing it stops the server and anything it started.
+  const child = spawn('node', [new URL('../preview.mjs', import.meta.url).pathname, '--host', '127.0.0.1', '--port', String(port)], {
     stdio: 'ignore',
     detached: true,
   });
@@ -44,5 +45,5 @@ export async function serveBuild({ build = true } = {}) {
     await sleep(250);
   }
   await close();
-  throw new Error(`astro preview did not answer on ${url} within 60 s`);
+  throw new Error(`preview did not answer on ${url} within 60 s`);
 }
