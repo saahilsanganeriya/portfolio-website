@@ -14,42 +14,105 @@ cover: "../../assets/projects/real-time-streaming.png"
 coverAlt: "Pipeline diagram: an SNS topic feeds a Lambda processor with a dead-letter queue and replay, then a Kinesis stream and a Flink job that writes three OpenSearch indexes and an optional S3 copy, read by OpenSearch Dashboards."
 ---
 
-The data behind a set of workforce dashboards ran through an hourly batch job. Whatever happened just
-after a run showed up nearly an hour later. My internship project was to make it real time.
 
-## What it does
+A set of workforce dashboards at Amazon ran on an hourly batch job. Anything that happened just after a
+run sat unseen until the next one, up to an hour later. My internship project was to make those dashboards
+real time.
 
-Events arrive on SNS in an AWS region in Australia and have to reach OpenSearch dashboards in the US. A
-Lambda function bridges SNS into Kinesis. A Flink application written in Java reads the stream, reshapes
-the nested JSON and writes it to several OpenSearch indexes at once. Beside that real-time path, every
-event also goes to S3 as a backup, with a dead-letter queue for replays, retries and CloudWatch alerts.
+## The target
 
-Before writing any Flink I compared Firehose, OpenSearch Ingestion, Data Prepper and a direct Lambda design
-against Flink on latency, exactly-once guarantees and cost. I picked Flink. The next two problems are why
-that choice mattered.
+The goal was 120 seconds from an event to the dashboard. The events start on SNS in an AWS region in
+Australia, and the dashboards live in OpenSearch in the US, so every event crosses an ocean on the way.
 
-## What was hard
+Two more rules came with it. A dashboard must never move backwards. And a result has to come out exactly
+once, even though the network will deliver some events twice and some late.
 
-**The notebook.** I started where the managed service makes starting easy, a PyFlink notebook. It worked
-for one sink. Then I needed several, and notebooks there allow only one. They also could not do the
-guarded updates I needed, and they could not use IAM authentication. I rebuilt the whole thing as a Java
-DataStream application.
+## The two easy roads, and where they ended
 
-**Order.** Events cross regions and get retried, so an older update can arrive after a newer one. If the
-sink just writes whatever comes in, the dashboard moves backwards. I built 5 custom OpenSearch sinks. Each
-signs its requests with IAM SigV4 and runs a Painless script that refuses an event older than the stored
-document. Delivery can repeat and arrive out of order, and the result still comes out exactly once.
+Before writing any streaming code I compared five designs on latency, exactly-once guarantees and cost:
+Firehose, OpenSearch Ingestion, Data Prepper, a direct Lambda, and Flink. Firehose is the easy one, but it
+buffers records before delivering them, and that buffer alone could outlast the target. I picked Flink.
+
+Then I took the easy road inside Flink: a PyFlink notebook on the managed service. It worked for one
+sink. The moment I needed several, it hung on the first one. The documentation says it plainly:
+one sink per notebook. I got several working anyway, by editing the code the notebook generates so all
+the writes ran as one job.
+
+The hack worked. Then I hit two walls that no hack got past. The notebook could not do the
+guarded updates the ordering rule needs, and it could not authenticate with IAM, only with a username and
+password. I threw the notebook away, after weeks of work, and rebuilt the job as a Java DataStream
+application.
+
+## The design
+
+A Lambda function bridges SNS into Kinesis. The Flink job in Java reads the stream, reshapes the nested
+JSON and writes to several OpenSearch indexes at once: one holds the current state of each record, one is
+an append-only log of every event. Beside that real-time path, every event also lands in S3 as a backup,
+with a dead-letter queue for replays, retries and CloudWatch alerts.
+
+The hard part was order. Events cross regions and get retried, so an older update can arrive after a newer
+one. A sink that just writes whatever arrives will move the dashboard backwards.
+
+<figure class="os-figure">
+
+```text
+                  first              then
+ sent             A (older)          B (newer)
+ arrives          B                  A (delayed, retried)
+
+ plain write      doc = B            doc = A
+                                     (the dashboard went
+                                      back in time)
+ guarded write    doc = B            A is older than the
+                                     stored doc: skipped
+```
+
+<figcaption>Why the sink has to check age: a retried, older update arrives last and would overwrite the newer one.</figcaption>
+</figure>
+
+I wrote 5 custom OpenSearch sinks. Each signs its requests with IAM SigV4, and the guarded ones run a small
+Painless script inside OpenSearch that compares the event's timestamp with the stored document's and
+quietly drops the older one. Delivery can repeat and arrive out of order, and the result still comes out
+exactly once.
+
+One problem was not mine to solve. The OpenSearch cluster sat inside a private network, so for a while the
+dashboards could not be reached at all. A teammate who knew that networking far better than I did built
+the way in.
+
+## What it costs
+
+The five sinks are really one sink with switches: append-only for the log, guarded upserts for current
+state, and faster upserts that skip the timestamp check, for indexes where speed mattered more than order.
+The guard is a script that runs on every write, so it is not free.
+
+Flink is also more machinery than a managed delivery stream. I gave up that simplicity on the real-time
+path and kept it on the backup path, where Firehose still carries every event to S3.
 
 ## The result
 
-The target was 120 seconds from event to dashboard. Events landed in 600–900 ms. The Lambda layer has
-headroom for 300K+ events a minute.
+<figure class="os-figure">
 
-That is room to spare against the target. The 120 s was the target, not the old job's time, so it
-gives no fair multiple to quote.
+```text
+ seconds from event to dashboard, log scale
 
-## What I would change
+ 0.1       1         10        100       1,000     10,000
+ |---------|---------|---------|---------|---------|
+         ===                    T              H
 
-I spent weeks on the notebook before checking whether it could do the two things I already knew I needed,
-more than one sink and IAM. Today I check hard requirements against a platform's documented limits on the
-first day, before writing a line for it.
+ ===  the new pipeline: 0.6 to 0.9 s
+ T    the target: 120 s
+ H    the old hourly batch: up to an hour
+```
+
+<figcaption>Event-to-dashboard time on a log scale: the new pipeline, the 120-second target and the hourly job it replaced.</figcaption>
+</figure>
+
+Events landed in 600–900 ms against the 120-second target, and the Lambda layer has headroom for 300K+
+events a minute. That is room to spare against the target. The 120 s was the target, not the old job's
+time, so the chart shows where each one sits, not a multiple to quote.
+
+## What I'd do differently
+
+I spent weeks on the notebook before checking whether it could do the two things I already knew I needed:
+more than one sink, and IAM. Today I check hard requirements, security first, against a platform's
+documented limits on the first day, before writing a line for it.
