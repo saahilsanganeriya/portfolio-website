@@ -1,17 +1,25 @@
 ---
 import FormattedDate from '../components/FormattedDate.astro';
+import favorites from '../content/favorites.json';
 import Base from '../layouts/Base.astro';
 import { groupByYear } from '../lib/content';
 import { filmsData, ratingLabel, stars, type FilmEntry } from '../lib/films';
 import { diaryKey } from '../lib/films/format';
 
-const { entries, posters, profile, fetchedAt } = filmsData;
+const { entries, profile, fetchedAt } = filmsData;
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
-const wall = posters
-  .map((slug) => entries.find((entry) => entry.slug === slug))
-  .filter((film): film is FilmEntry => film !== undefined);
+// The room's posters are the four Letterboxd favourites; a favourite may have no diary entry at all.
+const wall = favorites.films.map((film) => ({ ...film, watch: entries.find((entry) => entry.slug === film.slug) }));
 const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slice(0, 4)));
+
+// The newest diary row of each film not on the wall carries its slug, so /films#<slug> finds any film.
+const anchored = new Set(wall.map((film) => film.slug));
+const anchorFor = (film: FilmEntry) => {
+  if (anchored.has(film.slug)) return undefined;
+  anchored.add(film.slug);
+  return film.slug;
+};
 ---
 
 <Base title="Films" description="What I have been watching, from my Letterboxd diary: ratings, rewatches and short reviews.">
@@ -28,25 +36,29 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
         <h2 class="section-title" id="wall">
           On the wall
         </h2>
-        <p class="section-note">The four films whose posters hang in the room.</p>
+        <p class="section-note">My four favourites on Letterboxd. Their posters hang in the room.</p>
         <ul class="wall link-list">
           {wall.map((film) => (
             <li id={film.slug}>
               <p class="wall-title">
-                <a href={film.url}>{film.title}</a>
+                <a href={`https://letterboxd.com/film/${film.slug}/`}>{film.title}</a>
               </p>
               <p class="meta">
-                {film.year}
-                {film.rating && (
+                {film.year}, {film.director}
+                {film.watch?.rating && (
                   <>
-                    , <span aria-hidden="true">{stars(film.rating)}</span>
-                    <span class="visually-hidden">{ratingLabel(film.rating)}</span>
+                    , <span aria-hidden="true">{stars(film.watch.rating)}</span>
+                    <span class="visually-hidden">{ratingLabel(film.watch.rating)}</span>
                   </>
                 )}
-                , last watched{' '}
-                <span data-last-watched>
-                  <FormattedDate date={day(film.watchedDate)} />
-                </span>
+                {film.watch && (
+                  <>
+                    , last watched{' '}
+                    <span data-last-watched>
+                      <FormattedDate date={day(film.watch.watchedDate)} />
+                    </span>
+                  </>
+                )}
               </p>
             </li>
           ))}
@@ -63,7 +75,7 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
           <p class="chrono-label">{year}</p>
           <ol class="diary link-list">
             {films.map((film) => (
-              <li data-film={diaryKey(film)}>
+              <li data-film={diaryKey(film)} id={anchorFor(film)}>
                 <span class="meta">
                   <FormattedDate date={day(film.watchedDate)} style="short" />
                 </span>

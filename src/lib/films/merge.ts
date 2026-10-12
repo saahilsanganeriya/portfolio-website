@@ -1,3 +1,5 @@
+import favorites from '../../content/favorites.json' with { type: 'json' };
+
 export interface FilmEntry {
   title: string;
   year: number;
@@ -20,13 +22,11 @@ export interface FilmsData {
 const PROFILE_URL = 'https://letterboxd.com/saahilsan/';
 export const FEED_URL = `${PROFILE_URL}rss/`;
 
-// The four films whose posters hang in the room; each id is the film's Letterboxd slug.
-export const POSTER_FILMS = [
-  { id: 'the-odyssey-2026', title: 'The Odyssey', year: 2026 },
-  { id: 'la-la-land', title: 'La La Land', year: 2016 },
-  { id: 'chungking-express', title: 'Chungking Express', year: 1994 },
-  { id: 'marty-supreme', title: 'Marty Supreme', year: 2025 },
-] as const;
+// The films whose posters hang in the room: the member's Letterboxd favourites; each id is the film's slug.
+export const POSTER_FILMS = favorites.films.map(({ slug, title, year }) => ({ id: slug, title, year }));
+// Exported films whose Letterboxd slug is not the plain title slug: the favourites, and The Odyssey (2026), whose
+// slug carries its year.
+const KNOWN_SLUGS = [...POSTER_FILMS, { id: 'the-odyssey-2026', title: 'The Odyssey', year: 2026 }];
 
 const normalise = (title: string) =>
   title
@@ -41,10 +41,10 @@ const normalise = (title: string) =>
 const filmKey = (title: string, year: number) => `${normalise(title)}|${year}`;
 const entryKey = (entry: FilmEntry) => `${filmKey(entry.title, entry.year)}|${entry.watchedDate}`;
 
-/** Letterboxd slug for an exported film: the poster ids where known, else the plain title slug. */
+/** Letterboxd slug for an exported film: the known slug where there is one, else the plain title slug. */
 export function slugFor(title: string, year: number): string {
   const key = filmKey(title, year);
-  return POSTER_FILMS.find((film) => filmKey(film.title, film.year) === key)?.id ?? normalise(title);
+  return KNOWN_SLUGS.find((film) => filmKey(film.title, film.year) === key)?.id ?? normalise(title);
 }
 
 /**
