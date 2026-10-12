@@ -3,8 +3,8 @@ title: "TMNT Frogger for Android"
 summary: "A Frogger-style Android game in plain Java, with the Ninja Turtles as characters and no game engine."
 year: 2023
 status: "archived"
-role: "Developer"
-team: "course project; every commit in the repository is mine"
+role: "Team member: 8 of the 40 tests, and the public repository"
+team: "team of 5 (CS 2340, spring 2023); the repository records authors only for the tests, and 8 of the 40 are mine"
 stack: ["Java", "Android SDK"]
 featured: false
 links:
@@ -12,19 +12,25 @@ links:
 ---
 
 Frogger is a good first game because the rules fit in one sentence: cross the road, then the river, and do
-not get hit or fall in. This version is an Android app in plain Java, with no game engine, and with the four
-Ninja Turtles as the characters you can play.
+not get hit or fall in. Five of us built this version for CS 2340 at Georgia Tech in spring 2023, over five
+sprints. It is an Android app in plain Java, with no game engine, and the four Ninja Turtles are the
+characters you can play.
 
 You pick a name, a difficulty and a turtle. Easy gives you 5 lives, medium 3 and hard 1. There are 5 lanes
-of traffic at different speeds and 4 river lanes of floating logs. Moving forward scores points, and
-crossing the water scores double.
+of traffic at three speeds and 4 river lanes of floating logs. Moving forward scores points, and crossing
+the water scores double. A hit costs a life and resets your score.
 
-Everything runs in one activity. Timers move the vehicles and logs, and every tick checks each object's
-bounds against the player. All of it, from setup to the win and lose screens, sits in a 559-line
+Everything runs in one activity. Timers move the vehicles and logs, and every vehicle checks its bounds
+against the player as it moves. All of it, from setup to the win and lose screens, sits in a 559-line
 `MainActivity.java`.
+
+The repository records authors only for the tests. I wrote 8 of the 40, and I put the finished app on
+GitHub after the term.
 
 ## What I would change
 
-One 559-line activity was quick to write and hard to change. The game state, the drawing and the loop
-belong in separate pieces that can be tested on their own. The turtle artwork also belongs to its owners,
-so none of it appears here.
+The river never became a hazard. The water check is written but never called, so a turtle can walk
+straight across. Our tests mock the activity and assert nothing, so they could not catch a bug. One
+559-line activity was also hard to change. The game state, the drawing and the loop belong in separate
+pieces that can be tested on their own. The turtle artwork belongs to its owners, so none of it appears
+here.
