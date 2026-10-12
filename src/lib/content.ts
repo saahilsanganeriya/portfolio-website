@@ -1,7 +1,7 @@
 import { getCollection, type CollectionEntry } from 'astro:content';
 
 // Draft posts build in dev, and in production only when SAMPLES=1 (tests and local previews of the samples).
-export const includeDrafts = import.meta.env.DEV || process.env.SAMPLES === '1';
+const includeDrafts = import.meta.env.DEV || process.env.SAMPLES === '1';
 
 export async function getPosts(): Promise<CollectionEntry<'blog'>[]> {
   const posts = await getCollection('blog', ({ data }) => includeDrafts || !data.draft);
@@ -26,7 +26,9 @@ export function groupByYear<T>(items: readonly T[], yearOf: (item: T) => number)
   const groups = new Map<number, T[]>();
   for (const item of items) {
     const year = yearOf(item);
-    groups.set(year, [...(groups.get(year) ?? []), item]);
+    const group = groups.get(year);
+    if (group) group.push(item);
+    else groups.set(year, [item]);
   }
   return [...groups.entries()];
 }
