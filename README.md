@@ -92,6 +92,26 @@ the feed fails, it serves the archive and the last good copy. `src/content/films
 each build as the static fallback. Set `FILMS_PRIVATE_NAMES` (comma-separated, in Vercel) to drop the text of any live
 review that names one of those people.
 
+The posters in the room are the four favourite films on the Letterboxd profile, in profile order. They are also the
+"On the wall" list on `/films`. Letterboxd answers a request for a profile page with HTTP 403, and the RSS feed does
+not include the favourites. So the source is the account export: its `profile.csv` has a "Favorite Films" column with
+four `boxd.it` links. To update the posters after a change on Letterboxd:
+
+1. Export the data (Letterboxd, Settings, Data, Export your data) and unzip it.
+2. Run `npm run favorites -- <export folder>`. The script follows each `boxd.it` link to its film page (browser
+   User-Agent, 10 s timeout, one request each 2 s, about 15 s in total) and writes `src/content/favorites.json`:
+   `{ source, updated, films: [{ slug, title, year, director, poster }] }`. If a request fails, the file does not
+   change and the script exits 1.
+3. Commit `src/content/favorites.json`.
+
+A favourite with hand-drawn art has `poster: "/room/posters/<slug>.avif"`. A `.ktx2` file with the same name is next
+to it for three.js. A favourite without art has `poster: null`, and the room draws a typographic poster for it with
+`renderPoster(film)` from `src/lib/posters.ts`. That function returns a self-contained SVG string (the text is in
+outlines, so an `<img>` or a texture shows it without web fonts). To add hand-drawn art, add a design to
+`scripts/posters/designs.mjs` with the film's slug as its id. Then run `npm run posters -- <slug>`,
+`npm run posters:runtime -- <slug>` and `npm run favorites -- <export folder>`. The art for films that are no longer
+favourites stays in `blender/posters/`.
+
 ## Scripts
 
 | Command | What it does |
@@ -103,7 +123,10 @@ review that names one of those people.
 | `npm run test:e2e` | Playwright tests in `tests/*.spec.ts`. They build with `SAMPLES=1` (draft posts included) and serve the build themselves. |
 | `node scripts/check-routes.mjs` | Builds, then checks every route: each entry has its page and JSON body, each page has a title, description, `og:title`, `og:image` and one `<h1>`, and no internal link is broken. `--samples` includes draft posts. |
 | `npm run films` | Writes `src/content/films.json`: the archive and the cached copy, with the Letterboxd feed merged over them. When the feed fails, it keeps the cached copy and exits 0. |
-| `npm run posters` | Draws the four room posters into `blender/posters/` (SVG and 2048-px PNG). |
+| `npm run posters [-- <slug> ...]` | Draws the hand-drawn posters into `blender/posters/` (SVG and 2048-px PNG). |
+| `npm run posters:runtime [-- <slug> ...]` | Writes the runtime copies of the favourites' posters to `public/room/posters/` (AVIF 683×1024 and KTX2 512×768, 120 KB or less each). |
+| `npm run favorites -- <export folder>` | Writes `src/content/favorites.json` from a Letterboxd export's `profile.csv`. |
+| `node scripts/posters/glyphs.mjs` | Writes `src/lib/poster-glyphs.ts`, the glyph outlines `renderPoster` uses. Run it again only when the fonts or the character sets change. |
 | `npm run measure:payload`, `npm run measure:fps` | Measure the room's 3D payload and frame rate. |
 
 ## Deploy
