@@ -1,0 +1,377 @@
+---
+import BootScreen from '../components/BootScreen.astro';
+import MonitorFrame from '../components/MonitorFrame.astro';
+import Base from './Base.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  /** The SaahilOS window this address opens on the monitor (`projects/swe-sim`, `about`); none on `/`. */
+  open?: string;
+  ogType?: 'website' | 'article';
+  publishedTime?: Date;
+}
+
+const { title, description, open = '', ogType, publishedTime } = Astro.props;
+---
+
+<Base {title} {description} {ogType} {publishedTime} bare skipLabel="Open SaahilOS">
+  {/*
+    Every page of the site is this one room. The head script picks how it is shown before anything renders: the 3D
+    room on a desktop with WebGL; SaahilOS on a drawn monitor for phones, touch-first or small screens, Save-Data and
+    browsers without WebGL. Without JavaScript the drawn monitor shows and says why it is dark.
+  */}
+  <script is:inline slot="head">
+    (function () {
+      // A page of the site followed inside the monitor takes the whole tab, so the room never runs inside itself.
+      if (window.top !== window.self) {
+        try {
+          window.top.location.href = location.href;
+        } catch (e) {}
+        return;
+      }
+      var root = document.documentElement;
+      var media = function (q) { return window.matchMedia && window.matchMedia(q).matches; };
+      var saveData = (navigator.connection && navigator.connection.saveData) || media('(prefers-reduced-data: reduce)');
+      var flat = saveData || media('(pointer: coarse)') || media('(max-width: 767.98px)');
+      if (!flat) {
+        var gl = null;
+        try {
+          var canvas = document.createElement('canvas');
+          gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        } catch (e) {}
+        if (gl) {
+          var lose = gl.getExtension('WEBGL_lose_context');
+          if (lose) lose.loseContext();
+        }
+        flat = !gl;
+      }
+      if (flat) root.classList.add('room-2d');
+      else {
+        root.classList.add('room');
+        if (media('(prefers-reduced-motion: reduce)')) root.classList.add('room-reduced', 'room-paused');
+      }
+    })();
+  </script>
+
+  <main id="content" class="room-stage" tabindex="-1" data-room data-open={open}>
+    <h1 class="visually-hidden">{title}</h1>
+    <div class="room-world" data-room-world></div>
+    <BootScreen />
+    <MonitorFrame />
+    <div class="room-controls">
+      <button type="button" aria-pressed="false" data-room-sound>Sound</button>
+      <button type="button" aria-pressed="false" data-room-pause>Pause motion</button>
+    </div>
+    <p class="visually-hidden" role="status" data-room-status></p>
+  </main>
+</Base>
+
+<script>
+  import type { RoomHandle } from '../scene/main';
+
+  // The window the skip link opens when the address names none.
+  const DEFAULT_WINDOW = 'projects';
+  // `/#os` (where a bare /os lands): the monitor with SaahilOS's desktop, no window named.
+  const DESKTOP = 'os';
+  // The finished boot log stays on screen this long before the room takes over by itself.
+  const BOOT_HOLD_MS = 700;
+  const LOG_LINES = 8;
+  // Moving focus around the page is not input to the room: these keys neither skip the intro nor start the sound.
+  const NAVIGATION_KEYS = new Set(['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'Escape', 'CapsLock']);
+
+  const root = document.documentElement;
+  const stage = document.querySelector<HTMLElement>('[data-room]')!;
+  const world = stage.querySelector<HTMLElement>('[data-room-world]')!;
+  const boot = stage.querySelector<HTMLElement>('[data-boot]')!;
+  const status = stage.querySelector<HTMLElement>('[data-room-status]')!;
+  const glass = stage.querySelector<HTMLElement>('[data-monitor-glass]')!;
+  const target = windowTarget(stage.dataset.open ?? '', location.hash);
+
+  /**
+   * The window this address opens on the monitor: '' for the desktop alone, null for the room's idle view. The route
+   * names it; on `/` a hash names one (`/#terminal`), on /films a hash names a film card (`/films#la-la-land`).
+   */
+  function windowTarget(open: string, hash: string): string | null {
+    let fragment = '';
+    try {
+      fragment = decodeURIComponent(hash.slice(1));
+    } catch {
+      // a malformed hash names nothing
+    }
+    if (fragment && fragment !== 'content') {
+      if (!open) return fragment === DESKTOP ? '' : fragment;
+      if (open === 'films') return `films/${fragment}`;
+    }
+    return open || null;
+  }
+
+  function showDrawnMonitor() {
+    root.classList.remove('room');
+    root.classList.add('room-2d');
+    if (glass.querySelector('iframe')) return;
+    const screen = document.createElement('iframe');
+    screen.title = 'SaahilOS, on the monitor';
+    screen.src = `/os${target ? `#${target}` : ''}`;
+    glass.append(screen);
+  }
+
+  function bootUi(bootEl: HTMLElement) {
+    const log = bootEl.querySelector<HTMLOListElement>('[data-boot-log]')!;
+    const statusLine = bootEl.querySelector<HTMLElement>('[data-boot-status]')!;
+    const progress = bootEl.querySelector<HTMLElement>('[data-boot-progress]')!;
+    const bar = bootEl.querySelector<HTMLElement>('[data-boot-bar]')!;
+    // The visitor's own date, as a BIOS shows its clock; the page itself is built ahead of time.
+    const today = bootEl.querySelector<HTMLTimeElement>('[data-boot-today]')!;
+    const now = new Date();
+    today.dateTime = today.textContent = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+      .map((n) => String(n).padStart(2, '0'))
+      .join('-');
+    let lastLabel = '';
+    return {
+      progress(p: number, label: string) {
+        const pct = Math.round(p * 100);
+        bar.style.width = `${pct}%`;
+        progress.setAttribute('aria-valuenow', String(pct));
+        statusLine.textContent = pct >= 100 ? 'FINISHED LOADING RESOURCES' : `LOADING RESOURCES (${pct}%)`;
+        const line = `Loaded ${label.padEnd(26, ' ')} ... `;
+        const item = label === lastLabel && log.lastElementChild ? log.lastElementChild : log.appendChild(document.createElement('li'));
+        item.textContent = line;
+        const pctEl = document.createElement('span');
+        pctEl.className = 'pct';
+        pctEl.textContent = `${pct}%`;
+        item.appendChild(pctEl);
+        lastLabel = label;
+        while (log.children.length > LOG_LINES) log.firstElementChild?.remove();
+      },
+    };
+  }
+
+  async function bootRoom() {
+    const ui = bootUi(boot);
+    const sound = stage.querySelector<HTMLButtonElement>('[data-room-sound]')!;
+    const pause = stage.querySelector<HTMLButtonElement>('[data-room-pause]')!;
+    const skipLink = document.querySelector<HTMLAnchorElement>('.skip-link');
+    const reduced = root.classList.contains('room-reduced');
+    let room: RoomHandle | null = null;
+    let entered = false;
+    let skipped = false;
+    let osRequested = false;
+    let unlocked = false;
+    let muted = false;
+    let paused = reduced;
+    pause.setAttribute('aria-pressed', String(paused));
+
+    const monitor = () => world.querySelector('iframe');
+    const showSound = () => sound.setAttribute('aria-pressed', String(unlocked && !muted));
+
+    // Browsers let sound start only inside a click, tap or key press; userActivation says whether this is one.
+    const unlock = () => {
+      if (!room || unlocked) return;
+      if (navigator.userActivation && !navigator.userActivation.isActive) return;
+      room.unlockAudio();
+      unlocked = true;
+      showSound();
+    };
+
+    const enter = () => {
+      if (!room || entered) return;
+      entered = true;
+      boot.dataset.state = 'gone';
+      root.classList.add('room-started');
+      setTimeout(() => (boot.hidden = true), 400);
+      const open = target ?? (osRequested ? DEFAULT_WINDOW : null);
+      room.start({ open: open ?? undefined, fast: skipped });
+      status.textContent = 'The room is ready. Sound starts with your first click or key press; the Sound button turns it off.';
+      if (osRequested) monitor()?.focus({ preventScroll: true });
+    };
+
+    // Any input skips the intro (or the boot screen's last moment) and starts the sound.
+    const onInput = (key: string | null, onToggle: boolean) => {
+      if (key !== null && NAVIGATION_KEYS.has(key)) return;
+      if (!entered) skipped = true;
+      enter();
+      room?.skipIntro();
+      // The Sound button decides for itself, so its first press turns the sound on rather than on and off again.
+      if (!onToggle) unlock();
+    };
+    const fromPage = (event: Event) =>
+      onInput(event instanceof KeyboardEvent ? event.key : null, Boolean((event.target as Element | null)?.closest?.('[data-room-sound]')));
+    for (const type of ['pointerdown', 'pointerup', 'keydown']) document.addEventListener(type, fromPage, { capture: true });
+    // Input inside the monitor stays in its frame; SaahilOS forwards presses and keys up to the room.
+    window.addEventListener('message', (event) => {
+      if (event.origin !== location.origin || event.source !== monitor()?.contentWindow) return;
+      const data = event.data as { type?: unknown; key?: unknown } | null;
+      if (data?.type === 'mousedown') onInput(null, false);
+      else if (data?.type === 'keydown' && typeof data.key === 'string') onInput(data.key, false);
+    });
+
+    sound.addEventListener('click', () => {
+      if (!unlocked) unlock();
+      else {
+        muted = !muted;
+        room?.setMuted(muted);
+      }
+      showSound();
+    });
+    pause.addEventListener('click', () => {
+      paused = !paused;
+      pause.setAttribute('aria-pressed', String(paused));
+      root.classList.toggle('room-paused', paused);
+      room?.setPaused(paused);
+    });
+    skipLink?.addEventListener('click', (event) => {
+      event.preventDefault();
+      osRequested = true;
+      if (!entered) {
+        skipped = true;
+        enter();
+        return;
+      }
+      room?.openWindow(target || DEFAULT_WINDOW, { fast: true });
+      monitor()?.focus({ preventScroll: true });
+    });
+
+    try {
+      const { startRoom } = await import('../scene/main');
+      room = await startRoom(world, { osUrl: '/os?embed=1', onProgress: ui.progress, reducedMotion: reduced });
+      room.setPaused(paused);
+      boot.dataset.ready = '';
+      if (target !== null || skipped || reduced) enter();
+      else setTimeout(enter, BOOT_HOLD_MS);
+    } catch (error) {
+      console.error('room: failed to load', error);
+      room = null;
+      showDrawnMonitor();
+    }
+  }
+
+  /** Runs once the text has painted, so no scene request competes with it (a timer covers browsers without paint timing). */
+  function afterFirstPaint(run: () => void) {
+    let done = false;
+    const once = () => {
+      if (done) return;
+      done = true;
+      observer?.disconnect();
+      run();
+    };
+    let observer: PerformanceObserver | null = null;
+    try {
+      observer = new PerformanceObserver((list) => {
+        if (list.getEntriesByName('first-contentful-paint').length) once();
+      });
+      observer.observe({ type: 'paint', buffered: true });
+    } catch {
+      // no paint timing here
+    }
+    setTimeout(once, 1500);
+  }
+
+  if (root.classList.contains('room')) afterFirstPaint(() => void bootRoom());
+  else if (root.classList.contains('room-2d')) {
+    showDrawnMonitor();
+    document.querySelector('.skip-link')?.addEventListener('click', (event) => {
+      event.preventDefault();
+      glass.querySelector('iframe')?.focus();
+    });
+  }
+</script>
+
+<style>
+  /* The room is the whole page: nothing above, below or beside it. */
+  .room-stage {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--ink);
+  }
+
+  .room-stage:focus {
+    outline: none;
+  }
+
+  .room-world,
+  .room-controls,
+  .room-stage :global(.boot) {
+    display: none;
+  }
+
+  :global(html.room) .room-world {
+    display: block;
+  }
+
+  :global(html.room) .room-controls {
+    display: flex;
+  }
+
+  :global(html.room) .room-stage :global(.boot:not([hidden])) {
+    display: block;
+  }
+
+  :global(html.room) .room-stage :global(.monitor-frame) {
+    display: none;
+  }
+
+  .room-world {
+    position: absolute;
+    inset: 0;
+  }
+
+  .room-world :global(.room-css),
+  .room-world :global(.room-webgl) {
+    position: absolute;
+    inset: 0;
+  }
+
+  .room-world :global(.room-webgl) {
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .room-world :global(.room-monitor) {
+    background: #0c0b0a;
+  }
+
+  .room-world :global(.room-label) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    padding: 0.2rem 0.55rem;
+    background: var(--ink);
+    color: var(--paper);
+    border-bottom: 1px solid var(--thread);
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .room-controls {
+    position: absolute;
+    right: var(--space-3);
+    bottom: var(--space-3);
+    z-index: 4;
+    gap: var(--space-2);
+  }
+
+  .room-controls button {
+    padding: 0.3rem 0.75rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    border-radius: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    cursor: pointer;
+  }
+
+  .room-controls button:hover {
+    border-color: var(--paper);
+  }
+
+  .room-controls button[aria-pressed='true'] {
+    background: var(--paper);
+    color: var(--ink);
+  }
+</style>

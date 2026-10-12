@@ -19,7 +19,7 @@ export interface RoomOptions {
 }
 
 export interface StartOptions {
-  /** A SaahilOS window to open on the monitor (`projects/swe-sim`): the room ends on the monitor instead of the idle view. */
+  /** End on the monitor instead of the idle view, opening this SaahilOS window (`projects/swe-sim`); '' opens none. */
   open?: string;
   /** Cut to the end framing (the visitor's input skipped the intro). */
   fast?: boolean;
@@ -145,9 +145,9 @@ export class Application implements RoomHandle {
     this.intro = true;
     this.monitor.iframe.removeAttribute('tabindex');
     const endIntro = () => (this.intro = false);
-    if (open) {
+    if (open !== undefined) {
       this.glide('monitor', fast ? 0 : FAST_GLIDE_MS, easeIntoMonitor, endIntro);
-      this.monitor.open(open);
+      if (open) this.monitor.open(open);
     } else this.glide('idle', fast ? 0 : 2500, easeOutExpo, endIntro);
   }
 

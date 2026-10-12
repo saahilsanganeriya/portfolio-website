@@ -1,9 +1,6 @@
 ---
-import { render } from 'astro:content';
-import FormattedDate from '../../components/FormattedDate.astro';
-import Article from '../../layouts/Article.astro';
+import Room from '../../layouts/Room.astro';
 import { getPosts } from '../../lib/content';
-import { ratingLabel, stars } from '../../lib/films';
 
 export async function getStaticPaths() {
   const posts = await getPosts();
@@ -11,48 +8,7 @@ export async function getStaticPaths() {
 }
 
 const { post } = Astro.props;
-const { Content } = await render(post);
-const { title, summary, date, updated, film, draft } = post.data;
+const { title, summary, date } = post.data;
 ---
 
-<Article {title} description={summary} publishedTime={date}>
-  <Fragment slot="lead">
-    <p class="article-lead">{summary}</p>
-    <p class="article-meta meta">
-      <FormattedDate date={date} />
-      {
-        updated && (
-          <>
-            , updated <FormattedDate date={updated} />
-          </>
-        )
-      }
-      {draft && ' (draft)'}
-    </p>
-    {
-      film && (
-        <dl class="facts">
-          <dt>Film</dt>
-          <dd>
-            <a href={film.letterboxd}>
-              {film.title} ({film.year})
-            </a>
-          </dd>
-          {film.rating && (
-            <>
-              <dt>My rating</dt>
-              <dd>
-                <span aria-hidden="true">{stars(film.rating)}</span>
-                <span class="visually-hidden">{ratingLabel(film.rating)}</span>
-              </dd>
-            </>
-          )}
-        </dl>
-      )
-    }
-  </Fragment>
-  <Content />
-  <footer class="article-end" slot="end">
-    <p><a href="/blog">More writing</a></p>
-  </footer>
-</Article>
+<Room {title} description={summary} open={`blog/${post.id}`} ogType="article" publishedTime={date} />

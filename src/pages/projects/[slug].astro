@@ -1,7 +1,6 @@
 ---
-import { Image } from 'astro:assets';
-import { getCollection, render } from 'astro:content';
-import Article from '../../layouts/Article.astro';
+import { getCollection } from 'astro:content';
+import Room from '../../layouts/Room.astro';
 
 export async function getStaticPaths() {
   const projects = await getCollection('projects');
@@ -9,57 +8,6 @@ export async function getStaticPaths() {
 }
 
 const { project } = Astro.props;
-const { Content } = await render(project);
-const { title, summary, year, years, status, role, team, stack, links, cover, coverAlt } = project.data;
-
-const statusLabel = { shipped: 'Shipped', research: 'Research', archived: 'Archived' }[status];
-const linkLabels = { repo: 'Code', paper: 'Paper', demo: 'Demo', page: 'Project page', pypi: 'PyPI' } as const;
-const linkList = (Object.keys(linkLabels) as (keyof typeof linkLabels)[])
-  .filter((key) => links[key])
-  .map((key) => ({ href: links[key]!, label: linkLabels[key] }));
 ---
 
-<Article {title} description={summary}>
-  <Fragment slot="lead">
-    <p class="article-lead">{summary}</p>
-    <dl class="facts">
-      <dt>When</dt>
-      <dd>{years ?? year}</dd>
-      <dt>Role</dt>
-      <dd>{role}</dd>
-      <dt>Team</dt>
-      <dd>{team}</dd>
-      <dt>Status</dt>
-      <dd>{statusLabel}</dd>
-      <dt>Stack</dt>
-      <dd>{stack.join(', ')}</dd>
-      {
-        linkList.length > 0 && (
-          <>
-            <dt>Links</dt>
-            <dd>
-              <ul>
-                {linkList.map(({ href, label }) => (
-                  <li>
-                    <a href={href}>{label}</a>
-                  </li>
-                ))}
-              </ul>
-            </dd>
-          </>
-        )
-      }
-    </dl>
-  </Fragment>
-  {
-    cover && (
-      <figure>
-        <Image src={cover} alt={coverAlt ?? ''} widths={[680, 1360]} sizes="(min-width: 56rem) 680px, 100vw" />
-      </figure>
-    )
-  }
-  <Content />
-  <footer class="article-end" slot="end">
-    <p><a href="/projects">All projects</a></p>
-  </footer>
-</Article>
+<Room title={project.data.title} description={project.data.summary} open={`projects/${project.id}`} />

@@ -1,6 +1,6 @@
 ---
-// The computer's power-on self-test, shown while the room loads. START is the click that lets the room make sound.
-// The page script (index.astro) fills the log, dates the screen and reveals START; this component is markup and style.
+// The computer's power-on self-test, shown while the room loads; it hands over to the room by itself.
+// The page script (layouts/Room.astro) fills the log, dates the screen and dismisses it; this is markup and style.
 ---
 
 <div class="boot" data-boot data-room-ui>
@@ -24,13 +24,8 @@
       <span data-boot-bar></span>
     </div>
 
-    <div class="boot-start" data-boot-start hidden>
-      <p role="status">All content loaded. START turns the sound on; the buttons at the bottom right mute it or pause the motion.</p>
-      <button type="button" class="boot-button" data-boot-button>START</button>
-    </div>
-
     <footer class="boot-foot" aria-hidden="true">
-      <p>Press ENTER to start, ESC to skip the room</p>
+      <p>Press any key to skip the intro</p>
       <p><time data-boot-today></time></p>
     </footer>
   </div>
@@ -85,10 +80,9 @@
     80% { transform: translate(-0.5px, -0.3px); }
   }
 
-  /* The projector settles once everything has loaded; the screen then waits still for START. */
+  /* The projector settles once everything has loaded, just before the room takes over. */
   .boot[data-ready] .boot-screen,
-  :global(html.room-paused) .boot-screen,
-  :global(html.room-paused) .boot-button::after {
+  :global(html.room-paused) .boot-screen {
     animation: none;
   }
 
@@ -96,8 +90,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0 4rem;
-    /* Room for the "Skip the room" link in the top right corner. */
-    padding-right: 9rem;
   }
 
   .boot-mark {
@@ -147,48 +139,6 @@
     width: 0;
     background: var(--thread);
     transition: width 0.3s ease-out;
-  }
-
-  .boot-start {
-    max-width: 38.5rem;
-    margin-top: 2rem;
-  }
-
-  .boot-start[hidden] {
-    display: none;
-  }
-
-  .boot-button {
-    position: relative;
-    margin-top: 1.25rem;
-    padding: 0.35rem 1.25rem;
-    border: 0;
-    border-radius: 0;
-    background: var(--paper);
-    color: var(--ink);
-    font: inherit;
-    letter-spacing: 0.12em;
-    cursor: pointer;
-  }
-
-  .boot-button:hover {
-    background: var(--projector);
-  }
-
-  /* A block cursor after START, blinking as BIOS cursors do. */
-  .boot-button::after {
-    content: '';
-    position: absolute;
-    top: 0.35rem;
-    right: -1.1rem;
-    width: 0.6rem;
-    height: 1.1rem;
-    background: var(--paper);
-    animation: blink 1.06s steps(1) infinite;
-  }
-
-  @keyframes blink {
-    50% { opacity: 0; }
   }
 
   .boot-foot {

@@ -1,17 +1,12 @@
 ---
-import { getEntry, render } from 'astro:content';
-import Headshot from '../components/Headshot.astro';
-import Article from '../layouts/Article.astro';
+import { getEntry } from 'astro:content';
+import Room from '../layouts/Room.astro';
 
 const entry = await getEntry('pages', 'about');
-const rendered = entry ? await render(entry) : null;
-const summary = entry?.data.summary ?? 'Who I am, where I am from, and what I want to build.';
 ---
 
-<Article title={entry?.data.title ?? 'About'} description={summary}>
-  <Fragment slot="lead">
-    <p class="article-lead">{summary}</p>
-    <Headshot />
-  </Fragment>
-  {rendered ? <rendered.Content /> : <p>This page is being written.</p>}
-</Article>
+<Room
+  title={entry?.data.title ?? 'About'}
+  description={entry?.data.summary ?? 'Who I am, where I am from, and what I want to build.'}
+  open="about"
+/>
