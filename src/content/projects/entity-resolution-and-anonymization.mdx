@@ -11,60 +11,145 @@ order: 1
 links: {}
 ---
 
-Picture a company's Slack, email and issue tracker. One engineer shows up as "Jordan", "J. Lee", a work
-address and a handle, often in the same thread. Before data like that can go to an AI lab for training,
-every real person in it has to disappear, and the conversation still has to make sense.
+
+Picture a company's Slack, email and issue tracker. One engineer shows up as "Jordan", as "J. Lee", as a
+work address and as a handle, often in the same thread. Before data like that can go to an AI lab for
+training, every real person in it has to disappear, and the conversation still has to make sense.
 
 I work on Mercor's Data Acquisition team, which delivers anonymized enterprise data to a frontier AI lab
-for post-training. I built the parts that decide who is who, and what each person becomes.
+for post-training. I built the parts that decide who is who, and what each person becomes. The details
+belong to Mercor, so this page stays where my résumé does.
 
-## Why it is hard
+## How big "who is who" gets
 
-Blacking out names breaks the data. A thread where three people argue turns into a thread where nobody
-does. Swapping each name for a random fake breaks it a different way: "Jordan" in one message and "J. Lee"
-in the next become two strangers. The fix is to find every mention of a person, link them, and give that
-person one fake identity everywhere. The linking is the hard part.
+One run of entity resolution resolved 88 million mentions. Comparing every mention with every other one
+would mean nearly four quadrillion pairs. A run also makes about 3 million LLM calls, so the parts that
+talk to model providers have to survive their bad days.
+
+## Three obvious answers, and how each one breaks
+
+<figure class="os-figure">
+
+```text
+ the thread
+   Jordan:   is the build red?
+   Sam:      yes, J. Lee broke it
+   J. Lee:   fixed now
+
+ black out every name
+   ####:     is the build red?
+   ####:     yes, #### broke it
+   ####:     fixed now        (who fixed it?)
+
+ a new random fake for every mention
+   Ravi:     is the build red?
+   Mei:      yes, Omar broke it
+   Lena:     fixed now        (one person is now three)
+
+ one fake identity per person
+   Ravi:     is the build red?
+   Mei:      yes, R. Iyer broke it
+   R. Iyer:  fixed now
+```
+
+<figcaption>One made-up thread under three treatments. Only the last keeps the conversation intact, and it needs to know that Jordan and J. Lee are the same person.</figcaption>
+</figure>
+
+**Black out the names.** The thread survives as text and dies as a conversation: nobody can tell any
+more who said what to whom.
+
+**Give every mention a random fake.** Now the conversation has people in it, but the wrong number of
+them. "Jordan" in one message and "J. Lee" in the next become strangers.
+
+**Link mentions by comparing everything.** The fix is to find every mention of a person, link them, and
+give that person one fake identity everywhere. Linking by comparing every pair does not fit at 88 million
+mentions. And linking has a trap: if A is B and B is C, then A is C, so one bad link can weld two whole
+groups of people into one.
 
 ## What I built
 
 **Entity resolution.** It links every name, email and handle to the real person behind it. An LLM labels
 what kind of thing each mention is, FAISS embedding search finds likely matches, and Leiden graph
-clustering groups them. I built its eval suite as well. Accuracy on the labeled eval set went from 85% to
-95%.
+clustering groups them. I built its eval suite alongside it.
 
-**Matching in blocks.** MinHash-LSH groups likely matches, one LLM call clusters each block, and a merge
-needs agreeing votes, so one bad verdict cannot join two people. A second mode uses correlation
-clustering. This lifted B-cubed F1, a clustering score that counts wrong merges and wrong splits, from
-0.34 to 0.84.
+**Matching in blocks.** MinHash-LSH groups likely matches into blocks, and one LLM call clusters each
+block. A merge needs agreeing votes, so one bad verdict cannot join two people. A second mode uses
+correlation clustering.
 
 **Learned scorers.** LightGBM and PyTorch match scorers sit on a 257-feature Rust library and are served
-through ONNX. They run in production shadow mode: beside the live system, logging answers, deciding nothing.
+through ONNX. They run in production shadow mode: beside the live system, logging answers, deciding
+nothing.
 
-**Scale.** I rebuilt resolution as a Go service with bounded memory that scales out on Temporal across GKE
-and EKS. One run resolved 88M mentions. Tuning its LLM judges halved the wall time, from 4h13m to 2h11m.
+**Scale.** I rebuilt resolution as a Go service with bounded memory that scales out on Temporal across
+GKE and EKS.
 
-**Staying up.** A run makes about 3M LLM calls. An adaptive concurrency controller cut provider failures
-22x, from 24.6 to 1.1 a minute at the same throughput. It is AIMD, the rule TCP uses: speed up slowly
-while calls succeed, back off hard when they fail. Versioned Temporal workers and a custom rollout
-controller let us deploy in the middle of a run.
+**Staying up.** With millions of calls a run, a provider's bad minute matters. I built an adaptive
+concurrency controller across providers. It follows AIMD, the rule TCP uses for congestion.
+
+<figure class="os-figure">
+
+```text
+ calls in flight
+  |        /|          /|          /
+  |      /  |        /  |        /
+  |    /    |      /    |      /
+  |  /      |    /      |    /
+  |/        |  /        |  /
+  |         |/          |/
+  +----------------------------------> time
+    climb a little      cut hard when
+    while calls         calls start
+    succeed             to fail
+```
+
+<figcaption>The general AIMD rule: additive increase, multiplicative decrease. An illustration of the idea, not a trace of any real run.</figcaption>
+</figure>
+
+Versioned Temporal workers and a custom rollout controller let us deploy in the middle of a run without
+losing it.
 
 **Fake identities.** The generator gives each person one consistent persona. Format-preserving generators
-cover 90+ PII types, and an LLM writes names and addresses of the same length as the originals. Expert
-reviewers kept 95% of its replacements on 675 documents.
+cover 90+ PII types, and an LLM writes names and addresses of the same length as the originals, so a form
+or a table still lines up.
 
-**Synthetic data.** To measure any of this you need ground truth. In the synthetic-data engine an
-LLM agent designs a fictional company and writes its Slack, Gmail and Linear history, while code places
-every PII value, so the labels are exact by construction. Its 1.6M labeled mentions became the team's
-benchmark.
+**Synthetic data.** To measure any of this you need ground truth, and real data does not come with it. In
+the synthetic-data engine an LLM agent designs a fictional company and writes its Slack, Gmail and Linear
+history, while code places every PII value. The labels are exact by construction.
 
-**Code.** Anonymizing a repository means rewriting its git history too. I redesigned that step around
-tree-sitter and Aho-Corasick, then hand each repo to a sandboxed LLM coding agent that runs its tests. It
-runs ~200 repos at once on ECS, and a 55k-commit repo went from 3+ hours to 19 minutes.
+**Code.** Anonymizing a repository means rewriting its git history too. Code anonymization already
+existed when I redesigned it to rewrite git histories with tree-sitter and Aho-Corasick, and to hand each
+repo to a sandboxed LLM coding agent that runs its tests.
+
+## What it gives up
+
+Agreeing votes and blocking guard against wrong merges, and they cost true matches. Two mentions that never
+land in the same block can never be linked, and a merge the votes do not agree on does not happen. That is
+the trade I wanted. A split leaves one person with two fakes, which reads a little oddly. A merge pins one
+person's words and details on someone else, and that cannot be undone once the data has left. So every
+close call should split.
+
+The learned scorers pay a different price. In shadow mode they can be measured against the live system
+for as long as it takes to trust them, and in the meantime they improve nothing.
+
+## Results
+
+| What | Before | After |
+|---|---|---|
+| entity-resolution accuracy, labeled eval set | 85% | 95% |
+| B-cubed F1 with blockwise matching | 0.34 | 0.84 |
+| wall time of one run, after tuning its LLM judges | 4h13m | 2h11m |
+| LLM provider failures a minute, same throughput | 24.6 | 1.1 |
+| one 55k-commit repo through code anonymization | 3+ hours | 19 min |
+
+B-cubed F1 is a clustering score that counts both wrong merges and wrong splits. Expert reviewers kept 95% of the fake-identity generator's replacements
+on 675 documents. The synthetic engine's 1.6M labeled mentions became the team's benchmark, and code
+anonymization runs about 200 repos at once on ECS.
 
 ## What I took from it
 
-A wrong merge costs more than a missed one. Two people merged into one persona leak each other's details
-into the training data. One person split in two only reads a little oddly. Agreeing votes, and blocks
-small enough for a single call, are that idea written down.
+Decide which mistake you can live with before you write any code. Every threshold after that is the same
+decision made again in small.
 
-The details belong to Mercor, so this page stops where my résumé does.
+And do not trust a clustering score on its own. Put every mention in one cluster and you have found every
+true match. Put every mention alone and you have made no wrong merge. A useful score makes both of those
+answers look bad, and I want to see splits and merges side by side.
