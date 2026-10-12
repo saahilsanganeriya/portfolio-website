@@ -34,7 +34,9 @@ const MONITOR_MARGIN = 1.3;
 const REFERENCE_ASPECT = 900 / 1440;
 // Free look: the pointer turns the view a little; a drag turns it further, within these limits.
 const POINTER_LOOK = { yaw: 0.06, pitch: 0.035 };
-const DRAG_LIMIT = { yaw: 0.5, pitch: 0.24 };
+// The wide view already fills its frame with the cut-away room (the idle sway's ±8° is its edge); inside the room,
+// where walls surround the camera, a drag may look further.
+const DRAG_LIMITS = { wide: { yaw: 0.14, pitch: 0.08 }, inside: { yaw: 0.35, pitch: 0.18 } };
 // The eye also slides a little with the pointer (Henry's desk parallax), as a share of the distance to what it looks at.
 const POINTER_SHIFT = { x: 0.03, y: 0.02 };
 const LOOK_SPRING = springFor(0.45);
@@ -136,10 +138,12 @@ export class RoomCamera {
 
   /** Turns the view by a drag of (dx, dy) CSS pixels: the room follows the finger. */
   dragLook(dx: number, dy: number, viewportHeight: number) {
-    if (this.destination === 'monitor') return;
+    const station = this.destination;
+    if (station === 'monitor' || station === 'loading') return;
+    const limit = station === 'idle' ? DRAG_LIMITS.wide : DRAG_LIMITS.inside;
     const radiansPerPixel = THREE.MathUtils.degToRad(this.instance.fov) / Math.max(1, viewportHeight);
-    this.drag.yaw = THREE.MathUtils.clamp(this.drag.yaw + dx * radiansPerPixel, -DRAG_LIMIT.yaw, DRAG_LIMIT.yaw);
-    this.drag.pitch = THREE.MathUtils.clamp(this.drag.pitch + dy * radiansPerPixel, -DRAG_LIMIT.pitch, DRAG_LIMIT.pitch);
+    this.drag.yaw = THREE.MathUtils.clamp(this.drag.yaw + dx * radiansPerPixel, -limit.yaw, limit.yaw);
+    this.drag.pitch = THREE.MathUtils.clamp(this.drag.pitch + dy * radiansPerPixel, -limit.pitch, limit.pitch);
   }
 
   /** How far the view is turned from its framing (radians), for tests and measurements. */

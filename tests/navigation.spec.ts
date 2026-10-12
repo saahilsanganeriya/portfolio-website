@@ -120,15 +120,15 @@ test('hovering a prop lifts it a little; leaving lets it back down', async ({ pa
 /** Catches a drag that clicks what is under it, turns the view without limit, or keeps its turn after a step. */
 test('a drag turns the view within limits, clicks nothing, and the next step looks straight again', async ({ page }) => {
   await inRoom(page);
-  // 1,100 px at 35° over 900 px turns 0.75 rad: past the 0.5 rad limit.
+  // 1,100 px at 35° over 900 px would turn 0.75 rad; the wide view stops at 0.14 rad, before the room leaves the frame.
   await page.mouse.move(300, 450);
   await page.mouse.down();
   for (let x = 300; x <= 1400; x += 50) await page.mouse.move(x, 450);
   await page.mouse.up();
   await page.mouse.move(720, 450);
-  await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.45);
+  await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.13);
   const { look, phase, destination } = await room(page);
-  expect(look.yaw).toBeLessThanOrEqual(0.5 + 0.02);
+  expect(look.yaw).toBeLessThanOrEqual(0.14 + 0.01);
   expect({ phase, destination }).toEqual({ phase: 'idle', destination: 'idle' });
   await page.keyboard.press('ArrowRight');
   await expect.poll(async () => Math.abs((await room(page)).look.yaw)).toBeLessThan(0.01);
@@ -181,10 +181,12 @@ test.describe('on a phone', () => {
     const cdp = await page.context().newCDPSession(page);
     const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) =>
       cdp.send('Input.dispatchTouchEvent', { type, touchPoints: x === undefined ? [] : [{ x, y: 420 }] });
-    await touch('touchStart', 40);
-    for (let x = 70; x <= 340; x += 30) await touch('touchMove', x);
+    // 120 px at 35° over 664 px turns the view 0.11 rad, inside the wide view's 0.14 rad limit.
+    await touch('touchStart', 100);
+    for (let x = 110; x <= 220; x += 10) await touch('touchMove', x);
     await touch('touchEnd');
-    await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.1);
+    await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.09);
+    expect((await room(page)).look.yaw).toBeLessThan(0.13);
     expect(await page.evaluate(() => scrollX + scrollY)).toBe(0);
     // Past the 1.6 s the phone would hold the wide view before going in by itself.
     await page.waitForTimeout(3000);

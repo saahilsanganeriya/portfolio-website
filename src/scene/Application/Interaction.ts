@@ -56,6 +56,8 @@ export class Interaction {
     );
     stage.addEventListener('pointerleave', () => (this.clientPointer.inside = false), { signal });
     stage.addEventListener('pointerdown', (e) => (this.touch = e.pointerType === 'touch'), { signal });
+    stage.addEventListener('pointerup', () => this.touch && this.releaseTouch(), { signal });
+    stage.addEventListener('pointercancel', () => this.touch && this.releaseTouch(), { signal });
     stage.addEventListener('click', (e) => this.onClick(e), { signal });
     // Phones have no live screen in the 3D monitor (the OS opens full screen there), so no frame to follow.
     if (!iframe) return;
@@ -121,8 +123,13 @@ export class Interaction {
     const hit = this.handlers.canHover() ? this.pick() : null;
     if (hit) this.handlers.hotspot(hit.hotspot, hit.proxy);
     else this.handlers.toggle();
-    // A finger leaves the glass after a tap; nothing stays hovered under where it was.
-    if (this.touch) this.clientPointer.inside = false;
+    if (this.touch) this.releaseTouch();
+  }
+
+  /** A finger leaves the glass: nothing stays hovered under it, and the view stops leaning toward where it was. */
+  private releaseTouch() {
+    this.clientPointer.inside = false;
+    this.pointer.set(0, 0);
   }
 
   private onMonitorPointer(over: boolean) {
