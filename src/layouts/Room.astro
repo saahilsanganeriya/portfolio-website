@@ -172,6 +172,8 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     const light = root.classList.contains('room-light');
     const back = stage.querySelector<HTMLButtonElement>('[data-monitor-back]')!;
     let room: RoomHandle | null = null;
+    // The light tier checks its frame rate before anyone enters.
+    let probing = light;
     let entered = false;
     let skipped = false;
     let osRequested = false;
@@ -218,7 +220,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     };
 
     const enter = () => {
-      if (!room || entered) return;
+      if (!room || probing || entered) return;
       entered = true;
       boot.dataset.state = 'gone';
       root.classList.add('room-started');
@@ -278,7 +280,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     try {
       const { startRoom } = await import('../scene/main');
       const films = JSON.parse(world.dataset.roomFilms ?? '[]');
-      const handle = await startRoom(world, {
+      room = await startRoom(world, {
         osUrl: '/os?embed=1',
         onProgress: ui.progress,
         reducedMotion: reduced,
@@ -290,14 +292,11 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       if (light) {
         // Load the phone's SaahilOS behind the boot screen, so it is ready when the camera reaches the glass.
         drawnScreen();
-        const fps = await handle.measureFps(LIGHT_PROBE_MS);
-        if (fps < LIGHT_MIN_FPS) {
-          room = handle;
-          fallBack(`${fps.toFixed(0)} fps on the light tier`);
-          return;
-        }
+        const fps = await room.measureFps(LIGHT_PROBE_MS);
+        probing = false;
+        if (fps < LIGHT_MIN_FPS) fallBack(`${fps.toFixed(0)} fps on the light tier`);
+        if (!room) return;
       }
-      room = handle;
       room.setPaused(paused);
       boot.dataset.ready = '';
       if (target !== null || skipped || reduced) enter();

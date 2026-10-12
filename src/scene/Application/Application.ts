@@ -60,6 +60,8 @@ export interface RoomHandle {
 const OS_LOAD_TIMEOUT_MS = 8000;
 // On a phone the wide view holds this long after the intro, then the camera goes into the monitor by itself.
 const PHONE_HOLD_MS = 1600;
+// A click this soon after the press that ended the drift belongs to that press.
+const DRIFT_CLICK_MS = 600;
 
 /** Debug and measurement hook: tests click real props by their projected screen position. */
 export interface RoomProbe {
@@ -123,6 +125,7 @@ export class Application implements RoomHandle {
   private handedOver = false;
   private pendingWindow: string | null = null;
   private phoneZoom = 0;
+  private driftEndedAt = -Infinity;
   private frameSink: ((frameMs: number) => void) | null = null;
   private clock = 0;
   private last = 0;
@@ -304,6 +307,7 @@ export class Application implements RoomHandle {
   /** The visitor took over: nothing moves the camera by itself any more. */
   private takeOver() {
     clearTimeout(this.phoneZoom);
+    if (this.navigation.drifting) this.driftEndedAt = performance.now();
     this.navigation.stopDrift();
   }
 
@@ -324,7 +328,8 @@ export class Application implements RoomHandle {
 
   /** A click on empty space: in to the desk from the wide view, back out to the wide view from anywhere else. */
   private toggle() {
-    if (!this.started) return;
+    // The click that ended the first drift only ends it.
+    if (!this.started || performance.now() - this.driftEndedAt < DRIFT_CLICK_MS) return;
     this.flyTo(this.camera.destination === 'idle' ? 'desk' : 'idle', 'step');
   }
 

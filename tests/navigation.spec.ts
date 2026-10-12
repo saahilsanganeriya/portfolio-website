@@ -56,6 +56,16 @@ test('any key ends the first drift, and the camera rests where it was heading', 
   expect(await room(page)).toMatchObject({ phase: heading, moving: false, drifting: false });
 });
 
+/** Catches a click on empty space during the drift that also sends the camera back to the wide view. */
+test('a click on empty space ends the first drift and does nothing else', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.__room?.drifting && window.__room.destination === 'shelf', null, { timeout: 120_000 });
+  // The bottom-left corner is bare wall or floor in every framing the drift passes.
+  await page.mouse.click(5, 895);
+  expect(await room(page)).toMatchObject({ destination: 'shelf', drifting: false });
+  await settledAt(page, 'shelf');
+});
+
 /** Catches arrow keys or the scroll wheel that do nothing, skip a framing, or step more than once per gesture. */
 test('arrow keys and the scroll wheel step between framings, one per press or gesture', async ({ page }) => {
   await inRoom(page);
@@ -69,11 +79,18 @@ test('arrow keys and the scroll wheel step between framings, one per press or ge
   await page.keyboard.press('ArrowLeft');
   await settledAt(page, 'idle');
 
-  await page.mouse.move(720, 450);
-  // One flick of a trackpad: a burst of small deltas is one step, not five.
-  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 30);
+  // One flick of a trackpad: a burst of small deltas (dispatched in one task, so no clock decides it) is one step, not five.
+  const flick = (deltaY: number, events: number) =>
+    page.evaluate(
+      ([deltaY, events]) => {
+        const stage = document.querySelector('[data-room-world]')!;
+        for (let i = 0; i < events; i++) stage.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }));
+      },
+      [deltaY, events],
+    );
+  await flick(30, 5);
   await settledAt(page, stations[at + 1]);
-  await page.mouse.wheel(0, -120);
+  await flick(-120, 1);
   await settledAt(page, 'idle');
 });
 
