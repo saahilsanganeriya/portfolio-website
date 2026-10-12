@@ -13,7 +13,7 @@ const PROJECTOR = new THREE.Color('#9db4c0');
 export type MonitorEvent =
   | { type: 'pointer'; x: number; y: number }
   | { type: 'press'; down: boolean }
-  | { type: 'key'; key: string };
+  | { type: 'key'; key: string; down: boolean };
 
 /**
  * The monitor as Henry built it: a CSS3D iframe placed at the glass, an invisible GL plane that writes alpha 0 so the
@@ -114,6 +114,15 @@ export class MonitorScreen {
     else this.queued = target;
   }
 
+  /** The OS's front window (`films`, `about/…`, or '' for none): SaahilOS names it in its own location hash. */
+  get frontWindow(): string {
+    try {
+      return this.iframe.contentWindow?.location.hash.slice(1) ?? '';
+    } catch {
+      return '';
+    }
+  }
+
   update(time: number, camera: THREE.Camera) {
     const u = this.glass.material.uniforms;
     u.uTime.value = time;
@@ -152,7 +161,8 @@ export class MonitorScreen {
         this.onEvent({ type: 'press', down: data.type === 'mousedown' });
         break;
       case 'keydown':
-        if (typeof data.key === 'string') this.onEvent({ type: 'key', key: data.key });
+      case 'keyup':
+        if (typeof data.key === 'string') this.onEvent({ type: 'key', key: data.key, down: data.type === 'keydown' });
         break;
     }
   }

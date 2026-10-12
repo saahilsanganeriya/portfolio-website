@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { RoomAudio } from './Audio';
+import { RoomAudio, type ClickKind } from './Audio';
 import { RoomCamera, type CameraPhase } from './Camera';
 import { Effects } from './Effects';
 import { Interaction } from './Interaction';
@@ -51,6 +51,11 @@ export interface RoomProbe {
   readonly tier: number;
   point(name: string): { x: number; y: number } | null;
   goto(phase: 'idle' | 'desk' | 'monitor'): void;
+  /** Renders the room's sound offline as heard from a framing; see RoomAudio.renderOffline. */
+  renderSound(
+    seconds: number,
+    options: { view: 'idle' | 'desk' | 'monitor'; filmsOpen?: boolean; clicks?: { at: number; kind: ClickKind }[] },
+  ): Promise<Float32Array[]>;
 }
 
 declare global {
@@ -115,7 +120,11 @@ export class Application implements RoomHandle {
     );
     this.effects = new Effects(this.nodes, this.scene);
     this.effects.setTier(this.quality.tier);
-    this.audio = new RoomAudio(this.nodes.monitor.position, this.nodes.projector?.lens ?? null, this.nodes.framings.desk.target);
+    this.audio = new RoomAudio({
+      crt: this.nodes.monitor.position,
+      projector: this.nodes.projector?.lens ?? null,
+      desk: this.nodes.framings.desk.target,
+    });
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
       hotspot: (hotspot) => (hotspot.target ? this.openWindow(hotspot.target) : this.enterMonitor()),
       toggle: () => this.toggle(),
@@ -259,7 +268,7 @@ export class Application implements RoomHandle {
     this.interaction.update();
     if (!this.paused) this.effects.update(this.clock, this.renderer.gl.getPixelRatio());
     this.monitor.update(this.clock, this.camera.instance);
-    this.audio.update(this.camera.instance, now);
+    this.audio.update(this.camera.instance, now, this.monitor.frontWindow.startsWith('films'));
 
     // While paused, a still camera means a still frame: skip the work entirely.
     const viewChanged = !this.lastView.equals(this.camera.instance.matrixWorld);
@@ -305,6 +314,14 @@ export class Application implements RoomHandle {
       goto(phase) {
         if (phase === 'monitor') app.enterMonitor();
         else app.glide(phase, 1000, easeInOutQuint);
+      },
+      renderSound(seconds, { view, filmsOpen, clicks }) {
+        const framing = app.nodes.framings[view];
+        const listener = new THREE.PerspectiveCamera();
+        listener.position.copy(framing.position);
+        listener.lookAt(framing.target);
+        listener.updateMatrixWorld();
+        return app.audio.renderOffline(seconds, listener, { filmsOpen, clicks });
       },
     };
   }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { hotspotForProxy, type Hotspot } from '../hotspots';
+import type { ClickKind } from './Audio';
 import type { MonitorEvent } from './MonitorScreen';
 
 export interface InteractionHandlers {
@@ -9,7 +10,7 @@ export interface InteractionHandlers {
   toggle(): void;
   enterMonitor(): void;
   leaveMonitor(): void;
-  click(kind: 'key' | 'mouse'): void;
+  click(kind: ClickKind): void;
   /** Whether props can be hovered now (not while inside the monitor). */
   canHover(): boolean;
 }
@@ -25,6 +26,7 @@ export class Interaction {
   private readonly raycaster = new THREE.Raycaster();
   private readonly clientPointer = { x: 0, y: 0, inside: false };
   private pressedInMonitor = false;
+  private heldKey = '';
   private overMonitor = false;
   private dwell = 0;
   private readonly abort = new AbortController();
@@ -63,9 +65,15 @@ export class Interaction {
       if (!this.overMonitor) this.onMonitorPointer(true);
     } else if (event.type === 'press') {
       this.pressedInMonitor = event.down;
-      this.handlers.click('mouse');
+      this.handlers.click(event.down ? 'mouse-down' : 'mouse-up');
       if (!event.down && !this.overMonitor) this.handlers.leaveMonitor();
-    } else this.handlers.click('key');
+    } else if (!event.down) {
+      if (event.key === this.heldKey) this.heldKey = '';
+    } else if (event.key !== this.heldKey) {
+      // A held key repeats keydown; a real key clicks once, as in Henry's room.
+      this.heldKey = event.key;
+      this.handlers.click('key');
+    }
   }
 
   /** Hit-tests the props under the pointer once a frame and places the hover label. */

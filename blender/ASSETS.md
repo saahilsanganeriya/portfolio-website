@@ -96,7 +96,12 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
 |---|---|---|---|---|---|
-| Room sound: CRT mains hum and 15.7 kHz line whine, projector motor and shutter, room tone, key and mouse clicks, CRT power-on | the room on the home page | none: synthesised in the browser by src/scene/Application/Audio.ts | Saahil Sanganeriya (made for this site) | original | procedural WebAudio, no recordings; pink noise uses Paul Kellet's published economy filter |
+| Room tone (`public/room/audio/atmosphere.webm`, `.m4a`) | the room's quiet ambience on the home page, muffled as the camera nears the monitor | https://github.com/henryjeff/portfolio-website/blob/c53c5a50183655eb83d70048403a5084f5d1214c/static/audio/atmosphere/office.ogg | Henry Heffernan | MIT, used with his permission | mono, low-passed at 11 kHz, loudness-normalised to −23 LUFS, a 15.8 s loop with a 1.5 s crossfade (scripts/media/build-audio.mjs); Opus 32 kbit/s, AAC 48 kbit/s copy |
+| Computer running (`computer.webm`, `.m4a`) | the computer's hum, clearer near the desk | https://github.com/henryjeff/portfolio-website/blob/c53c5a50183655eb83d70048403a5084f5d1214c/static/audio/computer/idle.wav | Henry Heffernan | MIT, used with his permission | as the room tone; a 13.8 s loop |
+| Computer startup (`startup.webm`, `.m4a`) | the sound at START | https://github.com/henryjeff/portfolio-website/blob/c53c5a50183655eb83d70048403a5084f5d1214c/static/audio/startup/startup.mp3 | Henry Heffernan | MIT, used with his permission | mono, low-passed at 11 kHz, loudness-normalised to −23 LUFS, cut to 9 s with a 1.5 s fade-out |
+| Key clicks (`key-1` … `key-6`) | typing in SaahilOS on the monitor | https://github.com/henryjeff/portfolio-website/tree/c53c5a50183655eb83d70048403a5084f5d1214c/static/audio/keyboard | Henry Heffernan | MIT, used with his permission | mono, low-passed at 11 kHz, silence trimmed, recorded level kept; Opus 48 kbit/s, AAC 64 kbit/s copy |
+| Mouse button (`mouse-down`, `mouse-up`) | clicking in SaahilOS on the monitor | https://github.com/henryjeff/portfolio-website/tree/c53c5a50183655eb83d70048403a5084f5d1214c/static/audio/mouse | Henry Heffernan | MIT, used with his permission | as the key clicks |
+| 8mm projector sound (`projector.webm`, `.m4a`) | the projector, heard up close or while Films is the front window | https://freesound.org/people/videofueralle/sounds/241886/ | videofueralle (Freesound) | CC0 1.0 | from the sound page's high-quality preview (Ogg Vorbis, 48 kHz); mono, low-passed at 11 kHz, loudness-normalised to −23 LUFS, an 11.9 s loop from 0:40 with a 1 s crossfade |
 
 ## Code
 

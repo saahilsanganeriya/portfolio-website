@@ -19,6 +19,7 @@ const TYPES = {
   '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.avif': 'image/avif', '.ico': 'image/x-icon',
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.pdf': 'application/pdf',
+  '.webm': 'audio/webm', '.m4a': 'audio/mp4', '.mp4': 'video/mp4',
 };
 
 async function staticFile(pathname) {
