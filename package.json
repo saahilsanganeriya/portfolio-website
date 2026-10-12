@@ -13,6 +13,7 @@
     "check": "astro check",
     "test:e2e": "playwright test",
     "films": "node scripts/fetch-films.mjs",
+    "photos:ingest": "node scripts/photos-ingest.mjs",
     "measure:payload": "node scripts/measure-payload.mjs",
     "measure:fps": "node scripts/measure-fps.mjs",
     "astro": "astro",
