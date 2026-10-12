@@ -263,6 +263,7 @@ def bake_atlas(atlas: str, size: int, samples: int):
 def main():
     args = parse_args()
     scene = bpy.context.scene
+    saved = (scene.cycles.samples, scene.cycles.use_denoising, scene.render.threads)
     scene.render.engine = "CYCLES"
     scene.cycles.device = "CPU"
     scene.render.threads_mode = "FIXED"
@@ -270,6 +271,7 @@ def main():
     for atlas in args.atlas.split(","):
         size = max(256, int(ATLAS_SIZES[atlas] * args.scale))
         bake_atlas(atlas, size, args.samples)
+    scene.cycles.samples, scene.cycles.use_denoising, scene.render.threads = saved
     if not args.no_save:
         for img in bpy.data.images:
             if img.filepath and not img.packed_file:

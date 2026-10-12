@@ -184,6 +184,7 @@ def check_contract(path: Path):
 # ---- Stills ----
 
 def render_stills(samples: int, threads: int):
+    sys.dont_write_bytecode = True
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import build_room
 

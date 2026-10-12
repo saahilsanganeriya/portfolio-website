@@ -16,6 +16,7 @@ import bmesh
 import bpy
 from mathutils import Euler, Matrix, Vector
 
+sys.dont_write_bytecode = True  # keep __pycache__ out of blender/scripts
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_henry  # noqa: E402
 from import_henry import CACHE, REPO, fetch_cached  # noqa: E402
@@ -76,7 +77,7 @@ POSTER_Z = 1.66
 CAMERAS = {
     # name: (position, target) in metres; vertical field of view is 35 degrees for every framing.
     "cam_loading": ((6.6, -8.8, 5.2), (-0.2, -0.8, 0.7)),
-    "cam_idle": ((4.05, -5.35, 2.85), (-0.2, -0.85, 0.95)),
+    "cam_idle": ((3.75, -4.95, 2.7), (-0.25, -0.9, 0.98)),
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
     "cam_shelf": ((-0.25, -1.05, 1.62), (-0.30, 0.30, 1.72)),
@@ -646,12 +647,11 @@ def build_window(mats):
             bevel=0.006)
     smooth_by_angle(new_object("env_window_sill", bm, "env", "env", [walnut]))
 
-    # Sky card: a flat panel 0.5 m outside the wall, below the wall top and inside its right end, so it is
-    # only ever seen through the window.
+    # Sky card: a flat panel 15 cm outside the wall, sized so every framing (from cam_desk low and close to
+    # cam_loading high and far) sees it only through the window, never past the wall's top or open right end.
     bm = bmesh.new()
-    y = Y_BACK + WALL_T + 0.5
-    quad = [bm.verts.new((x, y, z)) for x, z in ((0.45, 0.6), (X_RIGHT - 0.05, 0.6), (X_RIGHT - 0.05, 2.42),
-                                                 (0.45, 2.42))]
+    y = Y_BACK + WALL_T + 0.15
+    quad = [bm.verts.new((x, y, z)) for x, z in ((0.55, 0.6), (2.05, 0.6), (2.05, 2.45), (0.55, 2.45))]
     bm.faces.new(quad)
     bm.normal_update()
     for face in bm.faces:
@@ -1235,7 +1235,7 @@ def setup_world_and_render():
     scene.render.resolution_x, scene.render.resolution_y = 1600, 1000
     scene.view_settings.view_transform = "AgX"
     scene.view_settings.look = "AgX - Medium High Contrast"
-    scene.view_settings.exposure = 1.3
+    scene.view_settings.exposure = 1.45
 
     cam = bpy.data.objects.new("render_cam", bpy.data.cameras.new("render_cam"))
     cam.data.sensor_fit = "VERTICAL"
