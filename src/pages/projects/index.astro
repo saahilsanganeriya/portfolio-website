@@ -1,0 +1,60 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getProjects, groupByYear } from '../../lib/content';
+
+const { featured, archive } = await getProjects();
+const archiveYears = groupByYear(archive, (project) => project.data.year);
+---
+
+<Base title="Projects" description="Things I have built, from data pipelines to research tools, with what each one taught me.">
+  <h1 class="page-title">Projects</h1>
+  <p class="page-lead">Things I have built, at work and on my own, and what each one taught me.</p>
+  {featured.length === 0 && archive.length === 0 && <p class="empty-note">The write-ups are being written.</p>}
+  {
+    featured.length > 0 && (
+      <section aria-labelledby="selected">
+        <h2 class="section-title" id="selected">
+          Selected work
+        </h2>
+        <ol class="entry-list">
+          {featured.map((project) => (
+            <li class="chrono">
+              <p class="chrono-label">{project.data.years ?? project.data.year}</p>
+              <div>
+                <h3 class="entry-title">
+                  <a href={`/projects/${project.id}`}>{project.data.title}</a>
+                </h3>
+                <p class="entry-summary">{project.data.summary}</p>
+                <p class="meta">{project.data.stack.join(', ')}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    )
+  }
+  {
+    archive.length > 0 && (
+      <section aria-labelledby="archive">
+        <h2 class="section-title" id="archive">
+          Archive
+        </h2>
+        {archiveYears.map(([year, projects]) => (
+          <div class="chrono">
+            <p class="chrono-label">{year}</p>
+            <ul class="entry-list compact">
+              {projects.map((project) => (
+                <li>
+                  <h3 class="entry-title">
+                    <a href={`/projects/${project.id}`}>{project.data.title}</a>
+                  </h3>
+                  <p class="entry-summary">{project.data.summary}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </section>
+    )
+  }
+</Base>

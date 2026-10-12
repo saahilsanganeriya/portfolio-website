@@ -1,0 +1,37 @@
+---
+import FormattedDate from '../../components/FormattedDate.astro';
+import Base from '../../layouts/Base.astro';
+import { getPosts, groupByYear } from '../../lib/content';
+
+const posts = await getPosts();
+const years = groupByYear(posts, (post) => post.data.date.getUTCFullYear());
+---
+
+<Base title="Writing" description="Essays on systems, data and film, and reviews from my Letterboxd diary, newest first.">
+  <h1 class="page-title">Writing</h1>
+  <p class="page-lead">
+    Essays on the systems I build, the data they run on, and the films I keep going back to. Newest first, also as
+    <a href="/rss.xml">RSS</a>.
+  </p>
+  {posts.length === 0 && <p class="empty-note">The first posts are being written. Subscribe to the RSS feed to get them.</p>}
+  {
+    years.map(([year, yearPosts]) => (
+      <section class="chrono" aria-labelledby={`y${year}`}>
+        <h2 class="chrono-label" id={`y${year}`}>{year}</h2>
+        <ol class="entry-list">
+          {yearPosts.map((post) => (
+            <li>
+              <h3 class="entry-title">
+                <a href={`/blog/${post.id}`}>{post.data.title}</a>
+              </h3>
+              <p class="entry-summary">{post.data.summary}</p>
+              <p class="meta">
+                <FormattedDate date={post.data.date} />
+              </p>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))
+  }
+</Base>

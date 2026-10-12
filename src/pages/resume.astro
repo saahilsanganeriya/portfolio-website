@@ -1,0 +1,27 @@
+---
+import { existsSync } from 'node:fs';
+import { getEntry, render } from 'astro:content';
+import Article from '../layouts/Article.astro';
+
+const PDF_PATH = '/resume/saahil-sanganeriya-resume.pdf';
+// Bundled pages lose their source location, so resolve public/ from the project root the build runs in.
+const hasPdf = existsSync(`${process.cwd()}/public${PDF_PATH}`);
+
+const entry = await getEntry('pages', 'resume');
+const rendered = entry ? await render(entry) : null;
+const summary = entry?.data.summary ?? 'Experience, education and selected work on one page.';
+---
+
+<Article title={entry?.data.title ?? 'Résumé'} description={summary}>
+  <Fragment slot="lead">
+    <p class="article-lead">{summary}</p>
+    {
+      hasPdf && (
+        <p class="article-meta meta">
+          <a href={PDF_PATH}>Download the PDF</a>
+        </p>
+      )
+    }
+  </Fragment>
+  {rendered ? <rendered.Content /> : <p>This page is being written.</p>}
+</Article>

@@ -1,0 +1,15 @@
+---
+import { getEntry, render } from 'astro:content';
+import Article from '../layouts/Article.astro';
+
+const entry = await getEntry('pages', 'about');
+const rendered = entry ? await render(entry) : null;
+---
+
+<Article
+  title={entry?.data.title ?? 'About'}
+  description={entry?.data.summary ?? 'Who I am, where I am from, and what I want to build.'}
+>
+  <p slot="lead" class="article-lead">{entry?.data.summary ?? 'Who I am, where I am from, and what I want to build.'}</p>
+  {rendered ? <rendered.Content /> : <p>This page is being written.</p>}
+</Article>

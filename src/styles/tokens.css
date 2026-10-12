@@ -1,0 +1,49 @@
+:root {
+  /* Palette roles. --thread is 3.0:1 on ink: lines and marks only, never text. --projector is for the beam and the CRT. */
+  --ink: #14110f;
+  --walnut: #3b2a1e;
+  --paper: #ede4d3;
+  --dust: #a89f91;
+  --thread: #b4442c;
+  --projector: #9db4c0;
+
+  --font-serif: 'Newsreader Variable', 'Iowan Old Style', Georgia, serif;
+  --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+
+  /* Sizes from the classical scale (14, 16, 18, 21, 24, 36, 48, 72 px); wide screens step body and headings up. */
+  --size-meta: 0.875rem;
+  --size-ui: 1rem;
+  --size-body: 1.125rem;
+  --size-lead: 1.3125rem;
+  --size-h3: 1.3125rem;
+  --size-h2: 1.5rem;
+  --size-h1: 2.25rem;
+  --size-display: 3rem;
+
+  --leading-body: 1.6;
+  --leading-tight: 1.15;
+  /* About 68 characters of Newsreader per line (1em is roughly 2.3 characters of running text). */
+  --measure: 29.5em;
+
+  /* The page is built on one left edge; dates and years hang to its left on wide screens. */
+  --edge: clamp(1.25rem, 6vw, 7rem);
+  --hang: 0rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --space-5: 2.5rem;
+  --space-6: 4rem;
+  --space-7: 6rem;
+}
+
+@media (min-width: 56rem) {
+  :root {
+    --size-body: 1.3125rem;
+    --size-h2: 1.5rem;
+    --size-h1: 3rem;
+    --size-display: 4.5rem;
+    --hang: 7rem;
+  }
+}

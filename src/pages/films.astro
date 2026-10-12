@@ -1,0 +1,142 @@
+---
+import FormattedDate from '../components/FormattedDate.astro';
+import Base from '../layouts/Base.astro';
+import { groupByYear } from '../lib/content';
+import { filmsData, ratingLabel, stars, type FilmEntry } from '../lib/films';
+
+const { entries, posters, profile, fetchedAt } = filmsData;
+const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
+
+const wall = posters
+  .map((slug) => entries.find((entry) => entry.slug === slug))
+  .filter((film): film is FilmEntry => film !== undefined);
+const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slice(0, 4)));
+---
+
+<Base title="Films" description="What I have been watching, from my Letterboxd diary: ratings, rewatches and short reviews.">
+  <h1 class="page-title">Films</h1>
+  <p class="page-lead">
+    What I have been watching, from my <a href={profile}>Letterboxd diary</a>. Last updated <FormattedDate
+      date={new Date(fetchedAt)}
+    />.
+  </p>
+
+  {
+    wall.length > 0 && (
+      <section aria-labelledby="wall">
+        <h2 class="section-title" id="wall">
+          On the wall
+        </h2>
+        <p class="section-note">The four films whose posters hang in the room.</p>
+        <ul class="wall link-list">
+          {wall.map((film) => (
+            <li id={film.slug}>
+              <p class="wall-title">
+                <a href={film.url}>{film.title}</a>
+              </p>
+              <p class="meta">
+                {film.year}
+                {film.rating && (
+                  <>
+                    , <span aria-hidden="true">{stars(film.rating)}</span>
+                    <span class="visually-hidden">{ratingLabel(film.rating)}</span>
+                  </>
+                )}
+                , last watched <FormattedDate date={day(film.watchedDate)} />
+              </p>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  <section aria-labelledby="diary">
+    <h2 class="section-title" id="diary">Diary</h2>
+    {
+      diaryYears.map(([year, films]) => (
+        <div class="chrono">
+          <p class="chrono-label">{year}</p>
+          <ol class="diary link-list">
+            {films.map((film) => (
+              <li>
+                <span class="meta">
+                  <FormattedDate date={day(film.watchedDate)} style="short" />
+                </span>
+                <span class="diary-film">
+                  <a href={film.url}>{film.title}</a> <span class="meta">{film.year}</span>
+                  {film.rewatch && <span class="meta">, rewatch</span>}
+                </span>
+                <span class="diary-rating">
+                  {film.rating && (
+                    <>
+                      <span aria-hidden="true">{stars(film.rating)}</span>
+                      <span class="visually-hidden">{ratingLabel(film.rating)}</span>
+                    </>
+                  )}
+                </span>
+                {film.review && <p class="diary-review">{film.review}</p>}
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))
+    }
+  </section>
+</Base>
+
+<style>
+  .section-note {
+    margin-top: calc(-1 * var(--space-3));
+    margin-bottom: var(--space-4);
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    color: var(--dust);
+  }
+
+  .wall {
+    display: grid;
+    gap: var(--space-4);
+    max-width: var(--measure);
+    padding: 0;
+    list-style: none;
+  }
+
+  .wall-title {
+    font-size: var(--size-h1);
+    font-weight: 300;
+    line-height: var(--leading-tight);
+  }
+
+  .diary {
+    max-width: var(--measure);
+    padding: 0;
+    list-style: none;
+  }
+
+  .diary li {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+    gap: 0 var(--space-3);
+    align-items: baseline;
+    padding-block: var(--space-2);
+  }
+
+  .diary-film {
+    font-size: var(--size-body);
+  }
+
+  .diary-rating {
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    letter-spacing: 0.08em;
+  }
+
+  .diary-review {
+    grid-column: 2 / -1;
+    margin-top: var(--space-1);
+    color: var(--dust);
+    font-style: italic;
+    white-space: pre-line;
+  }
+</style>

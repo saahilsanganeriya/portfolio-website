@@ -1,0 +1,15 @@
+---
+import { SITE } from '../site';
+import ThreadDivider from './ThreadDivider.astro';
+---
+
+<footer class="site-footer">
+  <ThreadDivider />
+  <ul>
+    <li><a href={`mailto:${SITE.email}`}>{SITE.email}</a></li>
+    <li><a href={SITE.github}>GitHub</a></li>
+    <li><a href={SITE.linkedin}>LinkedIn</a></li>
+    <li><a href="/rss.xml">RSS</a></li>
+    <li><a href="/credits">Credits</a></li>
+  </ul>
+</footer>

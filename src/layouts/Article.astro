@@ -1,0 +1,27 @@
+---
+import '../styles/article.css';
+import Base from './Base.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  ogImage?: string;
+  canonical?: string;
+  publishedTime?: Date;
+}
+
+const { title, description, ogImage, canonical, publishedTime } = Astro.props;
+---
+
+<Base {title} {description} {ogImage} {canonical} {publishedTime} ogType="article">
+  <article class="article">
+    <header class="article-header">
+      <h1 class="article-title">{title}</h1>
+      <slot name="lead" />
+    </header>
+    <div class="prose">
+      <slot />
+    </div>
+    <slot name="end" />
+  </article>
+</Base>
