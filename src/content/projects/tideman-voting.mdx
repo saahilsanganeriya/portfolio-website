@@ -38,7 +38,9 @@ When one candidate beats everyone head to head, ranked pairs always picks them. 
 
 ## Where the shortcut broke
 
-Plurality counts first choices. My program keeps only the table of head-to-head counts, not the ballots, so it estimates first-place votes by adding up a candidate’s head-to-head support and dividing by the number of opponents. That is the Borda score scaled down. In the program’s own 9-voter demo, the true first-choice counts are 4, 3 and 2. The estimate ties the top two at 5. So the plurality and Borda columns nearly always agree, and comparing them says little.
+Plurality counts first choices. My program keeps only the table of head-to-head counts, not the ballots, so it estimates first-place votes by adding up a candidate’s head-to-head support and dividing by the number of opponents. That is the Borda score scaled down.
+
+In the program’s own 9-voter demo, the true first-choice counts are 4, 3 and 2. The estimate ties the top two at 5. So the plurality and Borda columns nearly always agree, and comparing them says little.
 
 The simulation’s agreement figure has the same kind of problem. It counts how often each method picked each candidate across all runs, then matches those totals. If Tideman picks A and then B while plurality picks B and then A, both totals are one win each, and the figure says 100%.
 
