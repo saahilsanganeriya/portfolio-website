@@ -4,15 +4,27 @@ import type { ImageMetadata } from 'astro';
 import { getImage } from 'astro:assets';
 import { z } from 'astro/zod';
 import projectionistArchitecture from '../assets/projects/projectionist-architecture.png';
-import ovenFile from '../content/oven.json';
 import samcellPipeline from '../assets/projects/samcell-paper-figure-3.jpg';
+import favouritesFile from '../content/favorites.json';
+import ovenFile from '../content/oven.json';
 import wallpaper from './assets/wallpaper/wallpaper.jpg';
 import type { OsFavourite, OsFigure, OsImage, OsWallpaper, OvenList } from './types';
 
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}/);
 
 const ovenSchema = z.object({
-  items: z.array(z.object({ title: z.string().min(1), note: z.string().min(1), link: z.string().regex(/^(\/|https?:\/\/)/, 'a site path or an http(s) URL').optional() })).min(1),
+  items: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        note: z.string().min(1),
+        link: z
+          .string()
+          .regex(/^(\/|https?:\/\/)/, 'a site path or an http(s) URL')
+          .optional(),
+      }),
+    )
+    .min(1),
   updated: isoDay,
 });
 
@@ -31,30 +43,9 @@ const favouritesSchema = z.object({
     .min(1),
 });
 
-// The stand-in until favorites.json is written; it matches that file's schema.
-// From the profile's Favorite Films in the Letterboxd export of 2026-10-12.
-const FAVOURITES_FALLBACK: OsFavourite[] = [
-  { slug: 'la-la-land', title: 'La La Land', year: 2016, director: 'Damien Chazelle', poster: null },
-  { slug: 'yi-yi', title: 'Yi Yi', year: 2000, director: 'Edward Yang', poster: null },
-  {
-    slug: 'normal-people-2020',
-    title: 'Normal People',
-    year: 2020,
-    director: 'Lenny Abrahamson and Hettie Macdonald',
-    poster: null,
-  },
-  { slug: 'black-swan', title: 'Black Swan', year: 2010, director: 'Darren Aronofsky', poster: null },
-];
-
-// A literal glob matches nothing until the file exists, so the build passes either way.
-const favouritesFile = Object.values(
-  import.meta.glob('../content/favorites.json', { eager: true, import: 'default' }),
-)[0];
-
 export const ovenList = (): OvenList => ovenSchema.parse(ovenFile);
 
-export const favourites = (): OsFavourite[] =>
-  favouritesFile === undefined ? FAVOURITES_FALLBACK : favouritesSchema.parse(favouritesFile).films;
+export const favourites = (): OsFavourite[] => favouritesSchema.parse(favouritesFile).films;
 
 type FigureSource = Omit<OsFigure, keyof OsImage> & { src: ImageMetadata; alt: string };
 
