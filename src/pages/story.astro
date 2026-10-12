@@ -39,6 +39,11 @@ const photoSizes = '(min-aspect-ratio: 1/1) 80vw, 100vw';
 >
   <script is:inline slot="head">
     (() => {
+      // The reel plays in SaahilOS's story window (?embed=1); opened as a page of its own it is the room, with that window open.
+      if (window.top === window.self && !new URLSearchParams(location.search).has('embed')) {
+        location.replace('/#story');
+        return;
+      }
       const root = document.documentElement;
       if (new URLSearchParams(location.search).get('embed') === '1') root.dataset.embed = '';
       if (!matchMedia('(prefers-reduced-motion: reduce)').matches) root.dataset.reel = 'live';

@@ -48,10 +48,17 @@ const index: OsIndex = {
 
 <Base
   title="SaahilOS"
-  description="A small desktop computer with my projects, writing, films and story in its windows. The same pages are also on the plain site."
+  description="A small desktop computer with my projects, writing, films and story in its windows."
   bare
 >
   <Fragment slot="head">
+    <script is:inline>
+      // SaahilOS lives on the room's monitor (?embed=1) and in the drawn monitor (framed); opened as a page of its own
+      // it is the room instead, ending on the monitor with the window the hash names (/#os: the desktop alone).
+      if (window.top === window.self && !new URLSearchParams(location.search).has('embed')) {
+        location.replace('/#' + (location.hash.slice(1) || 'os'));
+      }
+    </script>
     <link rel="preload" href={pixelFont} as="font" type="font/woff2" crossorigin />
     <script is:inline>
       // Inside the room's monitor (?embed=1), pass pointer and key events up so the room keeps reacting to them,
