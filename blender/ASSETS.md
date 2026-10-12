@@ -13,6 +13,11 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Projector Screen (`projector_screen`) | prop `projector_screen` (tripod screen) | https://polyhaven.com/a/projector_screen | PeterM (Poly Haven) | CC0 1.0 | fabric split into its own object, turned to face −Y, origin moved to the base, centre empty added |
 | Filmstrip Projector 8mm (`filmstrip_projector_8mm`) | prop `projector_8mm` (Super 8 projector, two reels) | https://polyhaven.com/a/filmstrip_projector_8mm | PeterM (Poly Haven) | CC0 1.0 | mains cable and plug removed, parts decimated from 27.1k to 13.9k triangles, reels split out, red reel muted to oxide red, lens empty added |
 | Poster frame (`poster_frame`) | prop `poster_frame` (40 × 60 cm print, walnut moulding, glass) | blender/scripts/props_poster_frame.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
+| Planter Pot Clay (`planter_pot_clay`) | pot of prop `mango_plant` | https://polyhaven.com/a/planter_pot_clay | Amal Kumar (Poly Haven) | CC0 1.0 | scaled to 72 % (a 19 cm pot), origin moved to the base |
+| Mango seedling (`mango_plant_leaves`) | prop `mango_plant` (stone, stem, leaves, soil) | blender/scripts/props_mango_plant.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
+| Four-bay NAS (`nas_4bay`) | prop `nas_4bay` with `nas_led_0..3` | blender/scripts/props_nas_4bay.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
+| Book stack (`books_stack`) | prop `books_stack` | blender/scripts/props_books_stack.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
+| Film canisters (`film_canister_a/_b/_c`) | prop `film_canister` | blender/scripts/props_film_canister.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
 
 ## Textures and HDRIs
 
@@ -22,6 +27,8 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Paper 001 | paper grain on poster prints and book pages | https://ambientcg.com/view?id=Paper001 | ambientCG (Lennart Demes) | CC0 1.0 | 1K height map as bump |
 | Fingerprints 002 | fingerprints on glass, chrome and glossy plastic | https://ambientcg.com/view?id=Fingerprints002 | ambientCG (Lennart Demes) | CC0 1.0 | 1K roughness map as a roughness overlay |
 | Surface Imperfections 003 | fine scratches and smears on metal and glass | https://ambientcg.com/view?id=SurfaceImperfections003 | ambientCG (Lennart Demes) | CC0 1.0 | 1K map as a roughness overlay |
+| Plastic 012 B | black plastic shell of `nas_4bay` | https://ambientcg.com/view?id=Plastic012B | ambientCG (Lennart Demes) | CC0 1.0 | 1K roughness map, box-projected |
+| Fabric 036 | book cloth of `books_stack` | https://ambientcg.com/view?id=Fabric036 | ambientCG (Lennart Demes) | CC0 1.0 | 1K colour and height maps, tinted per book |
 
 ## Images
 

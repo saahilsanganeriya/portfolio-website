@@ -59,10 +59,10 @@ def build_studio(scene, lo, hi):
     mp = k.node("ShaderNodeMapping", inputs={"Rotation": (0, 0, math.radians(140))})
     k.set(mp, "Vector", k.node("ShaderNodeTexCoord").outputs["Generated"])
     k.set(env, "Vector", mp.outputs[0])
-    bg = k.node("ShaderNodeBackground", inputs={"Color": env.outputs["Color"], "Strength": 0.4})
+    bg = k.node("ShaderNodeBackground", inputs={"Color": env.outputs["Color"], "Strength": 0.1})
     k.set(k.node("ShaderNodeOutputWorld"), "Surface", bg.outputs[0])
 
-    floor_mat = pl.surface("studio_sweep", (0.30, 0.285, 0.265), 0.62, color_var=0.0)
+    floor_mat = pl.surface("studio_sweep", (0.16, 0.152, 0.142), 0.7, color_var=0.0)
     b = pl.Builder("studio_sweep")
     span = size * 6
     radius = size * 1.2
@@ -103,9 +103,9 @@ def build_studio(scene, lo, hi):
 
     dist = size * 2.2
     scale = dist * dist
-    area("key", -45, 48, dist, 60 * scale, (1.0, 0.93, 0.84), size * 1.1)
-    area("fill", 70, 18, dist, 15 * scale, (0.88, 0.93, 1.0), size * 1.6)
-    area("rim", 165, 40, dist, 40 * scale, (1.0, 0.97, 0.92), size * 0.8)
+    area("key", -45, 48, dist, 17 * scale, (1.0, 0.93, 0.84), size * 0.7)
+    area("fill", 70, 18, dist, 4 * scale, (0.88, 0.93, 1.0), size * 1.6)
+    area("rim", 165, 40, dist, 12 * scale, (1.0, 0.97, 0.92), size * 0.8)
     return rig
 
 
@@ -168,6 +168,7 @@ def main():
     scene.render.threads_mode = "FIXED"
     scene.render.threads = 16
     scene.view_settings.view_transform = "AgX"
+    scene.view_settings.look = "AgX - Medium High Contrast"
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_depth = "8"
     scene.render.film_transparent = False

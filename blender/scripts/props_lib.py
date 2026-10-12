@@ -61,6 +61,7 @@ def save_prop(name):
     os.makedirs(PROPS_DIR, exist_ok=True)
     bpy.data.orphans_purge(do_recursive=True)
     bpy.ops.file.pack_all()
+    bpy.context.preferences.filepaths.save_version = 0
     path = os.path.join(PROPS_DIR, f"{name}.blend")
     bpy.ops.wm.save_as_mainfile(filepath=path, compress=True)
     print(f"saved {path}")
@@ -80,6 +81,7 @@ def triangle_count(objects):
 
 
 def report(name, collection, budget):
+    bpy.context.view_layer.update()
     objs = mesh_objects(collection)
     tris = triangle_count(objs)
     lo = Vector((1e9, 1e9, 1e9))
@@ -242,6 +244,24 @@ class Builder:
             bmesh.ops.bevel(self.bm, geom=along, offset=corner, offset_type="OFFSET", segments=corner_seg,
                             profile=0.5, affect="EDGES", clamp_overlap=True)
             faces = [f for f in self.bm.faces if f not in before]
+        self._bevel_sharp(faces, bevel, bevel_seg)
+        return self._wrap(before, xform(loc, rot), mat)
+
+    def frustum(self, bottom, top, height, loc=(0, 0, 0), rot=(0, 0, 0), top_offset=(0, 0), mat=None, bevel=0.0,
+                bevel_seg=2):
+        """Tapered block: bottom (w, d) rectangle at z=0, top (w, d) rectangle at z=height shifted by top_offset."""
+        before = set(self.bm.faces)
+        (bw, bd), (tw, td) = bottom, top
+        ox, oy = top_offset
+        lo = [self.bm.verts.new((sx * bw / 2, sy * bd / 2, 0.0)) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        hi = [self.bm.verts.new((ox + sx * tw / 2, oy + sy * td / 2, height)) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+        self.bm.faces.new(list(reversed(lo)))
+        self.bm.faces.new(hi)
+        for i in range(4):
+            j = (i + 1) % 4
+            self.bm.faces.new((lo[i], lo[j], hi[j], hi[i]))
+        faces = [f for f in self.bm.faces if f not in before]
+        bmesh.ops.recalc_face_normals(self.bm, faces=faces)
         self._bevel_sharp(faces, bevel, bevel_seg)
         return self._wrap(before, xform(loc, rot), mat)
 
@@ -430,8 +450,10 @@ class Builder:
 
 
 def _activate(ob):
+    bpy.context.view_layer.update()
     for o in bpy.context.view_layer.objects:
-        o.select_set(False)
+        if o is not None:
+            o.select_set(False)
     bpy.context.view_layer.objects.active = ob
     ob.select_set(True)
 
@@ -632,8 +654,8 @@ def _wear_group():
     ao_in = k.node("ShaderNodeAmbientOcclusion", inside=True, only_local=True, samples=8)
     k.set(ao_in, "Distance", gi.outputs["Edge Width"])
     convex = k.math("SUBTRACT", 1.0, ao_in.outputs["AO"])
-    edge = k.map_range(convex, 0.06, 0.42)
-    breakup = k.map_range(fine, 0.36, 0.62)
+    edge = k.map_range(convex, 0.02, 0.22)
+    breakup = k.map_range(fine, 0.30, 0.58)
     edge = k.math("MULTIPLY", edge, breakup, clamp=True)
     ao_out = k.node("ShaderNodeAmbientOcclusion", inside=False, only_local=True, samples=8)
     k.set(ao_out, "Distance", k.math("MULTIPLY", gi.outputs["Edge Width"], 4.0))
@@ -715,9 +737,11 @@ def surface(name, base, roughness, metallic=0.0, *, color_tex=None, tint=None, r
         metal = k.mix_float(k.math("MULTIPLY", wear.outputs["Edge"], edge_wear, clamp=True), metallic, edge_metallic)
 
     if dust > 0:
-        dmask = k.math("MULTIPLY", wear.outputs["Top"], k.map_range(wear.outputs["Fine"], 0.3, 0.75, 0.25, 1.0))
-        dmask = k.math("MULTIPLY", dmask, k.map_range(wear.outputs["Broad"], 0.25, 0.7, 0.4, 1.0))
-        dmask = k.math("MULTIPLY", dmask, dust, clamp=True)
+        # a fine haze on up-facing faces, a little heavier in crevices, broken up at two scales
+        haze = k.math("MULTIPLY", wear.outputs["Top"], k.map_range(wear.outputs["Fine"], 0.2, 0.8, 0.45, 1.0))
+        haze = k.math("MULTIPLY", haze, k.map_range(wear.outputs["Broad"], 0.3, 0.7, 0.7, 1.0))
+        haze = k.math("ADD", haze, k.math("MULTIPLY", wear.outputs["Cavity"], 0.35))
+        dmask = k.math("MULTIPLY", haze, dust * 0.38, clamp=True)
         color = k.mix_color(dmask, color, dust_color + (1.0,))
         rough = k.mix_float(dmask, rough, 0.92)
         metal = k.mix_float(dmask, metal, 0.0)
