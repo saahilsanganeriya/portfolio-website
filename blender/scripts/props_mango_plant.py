@@ -55,7 +55,7 @@ def add_leaf(builder, leaf_uv, base, direction_az, pitch_deg, length, width, dro
         row = []
         for s in across:
             y = hw * s
-            lift = fold * abs(y) + 0.0018 * math.sin(t * math.pi * 5 + wave_phase) * abs(s)
+            lift = fold * abs(y) - 0.9 * fold * hw * abs(s) ** 3 + 0.0016 * math.sin(t * math.pi * 5 + wave_phase) * abs(s)
             yr = y * math.cos(tw) - lift * math.sin(tw)
             zr = y * math.sin(tw) + lift * math.cos(tw)
             row.append(pet_end + fwd * x + side * yr + up * (z + zr))
@@ -75,7 +75,7 @@ def add_leaf(builder, leaf_uv, base, direction_az, pitch_deg, length, width, dro
     builder._wrap(before, None, mat)
 
 
-def soil_disc(builder, radius, z, mat, rng, rings=6, segments=36):
+def soil_disc(builder, radius, z, mat, rng, rings=9, segments=40):
     bm = builder.bm
     before = set(bm.faces)
     centre = bm.verts.new((0, 0, z + 0.006))
@@ -86,7 +86,7 @@ def soil_disc(builder, radius, z, mat, rng, rings=6, segments=36):
         ring = []
         for s in range(segments):
             a = math.tau * s / segments
-            bump = 0.006 * (1 - (r_i / rings) ** 2) + rng.uniform(-0.0012, 0.0012)
+            bump = 0.005 * (1 - (r_i / rings) ** 2) + rng.uniform(-0.0022, 0.0022) * (1 if r_i < rings else 0.3)
             ring.append(bm.verts.new((rr * math.cos(a), rr * math.sin(a), z + bump)))
         ring_verts.append(ring)
     first = ring_verts[0]
@@ -124,14 +124,14 @@ def main():
     stone_mat = pl.surface("mango_stone", (0.26, 0.19, 0.10), 0.9, micro_bump=(260, 0.9), color_var=0.2,
                            grime=0.7, edge_wear=0.25, edge_color=(0.34, 0.26, 0.15))
     stem_mat = pl.surface("mango_stem", (0.075, 0.06, 0.03), 0.55, micro_bump=(600, 0.3), color_var=0.25)
-    leaf_mat = leaf_material("mango_leaf", (0.018, 0.050, 0.012), (0.15, 0.19, 0.055), 0.5)
+    leaf_mat = leaf_material("mango_leaf", (0.026, 0.066, 0.017), (0.17, 0.21, 0.06), 0.42)
     young_mat = leaf_material("mango_leaf_young", (0.12, 0.035, 0.018), (0.22, 0.12, 0.06), 0.5)
     dry_mat = leaf_material("mango_leaf_dry", (0.16, 0.09, 0.035), (0.24, 0.16, 0.07), 0.8)
 
     plant = pl.Builder(f"{NAME}_leaves")
     plant.bm.loops.layers.uv.new("UVMap")
     leaf_uv = plant.bm.loops.layers.uv.new("leaf")
-    soil_z = pot_h * 0.86
+    soil_z = pot_h - 0.011
     r_in = pot_inner_radius(pot, soil_z) + 0.0015
     soil_disc(plant, r_in, soil_z, soil_mat, rng)
     for _ in range(9):
@@ -176,7 +176,7 @@ def main():
             az += math.degrees(GOLDEN) + rng.uniform(-12, 12)
             base = stem_point(h + rng.uniform(-0.012, 0.004))
             add_leaf(plant, leaf_uv, base, az, rng.uniform(*pitches), rng.uniform(*lens), rng.uniform(*widths),
-                     droop * rng.uniform(0.8, 1.2), mat, stem_mat, rng, fold=rng.uniform(0.15, 0.3),
+                     droop * rng.uniform(0.8, 1.2), mat, stem_mat, rng, fold=rng.uniform(0.28, 0.42),
                      twist_deg=rng.uniform(-25, 25), hang=hang, petiole=rng.uniform(0.018, 0.032))
 
     dry_base = Vector((-0.045, 0.035, soil_z + 0.006))

@@ -18,6 +18,8 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Four-bay NAS (`nas_4bay`) | prop `nas_4bay` with `nas_led_0..3` | blender/scripts/props_nas_4bay.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
 | Book stack (`books_stack`) | prop `books_stack` | blender/scripts/props_books_stack.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
 | Film canisters (`film_canister_a/_b/_c`) | prop `film_canister` | blender/scripts/props_film_canister.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
+| Silver rangefinder-style camera (`fujifilm_x100`) | prop `fujifilm_x100` | blender/scripts/props_fujifilm_x100.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font (not the maker's logo) |
+| Black SLR-style digital camera (`fujifilm_xt`) | prop `fujifilm_xt` | blender/scripts/props_fujifilm_xt.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | lettering set in Blender's built-in font (not the maker's logo) |
 
 ## Textures and HDRIs
 
@@ -29,6 +31,8 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | Surface Imperfections 003 | fine scratches and smears on metal and glass | https://ambientcg.com/view?id=SurfaceImperfections003 | ambientCG (Lennart Demes) | CC0 1.0 | 1K map as a roughness overlay |
 | Plastic 012 B | black plastic shell of `nas_4bay` | https://ambientcg.com/view?id=Plastic012B | ambientCG (Lennart Demes) | CC0 1.0 | 1K roughness map, box-projected |
 | Fabric 036 | book cloth of `books_stack` | https://ambientcg.com/view?id=Fabric036 | ambientCG (Lennart Demes) | CC0 1.0 | 1K colour and height maps, tinted per book |
+| Leather 026 | camera leatherette | https://ambientcg.com/view?id=Leather026 | ambientCG (Lennart Demes) | CC0 1.0 | 1K height and roughness maps, box-projected |
+| Metal 009 | satin aluminium of the camera plates | https://ambientcg.com/view?id=Metal009 | ambientCG (Lennart Demes) | CC0 1.0 | 1K roughness map, box-projected |
 
 ## Images
 
