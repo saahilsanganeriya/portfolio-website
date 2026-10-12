@@ -14,60 +14,144 @@ cover: "../../assets/projects/swe-sim.png"
 coverAlt: "swe-sim's pipeline in nine boxes: repository URL or SWE-bench pool, discover and judge, probe base and gold on Modal, draft facts and briefs, approval gates, compile and validate controls, register, run through Temporal, then grade, audit, score and export."
 ---
 
-Most GitHub issues leave something out. A bug report says a hook misbehaves when a test is skipped and
-never says which kind of skip. An engineer on the team would ask. Most coding benchmarks hand the agent a
-tidy spec instead, so they never find out whether it knows when to ask.
+Here is a real pytest bug report, in one line: run your tests with `--pdb`, and a unittest test that was
+skipped still runs its `tearDown`. It sounds complete. It is not. You can skip a unittest test with
+`@unittest.skip` or with pytest's own skip marker, and the report never says which one it means.
 
-swe-sim turns real issues into tasks that keep the gap. It removes chosen facts from the issue and gives
-them to a simulated stakeholder: an LLM that knows the missing facts and runs out of patience. The agent
-can question it, write a patch, and then hidden tests grade the patch in a separate offline container.
-Asking changes what the agent knows. It never changes the tests or the reward.
+An engineer on the project would ask. A coding agent in most benchmarks cannot. It gets a tidy spec, so the
+benchmark never learns whether the agent knows when a spec is missing something.
 
-## How a task gets made
+swe-sim builds the other kind of task. It takes a real GitHub issue, keeps the gap, and gives the agent
+someone to ask.
 
-Each task runs in three conditions: the full brief, the brief with the gaps, and the brief with the gaps
-plus a channel to the stakeholder. Before a task is registered it passes automatic approval gates, then a
-set of controls that actually execute:
+## Two things have to hold
 
-- An empty patch must score zero, and the real fix must score one.
-- A plausible but wrong patch must fail.
-- Patches that tamper with the tests must earn exactly zero.
-- The real fix must not be reachable from inside the agent's container.
+A trial is cheap. On the first task, some trials cost less than half a cent, and all 29 trials together
+cost $3.01. What is expensive is a number you cannot trust. Two things have to hold before any
+result means anything.
 
-Temporal runs task creation and every graded trial. Harbor builds the agent and verifier environments on
-Modal, and each trial is its own Cloud Run job. The repository is about 29,000 lines of Python with 20,600
-lines of tests.
+The comparison has to be fair. The same task runs in three conditions, and the only thing that changes
+between them is what the agent knows. The tests and the reward stay frozen.
 
-## The hard part
+And the grader has to be hard to fool. The agent writes code that the grader then runs, so the agent has a
+hand on its own report card.
 
-Trust. The agent's code runs inside pytest, so it can try to fake its own results. The verifier gives
-credit only when four signals agree: the collected test ids, the JUnit file, the terminal summary and the
-exit status. A forged report gets caught when it disagrees with the others. That is a tested defence, not
-a proof, and the grading notes say exactly that.
+## The obvious versions, and how each one breaks
 
-## First results, and the bug they found
+**Let an LLM play the reporter, and give it the fix.** It will happily describe the fix, or the tests. Then
+asking stops being a skill and becomes a way to read the answer key.
 
-The first task through every gate came from a real pytest bug (`pytest-dev--pytest-7283`). I ran four
-models on it in all three conditions, two trials each, plus a screening run and a demo: 29 trials for
-$3.01 in total.
+**Grade with pytest's exit status.** The agent's code runs inside pytest's own process. A patch can rewrite
+how pytest reports, so the exit status says whatever the patch wants it to say.
 
-Two models solved every trial they got, 7 of 7 and 6 of 6. The other two failed the full brief and solved
-the interactive one. Full scoring below the gapped brief should not happen, since full holds strictly more
-information.
+**Hide the fix by checking out the old commit.** If the real fix is anywhere in the repository's history,
+an agent with a shell can find it.
 
-One stakeholder fact caused it. It described behaviour that only an existing, passing test covered, and
-that test punished implementing it. An agent that followed the fact broke the passing test, and the
-regression rule set its reward to zero. That was a bug in how I wrote the task, not a finding about
-asking questions. I added a gate the same day: a stakeholder fact may not claim behaviour outside the
-task's contract.
+## The design
 
-The judge that decides whether an issue is underspecified enough to use is weaker than I would like.
-Against 145 issues with human labels it reached 0.634 agreement, where always answering "no" gets 0.566.
-Its recall is 0.46, so it misses more than half of what people called underspecified. For a filter that
-only needs enough good tasks, that is tolerable. For anything else it is not.
+The issue stays as its reporter wrote it. Whatever the discussion thread and the merged fix settled goes
+into a ledger of facts, each one quoted from its source. A simulated stakeholder holds those facts and
+speaks as the reporter: it describes the behaviour wanted and the behaviour seen, and never the tests, the
+fix or which option to pick. It also has a limited amount of patience.
 
-## What I would change
+<figure class="os-figure">
 
-Every cell above has two to five trials, all on one task. Nothing here supports a claim across tasks or
-models, and nobody has yet read what the agents asked the stakeholder in the interactive runs. The next
-step is more tasks and an audit of those conversations, not more trials on this one.
+```text
+ GitHub issue, its discussion and the merged fix
+                       |
+          +------------+-------------+
+          v                          v
+  brief: the issue as        fact ledger: what the
+  its reporter wrote it      thread and the fix
+          |                  settled, each quoted
+          v                          v
+   coding agent  --- asks --->  stakeholder: an LLM
+          |      <-- answers --  that speaks as the
+          |                      reporter
+          v  patch
+  offline container: hidden tests, one reward contract
+
+  full         brief + every fact    no stakeholder
+  hidden       brief only            no stakeholder
+  interactive  brief only            stakeholder on call
+```
+
+<figcaption>How one issue becomes a task: the missing facts move to a stakeholder the agent can question, and all three conditions are graded by the same hidden tests.</figcaption>
+</figure>
+
+Grading happens in a separate container with no network. It first throws away any edit to the files it
+protects, such as the contract tests and pytest's configuration. Then it runs the hidden tests and refuses
+to trust any single report of the result.
+
+<figure class="os-figure">
+
+```text
+       the agent's patch, run under pytest
+                       |
+      +----------+-----+-----+-----------+
+      v          v           v           v
+  collected   JUnit XML   terminal     exit
+  test ids                summary      status
+      |          |           |           |
+      +----------+-----+-----+-----------+
+                       v
+               do all four agree?
+                 |             |
+                yes            no
+                 v             v
+   partial credit by      reward 0, and no
+   requirement group      rerun can restore it
+```
+
+<figcaption>The verifier pays out only when four independent records of the same test run agree.</figcaption>
+</figure>
+
+Before a task joins the pool it passes nine approval gates, then controls that actually run. An empty patch
+must score zero and the real fix must score one. A plausible but wrong patch must fail. Patches that tamper
+with the tests must earn exactly zero. And a probe checks that the real fix cannot be reached from the
+agent's container. Temporal runs the task pipeline and every trial, Harbor builds the images on Modal, and
+each trial is its own Cloud Run job.
+
+## What this costs
+
+The four-way check catches a forged report only when the forgery disagrees with the other three. That is a
+tested defence, not proof that the grader is isolated, and the README says as much.
+
+The reward has no term for asking well. A good question only pays if it leads to a better patch. That is
+on purpose: one frozen contract across the three conditions is what lets the gap between them measure
+what asking is worth.
+
+The stakeholder's stance as the reporter is held partly by its prompt. An audit measures what it discloses,
+but a prompt is not a wall. And the interactive runs stay unjudged until a person reads them.
+
+## First results, and the bugs they found
+
+The first task on the hosted pipeline was that pytest report. Four models ran in all three conditions. Two
+solved every trial they got, 7 of 7 and 6 of 6. The other two scored backwards:
+
+| | full | hidden | interactive |
+|---|---|---|---|
+| model A | 0 of 3 | 3 of 5 | 2 of 2 |
+| model B | 0 of 2 | 1 of 2 | 2 of 2 |
+
+That should not happen. The full brief holds strictly more information than the hidden one.
+
+One fact in the ledger caused it. It said the fix applies to both kinds of skip, and the second kind was
+covered only by an existing, passing test that punishes changing it. Agents that were handed every fact
+acted on it, one broke the passing test, and the regression rule set its reward to zero. That was my bug in
+writing the task, not a finding about asking. I added the ninth gate the same day: a stakeholder fact may
+not claim behaviour outside what the tests require.
+
+It was not the first time. An earlier task scored 0 of 6, and an audit found its hidden test calling a
+helper that only the real fix adds. So two of my most striking results were bugs in my own tasks.
+
+The judge that decides whether an issue is underspecified enough to use is weak. Against 145 issues with
+human labels it agreed 0.634 of the time, where always answering "no" gets 0.566. Its recall is 0.46, so it
+misses more than half of what people called underspecified. For a filter that only needs enough good tasks
+that is tolerable. For anything else it is not.
+
+## What's next
+
+Every cell above holds two to five trials, all on one task. Nothing here supports a claim about models or
+about asking in general, and nobody has yet read what the agents asked the stakeholder. The next step is
+more tasks and a read of those conversations, not more trials on this one.
