@@ -10,11 +10,18 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
 |---|---|---|---|---|---|
+| Projector Screen (`projector_screen`) | prop `projector_screen` (tripod screen) | https://polyhaven.com/a/projector_screen | PeterM (Poly Haven) | CC0 1.0 | fabric split into its own object, turned to face −Y, origin moved to the base, centre empty added |
+| Filmstrip Projector 8mm (`filmstrip_projector_8mm`) | prop `projector_8mm` (Super 8 projector, two reels) | https://polyhaven.com/a/filmstrip_projector_8mm | PeterM (Poly Haven) | CC0 1.0 | mains cable and plug removed, parts decimated from 27.1k to 13.9k triangles, reels split out, red reel muted to oxide red, lens empty added |
+| Poster frame (`poster_frame`) | prop `poster_frame` (40 × 60 cm print, walnut moulding, glass) | blender/scripts/props_poster_frame.py | Saahil Sanganeriya (made for this site) | CC0 1.0 | — |
 
 ## Textures and HDRIs
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
 |---|---|---|---|---|---|
+| Wood 051 | walnut moulding of `poster_frame` | https://ambientcg.com/view?id=Wood051 | ambientCG (Lennart Demes) | CC0 1.0 | 1K colour, roughness and height maps, tinted warmer |
+| Paper 001 | paper grain on poster prints and book pages | https://ambientcg.com/view?id=Paper001 | ambientCG (Lennart Demes) | CC0 1.0 | 1K height map as bump |
+| Fingerprints 002 | fingerprints on glass, chrome and glossy plastic | https://ambientcg.com/view?id=Fingerprints002 | ambientCG (Lennart Demes) | CC0 1.0 | 1K roughness map as a roughness overlay |
+| Surface Imperfections 003 | fine scratches and smears on metal and glass | https://ambientcg.com/view?id=SurfaceImperfections003 | ambientCG (Lennart Demes) | CC0 1.0 | 1K map as a roughness overlay |
 
 ## Images
 
