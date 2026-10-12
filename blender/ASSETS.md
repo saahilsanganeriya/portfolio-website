@@ -25,6 +25,9 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
 |---|---|---|---|---|---|
+| Newsreader (variable, optical sizes) | headings and essays on the plain pages | https://github.com/productiontype/Newsreader | The Newsreader Project Authors (Production Type) | SIL OFL 1.1 | none; self-hosted WOFF2 subsets from Fontsource (@fontsource-variable/newsreader 5.3.0) |
+| IBM Plex Sans | interface text: navigation, dates, notes | https://github.com/IBM/plex | IBM Corp. | SIL OFL 1.1 | none; self-hosted WOFF2 subsets from Fontsource (@fontsource/ibm-plex-sans 5.3.0) |
+| IBM Plex Mono | code | https://github.com/IBM/plex | IBM Corp. | SIL OFL 1.1 | none; self-hosted WOFF2 subsets from Fontsource (@fontsource/ibm-plex-mono 5.3.0) |
 
 ## Audio
 
