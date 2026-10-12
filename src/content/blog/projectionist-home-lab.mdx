@@ -28,7 +28,7 @@ In projectionist that is one rule. Every disruptive job pauses while anyone but 
 
 projectionist is one Go service in one container on the NAS. Each job is a stage with its own schedule and, where it matters, a night window. State lives in SQLite, so a restart never runs a stage early, and every stage has to be safe to run again after a crash. The service answers a health check, and the NAS emails me when that check fails. There are 15 stages now. They rename new arrivals, fit subtitles, choose posters, keep watch history in step between two media apps, audit the library and back up the apps’ own data.
 
-I did not write it alone. Coding agents wrote a lot of the Go, and 316 of its 641 commits carry an agent’s co-author line. My part was deciding what each stage had to prove. An old script could go only when its replacement matched it on a recorded test, and the script and its scheduled task were deleted in the same change, so the two never ran side by side.
+I did not write it alone. Coding agents wrote a lot of the Go, and 286 of its 610 commits carry an agent’s co-author line. My part was deciding what each stage had to prove. An old script could go only when its replacement matched it on a recorded test, and the script and its scheduled task were deleted in the same change, so the two never ran side by side.
 
 ## What broke
 
