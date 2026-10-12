@@ -14,67 +14,138 @@ cover: "../../assets/projects/saahil-brain.png"
 coverAlt: "Diagram of two paths: a prompt goes through a hook to a SQLite index and gets up to three pointers back; every hour a Temporal worker files new sessions and docs into notes and hubs, commits them and syncs to the laptop."
 ---
 
-A coding agent starts every session knowing nothing about the last one. Claude Code keeps a memory folder
-for each project, so a rule I taught an agent in one repo never reached a session in another. And I work
-on two machines: a MacBook, and a Linux machine in the cloud that stays on, which I call the devbox.
+Tell a coding agent once not to do something, and it remembers, in that repo. Open a session in the next
+repo and it does the thing again. Claude Code keeps a memory folder for each project, so a lesson learned in
+one never reaches another.
 
-saahil-brain is my fix: one folder, `~/brain`, kept the same on both machines, and one Go program that
-hands every agent session a capped slice of it.
+I also work on two machines: a MacBook, and a Linux machine in the cloud that stays on, which I call the
+devbox. A lesson learned on one did not reach the other either.
 
-## What it holds
+saahil-brain is my fix. It is one folder, `~/brain`, kept the same on both machines, and one Go program
+that hands every agent session a small, capped slice of it.
 
-My work lives in one box per project. What agents learn becomes small typed notes of 4 KB at most, grouped
-under topic pages called hubs. Notes link through seven named fields and no more, because models misuse a
-large vocabulary of relations.
+## What has to fit
 
-One page of memory loads in every session, in every repo, on both machines. It is capped at 200 lines and
-24 KiB, because Claude Code cuts the file after about 24.4 KB.
+The folder holds three kinds of thing. My work lives in one box per project: plans, reports, results.
+What agents learn becomes small typed notes, 4 KB at most, grouped under topic pages called hubs. And one
+page of memory loads in every session, in every repo, on both machines.
 
-## A few pointers, or none
+The boxes are the heavy part: about 600 GB of results on the devbox and about 220 GB on the laptop. An
+agent session can read only a sliver of that. The whole design is the question of which sliver.
 
-A session starts with a digest of at most 8,000 characters: this week, where its project stands, and the
-files earlier sessions of that project read most. On every prompt, a hook offers at most three pointers in
-300 tokens, or nothing when nothing matches well. A note shown ten times and never opened sinks. Every
-hook fails open, so a broken brain never blocks a session.
+## The obvious version, and how it broke
 
-## The dream
+The obvious version is one long memory file that every session loads, with every rule in it. I had that.
+Then Claude Code printed a truncation warning. It loads only about 24.4 KB of that file and cuts the rest,
+whatever the line count, so the rules at the end never reached a session. The session carried on as if
+they did not exist.
 
-Once an hour the devbox checks whether anything new has landed. If enough has piled up, it dreams: it
-turns sessions where I corrected an agent into short lessons, files new memories as notes, merges
-duplicate rules and redraws the memory page.
+The fix was a cap of 200 lines and 24 KiB on the rendered page, with standing rules first. The same idea
+runs through the whole design: every level of context has a hard budget.
 
-A model does the judgment, but it can only propose edits. Code checks each one and applies at most 50 a
-run. Nothing is ever deleted: overwritten files are archived first, and if the lint check fails, the whole
-run is rolled back. A run may spend at most $8, and a day $100.
+## The design
 
-## Two machines, one mesh
+<figure class="os-figure">
 
-Every hour the laptop syncs the folder with the devbox over Unison. Agents on either machine can also list
-each other and send notes. My laptop accepts no incoming ssh, so it runs a small bridge on its own
-localhost and reaches the devbox through a reverse ssh tunnel. The bridge answers a short allow-list of
-commands, never a shell. A note is a file in the target session's inbox. A hook delivers it at that
-session's next tool call or prompt and claims it with an atomic rename, so it arrives exactly once.
+```text
+ what a session gets             budget
+ ------------------------------  --------------------------
+ L0  at start: the memory page   200 lines and 24 KiB,
+     and a digest of its work    digest 8,000 characters
+ L1  on every prompt: pointers   3 at most in 300 tokens,
+     to notes or files           or nothing at all
+ L2  search and show tools       when the agent asks
+ L3  the file itself             when the agent asks
+```
 
-Coding agents wrote nearly all of the code, about 38,000 lines of Go, over four days in October. My part
-was the design, including the rule that a model proposes and code decides.
+<figcaption>Four levels of context, each with a hard budget: a little arrives for free, and the agent pulls the rest only when it needs it.</figcaption>
+</figure>
 
-## What was hard
+The digest says what this week looks like, where the session's project stands, and which files earlier
+sessions of that project read most. The prompt hook offers at most three pointers, or none when nothing
+matches well. A note shown ten times and never opened sinks. Every hook fails open, so a broken brain never
+blocks a session.
 
-The repo lists 26 things that broke while I built it. Two stay with me.
+Notes link to each other through seven named fields and no more, because models misuse a large vocabulary
+of relations.
 
-A git snapshot of the brain once ran over about 600 GB of project results. Git now tracks only brain text,
-and the history went from 6.4 GB to 5.7 MB.
+**The dream.** Once an hour the devbox checks whether anything new has landed. If enough has piled up, it
+dreams: it turns sessions where I corrected an agent into short lessons, files new memories as notes,
+merges duplicate rules and redraws the memory page. A model does the judgement, but it can only propose.
 
-The quieter one: for 12 dreams in a row, the merge step tried to narrow the same old rule, and the code
-refused every time. A lesson holds 300 characters, and 108 of the 109 global lessons had no room for one
-more line. The step still reported ok. Now the narrowing goes into the note's link, and every step counts
-the edits it refused, not only the steps that failed.
+<figure class="os-figure">
 
-## What I would change
+```text
+ new sessions, memories and docs
+               |
+               v
+ a model reads them and PROPOSES edits
+               |
+               v
+ code CHECKS each edit -- a delete, or --> refused
+               |          over a cap       and counted
+               v  at most 50 a run, $8 a run
+ apply (every overwritten file is archived first)
+               |
+               v
+ lint the brain ---- fails ---> restore every file
+               |                the run edited
+               v  passes
+ commit (the hourly sync takes it to the laptop)
+```
 
-The eval closest to real use matches prompts I typed to the file that answered them, and it was the
-weakest. The right file was in the top three pointers 15.9% of the time, and within three tool calls 50.7%
-of the time. A daily agent now works on that number first, and keeps a change only if the numbers improve.
+<figcaption>The dream's contract: a model proposes, code decides, and nothing is ever deleted.</figcaption>
+</figure>
 
-It is also built around one person's setup. Packaging it for someone else turned up steps that had only
-ever run by hand, and it cannot run on a laptop alone, because the dream needs a machine that stays on.
+**Two machines, one mesh.** Every hour the laptop syncs the folder with the devbox over Unison. Agents on
+either machine can also list each other and send notes. My laptop accepts no incoming ssh, so it runs a
+small bridge on its own localhost, and the devbox reaches it through a reverse ssh tunnel. The bridge
+answers a short allow-list of commands, never a shell. A note is a file in the target session's inbox. A
+hook delivers it at that session's next tool call or prompt and claims it with an atomic rename, so it
+arrives exactly once.
+
+Coding agents wrote nearly all of the code: 254 of its 256 commits carry an agent co-author line, about
+38,000 lines of Go, written between 8 and 12 October. My part was the design, including the rule that a
+model proposes and code decides.
+
+## What it costs
+
+A pointer budget of three means an agent sometimes gets nothing, even when the brain holds the answer
+somewhere. I chose silence over a wrong hint.
+
+The dream is batched. It waits for 12 hours since the last one or 30 new sessions, so a lesson learned this
+morning may not reach other sessions until tonight. A run may spend at most $8 and a day $100. When a cap
+stops a run, its remaining model steps are skipped.
+
+And it cannot run on a laptop alone. The dream, Temporal and the daily care agent need a machine that
+stays on.
+
+## What broke
+
+The repo lists 26 things that broke while I built it. Four are worth telling.
+
+**A snapshot that tried to swallow the boxes.** The dream's git snapshot ran over the whole brain root,
+600 GB of project results included. Git now tracks only brain text, and the history went from 6.4 GB to
+5.7 MB.
+
+**A narrowing that never landed.** For 12 dreams in a row, the merge step tried to narrow the same old
+rule, and the code refused every time. A lesson holds 300 characters, and 108 of the 109 global lessons had
+no room for one more line. The step still reported ok. Now the narrowing goes into the note's link, and
+every step counts the edits it refused, not only the steps that failed.
+
+**Evals that graded themselves.** My first navigation numbers looked better than real use felt. A file the
+session had written itself counted as "found", and ranking used today's brain instead of the brain as it
+was when the session started. A target now has to exist before the session began.
+
+**A setup that only fit me.** Packaging it for a second person turned up steps that had only ever run by
+hand, such as the marker that switches the hooks from shadow mode to live, and defaults that fit only my
+machines. Each step is now code with a check, and each value a setting.
+
+## Results, and what's next
+
+The eval closest to real use takes prompts I actually typed and checks whether the brain pointed at the
+file that answered them. It is the weakest number I have. The right file was in the top three pointers
+15.9% of the time, and reachable within three tool calls 50.7% of the time. The marks I hold the automatic
+navigation eval to are 70% and 80%.
+
+A daily care agent now works on that number first, and keeps a change only if the numbers improve.
