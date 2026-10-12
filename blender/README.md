@@ -17,7 +17,8 @@ blender -b blender/room.blend -P blender/scripts/bake.py
 ```
 
 Bakes all four atlases at full size (env and desk 4096², props and posters 2048²) with 512 samples, 24 threads,
-and saves the bake UVs into `room.blend`. Expect a few hours on 24 CPU threads. For a quick look, bake small:
+and saves the bake UVs into `room.blend`. It took 32 minutes on 24 threads of a shared 32-core machine
+(2026-10-12). For a quick look, bake small:
 `-- --scale 0.25 --samples 32` (same UV layout, a quarter of the size), or one atlas: `-- --atlas desk`.
 
 ## Re-export
@@ -28,8 +29,9 @@ blender -b blender/room.blend -P blender/scripts/export.py
 
 Renders the stills (`renders/room_{idle,desk,shelf}.png`, `public/room/poster.{avif,jpg}` from `cam_idle`), exports
 the glb, then runs gltf-transform 4.5.1 (via `npx`): dedup, prune (empties kept), KTX2 ETC1S textures, meshopt
-geometry. It fails if `room.glb` is over 4.5 MB or a node from the contract below is missing. Needs Node (`npx`),
-`ktx` from KTX-Software 4.x and `ffmpeg` with libaom on `PATH`. Add `-- --no-stills` to export only the glb.
+geometry; about 8 minutes in all. It fails if `room.glb` is over 4.5 MB or a node from the contract below is missing.
+Needs Node (`npx`), `ktx` from KTX-Software 4.x and `ffmpeg` with libaom on `PATH`. Add `-- --no-stills` to export
+only the glb.
 
 ## Rebuild from scratch
 
@@ -47,10 +49,10 @@ props from another checkout). Re-bake after a rebuild.
 
 | Node | What |
 |---|---|
-| `env_*` | walls, floor, window, sill, sky card, radiator, shelf, fixtures, rug, side table |
+| `env_*` | walls, floor, window, curtains, sill, radiator, shelf, fixtures, rug, side table; `env_sky` (the city card) sits 15 cm behind the window and every framing sees it only through the window |
 | `desk_*` | desk, chair, computer, CRT, keyboard, mouse, cables, lamp, papers, mug |
 | `props_*` | props from `blender/props/`, the poster art and frames, the projected picture |
-| `crt_glow`, `lamp_bulb`, `nas_led_0..3` | runtime meshes, each with its own unlit material |
+| `crt_glow`, `lamp_bulb`, `nas_led_0..3` | runtime meshes with their own unlit materials (`crt_glow`, `lamp_bulb`, `nas_led` shared by the four LEDs); `crt_glow` bulges up to 8 mm in front of `monitor_screen`, so hide it or draw it additively while the iframe shows |
 | `hit_*` | invisible click boxes (material `proxy`) |
 | `monitor_screen` | centre of the CRT glass; local +Z out of the glass; extras `width_m`, `height_m` |
 | `projector_lens`, `projector_screen_center` | beam origin (local −Z along the beam) and its target |
