@@ -170,6 +170,10 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
         <div className="os" data-embedded={embedded || undefined} onClick={onClick}>
           {power === 'on' ? (
             <>
+              <picture className="os-wallpaper">
+                <source type="image/avif" srcSet={index.wallpaper.avif} sizes="100vw" />
+                <img src={index.wallpaper.src} srcSet={index.wallpaper.webp} sizes="100vw" alt="" decoding="async" />
+              </picture>
               <header className="os-phonebar">
                 <p>SaahilOS</p>
                 <p>

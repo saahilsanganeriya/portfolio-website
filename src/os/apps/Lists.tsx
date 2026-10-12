@@ -1,6 +1,6 @@
 import { PixelIcon } from '../assets/PixelIcon';
 import { formatDay } from '../format';
-import type { OsApi, OsProject } from '../types';
+import type { OsApi, OsImage, OsProject } from '../types';
 
 interface Row {
   href: string;
@@ -8,12 +8,49 @@ interface Row {
   summary: string;
   meta: string;
   metaDateTime?: string;
+  /** Present on rows that show a picture: the cover, or null for a project with none. */
+  thumb?: OsImage | null;
 }
 
-// Win98's "Details" view: one row per file, a name column and a narrow column on the right.
-function DetailsList({ heading, metaLabel, rows }: { heading: string; metaLabel: string; rows: Row[] }) {
+// The row's link text names the project, so its picture is decorative here (alt="").
+function Thumb({ image, large }: { image: OsImage | null; large: boolean }) {
+  if (image)
+    return (
+      <span className="os-thumb">
+        <img
+          src={image.src}
+          srcSet={image.srcset}
+          sizes={large ? '128px' : '48px'}
+          width={image.width}
+          height={image.height}
+          alt=""
+          loading="lazy"
+          decoding="async"
+        />
+      </span>
+    );
   return (
-    <section className="os-details">
+    <span className="os-thumb os-thumb-empty">
+      {large ? 'No public pictures' : <PixelIcon name="page" size={16} />}
+    </span>
+  );
+}
+
+// Win98's "Details" view: one row per file, a name column and a narrow column on the right. Featured projects
+// use the "Thumbnails" variant: a framed picture on the left of each row.
+function DetailsList({
+  heading,
+  metaLabel,
+  rows,
+  large = false,
+}: {
+  heading: string;
+  metaLabel: string;
+  rows: Row[];
+  large?: boolean;
+}) {
+  return (
+    <section className="os-details" data-large={large || undefined}>
       <h2 className="os-details-heading">
         <span>{heading}</span>
         <span className="os-details-meta-label" aria-hidden="true">
@@ -23,9 +60,10 @@ function DetailsList({ heading, metaLabel, rows }: { heading: string; metaLabel:
       <ul className="os-details-rows">
         {rows.map((row) => (
           <li key={row.href}>
-            <a className="os-row" href={row.href}>
+            <a className="os-row" href={row.href} data-thumb={row.thumb !== undefined || undefined}>
+              {row.thumb !== undefined && <Thumb image={row.thumb} large={large} />}
               <span className="os-row-name">
-                <PixelIcon name="page" size={16} />
+                {row.thumb === undefined && <PixelIcon name="page" size={16} />}
                 <span>{row.title}</span>
               </span>
               <span className="os-row-meta">
@@ -45,6 +83,7 @@ const projectRow = (p: OsProject): Row => ({
   title: p.title,
   summary: p.summary,
   meta: p.years ?? String(p.year),
+  thumb: p.cover ?? null,
 });
 
 export function ProjectsApp({ os }: { os: OsApi }) {
@@ -56,7 +95,9 @@ export function ProjectsApp({ os }: { os: OsApi }) {
   if (os.index.projects.length === 0) return <p className="os-note">No project write-ups are published yet.</p>;
   return (
     <div className="os-list">
-      {featured.length > 0 && <DetailsList heading="Featured" metaLabel="Year" rows={featured.map(projectRow)} />}
+      {featured.length > 0 && (
+        <DetailsList heading="Featured" metaLabel="Year" rows={featured.map(projectRow)} large />
+      )}
       {[...archiveYears].map(([year, projects]) => (
         <DetailsList key={year} heading={`Archive, ${year}`} metaLabel="Year" rows={projects.map(projectRow)} />
       ))}

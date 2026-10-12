@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { formatDay } from '../format';
-import type { OsApi, OsPost, OsProject } from '../types';
+import type { OsApi, OsFigure, OsImage, OsPost, OsProject } from '../types';
 import { useWindowStatus } from '../wm/Window';
 import { decorateLinks, linkAttributes, useContent, type ContentState } from './content';
 
@@ -46,8 +46,42 @@ function Body<T>({ content, what }: { content: ContentState<T>; what: string }) 
   }
 }
 
-const LINK_LABELS: Record<keyof OsProject['links'], string> = {
-  repo: 'Source code',
+/** One responsive picture; `sizes` matches the reader column (40rem at most). */
+export function Picture({ image, eager = false }: { image: OsImage; eager?: boolean }) {
+  return (
+    <img
+      src={image.src}
+      srcSet={image.srcset}
+      sizes="(max-width: 760px) 100vw, 640px"
+      width={image.width}
+      height={image.height}
+      alt={image.alt}
+      loading={eager ? 'eager' : 'lazy'}
+      decoding="async"
+    />
+  );
+}
+
+function Figures({ figures }: { figures: OsFigure[] }) {
+  return (
+    <section className="os-figures" aria-label="Figures">
+      {figures.map((figure) => (
+        <figure key={figure.src} className="os-figure">
+          <Picture image={figure} />
+          <figcaption>
+            {figure.caption}{' '}
+            <a href={figure.credit.url} {...linkAttributes(figure.credit.url)}>
+              {figure.credit.text}
+            </a>
+          </figcaption>
+        </figure>
+      ))}
+    </section>
+  );
+}
+
+// The repository has its own "View source" button in the window's toolbar.
+const LINK_LABELS: Record<Exclude<keyof OsProject['links'], 'repo'>, string> = {
   paper: 'Paper',
   demo: 'Demo',
   page: 'Project page',
@@ -63,13 +97,20 @@ const STATUS_LABELS: Record<OsProject['status'], string> = {
 export function ProjectReader({ slug, os }: { slug: string; os: OsApi }) {
   const project = os.index.projects.find((p) => p.slug === slug);
   const content = useContent<OsProject>('projects', slug);
-  const links = project ? (Object.entries(project.links) as [keyof OsProject['links'], string][]) : [];
+  const links = project
+    ? (Object.entries(project.links).filter(([kind]) => kind !== 'repo') as [keyof typeof LINK_LABELS, string][])
+    : [];
   return (
     <article className="os-reader">
       {project && (
         <header className="os-reader-head">
           <h2 className="os-reader-title">{project.title}</h2>
           <p className="os-reader-lead">{project.summary}</p>
+          {project.cover && (
+            <figure className="os-figure os-cover">
+              <Picture image={project.cover} eager />
+            </figure>
+          )}
           <dl className="os-facts">
             <dt>Year</dt>
             <dd>{project.years ?? project.year}</dd>
@@ -96,6 +137,7 @@ export function ProjectReader({ slug, os }: { slug: string; os: OsApi }) {
         </header>
       )}
       <Body content={content} what={project?.title ?? slug} />
+      {project && project.figures.length > 0 && <Figures figures={project.figures} />}
     </article>
   );
 }

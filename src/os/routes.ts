@@ -34,6 +34,7 @@ export function plainHref(route: Route): string | null {
     case 'credits':
       return `/${route.app}`;
     case 'terminal':
+    case 'oven':
       return null;
   }
 }

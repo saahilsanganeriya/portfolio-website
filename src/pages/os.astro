@@ -5,6 +5,7 @@ import { parseAssetsRegister } from '../lib/assets-register';
 import { getPosts, getProjects, isoDay } from '../lib/content';
 import { filmsData } from '../lib/films';
 import { windowDiary } from '../os/apps/films/diary';
+import { favourites as loadFavourites, osImage, osWallpaper, ovenList, projectFigures } from '../os/build-data';
 import SaahilOS from '../os/SaahilOS';
 import pixelFont from '../os/assets/fonts/PixelOperator.woff2?url';
 import type { OsIndex } from '../os/types';
@@ -13,27 +14,35 @@ const { featured, archive } = await getProjects();
 const posts = await getPosts();
 const pages = await getCollection('pages');
 const story = (await getCollection('story')).sort((a, b) => a.data.n - b.data.n);
+const favourites = loadFavourites();
 
 // Lists only; window bodies load from /content/<collection>/<slug>.json when a window opens.
 const index: OsIndex = {
-  projects: [...featured, ...archive].map(({ id, data }) => ({
-    slug: id,
-    title: data.title,
-    summary: data.summary,
-    year: data.year,
-    years: data.years,
-    status: data.status,
-    role: data.role,
-    team: data.team,
-    stack: data.stack,
-    featured: data.featured,
-    links: data.links,
-  })),
+  projects: await Promise.all(
+    [...featured, ...archive].map(async ({ id, data }) => ({
+      slug: id,
+      title: data.title,
+      summary: data.summary,
+      year: data.year,
+      years: data.years,
+      status: data.status,
+      role: data.role,
+      team: data.team,
+      stack: data.stack,
+      featured: data.featured,
+      links: data.links,
+      cover: data.cover && (await osImage(data.cover, data.coverAlt ?? '')),
+      figures: await projectFigures(id),
+    })),
+  ),
   posts: posts.map(({ id, data }) => ({ slug: id, title: data.title, date: isoDay(data.date), summary: data.summary, tags: data.tags })),
   pages: pages.map(({ id, data }) => ({ slug: id, title: data.title, summary: data.summary })),
   story: story.map(({ id, data }) => ({ slug: id, n: data.n, title: data.title, intertitle: data.intertitle })),
-  films: windowDiary(filmsData),
+  films: windowDiary(filmsData, favourites),
+  favourites,
+  oven: ovenList(),
   credits: parseAssetsRegister().filter((section) => section.rows.length > 0),
+  wallpaper: await osWallpaper(),
 };
 ---
 

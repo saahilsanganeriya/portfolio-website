@@ -5,13 +5,15 @@ import { plainHref } from '../routes';
 import type { AppId, OsApi, OsIndex, Route } from '../types';
 import { FilmsApp } from './FilmsApp';
 import { BlogApp, ProjectsApp } from './Lists';
+import { OvenApp } from './OvenApp';
 import { PageReader, PostReader, ProjectReader } from './Reader';
 import { CreditsApp, ResumeApp, StoryApp } from './SmallApps';
 import { TerminalApp } from './TerminalApp';
 
-/** Desktop order: the work first, then the story, then the machine itself. */
+/** Desktop order: the work first (finished, then in progress), then the story, then the machine itself. */
 export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   projects: { label: 'Projects', icon: 'projects' },
+  oven: { label: 'In the oven', icon: 'oven' },
   blog: { label: 'Blog', icon: 'page' },
   films: { label: 'Films', icon: 'films' },
   story: { label: 'A Narrative in a Frame', icon: 'story' },
@@ -28,6 +30,8 @@ export interface WindowDescription {
   icon: IconName;
   defaultStatus: string;
   pageHref: string | null;
+  /** The project's repository, for the window's "View source" button. */
+  sourceHref: string | null;
 }
 
 export function describeWindow(route: Route, index: OsIndex): WindowDescription {
@@ -40,6 +44,7 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
       icon: 'page',
       defaultStatus: project?.stack.join(', ') ?? '',
       pageHref,
+      sourceHref: project?.links.repo ?? null,
     };
   }
   if (route.app === 'blog' && route.slug) {
@@ -49,10 +54,12 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
       icon: 'page',
       defaultStatus: post ? formatDay(post.date) : '',
       pageHref,
+      sourceHref: null,
     };
   }
   const defaultStatus: Record<AppId, string> = {
     projects: plural(index.projects.length, 'project'),
+    oven: `${plural(index.oven.items.length, 'thing')} in the oven`,
     blog: plural(index.posts.length, 'post'),
     films: 'Films from the Letterboxd diary',
     story: `${plural(index.story.length, 'chapter')}, playing by itself`,
@@ -61,13 +68,15 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     resume: '',
     credits: 'Every file is used under the licence shown',
   };
-  return { title: app.label, icon: app.icon, defaultStatus: defaultStatus[route.app], pageHref };
+  return { title: app.label, icon: app.icon, defaultStatus: defaultStatus[route.app], pageHref, sourceHref: null };
 }
 
 export function AppBody({ route, os }: { route: Route; os: OsApi }): ReactNode {
   switch (route.app) {
     case 'projects':
       return route.slug ? <ProjectReader slug={route.slug} os={os} /> : <ProjectsApp os={os} />;
+    case 'oven':
+      return <OvenApp os={os} />;
     case 'blog':
       return route.slug ? <PostReader slug={route.slug} os={os} /> : <BlogApp os={os} />;
     case 'films':

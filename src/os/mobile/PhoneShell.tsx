@@ -4,7 +4,7 @@ import { useId } from 'react';
 import { AppBody, describeWindow } from '../apps/registry';
 import type { OsApi } from '../types';
 import { springOrInstant } from '../wm/motion';
-import { windowDomId } from '../wm/Window';
+import { WindowTools, windowDomId } from '../wm/Window';
 import type { WindowState } from '../wm/windows';
 
 interface PhoneWindowProps {
@@ -18,7 +18,7 @@ interface PhoneWindowProps {
 function PhoneWindow({ win, covered, os, onBack }: PhoneWindowProps) {
   const reduceMotion = useReducedMotion();
   const titleId = useId();
-  const { title, pageHref } = describeWindow(win.route, os.index);
+  const { title, pageHref, sourceHref } = describeWindow(win.route, os.index);
   return (
     <m.section
       id={windowDomId(win.id)}
@@ -39,13 +39,9 @@ function PhoneWindow({ win, covered, os, onBack }: PhoneWindowProps) {
         <p className="os-backbar-title" id={titleId}>
           {title}
         </p>
-        {pageHref && (
-          <a className="os-tool" href={pageHref} target="_top">
-            Open as page ↗
-          </a>
-        )}
       </div>
-      <div className="os-phone-body">
+      <WindowTools pageHref={pageHref} sourceHref={sourceHref} />
+      <div className="os-phone-body" tabIndex={0}>
         <AppBody route={win.route} os={os} />
       </div>
     </m.section>

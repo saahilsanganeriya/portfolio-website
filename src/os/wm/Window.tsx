@@ -51,12 +51,33 @@ export const useWindowStatus = () => useContext(WindowStatusContext);
 
 export const windowDomId = (id: string) => `os-win-${id.replace(/[^a-z0-9-]/gi, '-')}`;
 
+/** The window's toolbar: the project's repository and the plain page that shows the same thing. */
+export function WindowTools({ pageHref, sourceHref }: { pageHref: string | null; sourceHref: string | null }) {
+  if (!pageHref && !sourceHref) return null;
+  return (
+    <div className="os-toolbar">
+      {sourceHref && (
+        <a className="os-tool" href={sourceHref} target="_blank" rel="noopener">
+          <PixelIcon name="source" size={13} />
+          View source
+        </a>
+      )}
+      {pageHref && (
+        <a className="os-tool" href={pageHref} target="_top">
+          Open as page ↗
+        </a>
+      )}
+    </div>
+  );
+}
+
 interface WindowProps {
   win: WindowState;
   title: string;
   icon: IconName;
   defaultStatus: string;
   pageHref: string | null;
+  sourceHref: string | null;
   active: boolean;
   desktopRef: RefObject<HTMLElement | null>;
   onFocus: () => void;
@@ -72,6 +93,7 @@ export function Window({
   icon,
   defaultStatus,
   pageHref,
+  sourceHref,
   active,
   desktopRef,
   onFocus,
@@ -197,14 +219,9 @@ export function Window({
           </button>
         </div>
       </div>
-      {pageHref && (
-        <div className="os-toolbar">
-          <a className="os-tool" href={pageHref} target="_top">
-            Open as page ↗
-          </a>
-        </div>
-      )}
-      <div className="os-well">
+      <WindowTools pageHref={pageHref} sourceHref={sourceHref} />
+      {/* Focusable, so a keyboard can scroll a body that has no links of its own (WCAG 2.1.1). */}
+      <div className="os-well" tabIndex={0}>
         <WindowStatusContext value={setStatus}>{children}</WindowStatusContext>
       </div>
       <div className="os-statusbar">

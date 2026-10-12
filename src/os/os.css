@@ -64,11 +64,31 @@ body.os-moving iframe {
 
 /* ---- Desktop ---- */
 
+/* The wallpaper: a film-look render of the room (src/os/assets/wallpaper/build.mjs). Walnut shows until it loads. */
+.os-wallpaper img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
 .os-desktop {
   position: relative;
   flex: 1;
   min-height: 0;
   outline: none;
+}
+
+/* Labels sit on a photograph, so each carries a hard ink drop and a soft ink halo, the way later Windows did. */
+.os-icon-label,
+.os-desktop-hint,
+.os-phonebar {
+  text-shadow:
+    1px 1px 0 var(--ink),
+    0 0 4px rgb(20 17 15 / 0.9),
+    0 0 10px rgb(20 17 15 / 0.7);
 }
 
 .os-icons {
@@ -135,6 +155,7 @@ body.os-moving iframe {
 }
 
 .os-phonebar {
+  position: relative;
   display: none;
 }
 
@@ -234,16 +255,38 @@ body.os-moving iframe {
   display: flex;
   flex: none;
   justify-content: flex-end;
-  gap: 4px;
-  padding: 4px 0 2px;
+  gap: 6px;
+  padding: 5px 2px 3px;
 }
 
-.os-tool,
 .os-button {
   display: inline-block;
   padding: 4px 10px;
   color: var(--os-dark);
   text-decoration: none;
+}
+
+/* Toolbar buttons are full-size Win98 buttons (30 px tall), each a real link reachable by Tab. */
+.os-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 14px;
+  color: var(--os-dark);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.os-tool:focus-visible {
+  outline: 1px dotted var(--os-dark);
+  outline-offset: -5px;
+}
+
+.os-well:focus-visible,
+.os-phone-body:focus-visible {
+  outline: 1px dotted var(--os-dark);
+  outline-offset: -4px;
 }
 
 .os-well {
@@ -368,6 +411,49 @@ body.os-moving iframe {
 .os-row:hover .os-row-summary,
 .os-row:focus-visible .os-row-summary {
   color: var(--os-shade);
+}
+
+/* Rows with a picture: a framed thumbnail on the left spanning the name and the summary. */
+.os-row[data-thumb] {
+  grid-template-columns: auto 1fr 6.5rem;
+  column-gap: 12px;
+}
+
+.os-row[data-thumb] .os-row-summary {
+  grid-column: 2 / -1;
+  padding-left: 0;
+}
+
+.os-thumb {
+  display: grid;
+  grid-row: 1 / span 2;
+  place-items: center;
+  width: 48px;
+  height: 30px;
+  overflow: hidden;
+  background: var(--os-face);
+  box-shadow: var(--os-sunken);
+}
+
+.os-details[data-large] .os-thumb {
+  width: 128px;
+  height: 80px;
+  padding: 2px;
+}
+
+.os-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.os-thumb-empty {
+  padding: 8px;
+  background: var(--os-desk);
+  color: var(--dust);
+  font-size: 14px;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .os-note {
@@ -534,6 +620,35 @@ body.os-moving iframe {
   height: auto;
 }
 
+/* Pictures in a reader hang in a sunken frame; captions are small sans, credits link to the source. */
+.os-figure {
+  margin: 16px 0 0;
+}
+
+.os-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 2px solid var(--os-face);
+  box-shadow:
+    0 0 0 1px var(--os-shade),
+    2px 3px 0 rgb(20 17 15 / 0.18);
+}
+
+.os-figure figcaption {
+  margin-top: 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--os-muted);
+}
+
+.os-figures {
+  margin-top: 28px;
+  padding-top: 4px;
+  border-top: 1px solid var(--os-shade);
+}
+
 /* The loading thread: drawn once across the window, the site's loading line. */
 .os-loading {
   padding: 8px 0;
@@ -567,6 +682,57 @@ body.os-moving iframe {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
+}
+
+.os-films-heading-aside {
+  font-weight: 400;
+  color: var(--dust);
+}
+
+/* His own line, set like an epigraph on the title card of a film. */
+.os-films-epigraph {
+  max-width: 30em;
+  margin: 4px 0 24px;
+  padding: 0;
+}
+
+.os-films-epigraph p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.3;
+  color: var(--paper);
+  -webkit-font-smoothing: auto;
+}
+
+.os-films-favourites {
+  outline: none;
+}
+
+.os-films-favourites[data-selected] .os-films-heading {
+  text-decoration: underline 2px var(--thread);
+  text-underline-offset: 0.3em;
+}
+
+.os-films-updated time {
+  color: var(--paper);
+}
+
+.os-film-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  box-shadow: 3px 4px 0 rgb(0 0 0 / 0.45);
+}
+
+.os-film-caption {
+  margin: 8px 0 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--dust);
 }
 
 .os-films-note {
@@ -636,6 +802,31 @@ body.os-moving iframe {
   -webkit-box-orient: vertical;
   overflow: hidden;
   user-select: text;
+}
+
+/* ---- In the oven ---- */
+
+.os-oven-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.os-oven-list li + li {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--os-shade);
+}
+
+.os-oven-list h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.os-oven-list p {
+  margin: 4px 0 0;
 }
 
 /* ---- Story ---- */
@@ -985,9 +1176,15 @@ body.os-moving iframe {
   text-overflow: ellipsis;
 }
 
-.os-backbar .os-tool {
-  flex: none;
-  padding: 8px 10px;
+.os-phone-window > .os-toolbar {
+  justify-content: flex-start;
+  padding: 6px 8px;
+  background: var(--os-face);
+  box-shadow: inset 0 -1px var(--os-shade);
+}
+
+.os-phone-window .os-tool {
+  min-height: 40px;
 }
 
 .os-phone-body {
@@ -1048,6 +1245,11 @@ body.os-moving iframe {
 
   html:not([data-embedded]) .os-desktop {
     overflow-y: auto;
+  }
+
+  html:not([data-embedded]) .os-details[data-large] .os-thumb {
+    width: 88px;
+    height: 55px;
   }
 
   html:not([data-embedded]) .os-desktop-hint {
