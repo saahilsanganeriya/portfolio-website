@@ -61,6 +61,23 @@ for (const id of entryIds('story')) {
   expectFile(`content/story/${id}.json`, `story chapter ${id}`);
 }
 
+// ---- SaahilOS window routes ----
+
+// SaahilOS opens windows from client-side hashes (/os#terminal, /os#projects/<slug>, /os#films/<poster>), so such a
+// fragment names an app and an entry, not an HTML id.
+const OS_APPS = ['projects', 'blog', 'films', 'story', 'terminal', 'about', 'resume', 'credits'];
+const OS_SLUGS = {
+  projects: new Set(entryIds('projects')),
+  blog: new Set(entryIds('blog')),
+  films: new Set(JSON.parse(readFileSync(join(CONTENT, 'films.json'), 'utf8')).posters ?? []),
+};
+const osRouteProblem = (fragment) => {
+  const [app, slug, ...rest] = fragment.split('/');
+  if (!OS_APPS.includes(app)) return 'names no SaahilOS app';
+  if (slug !== undefined && (rest.length > 0 || !OS_SLUGS[app]?.has(slug))) return 'names no SaahilOS window';
+  return null;
+};
+
 // ---- every built page ----
 
 const walk = (dir) =>
@@ -109,6 +126,11 @@ for (const file of pages) {
       const route = pathname.replace(/\/$/, '');
       if (PENDING_ROUTES.includes(route)) pending.add(route);
       else problems.push(`${page}: broken link ${href}`);
+      continue;
+    }
+    if (fragment && pathname.replace(/\/$/, '') === '/os') {
+      const problem = osRouteProblem(decodeURIComponent(fragment));
+      if (problem) problems.push(`${page}: link ${href} ${problem}`);
       continue;
     }
     if (fragment && target.endsWith('.html') && !readHtml(target).includes(`id="${fragment}"`)) {
