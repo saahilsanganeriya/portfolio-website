@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { devices, expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
 // Headless Chromium only has WebGL through SwiftShader; the room needs it.
@@ -107,6 +107,9 @@ test('a key press during the intro skips it', async ({ page }) => {
 test('hovering the mango plant labels it, and clicking it opens About in SaahilOS', async ({ page }) => {
   await page.goto('/');
   await settled(page, 'idle');
+  // Stop the first drift, so the plant stays where the pointer goes.
+  await page.evaluate(() => window.__room!.goto('idle'));
+  await settled(page, 'idle');
   const mango = await screenPoint(page, 'hit_mango');
   await page.mouse.move(mango.x, mango.y);
   await expect(page.locator('.room-label')).toHaveText('About');
@@ -210,17 +213,4 @@ test('without WebGL the drawn monitor shows SaahilOS with the window open', asyn
   } finally {
     await browser.close();
   }
-});
-
-test.describe('on a phone', () => {
-  const { defaultBrowserType: _browser, ...iPhone13 } = devices['iPhone 13'];
-  test.use(iPhone13);
-
-  /** Catches a phone loading the desktop room or a plain page instead of SaahilOS on the drawn monitor. */
-  test('an iPhone 13 gets SaahilOS on the drawn monitor, at the same address', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('html')).toHaveClass(/room-2d/);
-    await expect(drawnOs(page).getByRole('button', { name: 'Projects', exact: true })).toBeVisible();
-    await expect(page).toHaveURL(/\/$/);
-  });
 });

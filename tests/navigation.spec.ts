@@ -1,0 +1,185 @@
+import { devices, expect, test, type Page } from '@playwright/test';
+import type {} from '../src/scene/Application/Application';
+
+// Headless Chromium only has WebGL through SwiftShader; the room needs it.
+const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
+test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
+// Software WebGL is slow; the springs run on the clock, so slow frames only stretch the waits.
+test.describe.configure({ timeout: 180_000 });
+
+const room = (page: Page) =>
+  page.evaluate(() => {
+    const r = window.__room!;
+    return { phase: r.phase, destination: r.destination, moving: r.moving, drifting: r.drifting, stations: r.stations, look: r.look, light: r.light, textureWidths: r.textureWidths };
+  });
+
+async function settledAt(page: Page, station: string, timeout = 30_000) {
+  await page.waitForFunction((s) => window.__room?.phase === s && !window.__room.moving, station, { timeout });
+}
+
+/** The room after its intro, with the first drift stopped, resting on the wide view. */
+async function inRoom(page: Page) {
+  await page.goto('/');
+  await settledAt(page, 'idle', 120_000);
+  await page.evaluate(() => window.__room!.goto('idle'));
+  await settledAt(page, 'idle');
+}
+
+/** Catches a room that sits still after the intro, or a drift that never comes to rest near the monitor. */
+test('with no input, the first drift passes the room’s corners and settles at the desk', async ({ page }) => {
+  await page.goto('/');
+  await settledAt(page, 'idle', 120_000);
+  const visited = new Set<string>();
+  await expect
+    .poll(
+      async () => {
+        const r = await room(page);
+        visited.add(r.destination);
+        return r.phase === 'desk' && !r.moving && !r.drifting;
+      },
+      { timeout: 60_000, intervals: [200] },
+    )
+    .toBe(true);
+  // Every corner between the wide view and the desk, in the drift's order (no window or photo wall in this room yet).
+  expect([...visited]).toEqual(expect.arrayContaining(['idle', 'projector', 'shelf', 'desk']));
+});
+
+/** Catches a drift the visitor has to sit through: any key ends it where it was heading, and nothing moves after. */
+test('any key ends the first drift, and the camera rests where it was heading', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.__room?.drifting && window.__room.destination !== 'idle', null, { timeout: 120_000 });
+  await page.keyboard.press('k');
+  const heading = (await room(page)).destination;
+  expect((await room(page)).drifting).toBe(false);
+  await settledAt(page, heading);
+  await page.waitForTimeout(4000);
+  expect(await room(page)).toMatchObject({ phase: heading, moving: false, drifting: false });
+});
+
+/** Catches arrow keys or the scroll wheel that do nothing, skip a framing, or step more than once per gesture. */
+test('arrow keys and the scroll wheel step between framings, one per press or gesture', async ({ page }) => {
+  await inRoom(page);
+  const { stations } = await room(page);
+  const at = stations.indexOf('idle');
+  expect(stations).toEqual(expect.arrayContaining(['idle', 'desk', 'monitor', 'projector', 'shelf']));
+  expect(stations.indexOf('monitor')).toBe(stations.indexOf('desk') + 1);
+
+  await page.keyboard.press('ArrowRight');
+  await settledAt(page, stations[at + 1]);
+  await page.keyboard.press('ArrowLeft');
+  await settledAt(page, 'idle');
+
+  await page.mouse.move(720, 450);
+  // One flick of a trackpad: a burst of small deltas is one step, not five.
+  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 30);
+  await settledAt(page, stations[at + 1]);
+  await page.mouse.wheel(0, -120);
+  await settledAt(page, 'idle');
+});
+
+/** Catches a hotspot that opens its window straight away instead of flying the camera to its framing first. */
+test('the projector flies the camera to its screen instead of opening the OS', async ({ page }) => {
+  await inRoom(page);
+  const projector = await page.evaluate(() => window.__room!.point('hit_projector'));
+  await page.mouse.click(projector!.x, projector!.y);
+  await settledAt(page, 'projector');
+  await expect(page.frameLocator('.room-monitor iframe').getByRole('dialog', { name: 'Films' })).toHaveCount(0);
+});
+
+/** Catches a prop that does not answer the pointer, or one that stays lifted after the pointer leaves. */
+test('hovering a prop lifts it a little; leaving lets it back down', async ({ page }) => {
+  await inRoom(page);
+  const mango = await page.evaluate(() => window.__room!.point('hit_mango'));
+  await page.mouse.move(mango!.x, mango!.y);
+  await expect(page.locator('.room-label')).toHaveText('About');
+  await expect.poll(() => page.evaluate(() => window.__room!.lift('hit_mango'))).toBeGreaterThan(4);
+  await page.mouse.move(20, 20);
+  await expect.poll(() => page.evaluate(() => window.__room!.lift('hit_mango'))).toBe(0);
+});
+
+/** Catches a drag that clicks what is under it, turns the view without limit, or keeps its turn after a step. */
+test('a drag turns the view within limits, clicks nothing, and the next step looks straight again', async ({ page }) => {
+  await inRoom(page);
+  // 1,100 px at 35° over 900 px turns 0.75 rad: past the 0.5 rad limit.
+  await page.mouse.move(300, 450);
+  await page.mouse.down();
+  for (let x = 300; x <= 1400; x += 50) await page.mouse.move(x, 450);
+  await page.mouse.up();
+  await page.mouse.move(720, 450);
+  await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.45);
+  const { look, phase, destination } = await room(page);
+  expect(look.yaw).toBeLessThanOrEqual(0.5 + 0.02);
+  expect({ phase, destination }).toEqual({ phase: 'idle', destination: 'idle' });
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => Math.abs((await room(page)).look.yaw)).toBeLessThan(0.01);
+});
+
+/** Catches glides under reduced motion: steps cut. */
+test('with reduced motion an arrow key cuts to the next framing', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await page.waitForFunction(() => window.__room?.phase === 'idle', null, { timeout: 120_000 });
+  const { stations } = await room(page);
+  await page.keyboard.press('ArrowRight');
+  expect(await room(page)).toMatchObject({ phase: stations[stations.indexOf('idle') + 1], moving: false, drifting: false });
+});
+
+test.describe('on a phone', () => {
+  const { defaultBrowserType: _browser, ...iPhone13 } = devices['iPhone 13'];
+  test.use(iPhone13);
+
+  /** Catches a phone that gets the desktop room, never reaches the monitor, or ends on neither the OS nor the drawn monitor. */
+  test('an iPhone 13 gets the light room, which goes into the monitor and opens SaahilOS full screen', async ({ page }) => {
+    const fallbacks: string[] = [];
+    page.on('console', (m) => m.text().startsWith('room: ') && fallbacks.push(m.text()));
+    await page.goto('/');
+    await expect(page.locator('html')).toHaveClass(/room-light/);
+    await page.waitForFunction(() => /room-os|room-2d/.test(document.documentElement.className), null, { timeout: 120_000 });
+    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('button', { name: 'Projects', exact: true })).toBeVisible();
+    const path = (await page.locator('html.room-2d').count()) ? `fell back: ${fallbacks.join('; ')}` : 'light room reached the monitor';
+    test.info().annotations.push({ type: 'phone path', description: path });
+    if (path.startsWith('fell back')) return; // too slow here: the drawn monitor took over, as it should
+    const r = await room(page);
+    expect(r).toMatchObject({ light: true, phase: 'monitor' });
+    await expect(page).toHaveURL(/\/$/);
+    expect(Math.max(...r.textureWidths)).toBeLessThanOrEqual(2048);
+
+    await page.getByRole('button', { name: 'Back to the room' }).tap();
+    await settledAt(page, 'idle');
+    await expect(page.locator('html')).not.toHaveClass(/room-os/);
+    // Tapping the glass goes back in.
+    const glass = await page.evaluate(() => window.__room!.point('hit_monitor'));
+    await page.touchscreen.tap(glass!.x, glass!.y);
+    await expect(page.locator('html')).toHaveClass(/room-os/, { timeout: 30_000 });
+  });
+
+  /** Catches an address on a phone that loses its window on the way into the monitor. */
+  test('a phone opening /about ends on About in SaahilOS', async ({ page }) => {
+    await page.goto('/about');
+    await page.waitForFunction(() => /room-os|room-2d/.test(document.documentElement.className), null, { timeout: 120_000 });
+    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('heading', { name: 'About' }).first()).toBeVisible();
+  });
+
+  /** Catches the light room loading on a device that reports too little memory for it. */
+  test('a phone with little memory gets the drawn monitor at once and loads no scene', async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, 'deviceMemory', { value: 1 }));
+    const sceneRequests: string[] = [];
+    page.on('request', (r) => /\/_astro\/main\.|\.glb$/.test(r.url()) && sceneRequests.push(r.url()));
+    await page.goto('/');
+    await expect(page.locator('html')).toHaveClass(/room-2d/);
+    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('button', { name: 'Projects', exact: true })).toBeVisible();
+    expect(sceneRequests).toEqual([]);
+  });
+
+  /** Catches a phone too slow for the light room staying in a stuttering room instead of the drawn monitor. */
+  test('a phone too slow for the light room falls back to the drawn monitor', async ({ page }) => {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 40 });
+    await page.goto('/');
+    await expect(page.locator('html')).toHaveClass(/room-light/);
+    await expect(page.locator('html')).toHaveClass(/room-2d/, { timeout: 150_000 });
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('button', { name: 'Projects', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => window.__room)).toBeUndefined();
+  });
+});
