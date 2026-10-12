@@ -94,7 +94,7 @@ place: "Amer Fort"        # optional
 series: "2019"            # default: --series, else the year; name a series by year, place or what the photos share
 caption: "Amer Fort beyond a wall, in black and white."   # one line; it is also the alt text, so say what is in it
 featured: false           # the favourites
-onWall: false             # framed on the wall of the room
+onWall: false             # framed on the room's print wall; it has five frames, and favourites fill the rest
 order: 20                 # optional; lower comes first
 ```
 
@@ -165,7 +165,7 @@ favourites stays in `blender/posters/`.
 | `npm run posters:runtime [-- <slug> ...]` | Writes the runtime copies of the favourites' posters to `public/room/posters/` (AVIF 683×1024 and KTX2 512×768, 120 KB or less each). |
 | `npm run favorites -- <export folder>` | Writes `src/content/favorites.json` from a Letterboxd export's `profile.csv`. |
 | `node scripts/posters/glyphs.mjs` | Writes `src/lib/poster-glyphs.ts`, the glyph outlines `renderPoster` uses. Run it again only when the fonts or the character sets change. |
-| `npm run measure:payload`, `npm run measure:fps` | Measure the room's 3D payload and frame rate. |
+| `npm run measure:payload`, `npm run measure:fps` | Measure the room's payload (the initial load until the room is interactive, and what a visit loads on demand) and its frame rate in each framing. |
 
 ## Deploy
 
