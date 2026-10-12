@@ -44,6 +44,14 @@ test('every chapter is reachable by keyboard, and the scene list jumps to a chap
   await expectFrameShown(page, 8);
 });
 
+/** Catches the browser's own scroll to a fragment overriding the reel, so a shared chapter link opens the wrong frame. */
+test('a link to a chapter opens the reel on that chapter', async ({ page }) => {
+  await page.goto('/story#chapter-4');
+  await expectFrameShown(page, 7);
+  await page.keyboard.press('ArrowDown');
+  await expectFrameShown(page, 8);
+});
+
 /** Catches reduced motion leaving words clipped inside the reel's gate instead of a static sequence of frames. */
 test('with reduced motion every frame is a static, readable sequence', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });

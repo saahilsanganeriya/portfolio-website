@@ -486,6 +486,8 @@ export function startReel(): void {
   if (startAt >= 0) {
     goTo(startAt);
     scrollSteps = startAt;
+    // The browser scrolls to the fragment's element itself while the page loads, after this script; go back to the frame.
+    if (document.readyState !== 'complete') addEventListener('load', () => requestAnimationFrame(() => goTo(startAt)), { once: true, ...on });
   }
   pos = targetIndex();
   setActive(pos, 0);
