@@ -61,7 +61,10 @@ const index = [
       <button type="button" aria-pressed="false" data-room-pause>Pause motion</button>
     </div>
     <figure class="room-still">
-      <img src="/room/poster.avif" width="1600" height="1000" alt="The room at dusk: a walnut desk with a cream computer and CRT, a projector throwing pale light on a small screen, four film posters, a NAS and a mango plant on the windowsill." />
+      <picture>
+        <source srcset="/room/poster.avif" type="image/avif" />
+        <img src="/room/poster.jpg" width="1600" height="1000" alt="The room at dusk: a walnut desk with a cream computer and CRT, a projector throwing pale light on a small screen, four film posters, a NAS and a mango plant on the windowsill." />
+      </picture>
       <figcaption>
         Motion is reduced on this device, so the room stays still. Everything in it is linked below, and
         <a href="/os">SaahilOS</a> opens as a page.
@@ -428,7 +431,9 @@ const index = [
     display: none;
   }
 
+  .room-still picture,
   .room-still img {
+    display: block;
     width: 100%;
     height: 100%;
     max-width: none;

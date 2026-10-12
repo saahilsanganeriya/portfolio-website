@@ -107,6 +107,8 @@ export class RoomCamera {
   private apply() {
     this.instance.position.copy(this.current.position);
     this.instance.lookAt(this.current.target);
+    // Hit tests and the paused-frame check read the world matrix before the renderer would refresh it.
+    this.instance.updateMatrixWorld();
     if (this.instance.fov !== this.current.fov) {
       this.instance.fov = this.current.fov;
       this.instance.updateProjectionMatrix();
