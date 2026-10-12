@@ -42,10 +42,10 @@ const EFFECTS = {
   lava: { files: ['lava'], dir: 'sfx', level: 0.3, anchors: ['lava_lamp', 'hit_lava_lamp'], ref: 1 },
   crt: { files: ['crt'], dir: 'sfx', level: 0.35, anchors: ['monitor_screen'] },
   whoosh: { files: ['whoosh'], dir: 'sfx', level: 0.1, anchors: [] },
-  foghorn: { files: ['foghorn'], dir: 'city', level: 0.35, anchors: ['window_view_sf'] },
-  gulls: { files: ['gulls'], dir: 'city', level: 0.3, anchors: ['window_view_sf'] },
-  'cable-car': { files: ['cable-car'], dir: 'city', level: 0.3, anchors: ['window_view_sf'] },
-  'temple-bell': { files: ['temple-bell'], dir: 'city', level: 0.3, anchors: ['window_view_delhi'] },
+  foghorn: { files: ['foghorn'], dir: 'city', level: 0.2, anchors: ['window_view_sf'] },
+  gulls: { files: ['gulls'], dir: 'city', level: 0.22, anchors: ['window_view_sf'] },
+  'cable-car': { files: ['cable-car'], dir: 'city', level: 0.22, anchors: ['window_view_sf'] },
+  'temple-bell': { files: ['temple-bell'], dir: 'city', level: 0.22, anchors: ['window_view_delhi'] },
 } as const satisfies Record<string, Effect>;
 export type SfxName = keyof typeof EFFECTS;
 

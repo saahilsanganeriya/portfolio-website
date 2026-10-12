@@ -522,8 +522,11 @@ export class Application implements RoomHandle {
         app.reel?.force(on);
       },
       renderSound(seconds, { view, ...options }) {
-        const framing = app.nodes.framings[view as keyof RoomNodes['framings']];
-        if (!framing) throw new Error(`room audio: the room has no ${view} framing`);
+        // A framing the runtime does not read yet (cam_window) still renders from its empties.
+        const at = (name: string) => app.scene.getObjectByName(name)?.getWorldPosition(new THREE.Vector3());
+        const known = app.nodes.framings[view as keyof RoomNodes['framings']];
+        const framing = known ?? { position: at(`cam_${view}`), target: at(`cam_${view}_target`) };
+        if (!framing.position || !framing.target) throw new Error(`room audio: the room has no ${view} framing`);
         const listener = new THREE.PerspectiveCamera();
         listener.position.copy(framing.position);
         listener.lookAt(framing.target);
