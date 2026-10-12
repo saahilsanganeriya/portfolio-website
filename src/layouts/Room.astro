@@ -54,7 +54,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     })();
   </script>
 
-  <main id="content" class="room-stage" tabindex="-1" data-room data-open={open}>
+  <main id="content" class="room-stage" tabindex="-1" aria-label="The room" data-room data-open={open}>
     <h1 class="visually-hidden">{title}</h1>
     <div class="room-world" data-room-world></div>
     <BootScreen />
