@@ -59,7 +59,7 @@ const shortDate = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
 });
 
-export function cardLabel(entry: FilmEntry): string {
+function cardLabel(entry: FilmEntry): string {
   const parts = [`${entry.title} (${entry.year})`];
   if (entry.rating !== null) parts.push(`rated ${entry.rating} out of 5`);
   if (entry.rewatch) parts.push('rewatch');

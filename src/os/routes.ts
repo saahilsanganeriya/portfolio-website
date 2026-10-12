@@ -49,7 +49,7 @@ const PATH_APPS: Record<string, AppId> = {
 };
 
 /** A same-site URL that has an OS window (`/projects/x`, `/about`, `/os#films`) → its route. */
-export function routeForUrl(url: URL): Route | null {
+function routeForUrl(url: URL): Route | null {
   const parts = url.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
   if (parts[0] === 'os') return url.hash ? parseTarget(url.hash) : null;
   const app = PATH_APPS[parts[0] ?? ''];
@@ -59,7 +59,7 @@ export function routeForUrl(url: URL): Route | null {
   return parts[1] ? { app, slug: parts[1] } : { app };
 }
 
-export type LinkTarget = { kind: 'window'; route: Route } | { kind: 'top' } | { kind: 'external' } | { kind: 'other' };
+type LinkTarget = { kind: 'window'; route: Route } | { kind: 'top' } | { kind: 'external' } | { kind: 'other' };
 
 /** How a link inside the OS behaves: open a window, replace the whole tab, or open a new tab. */
 export function classifyLink(href: string, origin: string): LinkTarget {

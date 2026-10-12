@@ -9,7 +9,7 @@ export function StoryApp() {
   );
 }
 
-export const RESUME_PDF = '/resume/saahil-sanganeriya-resume.pdf';
+const RESUME_PDF = '/resume/saahil-sanganeriya-resume.pdf';
 
 export function ResumeApp({ os }: { os: OsApi }) {
   return (

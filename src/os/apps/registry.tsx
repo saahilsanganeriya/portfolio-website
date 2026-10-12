@@ -55,7 +55,7 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     projects: plural(index.projects.length, 'project'),
     blog: plural(index.posts.length, 'post'),
     films: plural(index.films.entries.length, 'film'),
-    story: 'Plays by itself; pause it at any time',
+    story: `${plural(index.story.length, 'chapter')}, playing by itself`,
     terminal: 'Type help for the commands',
     about: '',
     resume: '',

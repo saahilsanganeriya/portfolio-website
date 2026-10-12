@@ -43,6 +43,9 @@ test.describe('desktop', () => {
     const asPage = reader.getByRole('link', { name: 'Open as page ↗' });
     await expect(asPage).toHaveAttribute('target', '_top');
     await expect(asPage).toHaveAttribute('href', '/projects/sample-project');
+    await asPage.click();
+    await expect(page).toHaveURL(/\/projects\/sample-project$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Sample project' })).toBeVisible();
 
     await page.goto('/os#blog/sample-post');
     await page

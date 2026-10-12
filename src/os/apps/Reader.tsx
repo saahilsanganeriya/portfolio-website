@@ -27,7 +27,7 @@ function Body<T>({ content, what }: { content: ContentState<T>; what: string }) 
   useEffect(() => {
     if (content.state === 'loading') setStatus(`Loading ${what}…`);
     else if (content.state === 'ready') setStatus(null);
-    else setStatus('Not loaded');
+    else setStatus(content.state === 'missing' ? 'Not published yet' : 'Did not load');
   }, [content.state, what, setStatus]);
 
   switch (content.state) {

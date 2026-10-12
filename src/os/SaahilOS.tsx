@@ -126,7 +126,8 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
     return () => window.removeEventListener('message', onMessage);
   }, [open]);
 
-  // Links to anything with a window open that window; the rest keep their own target (see routes.classifyLink).
+  // Links to anything with a window open that window. A link with its own target ("Open as page", other
+  // sites) keeps it, so the plain page still loads in the whole tab.
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
     if (
       event.defaultPrevented ||
@@ -138,7 +139,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
     )
       return;
     const anchor = (event.target as Element).closest('a[href]');
-    if (!anchor || anchor.getAttribute('target') === '_blank') return;
+    if (!anchor || anchor.hasAttribute('target')) return;
     const link = classifyLink(anchor.getAttribute('href')!, window.location.origin);
     if (link.kind !== 'window') return;
     event.preventDefault();
