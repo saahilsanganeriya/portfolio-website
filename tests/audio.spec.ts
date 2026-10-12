@@ -78,12 +78,21 @@ test('the music follows the visitor: the monitor muffles it, Films trades the be
   expect(room.cutoff!.to).toBe(11000);
 
   await page.evaluate(() => window.__room!.goto('monitor'));
-  await page.waitForFunction(() => window.__room?.audio?.graph().state === 'os', null, { timeout: 30_000 });
-  const os = await graph(page);
-  expect(os.cutoff!.to).toBe(1400);
-  expect(os.stems!.beat.to).toBe(0.7);
-  // A glide, not a jump: the filter lands later than it was told to move, and the node itself gets there.
-  expect(os.cutoff!.at).toBeGreaterThan(os.time!);
+  // The graph as it is in the first frame that reports the new state.
+  const os = await (
+    await page.waitForFunction(
+      () => {
+        const g = window.__room?.audio?.graph();
+        return g?.state === 'os' ? g : null;
+      },
+      null,
+      { timeout: 30_000 },
+    )
+  ).jsonValue();
+  expect(os!.cutoff!.to).toBe(1400);
+  expect(os!.stems!.beat.to).toBe(0.7);
+  // A glide, not a jump: the filter node is still near the open room's 11 kHz as the state flips, then gets to 1.4 kHz.
+  expect(os!.cutoff!.now).toBeGreaterThan(5000);
   await expect.poll(async () => (await graph(page)).cutoff!.now, { timeout: 10_000 }).toBeLessThan(1500);
 
   const osFrame = page.frames().find((frame) => frame.url().includes('/os'));
