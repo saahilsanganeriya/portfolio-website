@@ -48,7 +48,7 @@ describe('photos:ingest', () => {
 
     const outDir = join(root, 'src/assets/photography/amer-fort');
     const outputs = (await readdir(outDir)).sort();
-    expect(outputs).toEqual(['480.avif', '480.webp', '960.avif', '960.webp']);
+    expect(outputs).toEqual(['1200.avif', '1200.webp', '480.avif', '480.webp', '960.avif', '960.webp']);
     for (const name of outputs) {
       const meta = await sharp(join(outDir, name)).metadata();
       expect({ name, exif: meta.exif, xmp: meta.xmp, iptc: meta.iptc, icc: meta.icc }).toEqual({ name });
@@ -57,14 +57,15 @@ describe('photos:ingest', () => {
     }
   });
 
-  /** Catches entries that do not build: a `file` pointing at a size that was never written, or wrong defaults. */
+  /** Catches entries that do not build (a `file` naming a size never written), wrong defaults, and a largest copy
+   *  smaller than the original (full resolution is served on demand). */
   test('writes one editable entry per photo, pointing at its largest size', async () => {
     await ingestFolder({ folder, root });
 
     const entry = await readFile(join(root, 'src/content/photography/amer-fort.yaml'), 'utf8');
     expect(entry).toBe(
       [
-        'file: "../../assets/photography/amer-fort/960.webp"',
+        'file: "../../assets/photography/amer-fort/1200.webp"',
         'title: "Amer fort"',
         'year: 2018',
         'series: "Street"',
@@ -91,7 +92,7 @@ describe('photos:ingest', () => {
     const entryPath = join(root, 'src/content/photography/amer-fort.yaml');
     const edited = (await readFile(entryPath, 'utf8')).replace('caption: ""', 'caption: "Edited by hand."');
     await writeFile(entryPath, edited);
-    const imagePath = join(root, 'src/assets/photography/amer-fort/960.webp');
+    const imagePath = join(root, 'src/assets/photography/amer-fort/1200.webp');
     const before = (await stat(imagePath)).mtimeMs;
 
     const { results } = await ingestFolder({ folder, root });

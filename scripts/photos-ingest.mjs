@@ -32,10 +32,10 @@ export function titleFromSlug(slug) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Long edges to write: every standard size up to the original's, or just the original when it is smaller than all. */
+/** Long edges to write: the standard sizes below the original, then the original itself (capped at the largest). */
 export function edgesFor(originalLongEdge) {
-  const edges = LONG_EDGES.filter((edge) => edge <= originalLongEdge);
-  return edges.length > 0 ? edges : [originalLongEdge];
+  const largest = Math.min(originalLongEdge, LONG_EDGES.at(-1));
+  return [...LONG_EDGES.filter((edge) => edge < largest), largest];
 }
 
 /** The earliest year among the EXIF date stamps (capture time is never later than an edit time), else null. */
