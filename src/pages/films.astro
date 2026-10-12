@@ -3,6 +3,7 @@ import FormattedDate from '../components/FormattedDate.astro';
 import Base from '../layouts/Base.astro';
 import { groupByYear } from '../lib/content';
 import { filmsData, ratingLabel, stars, type FilmEntry } from '../lib/films';
+import { diaryKey } from '../lib/films/format';
 
 const { entries, posters, profile, fetchedAt } = filmsData;
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
@@ -16,9 +17,9 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
 <Base title="Films" description="What I have been watching, from my Letterboxd diary: ratings, rewatches and short reviews.">
   <h1 class="page-title">Films</h1>
   <p class="page-lead">
-    What I have been watching, from my <a href={profile}>Letterboxd diary</a>. Last updated <FormattedDate
-      date={new Date(fetchedAt)}
-    />.
+    What I have been watching, from my <a href={profile}>Letterboxd diary</a>. Last updated <span data-films-updated
+      ><FormattedDate date={new Date(fetchedAt)} /></span
+    >.
   </p>
 
   {
@@ -42,7 +43,10 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
                     <span class="visually-hidden">{ratingLabel(film.rating)}</span>
                   </>
                 )}
-                , last watched <FormattedDate date={day(film.watchedDate)} />
+                , last watched{' '}
+                <span data-last-watched>
+                  <FormattedDate date={day(film.watchedDate)} />
+                </span>
               </p>
             </li>
           ))}
@@ -51,15 +55,15 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
     )
   }
 
-  <section aria-labelledby="diary">
+  <section aria-labelledby="diary" data-diary>
     <h2 class="section-title" id="diary">Diary</h2>
     {
       diaryYears.map(([year, films]) => (
-        <div class="chrono">
+        <div class="chrono" data-year={year}>
           <p class="chrono-label">{year}</p>
           <ol class="diary link-list">
             {films.map((film) => (
-              <li>
+              <li data-film={diaryKey(film)}>
                 <span class="meta">
                   <FormattedDate date={day(film.watchedDate)} style="short" />
                 </span>
@@ -108,13 +112,14 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
     line-height: var(--leading-tight);
   }
 
-  .diary {
+  /* Global: the client refresh adds diary rows, which carry no scope attribute. */
+  :global(.diary) {
     max-width: var(--measure);
     padding: 0;
     list-style: none;
   }
 
-  .diary li {
+  :global(.diary li) {
     display: grid;
     grid-template-columns: 4.5rem minmax(0, 1fr) auto;
     gap: 0 var(--space-3);
@@ -122,17 +127,17 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
     padding-block: var(--space-2);
   }
 
-  .diary-film {
+  :global(.diary-film) {
     font-size: var(--size-body);
   }
 
-  .diary-rating {
+  :global(.diary-rating) {
     font-family: var(--font-sans);
     font-size: var(--size-meta);
     letter-spacing: 0.08em;
   }
 
-  .diary-review {
+  :global(.diary-review) {
     grid-column: 2 / -1;
     margin-top: var(--space-1);
     color: var(--dust);
@@ -140,3 +145,92 @@ const diaryYears = groupByYear(entries, (entry) => Number(entry.watchedDate.slic
     white-space: pre-line;
   }
 </style>
+
+<script>
+  import { diaryKey, ratingLabel, stars } from '../lib/films/format';
+  import type { FilmEntry, FilmsData } from '../lib/films/merge';
+
+  // The prerendered diary is the page without JavaScript. After load, watches the build did not have join it from
+  // the live merge (/api/films.json, cached for up to an hour), each in its place by date; nothing is removed.
+  const shortDay = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const longDay = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  const isFilmsData = (value: unknown): value is FilmsData =>
+    typeof value === 'object' && value !== null && Array.isArray((value as FilmsData).entries);
+
+  function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function time(isoDay: string, format: Intl.DateTimeFormat) {
+    const day = isoDay.slice(0, 10);
+    const node = el('time', undefined, format.format(new Date(`${day}T00:00:00Z`)));
+    node.dateTime = day;
+    return node;
+  }
+
+  function diaryRow(film: FilmEntry) {
+    const row = el('li');
+    row.dataset.film = diaryKey(film);
+    const date = el('span', 'meta');
+    date.append(time(film.watchedDate, shortDay));
+    const title = el('span', 'diary-film');
+    const link = el('a', undefined, film.title);
+    link.href = film.url;
+    title.append(link, ' ', el('span', 'meta', String(film.year)));
+    if (film.rewatch) title.append(el('span', 'meta', ', rewatch'));
+    const rating = el('span', 'diary-rating');
+    if (film.rating) {
+      const shown = el('span', undefined, stars(film.rating));
+      shown.setAttribute('aria-hidden', 'true');
+      rating.append(shown, el('span', 'visually-hidden', ratingLabel(film.rating)));
+    }
+    row.append(date, title, rating);
+    if (film.review) row.append(el('p', 'diary-review', film.review));
+    return row;
+  }
+
+  function yearList(diary: HTMLElement, year: string) {
+    const existing = diary.querySelector<HTMLOListElement>(`[data-year="${year}"] ol`);
+    if (existing) return existing;
+    const group = el('div', 'chrono');
+    group.dataset.year = year;
+    const list = el('ol', 'diary link-list');
+    group.append(el('p', 'chrono-label', year), list);
+    const older = [...diary.querySelectorAll<HTMLElement>('[data-year]')].find((g) => (g.dataset.year ?? '') < year);
+    diary.insertBefore(group, older ?? null);
+    return list;
+  }
+
+  async function refresh() {
+    const diary = document.querySelector<HTMLElement>('[data-diary]');
+    if (!diary) return;
+    const data: unknown = await fetch('/api/films.json')
+      .then((response) => (response.ok ? response.json() : null))
+      .catch(() => null);
+    if (!isFilmsData(data) || data.entries.length === 0) return;
+
+    const shown = new Set([...diary.querySelectorAll<HTMLElement>('[data-film]')].map((row) => row.dataset.film));
+    for (const film of data.entries) {
+      if (shown.has(diaryKey(film))) continue;
+      const list = yearList(diary, film.watchedDate.slice(0, 4));
+      // Rows run newest first; a new row goes above the first strictly older one, after same-day rows.
+      const older = [...list.children].find((row) => ((row as HTMLElement).dataset.film ?? '').slice(-10) < film.watchedDate);
+      list.insertBefore(diaryRow(film), older ?? null);
+    }
+
+    document.querySelector('[data-films-updated]')?.replaceChildren(time(data.fetchedAt, longDay));
+    for (const wall of document.querySelectorAll<HTMLElement>('[data-last-watched]')) {
+      const slug = wall.closest('li')?.id;
+      const latest = data.entries.find((film) => film.slug === slug);
+      const current = wall.querySelector('time')?.dateTime ?? '';
+      if (latest && latest.watchedDate > current) wall.replaceChildren(time(latest.watchedDate, longDay));
+    }
+  }
+
+  if (document.readyState === 'complete') void refresh();
+  else addEventListener('load', () => void refresh(), { once: true });
+</script>

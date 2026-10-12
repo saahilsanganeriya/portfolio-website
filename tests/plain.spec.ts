@@ -78,3 +78,25 @@ test('plain pages have no axe violations', async ({ page }) => {
     expect(violations.map((v) => `${path}: ${v.id} (${v.nodes.length})`)).toEqual([]);
   }
 });
+
+/**
+ * Catches /films never showing watches logged after the build (the client refresh not running or not inserting),
+ * and a refresh that drops or duplicates the rows the prerendered page already has.
+ */
+test('/films adds watches from the live feed, newest first, and keeps the prerendered rows', async ({ page }) => {
+  const rows = page.locator('[data-diary] li');
+  await page.route('**/api/films.json', (route) => route.abort());
+  await page.goto('/films');
+  const prerendered = await rows.count();
+  expect(prerendered).toBeGreaterThan(0);
+
+  const watched = '2099-01-02';
+  const entry = { title: 'A Test Film', year: 2099, rating: 4.5, rewatch: false, liked: false, watchedDate: watched, review: 'Short.', url: 'https://letterboxd.com/', slug: 'a-test-film' };
+  await page.unroute('**/api/films.json');
+  await page.route('**/api/films.json', (route) => route.fulfill({ json: { fetchedAt: `${watched}T08:00:00.000Z`, profile: '', posters: [], entries: [entry] } }));
+  await page.reload();
+  await expect(rows.first()).toContainText('A Test Film');
+  await expect(rows).toHaveCount(prerendered + 1);
+  await expect(page.locator('[data-year="2099"] .chrono-label')).toHaveText('2099');
+  await expect(page.locator('[data-films-updated] time')).toHaveAttribute('datetime', watched);
+});
