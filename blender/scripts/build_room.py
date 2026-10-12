@@ -1254,6 +1254,55 @@ def aim_camera(name: str):
     cam.rotation_euler = (target - pos).to_track_quat("-Z", "Y").to_euler()
 
 
+# Share of its atlas per object relative to its surface area (1 = by area): the poster type, the city view and
+# the CRT get more texels, the large dark walls fewer.
+TEXEL_WEIGHTS = {
+    "env_wall_back": 0.6, "env_wall_left": 0.6, "env_floor": 0.7, "env_rug": 0.8, "env_curtains": 0.8,
+    "env_sky": 2.5, "env_window_frame": 1.3,
+    "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_crt": 1.6, "crt_glow": 2.0, "desk_keyboard": 1.6,
+    "desk_computer": 1.3, "desk_lamp_shade": 1.3,
+    "props_projector_screen": 0.6, "props_projector_screen_surface": 0.35, "props_projection": 0.15,
+    "props_mango_plant_leaves": 1.4,
+}
+SUPPORT_Z = (0.0, 0.732, 0.55, 0.92, 1.6475, 2.0075)
+
+
+def tune_atlas_objects():
+    """Set texel weights, and drop faces no framing can see: downward faces below 0.8 m (every camera is above
+    1.1 m) and bottoms resting on the floor, desk, side table, sill or shelves."""
+    for obj in bpy.context.scene.objects:
+        if obj.type != "MESH" or "atlas" not in obj:
+            continue
+        name = obj.name
+        weight = TEXEL_WEIGHTS.get(name)
+        if weight is None and name.startswith("props_poster_frame_"):
+            weight = 0.6
+        elif weight is None and name.startswith("props_poster_"):
+            weight = 3.0
+        elif weight is None and obj.get("prop") in ("fujifilm_x100", "fujifilm_xt", "fujica_st", "super8_camera"):
+            weight = 1.6
+        if weight is not None:
+            obj["texel"] = weight
+        if name in ("lamp_bulb", "crt_glow", "env_sky") or name.startswith("nas_led_"):
+            continue
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        world = obj.matrix_world
+        normal_matrix = world.to_3x3().inverted().transposed()
+        doomed = []
+        for face in bm.faces:
+            n = (normal_matrix @ face.normal).normalized()
+            if n.z > -0.95:
+                continue
+            z = (world @ face.calc_center_median()).z
+            if z < 0.8 or any(abs(z - s) < 0.004 for s in SUPPORT_Z):
+                doomed.append(face)
+        if doomed and len(doomed) < len(bm.faces):
+            bmesh.ops.delete(bm, geom=doomed, context="FACES")
+            bm.to_mesh(obj.data)
+        bm.free()
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     mats = build_materials()
@@ -1274,6 +1323,7 @@ def main():
     build_proxies(placed, mats)
     lens, beam = build_markers(placed, anchors, screen_centre)
     build_lights(lens, beam, picture, screen_centre, mats)
+    tune_atlas_objects()
     setup_world_and_render()
     bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
     for img in bpy.data.images:

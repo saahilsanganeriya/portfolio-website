@@ -144,7 +144,7 @@ def run(*args):
 def optimise(raw: Path, final: Path):
     work = CACHE / "export"
     steps = work / "step1.glb", work / "step2.glb", work / "step3.glb"
-    run(*GLTF_TRANSFORM, "dedup", raw, steps[0])
+    run(*GLTF_TRANSFORM, "dedup", raw, steps[0], "--materials", "false")
     run(*GLTF_TRANSFORM, "prune", steps[0], steps[1], "--keep-leaves", "true")
     run(*GLTF_TRANSFORM, "etc1s", steps[1], steps[2], "--quality", "255", "--compression", "5",
         "--rdo-threshold", "1.0", "--jobs", "4")
