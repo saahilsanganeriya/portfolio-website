@@ -1,60 +1,28 @@
 // The room posters, drawn as one set: a 600 x 900 sheet (2:3), one graphic idea per film in the top two thirds,
 // and the same title and credit baselines on every sheet so they read as a set on the wall. The room hangs the
 // four in src/content/favorites.json; the older sheets stay for the Films app.
+import { composeSheet, INKS, mix, SHEET } from '../../src/lib/posters.ts';
 import { setLine } from './type.mjs';
 
-export const W = 600;
-export const H = 900;
-const M = 40;
-const TITLE_SIZE = 150;
-const TITLE_BASE = 702;
-const TITLE_LEAD = 122;
-const CREDIT_BASE = 866;
-const CREDIT_SIZE = 19;
+export const W = SHEET.width;
+export const H = SHEET.height;
+const M = SHEET.margin;
+const TITLE_SIZE = SHEET.titleSize;
+const TITLE_BASE = SHEET.titleBase;
+const TITLE_LEAD = SHEET.titleLead;
+const CREDIT_BASE = SHEET.creditBase;
+const CREDIT_SIZE = SHEET.creditSize;
 
-const PAPER = '#EDE4D3';
-const INK = '#14110F';
-const THREAD = '#B4442C';
-const DUST = '#A89F91';
+const PAPER = INKS.paper;
+const INK = INKS.ink;
+const THREAD = INKS.thread;
+const DUST = INKS.dust;
 
 const n = (v) => Math.round(v * 100) / 100;
 const circle = (cx, cy, r, clockwise = true) =>
   `M${n(cx + r)} ${n(cy)}A${n(r)} ${n(r)} 0 1 ${clockwise ? 1 : 0} ${n(cx - r)} ${n(cy)}` +
   `A${n(r)} ${n(r)} 0 1 ${clockwise ? 1 : 0} ${n(cx + r)} ${n(cy)}Z`;
 const poly = (points) => `M${points.map(([x, y]) => `${n(x)} ${n(y)}`).join('L')}Z`;
-
-function hexToRgb(hex) {
-  const v = Number.parseInt(hex.slice(1), 16);
-  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
-}
-function mix(a, b, t) {
-  const [ra, ga, ba] = hexToRgb(a);
-  const [rb, gb, bb] = hexToRgb(b);
-  const c = (x, y) => Math.round(x + (y - x) * t).toString(16).padStart(2, '0');
-  return `#${c(ra, rb)}${c(ga, gb)}${c(ba, bb)}`;
-}
-
-// Letterpress: one warp field roughens every printed edge and one speckle field lets the sheet show through
-// the ink at the same pits on every layer, as it does on a hand-inked press.
-const DEFS = `
-<filter id="press" x="-2%" y="-2%" width="104%" height="104%" color-interpolation-filters="sRGB">
-  <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="7" result="warp"/>
-  <feDisplacementMap in="SourceGraphic" in2="warp" scale="2" xChannelSelector="R" yChannelSelector="G" result="rough"/>
-  <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="11" result="speck"/>
-  <feColorMatrix in="speck" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  -9 0 0 0 6.1" result="mask"/>
-  <feComposite in="rough" in2="mask" operator="arithmetic" k1="0.3" k2="0.7"/>
-</filter>
-<filter id="stamp" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
-  <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="23" result="warp"/>
-  <feDisplacementMap in="SourceGraphic" in2="warp" scale="3.5" xChannelSelector="R" yChannelSelector="G" result="rough"/>
-  <feTurbulence type="fractalNoise" baseFrequency="0.22" numOctaves="3" seed="5" result="speck"/>
-  <feColorMatrix in="speck" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -6 0 0 0 3.7" result="mask"/>
-  <feComposite in="rough" in2="mask" operator="in"/>
-</filter>
-<filter id="fibre" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
-  <feTurbulence type="fractalNoise" baseFrequency="0.6 0.9" numOctaves="3" seed="3" stitchTiles="stitch"/>
-  <feColorMatrix type="matrix" values="0 0 0 0 0.42  0 0 0 0 0.36  0 0 0 0 0.3  0 0 0 -1.6 1.05"/>
-</filter>`;
 
 function frame({ id, label, ground, titleLines, titleInk, creditInk, director, year, art, overlay = '' }) {
   const title = titleLines
@@ -63,20 +31,14 @@ function frame({ id, label, ground, titleLines, titleInk, creditInk, director, y
   const byline = setLine('serifItalic', 'a film by', { x: M, y: CREDIT_BASE, size: CREDIT_SIZE });
   const name = setLine('serif', director, { x: M + byline.width + 7, y: CREDIT_BASE, size: CREDIT_SIZE });
   const yearLine = setLine('serif', String(year), { x: W - M, y: CREDIT_BASE, size: CREDIT_SIZE, anchor: 'end', features: ['onum'] });
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" data-poster="${id}">
-<title>${label}</title>
-<defs>${DEFS}</defs>
-<rect width="${W}" height="${H}" fill="${PAPER}"/>
-<g filter="url(#press)">
-<rect width="${W}" height="${H}" fill="${ground}"/>
-${art}
-<path fill="${titleInk}" d="${title}"/>
-<path fill="${creditInk}" d="${byline.d}${name.d}${yearLine.d}"/>
-</g>
-${overlay}
-<rect width="${W}" height="${H}" filter="url(#fibre)" opacity="0.5" style="mix-blend-mode:multiply"/>
-</svg>
-`;
+  return composeSheet({
+    id,
+    label,
+    ground,
+    art,
+    type: `<path fill="${titleInk}" d="${title}"/>\n<path fill="${creditInk}" d="${byline.d}${name.d}${yearLine.d}"/>`,
+    overlay,
+  });
 }
 
 // The Odyssey: the trial of the bow. Twelve axes stand in a trench in a line, and one arrow passes through
