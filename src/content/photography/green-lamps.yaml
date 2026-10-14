@@ -5,5 +5,8 @@ place: "Boston"
 series: "2022"
 caption: "A reading room through a half-open door: green lamps, a long table, heads bent over work."
 featured: false
-onWall: false
-order: 15
+onWall: true
+order: 12
+sharpie: "green lamps"
+date: "2022-04-21"
+igCaption: "-\nCinestill 800t\nCanon A-1, 35-105mm f/3.5"

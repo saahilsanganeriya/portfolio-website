@@ -5,5 +5,8 @@ place: "Boston"
 series: "2022"
 caption: "A dark reading room seen between stone balusters, two lamps lit."
 featured: false
-onWall: false
-order: 16
+onWall: true
+order: 11
+sharpie: "reading room"
+date: "2022-04-23"
+igCaption: "-\nCinestill 800t\nCanon A-1, 35-105mm f/3.5"

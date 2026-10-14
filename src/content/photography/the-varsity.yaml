@@ -5,5 +5,8 @@ place: "Atlanta"
 series: "2022"
 caption: "The Varsity's glass doors at dusk, the red sign lit from inside."
 featured: false
-onWall: false
-order: 7
+onWall: true
+order: 9
+sharpie: "the varsity, atlanta"
+date: "2022-02-05"
+igCaption: "-\nKodak gold 200\nCanon A-1, 50mm f/1.4"
