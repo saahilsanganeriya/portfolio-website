@@ -31,6 +31,10 @@ async function settledAt(page: Page, phase: string, timeout = 20_000) {
 async function clickProp(page: Page, name: string) {
   const point = await page.evaluate((n) => window.__room!.point(n), name);
   expect(point, `${name} is on screen`).not.toBeNull();
+  // The monitor's frame is a page element over the canvas: until a frame has moved it with the camera, it can still
+  // cover a prop the camera has already turned to (seen under load with reduced motion, whose frames are the slowest).
+  if (name.startsWith('hit_'))
+    await expect.poll(() => page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, point!)).not.toBe('IFRAME');
   await page.mouse.click(point!.x, point!.y);
 }
 
