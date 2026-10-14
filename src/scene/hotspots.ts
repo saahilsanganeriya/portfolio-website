@@ -3,6 +3,7 @@
 // on a hotspot without one) runs its room `action`, or zooms into the monitor and opens `target`. The click's sound is
 // the audio layer's, by proxy (src/scene/audio/RoomAudio.ts).
 import favorites from '../content/favorites.json';
+import phrases from '../content/sticky-notes.json';
 import type { StationName } from './Application/RoomModel';
 
 /**
@@ -53,6 +54,16 @@ const prints: Hotspot[] = Array.from({ length: PRINT_SLOTS }, (_, slot) => ({
   href: '/#photography',
 }));
 
+/** The sticky notes: under the pointer each lifts a little and its label reads his phrase out; a click does nothing. */
+const notes: Hotspot[] = phrases.map((phrase, slot) => ({
+  proxies: [`hit_sticky_note_${slot}`],
+  prop: 'A sticky note',
+  label: phrase,
+  target: null,
+  labelOnly: true,
+  href: '/',
+}));
+
 export const HOTSPOTS: readonly Hotspot[] = [
   // On the desktop the monitor is its live iframe; phones have no live screen, so the room may make hit_monitor there.
   { proxies: ['hit_monitor'], prop: 'The monitor', label: 'SaahilOS', target: null, href: '/os' },
@@ -77,6 +88,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
   { proxies: ['hit_photo_wall'], prop: 'The print wall', label: 'Photographs', target: 'photography', fly: 'photos', href: '/#photography' },
   ...prints,
   { proxies: ['hit_album'], prop: 'The photo album', label: 'The photo album', target: 'photography', fly: 'desk', action: 'album', href: '/#photography' },
+  ...notes,
 ];
 
 const byProxy = new Map(HOTSPOTS.flatMap((hotspot) => hotspot.proxies.map((proxy) => [proxy, hotspot] as const)));
