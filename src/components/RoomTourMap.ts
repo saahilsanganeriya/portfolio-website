@@ -183,7 +183,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
       open.focus();
     }
   };
-  open.addEventListener('click', () => setOpen(panel.hidden));
+  open.addEventListener('click', () => setOpen(open.getAttribute('aria-expanded') !== 'true'));
   q<HTMLButtonElement>('[data-tour-close]').addEventListener('click', () => setOpen(false));
 
   // Arrow keys move between the stops (Tab does too); the room must not also take them as a step.

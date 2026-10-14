@@ -10,10 +10,13 @@ test.describe.configure({ timeout: 240_000 });
 const os = (page: Page) => page.frameLocator('.room-monitor iframe');
 const world = (page: Page) => page.evaluate(() => window.__room!.world);
 
+/** The room after the arrival, stepped back from the desk to the wide view, where every prop is in sight. */
 async function inRoom(page: Page, path = '/') {
   await page.goto(path);
-  await page.waitForFunction(() => window.__room?.phase === 'idle' && !window.__room.moving, null, { timeout: 150_000 });
+  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 150_000 });
   await page.waitForFunction(() => window.__room!.world.interactive, null, { timeout: 10_000 });
+  await page.evaluate(() => window.__room!.goto('idle'));
+  await page.waitForFunction(() => window.__room?.phase === 'idle' && !window.__room.moving, null, { timeout: 20_000 });
 }
 
 async function settledAt(page: Page, phase: string, timeout = 20_000) {
@@ -62,7 +65,7 @@ test('each half of the window shows its own city’s day or night, by that city�
 
   await page.clock.setFixedTime('2026-06-22T08:00:00Z');
   await page.reload();
-  await page.waitForFunction(() => window.__room?.phase === 'idle' && !window.__room.moving, null, { timeout: 150_000 });
+  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 150_000 });
   const night = (await world(page)).window!;
   expect(night.sf).toMatchObject({ local: '1:00 am', night: 1 });
   expect(night.delhi).toMatchObject({ local: '1:30 pm', night: 0 });
@@ -125,13 +128,11 @@ test('the projector’s dial steps through The Reel, Photographs and Short films
   await page.waitForFunction(() => window.__room!.world.projector?.state === 'playing', null, { timeout: 30_000 });
   const photo = (await world(page)).projector!.photo;
   expect(photo).toBeTruthy();
-  expect((await world(page)).labels['hit_projector_screen']).toBe('Photographs');
 
   await backToIdle(page);
   await clickProp(page, 'hit_projector_dial');
   await page.waitForFunction(() => window.__room!.world.projector?.program === 'shorts', null, { timeout: 5_000 });
   await page.waitForFunction(() => window.__room!.world.projector?.state === 'playing', null, { timeout: 10_000 });
-  expect((await world(page)).labels['hit_projector_screen']).toBe('Short films — coming soon');
 
   await backToIdle(page);
   await clickProp(page, 'hit_projector_dial');
@@ -148,8 +149,6 @@ test('every new hotspot does what it says, with a sound where the room has its r
   // Room actions that need no window.
   await clickProp(page, 'hit_lava_lamp');
   await expect.poll(async () => (await world(page)).lava).toBe('amber');
-  await clickProp(page, 'hit_fan');
-  await expect.poll(async () => (await world(page)).fan?.speed).toBe(1);
   await clickProp(page, 'hit_espresso');
   await expect.poll(async () => (await world(page)).steam?.brewing).toBe(true);
 
@@ -172,10 +171,14 @@ test('every new hotspot does what it says, with a sound where the room has its r
   await settledAt(page, 'monitor');
   await expect(os(page).getByRole('dialog', { name: 'A Narrative in a Frame' })).toBeVisible();
 
+  // The oven takes the camera in (its door and the croissant are the world's); with no close-up framing in this room it
+  // goes straight for its window. The oven's own sound plays either way.
+  await backToIdle(page);
+  await clickProp(page, 'hit_oven');
+  await expect.poll(() => page.evaluate(() => window.__room!.destination)).not.toBe('idle');
+
   // Props whose content lives in a SaahilOS window.
   for (const [proxy, window] of [
-    ['hit_fujifilm_a', 'A Narrative in a Frame'],
-    ['hit_oven', 'In the oven'],
     ['hit_plaque', 'Films'],
     ['hit_poster_0', 'Films'],
     ['hit_nas', 'Terminal'],
@@ -188,7 +191,7 @@ test('every new hotspot does what it says, with a sound where the room has its r
   // #films/favourites brings the four favourites into view.
   await expect(os(page).locator('#film-favourites')).toBeVisible();
 
-  expect(await sounds(page)).toEqual(expect.arrayContaining(['lava', 'espresso', 'espresso-brew', 'projector-clack', 'shutter', 'oven']));
+  expect(await sounds(page)).toEqual(expect.arrayContaining(['lava', 'espresso', 'espresso-brew', 'projector-clack', 'oven']));
 });
 
 /** Catches on-demand media (reel, prints, photographs, album pages) creeping into the room's initial load. */

@@ -124,6 +124,10 @@ export interface RoomProbe {
   readonly world: ReturnType<World['probe']>;
   /** performance.now() when the intro ended and the room became interactive; null before. */
   readonly interactiveAt: number | null;
+  /** performance.now() when the room started (the boot screen left and input reached the room), and when the camera first
+   * came to rest where it starts (the desk; the monitor for a phone's address); null before. */
+  readonly startedAt: number | null;
+  readonly landedAt: number | null;
   /** The last frame's draw calls and triangles, and what the GPU holds. */
   readonly gpu: { calls: number; triangles: number; textures: number; geometries: number; programs: number };
   /** Everything that moves at once: fan at top speed, steam brewing, the projector playing in view or not. */
@@ -156,6 +160,8 @@ export class Application implements RoomHandle {
   audio!: RoomAudio;
   private world!: World;
   private interactiveAt: number | null = null;
+  private startedAt: number | null = null;
+  private landedAt: number | null = null;
   private interaction!: Interaction;
   private navigation!: Navigation;
   private hover!: HoverReactions;
@@ -276,9 +282,11 @@ export class Application implements RoomHandle {
   start({ open, fast = false }: StartOptions = {}) {
     if (this.started) return;
     this.started = true;
+    this.startedAt = performance.now();
     this.monitor.iframe?.removeAttribute('tabindex');
     const endIntro = () => {
       this.intro = false;
+      this.landedAt ??= performance.now();
       // The visitor can act now: what was left for later may start loading.
       this.interactiveAt ??= performance.now();
       this.world.becomeInteractive();
@@ -647,6 +655,12 @@ export class Application implements RoomHandle {
       },
       get interactiveAt() {
         return app.interactiveAt;
+      },
+      get startedAt() {
+        return app.startedAt;
+      },
+      get landedAt() {
+        return app.landedAt;
       },
       get gpu() {
         const { render, memory, programs } = app.renderer.gl.info;

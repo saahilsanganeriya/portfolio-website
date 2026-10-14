@@ -12,8 +12,9 @@ const musicLoaded = (page: Page) =>
     timeout: 60_000,
   });
 
-async function idle(page: Page) {
-  await page.waitForFunction(() => window.__room?.phase === 'idle' && !window.__room.moving, null, { timeout: 120_000 });
+/** The arrival has landed at the desk. */
+async function arrived(page: Page) {
+  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 120_000 });
 }
 
 /** Catches any sound file (music, props, city) fetched before the visitor's first input, and music that never starts. */
@@ -24,7 +25,7 @@ test('no sound loads before the first input; the first key press starts the room
     if (pathname.startsWith('/audio/')) sounds.push(pathname);
   });
   await page.goto('/');
-  await idle(page);
+  await arrived(page);
   expect(sounds).toEqual([]);
   expect((await graph(page)).context).toBe('none');
 
@@ -39,7 +40,7 @@ test('no sound loads before the first input; the first key press starts the room
 /** Catches a volume or mute that resets on the next visit, and a remembered mute that the first input overrides. */
 test('volume and mute are remembered; a remembered mute keeps the first input silent until Sound is pressed', async ({ page }) => {
   await page.goto('/');
-  await idle(page);
+  await arrived(page);
   const volume = page.getByRole('slider', { name: 'Volume' });
   const sound = page.getByRole('button', { name: 'Sound' });
   await page.keyboard.press('KeyA');
@@ -52,7 +53,7 @@ test('volume and mute are remembered; a remembered mute keeps the first input si
   expect(await graph(page)).toMatchObject({ volume: 0.8, muted: true });
 
   await page.reload();
-  await idle(page);
+  await arrived(page);
   await expect(volume).toHaveValue('80');
   await page.keyboard.press('KeyA');
   expect(await graph(page)).toMatchObject({ context: 'none', muted: true, volume: 0.8 });
@@ -70,7 +71,7 @@ test('volume and mute are remembered; a remembered mute keeps the first input si
 /** Catches music that ignores where the visitor is: the monitor must muffle it, Films must bring in the melody stem. */
 test('the music follows the visitor: the monitor muffles it, Films trades the beat for the melody, each by a glide', async ({ page }) => {
   await page.goto('/');
-  await idle(page);
+  await arrived(page);
   await page.keyboard.press('KeyA');
   await musicLoaded(page);
   const room = await graph(page);

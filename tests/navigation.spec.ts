@@ -10,72 +10,41 @@ test.describe.configure({ timeout: 180_000 });
 const room = (page: Page) =>
   page.evaluate(() => {
     const r = window.__room!;
-    return { phase: r.phase, destination: r.destination, moving: r.moving, drifting: r.drifting, stations: r.stations, look: r.look, light: r.light, textureWidths: r.textureWidths };
+    return { phase: r.phase, destination: r.destination, moving: r.moving, stations: r.stations, look: r.look, light: r.light, textureWidths: r.textureWidths };
   });
 
 async function settledAt(page: Page, station: string, timeout = 30_000) {
   await page.waitForFunction((s) => window.__room?.phase === s && !window.__room.moving, station, { timeout });
 }
 
-/** The room after its intro, with the first drift stopped, resting on the wide view. */
+/** The room after its arrival at the desk, stepped back to the wide view. */
 async function inRoom(page: Page) {
   await page.goto('/');
-  await settledAt(page, 'idle', 120_000);
+  await settledAt(page, 'desk', 120_000);
   await page.evaluate(() => window.__room!.goto('idle'));
   await settledAt(page, 'idle');
 }
 
-/** Catches a room that sits still after the intro, or a drift that never comes to rest near the monitor. */
-test('with no input, the first drift passes the room’s corners and settles at the desk', async ({ page }) => {
+/** Catches a click during the arrival that also sends the camera on from the desk (to the wide view), instead of only landing it. */
+test('a click on empty space during the arrival lands it at the desk and does nothing else', async ({ page }) => {
   await page.goto('/');
-  await settledAt(page, 'idle', 120_000);
-  const visited = new Set<string>();
-  await expect
-    .poll(
-      async () => {
-        const r = await room(page);
-        visited.add(r.destination);
-        return r.phase === 'desk' && !r.moving && !r.drifting;
-      },
-      { timeout: 60_000, intervals: [200] },
-    )
-    .toBe(true);
-  // Every corner between the wide view and the desk, in the drift's order (no window or photo wall in this room yet).
-  expect([...visited]).toEqual(expect.arrayContaining(['idle', 'projector', 'shelf', 'desk']));
+  await page.waitForFunction(() => window.__room?.moving && window.__room.arrival, null, { timeout: 120_000 });
+  await page.mouse.click(5, 5);
+  expect(await room(page)).toMatchObject({ phase: 'desk', destination: 'desk', moving: false });
+  await page.waitForTimeout(1500);
+  expect(await room(page)).toMatchObject({ phase: 'desk', destination: 'desk', moving: false });
 });
 
-/** Catches a drift the visitor has to sit through: any key ends it where it was heading, and nothing moves after. */
-test('any key ends the first drift, and the camera rests where it was heading', async ({ page }) => {
+/** Catches Escape at the desk not letting the visitor out into the room (brief §0: click out of the monitor to explore). */
+test('Escape at the desk steps out to the wide view, and from the monitor back to the desk', async ({ page }) => {
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.drifting && window.__room.destination !== 'idle', null, { timeout: 120_000 });
-  await page.keyboard.press('k');
-  const heading = (await room(page)).destination;
-  expect((await room(page)).drifting).toBe(false);
-  await settledAt(page, heading);
-  await page.waitForTimeout(4000);
-  expect(await room(page)).toMatchObject({ phase: heading, moving: false, drifting: false });
-});
-
-/** Catches a click on empty space during the drift that also sends the camera back to the wide view. */
-test('a click on empty space ends the first drift and does nothing else', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForFunction(() => window.__room?.drifting && window.__room.destination === 'shelf', null, { timeout: 120_000 });
-  // Find a point with no prop under it and click it in the same task, so the drifting camera cannot move in between.
-  const clicked = await page.evaluate(() => {
-    const corners = [[5, 5], [1435, 5], [5, 895], [1435, 895], [720, 5], [720, 895]];
-    const empty = corners.find(([x, y]) => window.__room!.hit(x, y) === null);
-    if (!empty) return null;
-    const [clientX, clientY] = empty;
-    const stage = document.querySelector('[data-room-world]')!;
-    const init = { clientX, clientY, bubbles: true, cancelable: true, isPrimary: true, pointerType: 'mouse' };
-    stage.dispatchEvent(new PointerEvent('pointerdown', init));
-    stage.dispatchEvent(new PointerEvent('pointerup', init));
-    stage.dispatchEvent(new MouseEvent('click', init));
-    return empty;
-  });
-  expect(clicked, 'a corner with no prop under it').not.toBeNull();
-  expect(await room(page)).toMatchObject({ destination: 'shelf', drifting: false });
-  await settledAt(page, 'shelf');
+  await settledAt(page, 'desk', 120_000);
+  await page.keyboard.press('Escape');
+  await settledAt(page, 'idle');
+  await page.evaluate(() => window.__room!.goto('monitor'));
+  await settledAt(page, 'monitor');
+  await page.keyboard.press('Escape');
+  await settledAt(page, 'desk');
 });
 
 /** Catches arrow keys or the scroll wheel that do nothing, skip a framing, or step more than once per gesture. */
@@ -138,10 +107,10 @@ test('a drag turns the view within limits, clicks nothing, and the next step loo
 test('with reduced motion an arrow key cuts to the next framing', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.phase === 'idle', null, { timeout: 120_000 });
+  await page.waitForFunction(() => window.__room?.phase === 'desk', null, { timeout: 120_000 });
   const { stations } = await room(page);
   await page.keyboard.press('ArrowRight');
-  expect(await room(page)).toMatchObject({ phase: stations[stations.indexOf('idle') + 1], moving: false, drifting: false });
+  expect(await room(page)).toMatchObject({ phase: stations[stations.indexOf('desk') + 1], moving: false });
 });
 
 test.describe('on a phone', () => {
@@ -181,16 +150,16 @@ test.describe('on a phone', () => {
     const cdp = await page.context().newCDPSession(page);
     const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) =>
       cdp.send('Input.dispatchTouchEvent', { type, touchPoints: x === undefined ? [] : [{ x, y: 420 }] });
-    // 120 px at 35° over 664 px turns the view 0.11 rad, inside the wide view's 0.14 rad limit.
+    // 120 px at 35° over 664 px turns the view 0.11 rad, inside the desk's 0.35 rad limit.
     await touch('touchStart', 100);
     for (let x = 110; x <= 220; x += 10) await touch('touchMove', x);
     await touch('touchEnd');
     await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.09);
     expect((await room(page)).look.yaw).toBeLessThan(0.13);
     expect(await page.evaluate(() => scrollX + scrollY)).toBe(0);
-    // Past the 1.6 s the phone would hold the wide view before going in by itself.
+    // Past the 1.2 s the phone would hold the desk before going in by itself.
     await page.waitForTimeout(3000);
-    expect(await room(page)).toMatchObject({ phase: 'idle', destination: 'idle' });
+    expect(await room(page)).toMatchObject({ phase: 'desk', destination: 'desk' });
     await expect(page.locator('html')).not.toHaveClass(/room-os/);
   });
 
