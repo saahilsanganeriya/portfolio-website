@@ -2,6 +2,14 @@ import type { AssetSection } from '../../lib/assets-register';
 import { linkAttributes, useJson } from './content';
 import { ThreadLoader } from './Reader';
 
+/** blender/ASSETS.md writes file and node names in backticks: they show as code, never as raw marks. */
+function Marked({ text }: { text: string }) {
+  return <>{text.split(/`([^`]+)`/).map((part, i) => (i % 2 ? <code key={i}>{part}</code> : part))}</>;
+}
+
+// A row's use reads as a sentence, unless it starts with a file or node name, which keeps its own case.
+const sentence = (text: string) => (text.startsWith('`') ? text : text.charAt(0).toUpperCase() + text.slice(1));
+
 /** Every third-party file on the site with its source and licence (blender/ASSETS.md), and the two sites it builds on. */
 export function CreditsApp() {
   const credits = useJson<{ sections: AssetSection[] }>('/content/credits.json');
@@ -33,17 +41,19 @@ export function CreditsApp() {
             <dl>
               {section.rows.map((row) => (
                 <div key={`${row.asset}-${row.usedFor}`} className="os-credits-row">
-                  <dt>{row.usedFor}</dt>
+                  <dt>
+                    <Marked text={sentence(row.usedFor)} />
+                  </dt>
                   <dd>
                     {row.sourceUrl ? (
                       <a href={row.sourceUrl} {...linkAttributes(row.sourceUrl)}>
-                        {row.asset}
+                        <Marked text={row.asset} />
                       </a>
                     ) : (
-                      row.asset
+                      <Marked text={row.asset} />
                     )}
                     <span className="os-credits-licence">
-                      {row.author}, {row.licence}
+                      <Marked text={`${row.author}, ${row.licence}`} />
                     </span>
                   </dd>
                 </div>

@@ -205,7 +205,11 @@ test.describe('desktop', () => {
 
     // A site that allows framing opens in SaahilOS's browser, which may not navigate the room.
     await page.goto('/os?embed=1#credits');
-    await page.getByRole('dialog', { name: 'Credits' }).locator('a[href^="https://polyhaven.com/"]').first().click();
+    // ASSETS.md's backticked names show as code, not as raw marks (T52 fix 15).
+    const credits = page.getByRole('dialog', { name: 'Credits' });
+    await expect(credits.locator('.os-credits-row code').first()).toBeVisible();
+    expect(await credits.locator('.os-credits-section').allInnerTexts()).not.toContainEqual(expect.stringContaining('`'));
+    await credits.locator('a[href^="https://polyhaven.com/"]').first().click();
     const browser = page.getByRole('dialog', { name: 'polyhaven.com' });
     const frame = browser.locator('iframe');
     await expect(frame).toHaveAttribute('src', /^https:\/\/polyhaven\.com\//);

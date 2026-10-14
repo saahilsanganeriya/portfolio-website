@@ -1791,12 +1791,13 @@ body.os-moving iframe {
   color: var(--os-muted);
 }
 
-.os-credits-row dt::first-letter {
-  text-transform: uppercase;
-}
-
 .os-credits-row dd {
   margin: 0;
+}
+
+.os-credits-row code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
 }
 
 .os-credits-licence {
