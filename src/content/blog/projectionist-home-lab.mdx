@@ -61,7 +61,7 @@ projectionist is one Go service in one container on the NAS. Each job is a stage
 
 Before I trusted any file operation, I measured it on this NAS, in scratch folders on shares that hold no films. A move is now a single system call that cannot overwrite anything, and the Go stages never call `chmod`. A manual describes a filesystem. The NAS has its own opinions.
 
-Coding agents wrote a lot of the Go, and 286 of its 610 commits carry an agent’s co-author line. My part was deciding what each stage had to prove.
+Coding agents wrote a lot of the Go, and 293 of its 617 commits carry an agent’s co-author line. My part was deciding what each stage had to prove.
 
 An old script could go only when its replacement matched it on a recorded test, and the script was deleted in the same change, so the two never ran side by side. The rename stage matched my old planner on 21,333 of 21,334 recorded rows. The one difference was on purpose.
 
