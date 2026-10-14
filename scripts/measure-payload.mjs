@@ -2,12 +2,11 @@
 // paint, on the production build, split in two.
 //   initial:   everything requested before the room became interactive (the intro glide ended, no input yet):
 //              models, textures, posters, decoders, scene code, the monitor's OS. Budget 6,000,000 B.
-//   on demand: everything a visit then pulls in: the projector reel (once its screen is in view), the live diary
-//              for its cards, the print wall's pictures, the photography chunk, the room's sound and music (first
-//              input; here a press of the Sound button), the Photographs program (one turn of the dial) and the album
-//              (opened, three pages turned) and a look out of the window close up (the other day/night pictures its
-//              cities need there). Caps: reel 1,500,000 B, music 1,200,000 B (PLAN 11.3); photos have no byte cap but
-//              must stay lazy and low-res (480 px on the wall, 960 px in the album and the program; PLAN 12.3). Each
+//   on demand: everything a visit then pulls in: the live diary, the print wall's pictures, the photography chunk,
+//              the room's sound and music (first input; here a press of the Sound button), the album (opened, three
+//              pages turned) and a look out of the window close up (the other day/night pictures its cities need
+//              there). Caps: reel 1,500,000 B (none since room v3 has no screen), music 1,200,000 B (PLAN 11.3); photos
+//              have no byte cap but must stay lazy and low-res (480 px on the wall, 960 px in the album; PLAN 12.3). Each
 //              on-demand request is put in a kind by its path, and pictures by the step of the visit that asked for
 //              them. Window pictures this visit never asked for are listed with their file sizes.
 // Also checks "text before 3D": first contentful paint happens before the first .glb/.ktx2 response ends (PLAN 3.9),
@@ -51,12 +50,11 @@ try {
   const interactiveEpoch = origin + interactiveAt;
   steps.push({ name: 'by itself', at: interactiveEpoch });
 
-  // What the room pulls in by itself once interactive, seen from the wide view: the reel (its screen is there) and the prints.
+  // What the room pulls in by itself once interactive, seen from the wide view: the prints.
   await page.evaluate(() => window.__room.goto('idle'));
   await settle();
-  await room(() => ['playing', 'paused', 'failed'].includes(window.__room.reel?.state ?? 'failed'));
   await room(() => window.__room.world.prints.length === 0 || window.__room.world.prints.every((p) => p.shown > 0));
-  // A visit: sound, one turn of the projector's dial, the album opened and paged.
+  // A visit: sound, the album opened and paged, the window close up.
   await step('sound');
   await page.locator('[data-room-sound]').click();
   // The sound the first input loads: the room's twelve recordings and the music's three stems.
@@ -64,12 +62,6 @@ try {
     const sounds = performance.getEntriesByType('resource').map((e) => e.name);
     return sounds.filter((name) => name.includes('/audio/room/')).length >= 12 && sounds.filter((name) => name.includes('/audio/music/')).length >= 3;
   });
-  await step('dial');
-  await click('hit_projector_dial');
-  await room(() => window.__room.world.projector?.program === 'photographs' && window.__room.world.projector.state !== 'loading');
-  await page.waitForTimeout(8000);
-  await page.evaluate(() => window.__room.goto('idle'));
-  await settle();
   await step('album');
   await click('hit_album');
   await room(() => window.__room.world.album?.state === 'open');
@@ -143,7 +135,7 @@ try {
     if (p === '/api/films.json') return 'live diary';
     if (r.type === 'font') return 'fonts';
     if (/\.(webp|avif|jpe?g|png)$/.test(p) || /\/photographs\.[^/]*\.js$/.test(p)) {
-      return { album: 'album', dial: 'photographs program' }[r.step] ?? 'photos on the wall';
+      return { album: 'album' }[r.step] ?? 'photos on the wall';
     }
     return 'other';
   };
