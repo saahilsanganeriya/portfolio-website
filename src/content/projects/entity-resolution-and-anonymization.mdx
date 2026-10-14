@@ -1,29 +1,32 @@
 ---
 title: "Entity resolution and anonymization at Mercor"
-summary: "Linking every name, email and handle to the real person behind it, then giving each person one consistent fake identity."
+summary: "Working out which names, emails and handles in a company's data belong to the same person, so that each person gets one consistent fake identity."
 year: 2026
 status: "shipped"
 role: "Software Engineer, Applied AI"
-team: "Data Acquisition team; I built or redesigned each system on this page"
-stack: ["Go", "Temporal", "Kubernetes (GKE, EKS)", "Rust", "LightGBM", "PyTorch", "ONNX", "FAISS", "LLM APIs"]
+team: "Data Acquisition team; my parts are the identity resolution, its evals and the fake-identity step"
+stack: ["Go", "Rust", "Temporal", "Kubernetes (GKE, EKS)", "Parquet", "LLM APIs"]
 featured: true
 order: 1
 links: {}
 ---
 
 Picture a company's Slack, email and issue tracker. One engineer shows up as "Jordan", as "J. Lee", as a
-work address and as a handle, often in the same thread. Before data like that can go to an AI lab for
-training, every real person in it has to disappear, and the conversation still has to make sense.
+work address and as a handle, often in the same thread. Before data like that can be used to train an AI
+model, every real person in it has to disappear, and the conversation still has to make sense.
 
-I work on Mercor's Data Acquisition team, which delivers anonymized enterprise data to a frontier AI lab
-for post-training. I built the parts that decide who is who, and what each person becomes. The details
-belong to Mercor, so this page stays where my résumé does.
+That is the job of the anonymization pipeline on Mercor's Data Acquisition team. It is team work. My part is
+the step that decides who is who, with the evals that measure it, and the step that picks what each
+person becomes.
 
-## How big "who is who" gets
+## Why find and replace is not enough
 
-One run of entity resolution resolved 88 million mentions. Comparing every mention with every other one
-would mean nearly four quadrillion pairs. A run also makes about 3 million LLM calls, so the parts that
-talk to model providers have to survive their bad days.
+Company data is not one kind of file. The same person turns up in email headers, chat exports,
+spreadsheets, PDFs, slide decks and screenshots. Whatever fake they get has to agree across all of them,
+or the data starts to contradict itself.
+
+Nobody reads this much text by hand. Whatever rule the pipeline follows for one name, it follows
+everywhere at once, mistakes included.
 
 ## Three obvious answers, and how each one breaks
 
@@ -61,88 +64,92 @@ more who said what to whom.
 them. "Jordan" in one message and "J. Lee" in the next become strangers.
 
 **Link mentions by comparing everything.** The fix is to find every mention of a person, link them, and
-give that person one fake identity everywhere. Linking by comparing every pair does not fit at 88 million
-mentions. And linking has a trap: if A is B and B is C, then A is C, so one bad link can weld two whole
-groups of people into one.
+give that person one fake identity everywhere. Comparing every mention with every other one grows with
+the square of the count, so it stops fitting long before a company's data runs out. And linking has a
+trap: if A is B and B is C, then A is C, so one bad link can weld two whole groups of people into one.
 
-## What I built
+## How the pipeline works
 
-**Entity resolution.** It links every name, email and handle to the real person behind it. An LLM labels
-what kind of thing each mention is, FAISS embedding search finds likely matches, and Leiden graph
-clustering groups them. I built its eval suite alongside it.
-
-**Matching in blocks.** MinHash-LSH groups likely matches into blocks, and one LLM call clusters each
-block. A merge needs agreeing votes, so one bad verdict cannot join two people. A second mode uses
-correlation clustering.
-
-**Learned scorers.** LightGBM and PyTorch match scorers sit on a 257-feature Rust library and are served
-through ONNX. They run in production shadow mode: beside the live system, logging answers, deciding
-nothing.
-
-**Scale.** I rebuilt resolution as a Go service with bounded memory that scales out on Temporal across
-GKE and EKS.
-
-**Staying up.** With millions of calls a run, a provider's bad minute matters. I built an adaptive
-concurrency controller across providers. It follows AIMD, the rule TCP uses for congestion.
+Each step answers one question and hands a table to the next.
 
 <figure class="os-figure">
 
 ```text
- calls in flight
-  |        /|          /|          /
-  |      /  |        /  |        /
-  |    /    |      /    |      /
-  |  /      |    /      |    /
-  |/        |  /        |  /
-  |         |/          |/
-  +----------------------------------> time
-    climb a little      cut hard when
-    while calls         calls start
-    succeed             to fail
+ read       what is the text, and where exactly
+   |        did each piece come from?
+   v
+ detect     which spans are personal data,
+   |        and of what kind?
+   v
+ resolve    which of those spans are the same person?
+   |
+   v
+ choose     what does each mention become?
+   |
+   v
+ rewrite    put each fake back in the exact spot
+            it came from
 ```
 
-<figcaption>The general AIMD rule: additive increase, multiplicative decrease. An illustration of the idea, not a trace of any real run.</figcaption>
+<figcaption>The pipeline's steps, in order. Every kind of file goes through the same steps, so a person gets one answer across all of them.</figcaption>
 </figure>
 
-Versioned Temporal workers and a custom rollout controller let us deploy in the middle of a run without
-losing it.
+**Reading.** Each format is read into text along with the exact place each piece came from: a cell in a
+table, a range of bytes in a document, a region of an image. Text found inside a picture joins the same
+pass as everything else, so a name in a screenshot can be linked to the same name in an email.
 
-**Fake identities.** The generator gives each person one consistent persona. Format-preserving generators
-cover 90+ PII types, and an LLM writes names and addresses of the same length as the originals, so a form
-or a table still lines up.
+**Who is who.** The default resolver is deterministic: the same input gives the same answer, and it
+makes no model calls. It treats two kinds of clue differently. An email address, a phone number or a
+username can match exactly. A name cannot, because it comes with spellings, initials and typos.
 
-**Synthetic data.** To measure any of this you need ground truth, and real data does not come with it. In
-the synthetic-data engine an LLM agent designs a fictional company and writes its Slack, Gmail and Linear
-history, while code places every PII value. The labels are exact by construction.
+The rule that matters most is that evidence has a direction. `Jordan Lee <jordan.lee@example.com>` in an
+email header ties that name to that address. Two strings that only sit in the same message are tied
+weakly, and no amount of weak evidence merges anyone, because recipient lists would chain strangers
+together. Things that many people use are identities of their own: a team inbox, or an address that
+several people sign for, never becomes a bridge between two people. Anything linked to too many others
+does not merge on its own.
 
-**Code.** Anonymizing a repository means rewriting its git history too. Code anonymization already
-existed when I redesigned it to rewrite git histories with tree-sitter and Aho-Corasick, and to hand each
-repo to a sandboxed LLM coding agent that runs its tests.
+For the close calls there is a slower path. It groups likely matches into small blocks, asks a model to
+sort each block, and only merges on agreeing votes. It is off by default, because it is slower and costs
+money on every run.
+
+**One fake per person.** Every mention of a person takes its fake from that person's one identity, in the
+same format and of the same length. An email address still looks like an email address, and a name on a
+form still fits its box. The table that pairs each real value with its fake is the key that undoes
+everything, so it never leaves with the data.
+
+**Writing it back.** Each fake goes back to the place the reader recorded, never by searching for the
+original text. Pictures get no fake: faces, logos, codes and personal text in an image are masked, and
+an image the pipeline cannot read is not shipped as it was.
+
+The whole pipeline runs on Temporal across GKE and EKS, and resolution is a Go service that keeps its
+memory bounded however much data comes in.
 
 ## What it gives up
 
-Agreeing votes and blocking guard against wrong merges, and they cost true matches. Two mentions that never
-land in the same block can never be linked, and a merge the votes do not agree on does not happen. That is
-the trade I wanted. A split leaves one person with two fakes, which reads a little oddly. A merge pins one
-person's words and details on someone else, and that cannot be undone once the data has left. So every
-close call should split.
+Strict evidence costs true matches. A person who appears as a first name on one page and a phone number
+on another may stay split, and a merge the evidence does not support does not happen. That is the trade
+I wanted.
 
-The learned scorers pay a different price. In shadow mode they can be measured against the live system
-for as long as it takes to trust them, and in the meantime they improve nothing.
+A split leaves one person with two fakes, which reads a little oddly. A merge pins one person's
+words and details on someone else, and that cannot be undone once the data has left. So every close call
+should split.
+
+The deterministic default gives up the matches that only a careful reader of the context would see. In
+return it gives the same answer twice, and every merge can be traced to the evidence behind it. It also
+adds no model bill to a run.
+
+Writing back by position is harder to build than search, because every step has to carry the locations
+along. Search would be simpler, and it would also change every innocent copy of the same string.
 
 ## Results
 
-| What | Before | After |
-|---|---|---|
-| entity-resolution accuracy, labeled eval set | 85% | 95% |
-| B-cubed F1 with blockwise matching | 0.34 | 0.84 |
-| wall time of one run, after tuning its LLM judges | 4h13m | 2h11m |
-| LLM provider failures a minute, same throughput | 24.6 | 1.1 |
-| one 55k-commit repo through code anonymization | 3+ hours | 19 min |
+With the eval suite I built alongside the resolver, accuracy on a labeled set went from 85% to 95%. That
+says the resolver is right more often. It does not say which way the remaining mistakes lean, split or
+merge, and that is what decides whether anyone gets hurt.
 
-B-cubed F1 is a clustering score that counts both wrong merges and wrong splits. Expert reviewers kept 95%
-of the fake-identity generator's replacements on 675 documents. The synthetic engine's 1.6M labeled mentions became the team's benchmark, and code
-anonymization runs about 200 repos at once on ECS.
+Every change to the resolver now shows its score against the main branch, next to the spread between two
+runs of the same build. A change smaller than that spread is not a finding.
 
 ## What I took from it
 
