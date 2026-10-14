@@ -6,11 +6,11 @@ import sitemap from '@astrojs/sitemap';
 import vercel from '@astrojs/vercel';
 import { darkroom } from './src/styles/shiki-darkroom.mjs';
 
-// Vercel sets the production domain at build time (a custom domain replaces it once one is added); local and other
-// builds use the project's production address.
+// Vercel sets the project's shortest production domain at build time (the custom domain); local and other builds use
+// the same address.
 const site = process.env.VERCEL_PROJECT_PRODUCTION_URL
   ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : 'https://portfolio-website-sandy-five-70.vercel.app';
+  : 'https://saahilsanganeriya.com';
 
 export default defineConfig({
   site,
