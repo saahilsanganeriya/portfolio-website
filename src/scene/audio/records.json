@@ -1,0 +1,92 @@
+{
+  "padSeconds": 0.1,
+  "records": {
+    "washed-up": {
+      "seconds": 234.601,
+      "webm": {
+        "kbps": 80,
+        "bytes": 2442107
+      },
+      "m4a": {
+        "kbps": 80,
+        "bytes": 2416712
+      },
+      "lufs": -18,
+      "truePeak": -6.2
+    },
+    "night-in-venice": {
+      "seconds": 218.149,
+      "webm": {
+        "kbps": 84,
+        "bytes": 2362295
+      },
+      "m4a": {
+        "kbps": 84,
+        "bytes": 2331981
+      },
+      "lufs": -18,
+      "truePeak": -6.2
+    },
+    "cylinder-five": {
+      "seconds": 173.533,
+      "webm": {
+        "kbps": 96,
+        "bytes": 2153595
+      },
+      "m4a": {
+        "kbps": 96,
+        "bytes": 2126665
+      },
+      "lufs": -18,
+      "truePeak": -5.3
+    },
+    "raga-kiravani": {
+      "seconds": 278,
+      "webm": {
+        "kbps": 68,
+        "bytes": 2476530
+      },
+      "m4a": {
+        "kbps": 68,
+        "bytes": 2427924
+      },
+      "lufs": -18,
+      "truePeak": -1.5
+    }
+  },
+  "crackle": {
+    "seconds": 18,
+    "webm": {
+      "kbps": 40,
+      "bytes": 88171
+    },
+    "m4a": {
+      "kbps": 64,
+      "bytes": 162995
+    }
+  },
+  "sounds": {
+    "needle-drop": {
+      "seconds": 1.6,
+      "webm": {
+        "kbps": 48,
+        "bytes": 10775
+      },
+      "m4a": {
+        "kbps": 64,
+        "bytes": 14345
+      }
+    },
+    "needle-lift": {
+      "seconds": 0.8,
+      "webm": {
+        "kbps": 48,
+        "bytes": 5213
+      },
+      "m4a": {
+        "kbps": 64,
+        "bytes": 7796
+      }
+    }
+  }
+}
