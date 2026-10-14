@@ -190,9 +190,9 @@ const handStyle = (size: number, colour: string, seed: number, slant: number) =>
 });
 
 /** The largest size at which every line fits the box, `lead` line heights apart (the hand's jitter needs a little room). */
-function handSize(ctx: CanvasRenderingContext2D, lines: readonly string[], box: { width: number; height: number }, lead: number, extra = 0) {
+function handSize(ctx: CanvasRenderingContext2D, lines: readonly string[], box: { width: number; height: number }, lead: number) {
   ctx.font = handFont(100);
-  const widest = Math.max(...lines.map((line) => ctx.measureText(line).width / 100 + extra));
+  const widest = Math.max(...lines.map((line) => ctx.measureText(line).width / 100));
   return Math.min((box.width * 0.94) / widest, box.height / (lines.length * lead));
 }
 
