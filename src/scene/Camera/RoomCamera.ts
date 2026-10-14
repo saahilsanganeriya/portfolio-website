@@ -33,6 +33,8 @@ interface Flight {
   spring: SpringSettings;
   path?: Path;
   onDone?: () => void;
+  /** How far back from its framing the camera stands at `to`, as a multiple of the framing's distance. */
+  distance: number;
 }
 
 /** Slow out of the boot framing, an even pace past the room, a gentle landing (zero speed at both ends). */
@@ -89,6 +91,8 @@ export class RoomCamera {
   private readonly position = new THREE.Vector3();
   private readonly target = new THREE.Vector3();
   private aspect = 1;
+  /** The distance multiple of the framing the camera rests at (a tour stop may stand further back than its node). */
+  private restDistance = 1;
 
   constructor(nodes: RoomNodes, aspect: number) {
     this.framings = nodes.framings;
@@ -123,21 +127,24 @@ export class RoomCamera {
     this.instance.updateProjectionMatrix();
   }
 
-  /** Flies to a station on a spring; `cut` jumps there (reduced motion, a skipped intro). False if the room lacks it. */
-  fly(station: StationName, motion: Motion, onDone?: () => void, cut = false): boolean {
+  /**
+   * Flies to a station on a spring; `cut` jumps there (reduced motion, a skipped intro). `distance` stands the camera
+   * that many times further from what the framing looks at, along the framing's own line. False if the room lacks it.
+   */
+  fly(station: StationName, motion: Motion, onDone?: () => void, cut = false, distance = 1): boolean {
     if (!this.has(station)) return false;
     this.drag.yaw = this.drag.pitch = 0;
     if (cut) {
-      this.flight = { to: station, spring: MOTIONS[motion], onDone };
+      this.flight = { to: station, spring: MOTIONS[motion], onDone, distance };
       this.finish();
       return true;
     }
-    if (!this.flight && this.phase === station) {
+    if (!this.flight && this.phase === station && this.restDistance === distance) {
       onDone?.();
       return true;
     }
     // Re-aiming keeps the rig's velocity, so a change of mind curves instead of stopping and starting again.
-    this.flight = { to: station, spring: MOTIONS[motion], onDone };
+    this.flight = { to: station, spring: MOTIONS[motion], onDone, distance };
     return true;
   }
 
@@ -158,6 +165,7 @@ export class RoomCamera {
       to: station,
       spring: MOTIONS.step,
       onDone,
+      distance: 1,
       path: {
         positions: new THREE.CatmullRomCurve3(positions, false, 'centripetal'),
         targets: new THREE.CatmullRomCurve3(targets, false, 'centripetal'),
@@ -254,6 +262,7 @@ export class RoomCamera {
     if (!flight) return;
     this.flight = null;
     this.phase = flight.to;
+    this.restDistance = flight.distance;
     flight.onDone?.();
   }
 
@@ -297,7 +306,7 @@ export class RoomCamera {
       ({ position, target, fov } = this.fromFraming(this.framings.idle, 1));
     } else {
       const framing = this.framings[phase] ?? this.framings.idle;
-      ({ position, target, fov } = this.fromFraming(framing, this.aspectFit()));
+      ({ position, target, fov } = this.fromFraming(framing, this.aspectFit() * this.distanceAt(phase)));
     }
     this.goal[0] = position.x;
     this.goal[1] = position.y;
@@ -306,6 +315,11 @@ export class RoomCamera {
     this.goal[4] = target.y;
     this.goal[5] = target.z;
     this.goal[6] = fov;
+  }
+
+  private distanceAt(phase: CameraPhase) {
+    if (this.flight) return phase === this.flight.to ? this.flight.distance : 1;
+    return phase === this.phase ? this.restDistance : 1;
   }
 
   private fromFraming(f: Framing, distanceScale: number) {

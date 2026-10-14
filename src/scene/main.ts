@@ -17,7 +17,7 @@ export async function startRoom(container: HTMLElement, opts: RoomOptions): Prom
     start: (options) => app.start(options),
     openWindow: (target, options) => app.openWindow(target, options),
     fly: (station) => app.fly(station),
-    visit: (station, onDone) => app.visit(station, onDone),
+    visit: (station, onDone, distance) => app.visit(station, onDone, distance),
     has: (station): station is StationName => app.has(station),
     view: () => app.view(),
     skipIntro: () => app.skipIntro(),

@@ -1,7 +1,8 @@
 ---
 // "Take the tour" and the map of the room it opens (brief §0, §1): a floor plan drawn from public/room/floorplan.json,
-// the stops in tour order (work first), a you-are-here mark that follows the camera, and "Play the tour". Never the
-// default: the button waits quietly in a corner, away from the monitor. Behaviour is in RoomTourMap.ts.
+// the stops of src/scene/tour.json in order (work first), a you-are-here mark that follows the camera, and "Play the
+// tour", during which the map shrinks to a small inset with each stop's caption. Never the default: the button waits
+// quietly in a corner, away from the monitor. Behaviour is in RoomTourMap.ts.
 ---
 
 <button type="button" class="room-tour-open" aria-expanded="false" aria-controls="room-tour" data-room-ui data-tour-open hidden>
@@ -261,8 +262,46 @@
     color: var(--dust);
   }
 
+  .room-tour-caption :global(strong) {
+    font-weight: 400;
+    color: var(--paper);
+  }
+
   .room-tour-actions {
     display: flex;
     justify-content: flex-end;
+  }
+
+  /* While the tour plays, the map shrinks to a you-are-here inset beside the stop's caption, out of the frame's way. */
+  .room-tour[data-playing] {
+    display: grid;
+    grid-template-columns: 6.5rem 1fr;
+    gap: 0 var(--space-3);
+    align-items: start;
+    width: min(27rem, calc(100vw - 2 * var(--space-3)));
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .room-tour[data-playing] .room-tour-head,
+  .room-tour[data-playing] .room-tour-stops {
+    display: none;
+  }
+
+  .room-tour[data-playing] .room-tour-plan {
+    grid-row: span 2;
+    margin: 0;
+  }
+
+  .room-tour[data-playing] .room-tour-markers :global(span) {
+    width: 0.8rem;
+    height: 0.8rem;
+    margin: -0.4rem 0 0 -0.4rem;
+    font-size: 0;
+  }
+
+  .room-tour[data-playing] .room-tour-caption {
+    min-height: 3em;
+    margin: 0 0 var(--space-2);
+    line-height: 1.45;
   }
 </style>

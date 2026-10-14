@@ -1,4 +1,5 @@
 import type { RoomHandle, StationName } from '../scene/main';
+import tour from '../scene/tour.json';
 
 type Segment = [[number, number], [number, number]];
 
@@ -10,13 +11,28 @@ export interface FloorPlan {
   windows?: Segment[];
   doors?: Segment[];
   furniture?: { label?: string; polygon: [number, number][] }[];
-  /** In tour order: the work first, then the rest. */
+  /** Every framing the room has a stop for, at its spot on the plan. */
   stops: { id: string; label: string; camera: string; position: [number, number] }[];
 }
 
+/**
+ * src/scene/tour.json: the stops the map offers and the played tour visits, in order (the work first). The plan's
+ * geometry stays the room's own; a stop takes its spot from the plan's stop with the same camera (or id).
+ */
+export interface TourStop {
+  id: string;
+  label: string;
+  /** The room's camera node, `cam_tour_<n>`. */
+  camera: string;
+  caption: string;
+  /** Stands the camera this many times further back than its node, for a framing authored too close. */
+  distance?: number;
+}
+
+export const TOUR_STOPS: readonly TourStop[] = tour.stops;
 export const FLOORPLAN_URL = '/room/floorplan.json';
-// The played tour rests this long at each stop once the camera has landed, long enough to read its label.
-const HOLD_MS = 2600;
+// The played tour rests this long at each stop once the camera has landed, long enough to read its caption.
+const HOLD_MS = 4500;
 // Around the room's outline, so the walls' strokes and the markers at the edges stay inside the drawing.
 const PLAN_MARGIN_M = 0.35;
 // The you-are-here wedge's length, as a share of the plan's width.
@@ -42,10 +58,27 @@ export async function loadFloorPlan(): Promise<FloorPlan | null> {
 
 interface Stop {
   label: string;
+  caption: string;
   station: StationName;
+  distance: number;
   position: [number, number];
   item: HTMLButtonElement;
   marker: HTMLElement;
+}
+
+/** Each tour stop with its camera and spot on the plan; a stop the room cannot frame is left out. */
+function placeStops(room: RoomHandle, plan: FloorPlan) {
+  return TOUR_STOPS.flatMap((stop) => {
+    const spot = plan.stops.find((s) => s.camera === stop.camera) ?? plan.stops.find((s) => s.id === stop.id);
+    // The room's own stop with this id stands in when the tour's camera is gone (the room renumbered its framings).
+    const camera = room.has(stop.camera.replace(/^cam_/, '')) ? stop.camera : (spot?.camera ?? stop.camera);
+    const station = camera.replace(/^cam_/, '');
+    if (!spot || !room.has(station)) {
+      console.warn(`room tour: the room has no ${stop.camera} for the stop "${stop.label}"`);
+      return [];
+    }
+    return [{ ...stop, station, position: spot.position }];
+  });
 }
 
 /**
@@ -62,7 +95,8 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   const list = q<HTMLOListElement>('[data-tour-stops]');
   const markers = q<HTMLElement>('[data-tour-markers]');
 
-  const points = [...plan.outline, ...plan.stops.map((s) => s.position)];
+  const placed = placeStops(room, plan);
+  const points = [...plan.outline, ...placed.map((s) => s.position)];
   const minX = Math.min(...points.map(([x]) => x)) - PLAN_MARGIN_M;
   const minZ = Math.min(...points.map(([, z]) => z)) - PLAN_MARGIN_M;
   const width = Math.max(...points.map(([x]) => x)) + PLAN_MARGIN_M - minX;
@@ -108,17 +142,13 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   }
 
   const spots = spread(
-    plan.stops.map((s) => s.position),
+    placed.map((s) => s.position),
     width * MARKER_GAP,
     [minX, minZ, minX + width, minZ + height],
   );
   const stops: Stop[] = [];
-  plan.stops.forEach((stop, i) => {
-    const station = stop.camera.replace(/^cam_/, '');
-    if (!room.has(station)) {
-      console.warn(`room tour: the room has no ${stop.camera} for the stop "${stop.label}"`);
-      return;
-    }
+  placed.forEach((stop, i) => {
+    const { station } = stop;
     const number = String(stops.length + 1);
     const item = document.createElement('button');
     item.type = 'button';
@@ -134,11 +164,11 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     marker.style.left = `${((spots[i][0] - minX) / width) * 100}%`;
     marker.style.top = `${((spots[i][1] - minZ) / height) * 100}%`;
     markers.append(marker);
-    const entry = { label: stop.label, station, position: stop.position, item, marker };
-    stops.push(entry);
+    const distance = stop.distance ?? 1;
+    stops.push({ label: stop.label, caption: stop.caption, station, distance, position: stop.position, item, marker });
     const go = () => {
       stopPlaying();
-      room.visit(station);
+      room.visit(station, undefined, distance);
     };
     item.addEventListener('click', go);
     marker.addEventListener('click', go);
@@ -149,26 +179,38 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     item.addEventListener('blur', () => light(false));
   });
 
-  // ---- the played tour ----
+  // ---- the played tour: the map shrinks to a small you-are-here inset carrying each stop's caption ----
   let playing: { expected: StationName; timer: number } | null = null;
+
+  const say = (heading: string, line = '') => {
+    const strong = document.createElement('strong');
+    strong.textContent = heading;
+    caption.replaceChildren(strong, ...(line ? [document.createTextNode(` ${line}`)] : []));
+  };
 
   const visitStop = (index: number) => {
     if (!playing) return;
     const stop = stops[index];
-    const at = index < stops.length ? stop.station : 'desk';
+    const at = stop ? stop.station : 'desk';
     playing.expected = at;
-    caption.textContent = stop ? `${index + 1} of ${stops.length} · ${stop.label}` : 'Back at the desk.';
-    room.visit(at, () => {
-      if (!playing || playing.expected !== at) return;
-      if (index >= stops.length) return stopPlaying(false);
-      playing.timer = window.setTimeout(() => visitStop(index + 1), HOLD_MS);
-    });
+    if (stop) say(`${index + 1} of ${stops.length} · ${stop.label}.`, stop.caption);
+    else say('Back at the desk.');
+    room.visit(
+      at,
+      () => {
+        if (!playing || playing.expected !== at) return;
+        if (index >= stops.length) return stopPlaying(false);
+        playing.timer = window.setTimeout(() => visitStop(index + 1), HOLD_MS);
+      },
+      stop?.distance,
+    );
   };
 
   function stopPlaying(clearCaption = true) {
     if (!playing) return;
     clearTimeout(playing.timer);
     playing = null;
+    panel.removeAttribute('data-playing');
     play.textContent = 'Play the tour';
     if (clearCaption) caption.textContent = '';
   }
@@ -176,6 +218,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   play.addEventListener('click', () => {
     if (playing) return stopPlaying();
     playing = { expected: stops[0]?.station ?? 'desk', timer: 0 };
+    panel.setAttribute('data-playing', '');
     play.textContent = 'Stop the tour';
     visitStop(0);
   });
@@ -197,7 +240,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     current = at;
     at?.item.setAttribute('aria-current', 'location');
     at?.marker.setAttribute('data-current', '');
-    if (at && !playing) caption.textContent = `You are here: ${at.label}.`;
+    if (at && !playing) say(`You are here: ${at.label}.`);
   };
 
   const nearestStop = (x: number, z: number) => {
@@ -211,6 +254,8 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     open.setAttribute('aria-expanded', String(on));
     cancelAnimationFrame(frame);
     if (on) {
+      // The visitor chose the tour: the arrival's own step into the monitor no longer comes.
+      room.takeOver();
       follow();
       (current ?? stops[0])?.item.focus();
     } else {

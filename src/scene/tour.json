@@ -1,0 +1,44 @@
+{
+  "stops": [
+    {
+      "id": "desk",
+      "label": "Desk",
+      "camera": "cam_tour_0",
+      "caption": "My desk. The monitor holds my projects, writing and code, and the NAS beside it is my home lab."
+    },
+    {
+      "id": "window",
+      "label": "Window and mango",
+      "camera": "cam_tour_1",
+      "caption": "San Francisco on the left, Delhi on the right, each lit by its own clock. The mango plant is for the seed I planted in Delhi in kindergarten."
+    },
+    {
+      "id": "space",
+      "label": "Space wall",
+      "camera": "cam_tour_3",
+      "distance": 1.6,
+      "caption": "The Voyager Golden Record and the Pale Blue Dot. Each one opens the story behind it."
+    },
+    {
+      "id": "kitchen",
+      "label": "Kitchen nook",
+      "camera": "cam_tour_4",
+      "distance": 1.15,
+      "caption": "Coffee and baking. Open the oven for the recipes I keep coming back to."
+    },
+    {
+      "id": "posters",
+      "label": "Posters and lava lamp",
+      "camera": "cam_tour_5",
+      "distance": 1.15,
+      "caption": "My four favourite films on Letterboxd, lit by the lava lamp under them."
+    },
+    {
+      "id": "armchair",
+      "label": "Armchair and books",
+      "camera": "cam_tour_9",
+      "distance": 1.1,
+      "caption": "The reading corner. The shelf holds my favourite books: Murakami, Yoshimoto, Vuong and Greene."
+    }
+  ]
+}

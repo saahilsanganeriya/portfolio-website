@@ -64,8 +64,11 @@ export interface RoomHandle {
   openWindow(target: string, options?: { fast?: boolean }): void;
   /** Flies the camera to a framing (idle, desk, monitor, window, tour_3, ...); false if the room lacks it. */
   fly(station: StationName): boolean;
-  /** Flies across the room to a stop (the map, the played tour) without overshoot; `onDone` runs once it lands there. */
-  visit(station: StationName, onDone?: () => void): boolean;
+  /**
+   * Flies across the room to a stop (the map, the played tour) without overshoot; `onDone` runs once it lands there.
+   * `distance` stands the camera that many times further back than the stop's framing.
+   */
+  visit(station: StationName, onDone?: () => void, distance?: number): boolean;
   /** Whether the room has this framing (a map stop names its camera node, `cam_tour_3` → `tour_3`). */
   has(station: string): station is StationName;
   /** The camera in plan coordinates, read every frame by the map's you-are-here mark. */
@@ -322,10 +325,10 @@ export class Application implements RoomHandle {
     return true;
   }
 
-  visit(station: StationName, onDone?: () => void) {
+  visit(station: StationName, onDone?: () => void, distance = 1) {
     if (!this.camera.has(station)) return false;
     this.takeOver();
-    this.flyTo(station, 'travel', onDone);
+    this.flyTo(station, 'travel', onDone, distance);
     return true;
   }
 
@@ -454,9 +457,9 @@ export class Application implements RoomHandle {
     this.flyTo(here === 'idle' || here === 'monitor' ? 'desk' : 'idle', 'step');
   }
 
-  private flyTo(station: StationName, motion: Motion, onDone?: () => void) {
+  private flyTo(station: StationName, motion: Motion, onDone?: () => void, distance = 1) {
     if (station === 'monitor') this.toMonitor(motion, null, onDone);
-    else this.glide(station, motion, onDone);
+    else this.glide(station, motion, onDone, false, distance);
   }
 
   /** Into the glass. On the light tier, landing there hands over to SaahilOS full screen with the window asked for. */
@@ -487,12 +490,12 @@ export class Application implements RoomHandle {
     this.options.onMonitor?.(target);
   }
 
-  private glide(station: StationName, motion: Motion, onDone?: () => void, cut = false) {
+  private glide(station: StationName, motion: Motion, onDone?: () => void, cut = false, distance = 1) {
     this.takeOver();
     this.intro = false;
     if (station !== 'monitor') this.handedOver = false;
     this.dirty = true;
-    this.camera.fly(station, motion, onDone, cut || this.options.reducedMotion);
+    this.camera.fly(station, motion, onDone, cut || this.options.reducedMotion, distance);
   }
 
   /** Phones have no live screen to hover or focus, so the glass gets a proxy box of its own (hotspots: hit_monitor). */
