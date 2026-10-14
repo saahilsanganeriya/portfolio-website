@@ -1,15 +1,17 @@
 """countertop_oven: a 1950s countertop oven, 40 x 27 x 22 cm, cream enamel and chrome, unbranded.
 
-A rounded enamel body with side louvres, a chrome door whose window shows the lit cavity, a handle bar, two
-bakelite dials, a pilot light and bakelite feet. Objects: countertop_oven and its child oven_glow (the cavity seen
-through the window: back wall, reveals, rack and the glowing elements, own material, so the site can flicker
-it). Faces -Y, origin at the base.
+A rounded enamel body with side louvres and a real cavity, a chrome door that drops open on a hinge along its bottom
+edge, a handle bar, two bakelite dials, a pilot light and bakelite feet, and a croissant on the rack inside.
+Objects: countertop_oven, its children oven_door (origin on the hinge axis; it opens by turning about its local +X
+by up to DOOR_OPEN_DEG, the top swinging out toward the viewer), oven_glow (the cavity lining, rack and glowing
+elements, own material, so the site can flicker it) and croissant. Faces -Y, origin at the base.
 """
 import math
 import os
 import sys
 
-from mathutils import Vector
+import bmesh
+from mathutils import Matrix, Vector
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,6 +25,9 @@ FRONT = -D / 2
 DOOR_X0, DOOR_X1, DOOR_Z0, DOOR_Z1 = -0.185, 0.075, FOOT + 0.022, FOOT + H - 0.030
 DOOR_T = 0.026
 WIN_X0, WIN_X1, WIN_Z0, WIN_Z1 = -0.162, 0.052, FOOT + 0.052, FOOT + H - 0.062
+# The cavity behind the door: a little larger than the window, 20 cm deep.
+CAV_X0, CAV_X1, CAV_Z0, CAV_Z1, CAV_D = -0.173, 0.063, FOOT + 0.040, FOOT + H - 0.044, 0.20
+DOOR_OPEN_DEG = 82.0
 
 
 def main():
@@ -42,6 +47,7 @@ def main():
     b = pl.Builder(NAME)
     b.box((W, D, H), loc=(0, 0, FOOT + H / 2), mat=enamel, corner=0.034, corner_seg=6, corner_axis="Y",
           bevel=0.004, bevel_seg=2)
+    door = pl.Builder("oven_door")
     # Door: four chrome rails around the window, proud of the body by DOOR_T.
     y = FRONT - DOOR_T / 2
     rails = [((DOOR_X1 - DOOR_X0, WIN_Z0 - DOOR_Z0), ((DOOR_X0 + DOOR_X1) / 2, (DOOR_Z0 + WIN_Z0) / 2)),
@@ -49,13 +55,17 @@ def main():
              ((WIN_X0 - DOOR_X0, WIN_Z1 - WIN_Z0), ((DOOR_X0 + WIN_X0) / 2, (WIN_Z0 + WIN_Z1) / 2)),
              ((DOOR_X1 - WIN_X1, WIN_Z1 - WIN_Z0), ((WIN_X1 + DOOR_X1) / 2, (WIN_Z0 + WIN_Z1) / 2))]
     for (w, h), (x, z) in rails:
-        b.box((w, DOOR_T, h), loc=(x, y, z), mat=chrome, bevel=0.0025, bevel_seg=2)
+        door.box((w, DOOR_T, h), loc=(x, y, z), mat=chrome, bevel=0.0025, bevel_seg=2)
     # Handle bar on stand-offs across the top rail.
     hz, hy = (WIN_Z1 + DOOR_Z1) / 2 + 0.002, FRONT - DOOR_T - 0.022
     for x in (DOOR_X0 + 0.035, DOOR_X1 - 0.035):
-        b.cylinder(0.0055, 0.024, segments=12, loc=(x, FRONT - DOOR_T + 0.002, hz), rot=(90, 0, 0), mat=chrome)
-    b.tube([Vector((DOOR_X0 + 0.022, hy, hz)), Vector((DOOR_X0 + 0.035, hy - 0.002, hz)),
-            Vector((DOOR_X1 - 0.035, hy - 0.002, hz)), Vector((DOOR_X1 - 0.022, hy, hz))], 0.0068, sides=12, mat=chrome)
+        door.cylinder(0.0055, 0.024, segments=12, loc=(x, FRONT - DOOR_T + 0.002, hz), rot=(90, 0, 0), mat=chrome)
+    door.tube([Vector((DOOR_X0 + 0.022, hy, hz)), Vector((DOOR_X0 + 0.035, hy - 0.002, hz)),
+               Vector((DOOR_X1 - 0.035, hy - 0.002, hz)), Vector((DOOR_X1 - 0.022, hy, hz))], 0.0068, sides=12,
+              mat=chrome)
+    # The hinge barrel along the bottom edge.
+    door.cylinder(0.005, DOOR_X1 - DOOR_X0 - 0.04, segments=12, loc=((DOOR_X0 + DOOR_X1) / 2, FRONT - 0.004, DOOR_Z0),
+                  rot=(0, 90, 0), mat=chrome)
 
     # Controls on the right: pilot light, two dials with chrome skirts and lettering.
     cx = (DOOR_X1 + W / 2) / 2
@@ -80,39 +90,145 @@ def main():
         for sy in (-1, 1):
             b.lathe([(0.0, 0.0), (0.011, 0.0), (0.013, 0.004), (0.010, FOOT + 0.002), (0.0, FOOT + 0.002)],
                     segments=20, loc=(sx * (W / 2 - 0.04), sy * (D / 2 - 0.035), 0.0), mat=bakelite)
-    oven = b.finish(col, smooth_angle=36)
+    oven = b.finish(col, smooth_angle=36, unwrap=False)
+    cut_cavity(oven)
+    pl.unwrap_object(oven)
     oven["source"] = "made for this site"
+    door_obj = door.finish(col, smooth_angle=36)
+    door_obj["source"] = "made for this site"
+    # Origin on the hinge axis (the door's bottom edge at the body's front face).
+    hinge = Vector(((DOOR_X0 + DOOR_X1) / 2, FRONT - 0.004, DOOR_Z0))
+    door_obj.data.transform(Matrix.Translation(-hinge))
+    door_obj.location = hinge
+    door_obj["turn_axis"] = "+X"
+    door_obj["open_angle_deg"] = DOOR_OPEN_DEG
+    pl.parent_keep_transform(door_obj, oven)
 
     glow_mat = glow_material()
     rack_mat = pl.surface("oven_rack", (0.35, 0.33, 0.30), 0.35, metallic=1.0, grime=0.8, color_var=0.05)
     element_mat = pl.surface("oven_element", (0.25, 0.08, 0.03), 0.4, metallic=0.5,
                              emission=((1.0, 0.30, 0.06), 9.0), color_var=0.0)
     g = pl.Builder("oven_glow")
-    # The cavity fills the door's depth just in front of the body, lining the window opening.
-    depth = DOOR_T - 0.002
-    yb = FRONT - 0.002
-    x0, x1, z0, z1 = WIN_X0 + 0.001, WIN_X1 - 0.001, WIN_Z0 + 0.001, WIN_Z1 - 0.001
-    g.box((x1 - x0, 0.002, z1 - z0), loc=((x0 + x1) / 2, yb + 0.001, (z0 + z1) / 2), mat=glow_mat)
-    for (sx, sz), (cx_, cz_) in (((x1 - x0, 0.002), ((x0 + x1) / 2, z0)), ((x1 - x0, 0.002), ((x0 + x1) / 2, z1)),
-                                 ((0.002, z1 - z0), (x0, (z0 + z1) / 2)), ((0.002, z1 - z0), (x1, (z0 + z1) / 2))):
-        g.box((sx, depth, sz), loc=(cx_, yb - depth / 2, cz_), mat=glow_mat)
-    for z in (z1 - 0.010, z0 + 0.012):
-        for dy in (0.008, 0.019):
-            g.tube([Vector((x0 + 0.004, yb - dy, z)), Vector((x1 - 0.004, yb - dy, z))], 0.0028, sides=8,
+    # The cavity lining: back, sides, roof and floor of the cut, a millimetre inside it, facing in.
+    x0, x1, z0, z1 = CAV_X0 + 0.001, CAV_X1 - 0.001, CAV_Z0 + 0.001, CAV_Z1 - 0.001
+    yf, yb = FRONT + 0.001, FRONT + CAV_D - 0.001
+    g.box((x1 - x0, 0.002, z1 - z0), loc=((x0 + x1) / 2, yb, (z0 + z1) / 2), mat=glow_mat)
+    for (sx, sy, sz), (cx_, cy_, cz_) in (
+            ((x1 - x0, yb - yf, 0.002), ((x0 + x1) / 2, (yf + yb) / 2, z0)),
+            ((x1 - x0, yb - yf, 0.002), ((x0 + x1) / 2, (yf + yb) / 2, z1)),
+            ((0.002, yb - yf, z1 - z0), (x0, (yf + yb) / 2, (z0 + z1) / 2)),
+            ((0.002, yb - yf, z1 - z0), (x1, (yf + yb) / 2, (z0 + z1) / 2))):
+        g.box((sx, sy, sz), loc=(cx_, cy_, cz_), mat=glow_mat)
+    for z in (z1 - 0.012, z0 + 0.012):
+        for dy in (0.05, 0.15):
+            g.tube([Vector((x0 + 0.006, yf + dy, z)), Vector((x1 - 0.006, yf + dy, z))], 0.003, sides=8,
                    mat=element_mat)
     rack_z = z0 + 0.034
-    for i in range(9):
-        x = x0 + 0.014 + i * (x1 - x0 - 0.028) / 8
-        g.tube([Vector((x, yb - 0.004, rack_z)), Vector((x, yb - depth + 0.006, rack_z))], 0.0011, sides=5,
-               mat=rack_mat)
-    for dy in (0.008, 0.022):
-        g.tube([Vector((x0 + 0.004, yb - dy, rack_z + 0.0015)), Vector((x1 - 0.004, yb - dy, rack_z + 0.0015))],
+    for i in range(10):
+        x = x0 + 0.012 + i * (x1 - x0 - 0.024) / 9
+        g.tube([Vector((x, yf + 0.01, rack_z)), Vector((x, yb - 0.008, rack_z))], 0.0011, sides=5, mat=rack_mat)
+    for dy in (0.02, 0.17):
+        g.tube([Vector((x0 + 0.004, yf + dy, rack_z + 0.0015)), Vector((x1 - 0.004, yf + dy, rack_z + 0.0015))],
                0.0014, sides=6, mat=rack_mat)
     glow = g.finish(col, smooth_angle=50)
     glow["source"] = "made for this site"
     pl.parent_keep_transform(glow, oven)
-    pl.report(NAME, col, 15000)
+
+    pastry = build_croissant(col, Vector(((CAV_X0 + CAV_X1) / 2, FRONT + CAV_D * 0.48, rack_z + 0.0025)))
+    pl.parent_keep_transform(pastry, oven)
+    pl.report(NAME, col, 18000)
     pl.save_prop(NAME)
+
+
+def cut_cavity(oven):
+    """Cut the cavity into the body's front with an exact boolean."""
+    bm = bmesh.new()
+    geom = bmesh.ops.create_cube(bm, size=1.0)
+    bmesh.ops.scale(bm, vec=Vector((CAV_X1 - CAV_X0, CAV_D + 0.05, CAV_Z1 - CAV_Z0)), verts=geom["verts"])
+    bmesh.ops.translate(bm, vec=Vector(((CAV_X0 + CAV_X1) / 2, FRONT + (CAV_D - 0.05) / 2, (CAV_Z0 + CAV_Z1) / 2)),
+                        verts=geom["verts"])
+    me = bpy.data.meshes.new("cavity_cutter")
+    bm.to_mesh(me)
+    bm.free()
+    cutter = bpy.data.objects.new("cavity_cutter", me)
+    bpy.context.scene.collection.objects.link(cutter)
+    mod = oven.modifiers.new("cavity", "BOOLEAN")
+    mod.operation, mod.solver, mod.object = "DIFFERENCE", "EXACT", cutter
+    pl.apply_modifier(oven, mod)
+    bpy.data.objects.remove(cutter, do_unlink=True)
+
+
+def build_croissant(col, base):
+    """A plain, well-made croissant: a crescent of seven laminated rolls swept along an arc, thickest in the middle
+    and curling to tapered tips, its cross-section flattened underneath; UVMap carries (along the crescent, around
+    it), which the material uses for the rolls' darker crests and paler, flaky grooves."""
+    bm = bmesh.new()
+    uv = bm.loops.layers.uv.new("UVMap")
+    n_s, n_t = 56, 20
+    span = math.radians(150)
+    radius = 0.050
+    rows = []
+    for i in range(n_s + 1):
+        s = i / n_s
+        a = -span / 2 + span * s
+        centre = Vector((radius * math.sin(a), -radius * math.cos(a) + radius * 0.55, 0.0))
+        outward = Vector((math.sin(a), -math.cos(a), 0.0))
+        taper = math.sin(math.pi * s) ** 0.7
+        rolls = 1.0 + 0.13 * math.cos(2 * math.pi * 7 * s) * taper
+        r = (0.0055 + 0.021 * taper) * rolls
+        ring = []
+        for j in range(n_t):
+            t = 2 * math.pi * j / n_t
+            ox, oz = math.cos(t), math.sin(t)
+            w = r * 1.25 * ox
+            h = r * (0.95 * oz if oz > 0 else 0.35 * oz)
+            p = centre + outward * w + Vector((0, 0, h + r * 0.36))
+            ring.append(bm.verts.new(p))
+        rows.append((ring, s))
+    for i in range(n_s):
+        (ra, sa), (rb, sb) = rows[i], rows[i + 1]
+        for j in range(n_t):
+            j2 = (j + 1) % n_t
+            face = bm.faces.new((ra[j], rb[j], rb[j2], ra[j2]))
+            for loop, (s_, t_) in zip(face.loops, ((sa, j / n_t), (sb, j / n_t), (sb, (j + 1) / n_t), (sa, (j + 1) / n_t))):
+                loop[uv].uv = (s_, t_)
+    for ring, _ in (rows[0], rows[-1]):
+        cap = bm.faces.new(list(reversed(ring)) if ring is rows[0][0] else ring)
+        for loop in cap.loops:
+            loop[uv].uv = (0.0 if ring is rows[0][0] else 1.0, 0.5)
+    bm.normal_update()
+    bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
+    me = bpy.data.meshes.new("croissant")
+    bm.to_mesh(me)
+    bm.free()
+    me.materials.append(croissant_material())
+    obj = bpy.data.objects.new("croissant", me)
+    col.objects.link(obj)
+    me.shade_smooth()
+    obj.location = base
+    obj["source"] = "made for this site"
+    return obj
+
+
+def croissant_material():
+    """Golden laminated dough: deep brown on the crests of the rolls, paler and flaky in the grooves, an egg-wash
+    sheen, a little subsurface."""
+    mat, k = pl.new_material("croissant")
+    uvn = k.node("ShaderNodeUVMap", uv_map="UVMap").outputs["UV"]
+    sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": uvn})
+    rolls = k.math("COSINE", k.math("MULTIPLY", sep.outputs["X"], 2 * math.pi * 7))
+    crest = k.map_range(rolls, -0.2, 1.0)
+    flakes = k.noise(k.coords("Object", 1.0), 900.0, detail=4.0)
+    top = k.map_range(k.math("SINE", k.math("MULTIPLY", sep.outputs["Y"], 2 * math.pi)), -0.3, 0.6)
+    base = k.mix_color(crest, (0.78, 0.52, 0.22, 1.0), (0.42, 0.20, 0.06, 1.0))
+    base = k.mix_color(k.math("MULTIPLY", top, 0.5), base, (0.36, 0.16, 0.04, 1.0))
+    base = k.mix_color(k.map_range(flakes, 0.45, 0.62, 0.0, 0.35), base, (0.88, 0.70, 0.42, 1.0))
+    bump = k.node("ShaderNodeBump", inputs={"Strength": 0.35, "Distance": 0.0008, "Height": k.math("ADD", crest, k.math("MULTIPLY", flakes, 0.4))})
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": base, "Roughness": 0.5, "Coat Weight": 0.35,
+                                                      "Coat Roughness": 0.25, "Subsurface Weight": 0.08,
+                                                      "Normal": bump.outputs[0]})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs[0])
+    return mat
 
 
 def glow_material():

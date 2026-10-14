@@ -11,9 +11,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BLENDER = os.environ.get("BLENDER", "blender")
-PROPS = ["poster_frame", "projector_screen", "projector_8mm", "mango_plant", "nas_4bay", "books_stack",
-         "film_canister", "fujifilm_x100", "fujifilm_xt", "fujica_st", "super8_camera", "lava_lamp", "ceiling_fan",
-         "espresso_machine", "countertop_oven"]
+PROPS = ["poster_frame", "projector_8mm", "mango_plant", "nas_4bay", "books_stack", "film_canister", "fujifilm_x100",
+         "fujifilm_xt", "fujica_st", "super8_camera", "lava_lamp", "espresso_machine", "countertop_oven"]
 
 
 def run(cmd):
