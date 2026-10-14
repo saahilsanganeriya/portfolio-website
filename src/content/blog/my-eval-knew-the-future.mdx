@@ -1,7 +1,7 @@
 ---
 title: "My eval knew the future"
 date: 2026-10-14
-summary: "The first eval of my agents' memory scored well because it could see files the past had not written yet. What closing those leaks did to the number, and why I trust the smallest one."
+summary: "The first eval of my agents' memory could see files the past had not written yet. What closing those leaks did to the number, and why I trust the smallest one."
 tags: ["engineering", "evaluation", "saahil-brain", "essays"]
 draft: false
 ---
@@ -16,7 +16,9 @@ It was not the first leak I closed that morning, or the last. Most of them had o
 
 [saahil-brain](/projects/saahil-brain) is the memory my coding agents share. On every prompt it hands the agent at most three pointers, each one line, or nothing. The question that matters is whether those pointers lead to the file the session actually needed.
 
-The navigation eval answers it from history. Take a past session from 20 September on, replay its first prompt, and look at the files it went on to use. A hit is a target in the top three pointers, or reachable within three tool calls. Sessions are split by a hash into a tuning half of 110 and a test half of 107. The marks I set are 70% for the top three and 80% within three calls.
+The navigation eval answers it from history. Take a past session from 20 September on, replay its first prompt, and look at the files it went on to use. A hit is a target in the top three pointers, or reachable within three tool calls.
+
+Sessions are split by a hash into a tuning half of 110 and a test half of 107. I tune on one half and judge on the other once. The marks I set are 70% for the top three and 80% within three calls.
 
 ## The obvious eval, and its leaks
 
@@ -51,9 +53,9 @@ The fix is to rebuild the brain as it was when the session began. A guard hides 
 <figcaption>Only files that existed when the session began can be targets or ranked, so the eval sees what the session could have seen.</figcaption>
 </figure>
 
-Dating a file turned out to be the hard part. Birth time alone made old files look new: the tool my agents edit with writes a new file on every edit, and a file synced from my other machine is born when it lands. So a file now counts as older than a moment if it was born, last changed, or read by a session that had already ended before it. The memory index and the start-of-session digest are rebuilt as of the same moment.
+Dating a file took more fixes than anything else. Birth time alone made old files look new: the tool my agents edit with replaces a file with a new one on every edit, and a file synced from my other machine is born when it lands. So a file now counts as older than a moment if it was born, last changed, or read by a session that had already ended before it. The memory index and the start-of-session digest are rebuilt as of the same moment.
 
-The splits got the same care. I tune on one half and judge on the other once. Not every fix lowered a score. Counting what the memory index already hands a session before its first call took the test half within three calls from 77.6% to 80.4%. Every new hit was a feedback memory linked from that index.
+Not every fix lowered a score. Counting what the memory index already hands a session before its first call took the test half within three calls from 77.6% to 80.4%. Every new hit was a feedback memory linked from that index.
 
 ## What this costs
 

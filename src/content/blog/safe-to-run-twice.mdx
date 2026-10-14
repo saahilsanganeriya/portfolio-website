@@ -66,7 +66,7 @@ The rename stage's main test runs the stage twice over a small library. The seco
 
 A separate test starts from a unit whose video had already moved before the run stopped. The rerun counts the move as already done and syncs nothing. Before, the log was synced once per move. Now it is synced once per unit, and not at all when there is nothing left to do.
 
-What no test does is cut the power. Each crash is a state the test builds by hand, from a picture of where a crash can land.
+No rename test kills the process in the middle of a unit. Each crash is a state the test builds by hand, from a picture of where a crash can land.
 
 ## What's next
 
