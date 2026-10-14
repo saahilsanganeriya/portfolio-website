@@ -19,14 +19,6 @@ export interface OsPicture {
   height: number;
 }
 
-/** A photo of the owner, shown only beside the text it belongs to. */
-export interface OsMePhoto extends OsPicture {
-  /** The entry's `file` in src/content/me.json. */
-  file: string;
-  alt: string;
-  caption?: string;
-}
-
 /** One of the owner's photographs (src/content/photography). */
 export interface OsPhotograph {
   slug: string;
@@ -119,21 +111,20 @@ export interface OsIndex {
   oven: OvenList;
   credits: AssetSection[];
   wallpaper: OsWallpaper;
-  /** The welcome window's portrait and the photos of him it places beside its text. */
-  me: { headshot: OsImage; opening: OsMePhoto[] };
+  /** The About window's portrait (his professional headshot); the photos beside its text come with the page body. */
+  me: { portrait: OsImage };
   /** Ordered: featured first, then by series and `order`. */
   photography: OsPhotograph[];
 }
 
 export const APP_IDS = [
-  'welcome',
+  'about',
   'projects',
   'oven',
   'blog',
   'photography',
   'films',
   'terminal',
-  'about',
   'resume',
   'credits',
 ] as const;

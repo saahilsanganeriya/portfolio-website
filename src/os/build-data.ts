@@ -8,15 +8,12 @@ import headshot from '../assets/headshot/saahil-sanganeriya.webp';
 import projectionistArchitecture from '../assets/projects/projectionist-architecture.png';
 import samcellPipeline from '../assets/projects/samcell-paper-figure-3.jpg';
 import favouritesFile from '../content/favorites.json';
-import meFile from '../content/me.json';
 import ovenFile from '../content/oven.json';
-import { mePhoto } from '../lib/me-photos';
 import wallpaper from './assets/wallpaper/wallpaper.jpg';
 import type {
   OsFavourite,
   OsFigure,
   OsImage,
-  OsMePhoto,
   OsPhotograph,
   OsPicture,
   OsWallpaper,
@@ -105,34 +102,19 @@ export async function osWallpaper(): Promise<OsWallpaper> {
   return { avif: avif.srcSet.attribute, webp: webp.srcSet.attribute, src: webp.src };
 }
 
-// ---- Photos of the owner and his photography: sizes made ahead of time by `npm run photos:ingest` ----
+// ---- The owner's portrait and his photography (sizes made ahead of time by `npm run photos:ingest`) ----
 
-export async function welcomePictures(): Promise<{ headshot: OsImage; opening: OsMePhoto[] }> {
-  const opening = meFile
-    .filter((entry) => entry.use === 'opening')
-    .map((entry) => {
-      const photo = mePhoto(entry.file, 960);
-      return {
-        file: entry.file,
-        avif: photo.avifSrcset,
-        webp: photo.webpSrcset,
-        src: photo.fallback.src,
-        width: photo.fallback.width,
-        height: photo.fallback.height,
-        alt: photo.alt,
-        caption: photo.caption,
-      };
-    });
-  const portrait = await getImage({ src: headshot, widths: [160, 320, 480], format: 'webp', quality: 80 });
+/** The About window's portrait: the owner's professional headshot, small enough for a 112 px circle at 2x. */
+export async function aboutPortrait(): Promise<{ portrait: OsImage }> {
+  const image = await getImage({ src: headshot, widths: [128, 256], format: 'webp', quality: 78 });
   return {
-    headshot: {
-      src: portrait.src,
-      srcset: portrait.srcSet.attribute,
+    portrait: {
+      src: image.src,
+      srcset: image.srcSet.attribute,
       width: headshot.width,
       height: headshot.height,
       alt: 'Saahil Sanganeriya',
     },
-    opening,
   };
 }
 

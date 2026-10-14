@@ -33,7 +33,6 @@ export function windowHref(route: Route): string | null {
     case 'credits':
       return `/${route.app}`;
     case 'photography':
-    case 'welcome':
     case 'terminal':
     case 'oven':
       return null;

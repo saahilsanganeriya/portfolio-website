@@ -1,8 +1,7 @@
 import type { OsApi } from '../types';
+import { RESUME_PDF } from './AboutApp';
 import { linkAttributes } from './content';
 import { PageReader } from './Reader';
-
-const RESUME_PDF = '/resume/saahil-sanganeriya-resume.pdf';
 
 export function ResumeApp({ os }: { os: OsApi }) {
   return (

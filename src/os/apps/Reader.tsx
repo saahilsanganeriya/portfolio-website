@@ -22,7 +22,7 @@ export function ThreadLoader({ label }: { label: string }) {
   );
 }
 
-function Body<T>({ content, what }: { content: ContentState<T>; what: string }) {
+export function Body<T>({ content, what }: { content: ContentState<T>; what: string }) {
   const setStatus = useWindowStatus();
   useEffect(() => {
     if (content.state === 'loading') setStatus(`Loading ${what}…`);

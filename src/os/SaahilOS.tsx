@@ -22,7 +22,7 @@ import { initialWindows, topWindow, windowsReducer } from './wm/windows';
 
 // Phones, small windows and touch-first devices get full-screen apps; the monitor in the room always gets the desktop.
 const PHONE_QUERY = '(max-width: 767.98px), (pointer: coarse)';
-const DEFAULT_APP = 'welcome';
+const DEFAULT_APP = 'about';
 
 function subscribePhone(onChange: () => void) {
   const query = window.matchMedia(PHONE_QUERY);
@@ -79,13 +79,12 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
     [index, embedded, phone, open],
   );
 
-  // Boot: a hash opens its window; otherwise the desktop opens the welcome window, as Henry's opened his showcase.
+  // Boot: a hash opens its window; otherwise About opens, on the monitor and on a phone alike.
   useEffect(() => {
     const isEmbedded = embeddedProp ?? new URLSearchParams(window.location.search).get('embed') === '1';
     setEmbedded(isEmbedded);
     const route = parseTarget(window.location.hash);
-    if (route) open(formatRoute(route), false);
-    else if (isEmbedded || !window.matchMedia(PHONE_QUERY).matches) open(DEFAULT_APP, false);
+    open(route ? formatRoute(route) : DEFAULT_APP, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -160,7 +159,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
 
   const restart = () => {
     setPower('on');
-    if (!phone) open(DEFAULT_APP, false);
+    open(DEFAULT_APP, false);
   };
 
   return (

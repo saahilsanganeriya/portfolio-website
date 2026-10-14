@@ -830,142 +830,108 @@ body.os-moving iframe {
   margin: 4px 0 0;
 }
 
-/* ---- Welcome: Henry Heffernan's showcase, rebuilt on paper. Name large, the ways in as buttons, prints beside text ---- */
+/* ---- About: the window SaahilOS opens first. Portrait and name, four big ways on, then the page itself ---- */
 
-.os-welcome {
-  max-width: 46rem;
-  padding: 28px clamp(16px, 5%, 40px) 36px;
-  font-family: var(--font-serif);
-  font-size: 1.0625rem;
-  line-height: 1.65;
-  -webkit-font-smoothing: auto;
+.os-about {
+  max-width: 44rem;
 }
 
-.os-welcome-head {
+.os-about-head {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 22px;
+  gap: 20px;
   align-items: center;
-  padding-bottom: 20px;
-  border-bottom: 2px solid var(--thread);
 }
 
-.os-welcome-portrait {
+.os-about-portrait {
   display: block;
-  width: 136px;
-  height: 136px;
+  width: 112px;
+  height: 112px;
   border-radius: 50%;
+  object-fit: cover;
   box-shadow:
     0 0 0 4px var(--os-light),
     0 0 0 5px var(--os-shade),
     3px 4px 0 5px rgb(20 17 15 / 0.16);
 }
 
-.os-welcome-name {
+.os-about-name {
   margin: 0;
-  font-size: clamp(2.25rem, 6vw, 3.5rem);
-  font-weight: 300;
-  line-height: 0.98;
-  letter-spacing: -0.02em;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
 }
 
-.os-welcome-role {
-  margin: 10px 0 0;
+.os-about-role {
+  margin: 8px 0 0;
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.45;
   color: var(--os-muted);
 }
 
-.os-welcome-ways ul {
-  display: flex;
-  flex-wrap: wrap;
+.os-about-actions ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: 8px;
-  margin: 20px 0 8px;
+  margin: 22px 0 0;
   padding: 0;
   list-style: none;
 }
 
-.os-welcome-way {
+/* Full-size Win98 buttons: icon left, the name in the chrome face, one plain line under it. */
+.os-reader a.os-about-action {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: 116px;
-  min-height: 84px;
-  padding: 10px 6px 8px;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 10px;
   background: var(--os-face);
   box-shadow: var(--os-raised);
   color: var(--os-dark);
-  font-family: var(--os-chrome);
-  font-size: 15px;
-  line-height: 1.15;
-  text-align: center;
   text-decoration: none;
-  -webkit-font-smoothing: none;
 }
 
-.os-welcome-way:active {
+.os-about-action svg {
+  flex: none;
+}
+
+.os-about-action:active {
   box-shadow: var(--os-pressed);
 }
 
-.os-welcome-way:focus-visible {
+.os-about-action:focus-visible {
   outline: 1px dotted var(--os-dark);
   outline-offset: -5px;
 }
 
-.os-welcome-text {
-  margin-top: 18px;
+.os-about-action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.os-welcome-text::after {
-  content: '';
-  display: block;
-  clear: both;
+.os-about-action-label {
+  font-family: var(--os-chrome);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.1;
+  -webkit-font-smoothing: none;
 }
 
-.os-welcome-text p {
-  margin: 0 0 0.9em;
-}
-
-.os-welcome-text a {
-  color: inherit;
-  text-decoration-color: var(--thread);
-  text-underline-offset: 0.2em;
-}
-
-/* A small print, film-toned and a little crooked, as if set down beside the paragraph. */
-.os-welcome-print {
-  width: clamp(7.5rem, 30%, 11rem);
-  margin: 0.3em 0 0.8em 1.4em;
-  float: right;
-  transform: rotate(1.4deg);
-}
-
-.os-welcome-print[data-side='left'] {
-  margin: 0.3em 1.4em 0.8em 0;
-  float: left;
-  transform: rotate(-1.2deg);
-}
-
-.os-welcome-print img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 5px solid #fbf7ef;
-  border-bottom-width: 14px;
-  box-shadow:
-    0 0 0 1px var(--os-shade),
-    3px 4px 0 rgb(20 17 15 / 0.22);
-  filter: sepia(0.32) saturate(0.72) contrast(1.06) brightness(0.95);
-}
-
-.os-welcome-print figcaption {
-  margin-top: 6px;
+.os-about-action-hint {
   font-family: var(--font-sans);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 13px;
+  line-height: 1.3;
   color: var(--os-muted);
+}
+
+.os-about-lead {
+  margin: 24px 0 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--thread);
+  font-style: italic;
 }
 
 /* ---- A Narrative in a Frame: prints on a darkroom wall ---- */
@@ -1540,18 +1506,17 @@ body.os-moving iframe {
     overflow-y: auto;
   }
 
-  html:not([data-embedded]) .os-welcome-head {
+  html:not([data-embedded]) .os-about-head {
     gap: 14px;
   }
 
-  html:not([data-embedded]) .os-welcome-portrait {
-    width: 96px;
-    height: 96px;
+  html:not([data-embedded]) .os-about-portrait {
+    width: 80px;
+    height: 80px;
   }
 
-  html:not([data-embedded]) .os-welcome-way {
-    width: calc(33.3% - 6px);
-    min-width: 96px;
+  html:not([data-embedded]) .os-about-actions ul {
+    grid-template-columns: 1fr 1fr;
   }
 
   html:not([data-embedded]) .os-details[data-large] .os-thumb {

@@ -6,20 +6,25 @@ import { devices, expect, test, type Page } from '@playwright/test';
 // ?embed=0 the same document unframed, for the phone layout here (linked nowhere).
 
 const APPS = [
-  'Welcome',
+  'About',
   'Projects',
   'In the oven',
   'Writing',
   'A Narrative in a Frame',
   'Films',
   'Terminal',
-  'About',
   'Résumé',
   'Credits',
 ];
 /** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
 const firstH2 = (collection: string, slug: string): string =>
   readFileSync(new URL(`../src/content/${collection}/${slug}.mdx`, import.meta.url), 'utf8').match(/^## (.+)$/m)![1].trim();
+// The About page's first paragraph and how many photos of him it places, read from the page so a rewrite moves the test too.
+const ABOUT = (() => {
+  const mdx = readFileSync(new URL('../src/content/pages/about.mdx', import.meta.url), 'utf8').replace(/^---[\s\S]*?---/, '');
+  const firstParagraph = mdx.split(/\n{2,}/).map((block) => block.trim()).find((block) => /^[A-Z]/.test(block))!;
+  return { firstWords: firstParagraph.split(/[,.]/)[0], photos: (mdx.match(/<MePhoto\b/g) ?? []).length };
+})();
 const PROJECT = {
   slug: 'real-time-streaming',
   title: 'A real-time streaming pipeline (Amazon internship)',
@@ -133,18 +138,19 @@ test.describe('desktop', () => {
     await expect(page.getByRole('dialog', { name: 'Films' }).getByText(/Letterboxd did not answer/)).toBeVisible();
   });
 
-  /** Catches a boot that opens anything but the welcome, or a welcome without his portrait, words and ways in. */
-  test('the welcome window opens first with the headshot, the text and the ways in', async ({ page }) => {
+  /** Catches a boot that opens anything but About, or an About without his portrait, its text and the photos beside it. */
+  test('About opens first with the portrait, the ways on, the page text and its photos', async ({ page }) => {
     await page.goto('/os?embed=1');
-    const welcome = page.getByRole('dialog', { name: 'Welcome' });
-    await expect(welcome.getByRole('heading', { level: 2, name: 'Saahil Sanganeriya' })).toBeVisible();
-    const portrait = welcome.getByRole('img', { name: 'Saahil Sanganeriya' });
+    const about = page.getByRole('dialog', { name: 'About' });
+    await expect(about.getByRole('heading', { level: 2, name: 'Saahil Sanganeriya' })).toBeVisible();
+    const portrait = about.getByRole('img', { name: 'Saahil Sanganeriya' });
     await expect.poll(() => portrait.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
-    await expect(welcome.getByText(/^Welcome\. This computer sits on the desk/)).toBeVisible();
-    // The photos of him sit beside the paragraphs they illustrate, inside the text column, never in a strip of their own.
-    await expect(welcome.locator('.os-welcome-text > figure img')).toHaveCount(2);
-    const ways = welcome.getByRole('navigation', { name: 'Start here' }).getByRole('link');
-    await expect(ways).toHaveText(['Projects', 'Writing', 'Films', 'A Narrative in a Frame']);
+    const ways = about.getByRole('navigation', { name: 'Start here' }).getByRole('link');
+    await expect(ways).toHaveCount(4);
+    // The page body is the About page as written, with each photo the page names set beside its paragraph.
+    await expect(about.locator('.os-prose p').filter({ hasText: ABOUT.firstWords })).toBeVisible();
+    await expect(about.locator('.os-prose img')).toHaveCount(ABOUT.photos);
+    await expect(page).toHaveURL(/\/os\?embed=1$/);
   });
 
   /** Catches a photograph's deep link opening the wrong one, and full-size files loading before a photograph is opened. */
@@ -262,7 +268,7 @@ test.describe('desktop', () => {
       ['films', 'Films'],
       ['oven', 'In the oven'],
       ['projects', 'Projects'],
-      ['welcome', 'Welcome'],
+      ['about', 'About'],
       ['photography', 'A Narrative in a Frame'],
       ['photography/colorful-tshirts', 'A Narrative in a Frame'],
     ]) {
@@ -282,6 +288,11 @@ test.describe('iPhone 13', () => {
   /** Catches the phone layout falling back to floating windows, or Back not returning to the apps. */
   test('an app opens full screen and Back returns to the apps', async ({ page }) => {
     await page.goto('/os?embed=0');
+    // A phone boots into About, like the monitor; Back shows the apps.
+    const about = page.getByRole('dialog', { name: 'About' });
+    await expect(about).toBeVisible();
+    await about.getByRole('button', { name: '‹ Back' }).tap();
+    await expect(about).toBeHidden();
     await page.getByRole('button', { name: 'Projects', exact: true }).tap();
     const app = page.getByRole('dialog', { name: 'Projects' });
     await expect(app).toBeVisible();
@@ -293,10 +304,10 @@ test.describe('iPhone 13', () => {
     await expect(page.getByRole('button', { name: 'Films', exact: true })).toBeVisible();
   });
 
-  /** Catches the welcome, the Daily word or the photographs failing axe, or spilling sideways, on a phone. */
-  test('the welcome, the Daily word and the photographs fit a phone and pass axe', async ({ page }) => {
+  /** Catches About or the photographs failing axe, or spilling sideways, on a phone. */
+  test('About and the photographs fit a phone and pass axe', async ({ page }) => {
     for (const [hash, name] of [
-      ['welcome', 'Welcome'],
+      ['about', 'About'],
       ['photography', 'A Narrative in a Frame'],
       ['photography/cansupport', 'A Narrative in a Frame'],
     ]) {

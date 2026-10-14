@@ -3,25 +3,24 @@ import type { IconName } from '../assets/icons';
 import { formatDay } from '../format';
 import { windowHref } from '../routes';
 import type { AppId, OsApi, OsIndex, Route } from '../types';
+import { AboutApp } from './AboutApp';
 import { FilmsApp } from './FilmsApp';
 import { BlogApp, ProjectsApp } from './Lists';
 import { OvenApp } from './OvenApp';
 import { PhotographyApp } from './photography/PhotographyApp';
-import { PageReader, PostReader, ProjectReader } from './Reader';
+import { PostReader, ProjectReader } from './Reader';
 import { CreditsApp, ResumeApp } from './SmallApps';
 import { TerminalApp } from './TerminalApp';
-import { WelcomeApp } from './welcome/WelcomeApp';
 
-/** Desktop order: the welcome, the work (finished, then in progress), the pictures, then the machine. */
+/** Desktop order: About, the work (finished, then in progress), the pictures, then the machine. */
 export const APPS: Record<AppId, { label: string; icon: IconName }> = {
-  welcome: { label: 'Welcome', icon: 'card' },
+  about: { label: 'About', icon: 'about' },
   projects: { label: 'Projects', icon: 'projects' },
   oven: { label: 'In the oven', icon: 'oven' },
   blog: { label: 'Writing', icon: 'page' },
   photography: { label: 'A Narrative in a Frame', icon: 'camera' },
   films: { label: 'Films', icon: 'films' },
   terminal: { label: 'Terminal', icon: 'terminal' },
-  about: { label: 'About', icon: 'about' },
   resume: { label: 'Résumé', icon: 'resume' },
   credits: { label: 'Credits', icon: 'credits' },
 };
@@ -61,7 +60,6 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     };
   }
   const defaultStatus: Record<AppId, string> = {
-    welcome: '',
     photography: plural(index.photography.length, 'photograph'),
     projects: plural(index.projects.length, 'project'),
     oven: `${plural(index.oven.items.length, 'thing')} in the oven`,
@@ -77,8 +75,6 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
 
 export function AppBody({ route, os }: { route: Route; os: OsApi }): ReactNode {
   switch (route.app) {
-    case 'welcome':
-      return <WelcomeApp os={os} />;
     case 'photography':
       return <PhotographyApp slug={route.slug} os={os} />;
     case 'projects':
@@ -92,7 +88,7 @@ export function AppBody({ route, os }: { route: Route; os: OsApi }): ReactNode {
     case 'terminal':
       return <TerminalApp os={os} />;
     case 'about':
-      return <PageReader slug="about" os={os} />;
+      return <AboutApp os={os} />;
     case 'resume':
       return <ResumeApp os={os} />;
     case 'credits':

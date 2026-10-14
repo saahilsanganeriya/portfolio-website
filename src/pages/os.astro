@@ -6,13 +6,13 @@ import { getPosts, getProjects, isoDay } from '../lib/content';
 import { filmsData } from '../lib/films';
 import { windowDiary } from '../os/apps/films/diary';
 import {
+  aboutPortrait,
   favourites as loadFavourites,
   osImage,
   osWallpaper,
   ovenList,
   photographs,
   projectFigures,
-  welcomePictures,
 } from '../os/build-data';
 import SaahilOS from '../os/SaahilOS';
 import pixelFont from '../os/assets/fonts/PixelOperator.woff2?url';
@@ -49,14 +49,14 @@ const index: OsIndex = {
   oven: ovenList(),
   credits: parseAssetsRegister().filter((section) => section.rows.length > 0),
   wallpaper: await osWallpaper(),
-  me: await welcomePictures(),
+  me: await aboutPortrait(),
   photography: await photographs(),
 };
 ---
 
 <Base
   title="SaahilOS"
-  description="A small desktop computer with my projects, writing, films and story in its windows."
+  description="A small desktop computer with my projects, writing, code and résumé in its windows."
   bare
 >
   <Fragment slot="head">
