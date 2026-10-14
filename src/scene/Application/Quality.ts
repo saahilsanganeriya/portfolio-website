@@ -35,11 +35,14 @@ export const LIGHT: QualityLadder = {
 };
 
 const TARGET_FPS = 50;
-const WINDOW_MS = 1000;
+// Half a second per window: the arrival glides for under five, none of them at a tier the machine cannot hold.
+const WINDOW_MS = 500;
 
 /**
- * Adaptive quality: each second, if the median frame rate of that second is under 50 fps, drop one tier. It never
- * climbs back, so the level settles instead of oscillating; the first second after a change only warms up.
+ * Adaptive quality: each half second, if the median frame rate of that window is under 50 fps, drop to the tier the
+ * rate calls for (fill cost goes with the pixel count, so the resolution scales with the square root of the shortfall),
+ * at least one. It never climbs back, so the level settles instead of oscillating; the first window after a change
+ * only warms up.
  */
 export class Quality {
   index = 0;
@@ -77,7 +80,9 @@ export class Quality {
     this.warmingUp = false;
     if (warmingUp || fps >= TARGET_FPS || this.index === this.ladder.tiers.length - 1) return;
 
-    this.index += 1;
+    const wanted = this.tier.resolution * Math.sqrt(fps / TARGET_FPS);
+    const fits = this.ladder.tiers.findIndex((tier, i) => i > this.index && tier.resolution <= wanted);
+    this.index = fits < 0 ? this.ladder.tiers.length - 1 : Math.max(this.index + 1, fits);
     this.warmingUp = true;
     this.onChange(this.tier, this.index);
   }
