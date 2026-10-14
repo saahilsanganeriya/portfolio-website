@@ -10,7 +10,7 @@
     }
   ],
   "poster": "/room/story-film.poster.avif",
-  "duration": 81.5,
+  "duration": 80.5,
   "chapters": [
     {
       "t": 3.75,
@@ -33,7 +33,7 @@
       "title": "Building"
     },
     {
-      "t": 58.5,
+      "t": 57.5,
       "title": "Home"
     }
   ],
