@@ -153,8 +153,8 @@ favourites stays in `blender/posters/`.
 
 The schemas are in `src/content.config.ts`. Books, recipes and the Voyager page may be absent or empty; the build
 passes and the window says so. Every entry is also served as static JSON at `/content/<collection>/<slug>.json`
-(`{ data, html }`), which SaahilOS reader windows load; `/content/books.json` and `/content/recipes.json` hold the
-two lists. `src/content/story/` is no longer a collection: nothing builds or serves it.
+(`{ data, html }`), which SaahilOS reader windows load; `/content/books.json`, `/content/recipes.json` and
+`/content/credits.json` (from `blender/ASSETS.md`) hold the lists. `src/content/story/` is no longer a collection: nothing builds or serves it.
 
 SaahilOS's Code window reads the owner's public GitHub repositories from a snapshot committed in
 `src/os/apps/code/snapshot/` (README and Markdown files as GitHub renders them, the file tree, the last 30 commits),

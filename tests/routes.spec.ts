@@ -70,3 +70,17 @@ test('the story reel and its chapters are gone', async ({ request }) => {
   expect((await request.get('/story?embed=1')).status()).toBe(404);
   expect((await request.get('/content/story/01-delhi.json')).status()).toBe(404);
 });
+
+/** Catches a SaahilOS list the build stops writing (an absent books.json or empty recipes folder must still give a list). */
+test('the shelf and credits lists are served as JSON, empty or full', async ({ request }) => {
+  const books = await (await request.get('/content/books.json')).json();
+  expect(Array.isArray(books.books)).toBe(true);
+  const recipes = await (await request.get('/content/recipes.json')).json();
+  expect(Array.isArray(recipes.recipes)).toBe(true);
+  const credits = await (await request.get('/content/credits.json')).json();
+  expect(credits.sections.map((section: { title: string }) => section.title)).toContain('Images');
+  const wallpaper = credits.sections
+    .flatMap((section: { rows: { sourceUrl: string | null; licence: string }[] }) => section.rows)
+    .find((row: { sourceUrl: string | null }) => row.sourceUrl === 'https://esawebb.org/images/weic2216a/');
+  expect(wallpaper.licence).toMatch(/^CC BY 4\.0/);
+});
