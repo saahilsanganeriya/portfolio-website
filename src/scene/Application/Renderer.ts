@@ -9,7 +9,7 @@ import type { QualityTier } from './Quality';
 const FINISH: FinishSettings = {
   grade: { tone: 'aces', exposure: 0.4, toe: [0.03, 0.3], keepHue: 0.85, strength: 0.6 },
   bloom: 0.85,
-  grain: 0.07,
+  grain: 0.05,
   vignette: 0.42,
 };
 

@@ -36,7 +36,9 @@ async function shoot(page: Page, look: () => void, clips: Clip[]) {
 test('the finishing pass changes the room but never the OS on the monitor', async ({ page }) => {
   await page.addInitScript(() => ((window as unknown as { __roomTier: number }).__roomTier = 0));
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.landedAt != null && !window.__room.moving && window.__room.phase === 'desk', null, { timeout: 180_000 });
+  await page.waitForFunction(() => window.__room?.landedAt != null && !window.__room.moving, null, { timeout: 180_000 });
+  await page.evaluate(() => window.__room!.goto('desk'));
+  await page.waitForFunction(() => window.__room!.phase === 'desk' && !window.__room!.moving, null, { timeout: 60_000 });
   await page.mouse.move(2, 2);
   await page.locator('[data-room-pause]').click();
   const monitor = (await page.evaluate(() => window.__room!.point('monitor')))!;
