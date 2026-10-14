@@ -2,13 +2,6 @@ import type { OsApi } from '../types';
 import { linkAttributes } from './content';
 import { PageReader } from './Reader';
 
-// The reel always autoplays in a window (it pauses with its own control); /story itself is scroll-driven.
-export function StoryApp() {
-  return (
-    <iframe className="os-story-frame" src="/story?embed=1#autoplay" title="The Thread, the story reel" />
-  );
-}
-
 const RESUME_PDF = '/resume/saahil-sanganeriya-resume.pdf';
 
 export function ResumeApp({ os }: { os: OsApi }) {

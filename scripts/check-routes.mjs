@@ -62,9 +62,6 @@ for (const id of entryIds('pages')) {
   ROOM_PAGES.set(`/${id}/`, id);
   expectFile(`content/pages/${id}.json`, `page ${id}`);
 }
-for (const id of entryIds('story')) {
-  expectFile(`content/story/${id}.json`, `story chapter ${id}`);
-}
 
 // ---- SaahilOS window routes ----
 
@@ -90,9 +87,9 @@ const osRouteProblem = (fragment) => {
 
 // ---- every built page ----
 
-// Framed inside the room (/os?embed=1 on the monitor, /story?embed=1 in the Story window); opened on their own they
-// replace themselves with the room. The 404 page is the only other page.
-const FRAMED_PAGES = new Set(['/os/', '/story/']);
+// Framed inside the room (/os?embed=1 on the monitor); opened on its own it replaces itself with the room. The 404
+// page is the only other page.
+const FRAMED_PAGES = new Set(['/os/']);
 const ERROR_PAGE = '/404.html';
 
 const walk = (dir) =>

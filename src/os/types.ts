@@ -80,13 +80,6 @@ export interface OsPage {
   summary: string;
 }
 
-export interface OsStoryChapter {
-  slug: string;
-  n: number;
-  title: string;
-  intertitle: string;
-}
-
 /** One of the four favourite films on Letterboxd, whose posters hang in the room. */
 export interface OsFavourite {
   slug: string;
@@ -121,7 +114,6 @@ export interface OsIndex {
   projects: OsProject[];
   posts: OsPost[];
   pages: OsPage[];
-  story: OsStoryChapter[];
   films: FilmsData;
   favourites: OsFavourite[];
   oven: OvenList;
@@ -140,8 +132,6 @@ export const APP_IDS = [
   'blog',
   'photography',
   'films',
-  'story',
-  'game',
   'terminal',
   'about',
   'resume',

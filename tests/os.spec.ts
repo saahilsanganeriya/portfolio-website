@@ -1,7 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { readFileSync } from 'node:fs';
 import { devices, expect, test, type Page } from '@playwright/test';
-import { answerFor } from '../src/os/apps/game/words';
 
 // Opened on its own, /os becomes the room; ?embed=1 is the document the monitor frames (desktop layout), and
 // ?embed=0 the same document unframed, for the phone layout here (linked nowhere).
@@ -13,8 +12,6 @@ const APPS = [
   'Writing',
   'A Narrative in a Frame',
   'Films',
-  'The Thread',
-  'Daily word',
   'Terminal',
   'About',
   'Résumé',
@@ -147,42 +144,7 @@ test.describe('desktop', () => {
     // The photos of him sit beside the paragraphs they illustrate, inside the text column, never in a strip of their own.
     await expect(welcome.locator('.os-welcome-text > figure img')).toHaveCount(2);
     const ways = welcome.getByRole('navigation', { name: 'Start here' }).getByRole('link');
-    await expect(ways).toHaveText(['Projects', 'Writing', 'Films', 'The Thread', 'A Narrative in a Frame']);
-    await ways.filter({ hasText: 'The Thread' }).click();
-    await expect(page.getByRole('dialog', { name: 'The Thread' })).toBeVisible();
-  });
-
-  /** Catches a Daily word that refuses a real guess, accepts a non-word, or never reaches its win state. */
-  test('the Daily word accepts a guess and shows the win', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    const day0 = new Date(2026, 9, 12, 10, 0);
-    const { word } = answerFor(0);
-    await page.clock.setFixedTime(day0);
-    await page.goto('/os?embed=1#game');
-    const game = page.getByRole('dialog', { name: 'Daily word' });
-    await expect(game.getByRole('heading', { name: /^Word 1,/ })).toBeVisible();
-    const strips = game.getByRole('list', { name: 'Your guesses' }).getByRole('listitem');
-
-    await game.focus();
-    await page.keyboard.type('XQZVJ');
-    await page.keyboard.press('Enter');
-    await expect(game.locator('.os-word-message')).toHaveText('XQZVJ is not in the word list.');
-    await expect(game.getByRole('status')).toHaveText('XQZVJ is not in the word list.');
-    for (let i = 0; i < 5; i++) await page.keyboard.press('Backspace');
-
-    // On-screen keys play the same game as the keyboard.
-    const guess = word === 'CRANE' ? 'SLATE' : 'CRANE';
-    for (const letter of guess) await game.getByRole('button', { name: letter, exact: true }).click();
-    await game.getByRole('button', { name: 'Enter' }).click();
-    await expect(strips.first()).toHaveAttribute('aria-label', new RegExp(`^Guess 1, ${guess}: `));
-
-    await game.focus();
-    await page.keyboard.type(word);
-    await page.keyboard.press('Enter');
-    const end = game.getByRole('region', { name: 'You won' });
-    await expect(end).toContainText('Got it in 2 of 6.');
-    await end.getByRole('button', { name: 'Copy result' }).click();
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^Daily word 1, 2\/6\n[🟧🟦⬛]{5}\n🟧{5}$/u);
+    await expect(ways).toHaveText(['Projects', 'Writing', 'Films', 'A Narrative in a Frame']);
   });
 
   /** Catches a photograph's deep link opening the wrong one, and full-size files loading before a photograph is opened. */
@@ -301,7 +263,6 @@ test.describe('desktop', () => {
       ['oven', 'In the oven'],
       ['projects', 'Projects'],
       ['welcome', 'Welcome'],
-      ['game', 'Daily word'],
       ['photography', 'A Narrative in a Frame'],
       ['photography/colorful-tshirts', 'A Narrative in a Frame'],
     ]) {
@@ -336,7 +297,6 @@ test.describe('iPhone 13', () => {
   test('the welcome, the Daily word and the photographs fit a phone and pass axe', async ({ page }) => {
     for (const [hash, name] of [
       ['welcome', 'Welcome'],
-      ['game', 'Daily word'],
       ['photography', 'A Narrative in a Frame'],
       ['photography/cansupport', 'A Narrative in a Frame'],
     ]) {

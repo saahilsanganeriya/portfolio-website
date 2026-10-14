@@ -5,7 +5,7 @@ import { loadRenderers } from 'astro:container';
 import { getCollection, render, type CollectionEntry } from 'astro:content';
 import { getPosts } from '../../../lib/content';
 
-type Entry = CollectionEntry<'projects' | 'blog' | 'pages' | 'story'>;
+type Entry = CollectionEntry<'projects' | 'blog' | 'pages'>;
 
 // Static `/content/<collection>/<slug>.json` → { data, html }: SaahilOS reader windows load bodies from here.
 export async function getStaticPaths() {
@@ -13,7 +13,6 @@ export async function getStaticPaths() {
     ...(await getCollection('projects')),
     ...(await getPosts()),
     ...(await getCollection('pages')),
-    ...(await getCollection('story')),
   ];
   return entries.map((entry) => ({ params: { collection: entry.collection, slug: entry.id }, props: { entry } }));
 }

@@ -1,7 +1,6 @@
 import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
-import mePhotos from './content/me.json';
 
 function entries(collection: string) {
   return glob({
@@ -65,26 +64,6 @@ const pages = defineCollection({
   }),
 });
 
-const story = defineCollection({
-  loader: entries('story'),
-  schema: ({ image }) =>
-    z.object({
-      n: z.number().int(),
-      title: z.string(),
-      intertitle: z.string().max(90),
-      background: z.object({
-        src: image(),
-        alt: z.string(),
-        credit: z.string(),
-        licence: z.string(),
-        sourceUrl: z.url(),
-        placeholder: z.boolean().optional(),
-      }),
-      /** A photo of the owner shown beside the chapter text: the `file` of an entry in src/content/me.json. */
-      photo: z.enum(mePhotos.map((photo) => photo.file) as [string, ...string[]]).optional(),
-    }),
-});
-
 // The owner's own photography, one YAML file per photo, written by `npm run photos:ingest`. Never photos of him.
 const photography = defineCollection({
   loader: glob({ base: './src/content/photography', pattern: '[^_]*.{yaml,yml}' }),
@@ -103,4 +82,4 @@ const photography = defineCollection({
     }),
 });
 
-export const collections = { projects, blog, pages, story, photography };
+export const collections = { projects, blog, pages, photography };

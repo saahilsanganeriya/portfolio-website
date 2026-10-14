@@ -4,7 +4,7 @@ import type { AppId, OsApi, OsMePhoto } from '../../types';
 import { APPS } from '../registry';
 
 // The ways in, as on Henry Heffernan's showcase: big buttons under the name.
-const WAYS_IN: AppId[] = ['projects', 'blog', 'films', 'story', 'photography'];
+const WAYS_IN: AppId[] = ['projects', 'blog', 'films', 'photography'];
 
 // Which paragraph each photo from src/content/me.json (use 'opening') belongs beside; a photo not named here is not shown.
 const PLACES: Record<string, 'photographs' | 'distance'> = {
@@ -87,8 +87,7 @@ export function WelcomeApp({ os }: { os: OsApi }) {
           distance.
         </p>
         <p>
-          <a href="#story">The Thread</a> tells the longer story, from my father’s spinning mill to here. The little oven
-          on the desktop holds <a href="#oven">what I am building right now</a>.
+          The little oven on the desktop holds <a href="#oven">what I am building right now</a>.
         </p>
       </div>
     </article>

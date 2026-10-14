@@ -28,14 +28,12 @@ export function windowHref(route: Route): string | null {
       return route.slug ? `/${route.app}/${route.slug}` : `/${route.app}`;
     case 'films':
       return route.slug ? `/films#${route.slug}` : '/films';
-    case 'story':
     case 'about':
     case 'resume':
     case 'credits':
       return `/${route.app}`;
     case 'photography':
     case 'welcome':
-    case 'game':
     case 'terminal':
     case 'oven':
       return null;
@@ -46,7 +44,6 @@ const PATH_APPS: Record<string, AppId> = {
   projects: 'projects',
   blog: 'blog',
   films: 'films',
-  story: 'story',
   about: 'about',
   resume: 'resume',
   credits: 'credits',

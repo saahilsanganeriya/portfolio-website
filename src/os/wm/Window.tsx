@@ -21,7 +21,7 @@ const MIN_HEIGHT = 200;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
 
-// Drags and resizes follow the captured pointer. Iframes (the story reel) would swallow it mid-move,
+// Drags and resizes follow the captured pointer. Iframes (a framed site) would swallow it mid-move,
 // so they ignore pointers while body has .os-moving.
 function followPointer(
   event: ReactPointerEvent<HTMLElement>,

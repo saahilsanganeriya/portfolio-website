@@ -62,11 +62,11 @@ test.describe('the framed documents, opened on their own', () => {
     await expect(page).toHaveURL(/\/#terminal$/);
     await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('dialog', { name: 'Terminal' })).toBeVisible();
   });
+});
 
-  /** Catches /story playing the reel as a page of its own instead of in SaahilOS's The Thread window. */
-  test('/story becomes the room with The Thread window open', async ({ page }) => {
-    await page.goto('/story');
-    await expect(page).toHaveURL(/\/#story$/);
-    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('dialog', { name: 'The Thread' })).toBeVisible();
-  });
+/** Catches the removed story reel or its chapter bodies still being served (the owner deleted The Thread). */
+test('the story reel and its chapters are gone', async ({ request }) => {
+  expect((await request.get('/story')).status()).toBe(404);
+  expect((await request.get('/story?embed=1')).status()).toBe(404);
+  expect((await request.get('/content/story/01-delhi.json')).status()).toBe(404);
 });
