@@ -133,7 +133,7 @@ export class World {
     this.paleBlueDot = n.paleBlueDot
       ? new ArtSurface(n.paleBlueDot.node, this.lamp, { ambient: 0.55, top: 0.6, lightAbove: 0.3, fall: 0.45 })
       : null;
-    this.stickies = n.stickies.length ? new StickyNotes(n.stickies, this.lamp) : null;
+    this.stickies = n.stickies.length ? new StickyNotes(n.stickies, this.lamp, room.proxies, room.monitor.position) : null;
     this.windowView = n.windowViews.length
       ? new WindowView(n.windowViews, n.windowSky, n.windowMotif, this.textures, { reducedMotion: still })
       : null;

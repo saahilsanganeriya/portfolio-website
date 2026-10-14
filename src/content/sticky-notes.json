@@ -1,8 +1,15 @@
 [
-  "You win some, you lose some.",
-  "Cost of doing business.",
-  "I’m not afraid. I’m fascinated.",
-  "When is a gimmick not a gimmick?",
-  "New perspectives, that’s all.",
-  "More stuff needs to be shot in Super 16."
+  {
+    "kind": "text",
+    "lines": ["You win some,", "you lose some.", "Cost of doing", "business."]
+  },
+  {
+    "kind": "equations",
+    "label": "Bayes’ rule, Jaccard similarity, the spacetime interval",
+    "lines": ["P(A|B) = P(B|A) P(A) / P(B)", "J(A,B) = |A ∩ B| / |A ∪ B|", "s² = (ct)² − x²"]
+  },
+  {
+    "kind": "todo",
+    "lines": ["[x] make it idempotent", "[x] make it idempotent", "[ ] delete the last bash script", "[ ] water the mango"]
+  }
 ]

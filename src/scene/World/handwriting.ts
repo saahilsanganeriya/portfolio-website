@@ -57,13 +57,16 @@ export interface HandStyle {
   maxLines: number;
   lineHeight: number;
   seed: number;
+  /** Ink at full strength on every letter: a heavy stroke over a lighter fill otherwise rings each letter. */
+  solid?: boolean;
 }
 
-const font = (size: number) => `${size}px "${FAMILY}", ${FALLBACK}`;
+/** The canvas font for the hand at `size` px. */
+export const handFont = (size: number) => `${size}px "${FAMILY}", ${FALLBACK}`;
 
 /** Splits `text` into at most `maxLines` lines no wider than `maxWidth` at `size`, or null if it does not fit. */
 function wrap(ctx: CanvasRenderingContext2D, text: string, size: number, maxWidth: number, maxLines: number): string[] | null {
-  ctx.font = font(size);
+  ctx.font = handFont(size);
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = '';
@@ -94,7 +97,7 @@ export function writeHand(ctx: CanvasRenderingContext2D, text: string, x: number
   ctx.translate(x, y);
   ctx.rotate(style.turn);
   ctx.transform(1, 0, -style.slant, 1, 0, 0);
-  ctx.font = font(size);
+  ctx.font = handFont(size);
   ctx.textBaseline = 'middle';
   ctx.fillStyle = style.colour;
   ctx.strokeStyle = style.colour;
@@ -114,7 +117,8 @@ export function writeHand(ctx: CanvasRenderingContext2D, text: string, x: number
       ctx.translate(cursor + advance / 2, top + row * lead + cursor * drift + (random() - 0.5) * size * 0.07);
       ctx.rotate((random() - 0.5) * 0.09);
       ctx.scale(scale, scale);
-      ctx.globalAlpha = 0.86 + random() * 0.14;
+      const alpha = 0.86 + random() * 0.14;
+      ctx.globalAlpha = style.solid ? 1 : alpha;
       ctx.lineWidth = size * style.weight;
       if (style.weight > 0) ctx.strokeText(glyph, -advance / 2, 0);
       ctx.fillText(glyph, -advance / 2, 0);

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
-const phrases: string[] = JSON.parse(readFileSync(new URL('../src/content/sticky-notes.json', import.meta.url), 'utf8'));
+const notes: { kind: string; lines: string[] }[] = JSON.parse(readFileSync(new URL('../src/content/sticky-notes.json', import.meta.url), 'utf8'));
 // The photography set in its order, read from its YAML so a new set moves the darkroom's test with it.
 const PHOTOS_DIR = new URL('../src/content/photography/', import.meta.url);
 const SET = readdirSync(PHOTOS_DIR)
@@ -150,20 +150,28 @@ test.describe('room v3 interactions', () => {
     expect((await world(page)).projector!.photo).toBe('diner');
   });
 
-  /** Catches notes without his phrases, phrases in the wrong order, or a note that does not answer the pointer. */
-  test('the sticky notes carry his phrases, and a note lifts under the pointer', async () => {
-    expect((await world(page)).stickies).toEqual(phrases);
+  /**
+   * Catches more than three notes (a spare slot left on the wall), a note left blank or out of its kind, and a note that
+   * does not answer the pointer or reads the wrong words out.
+   */
+  test('three sticky notes on the bezel are written, the spare slots gone, and a note lifts under the pointer', async () => {
+    const written = (await world(page)).stickies!;
+    expect(written.map((note) => [note.kind, note.lines])).toEqual(notes.map((note) => [note.kind, note.lines]));
+    expect(written.every((note) => note.shown)).toBe(true);
     await page.evaluate(() => window.__room!.goto('desk'));
     await settledAt(page, 'desk');
+    const spare = [0, 1, 2, 3, 4, 5].filter((slot) => !written.some((note) => note.slot === slot));
+    for (const slot of spare) expect(await page.evaluate((n) => window.__room!.point(`hit_sticky_note_${n}`), slot), `slot ${slot} is gone`).toBeNull();
     // The desk's free look turns the view toward the pointer, so the note moves: follow it until the view settles on it.
+    const first = `hit_sticky_note_${written[0].slot}`;
     for (let i = 0; i < 6; i++) {
-      const point = await page.evaluate(() => window.__room!.point('hit_sticky_note_3'));
+      const point = await page.evaluate((n) => window.__room!.point(n), first);
       await page.mouse.move(point!.x, point!.y);
       await page.waitForTimeout(400);
-      if ((await page.evaluate(() => window.__room!.lift('hit_sticky_note_3'))) > 0) break;
+      if ((await page.evaluate((n) => window.__room!.lift(n), first)) > 0) break;
     }
-    await expect.poll(() => page.evaluate(() => window.__room!.lift('hit_sticky_note_3')), { timeout: 15_000 }).toBeGreaterThan(0);
-    await expect(page.locator('.room-label')).toHaveText(phrases[3]);
+    await expect.poll(() => page.evaluate((n) => window.__room!.lift(n), first), { timeout: 15_000 }).toBeGreaterThan(0);
+    await expect(page.locator('.room-label')).toHaveText(notes[0].lines.join(' '));
   });
 
   /**

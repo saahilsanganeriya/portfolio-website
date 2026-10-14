@@ -3,8 +3,8 @@
 // on a hotspot without one) runs its room `action`, or zooms into the monitor and opens `target`. The click's sound is
 // the audio layer's, by proxy (src/scene/audio/RoomAudio.ts).
 import favorites from '../content/favorites.json';
-import phrases from '../content/sticky-notes.json';
 import type { StationName } from './Application/RoomModel';
+import { STICKY_NOTES } from './World/stickyContent';
 
 /**
  * What a prop does in the room itself; World carries these out. An action World does not handle yet falls back to the
@@ -54,11 +54,11 @@ const prints: Hotspot[] = Array.from({ length: PRINT_SLOTS }, (_, slot) => ({
   href: '/#photography',
 }));
 
-/** The sticky notes: under the pointer each lifts a little and its label reads his phrase out; a click does nothing. */
-const notes: Hotspot[] = phrases.map((phrase, slot) => ({
+/** The sticky notes: under the pointer each lifts a little and its label reads the note out; a click does nothing. */
+const notes: Hotspot[] = STICKY_NOTES.map(({ slot, label }) => ({
   proxies: [`hit_sticky_note_${slot}`],
   prop: 'A sticky note',
-  label: phrase,
+  label,
   target: null,
   labelOnly: true,
   href: '/',
