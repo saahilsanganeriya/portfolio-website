@@ -139,7 +139,7 @@ function Recipe({ recipe }: { recipe: OsRecipe }) {
   );
 }
 
-/** What he bakes: a list, and each recipe with its ingredients, method and notes. */
+/** The Kitchen (owner's name for it): recipes he keeps coming back to, each with ingredients, method and notes. */
 export function RecipesApp({ slug }: { slug?: string }) {
   const loaded = useJson<{ recipes: OsRecipe[] }>('/content/recipes.json');
   let body: ReactNode;
@@ -164,7 +164,7 @@ export function RecipesApp({ slug }: { slug?: string }) {
       <div className="os-list">
         <StatusLine text={plural(recipes.length, 'recipe')} />
         <DetailsList
-          heading="Recipes, newest first"
+          heading="Recipes I keep coming back to"
           metaLabel="Time"
           large={withPictures}
           rows={recipes.map((recipe) => ({

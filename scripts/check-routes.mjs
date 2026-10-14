@@ -73,14 +73,22 @@ const OS_APPS = JSON.parse(
     .replaceAll("'", '"')
     .replace(/,\s*\]$/, ']'),
 );
+const yamlIds = (collection) =>
+  existsSync(join(CONTENT, collection))
+    ? readdirSync(join(CONTENT, collection)).filter((f) => /^[^_].*\.ya?ml$/.test(f)).map((f) => f.replace(/\.ya?ml$/, ''))
+    : [];
 const OS_SLUGS = {
   projects: new Set(entryIds('projects')),
   blog: new Set(entryIds('blog')),
+  recipes: new Set(entryIds('recipes')),
+  photography: new Set(yamlIds('photography')),
   films: new Set(JSON.parse(readFileSync(join(CONTENT, 'films.json'), 'utf8')).posters ?? []),
 };
 const osRouteProblem = (fragment) => {
   const [app, slug, ...rest] = fragment.split('/');
   if (!OS_APPS.includes(app)) return 'names no SaahilOS app';
+  // The Code window takes any GitHub path (owner/repo/…); it says so itself when GitHub has nothing there.
+  if (app === 'code') return slug === undefined || rest.length > 0 ? null : 'names no repository (code/<owner>/<repo>)';
   if (slug !== undefined && (rest.length > 0 || !OS_SLUGS[app]?.has(slug))) return 'names no SaahilOS window';
   return null;
 };

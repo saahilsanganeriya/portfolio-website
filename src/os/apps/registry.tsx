@@ -21,7 +21,7 @@ export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   photography: { label: 'A Narrative in a Frame', icon: 'camera' },
   films: { label: 'Films', icon: 'films' },
   books: { label: 'Books', icon: 'books' },
-  recipes: { label: 'Recipes', icon: 'recipes' },
+  recipes: { label: 'Kitchen', icon: 'recipes' },
   voyager: { label: 'Voyager Golden Record', icon: 'voyager' },
   personal: { label: 'Personal', icon: 'folder' },
   terminal: { label: 'Terminal', icon: 'terminal' },

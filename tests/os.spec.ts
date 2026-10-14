@@ -7,7 +7,7 @@ import { devices, expect, test, type Page } from '@playwright/test';
 
 // The desktop holds the work and the machine; the Personal folder holds the rest (the room opens those directly too).
 const DESKTOP = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'In the oven', 'Personal', 'Terminal', 'Credits'];
-const PERSONAL = ['Films', 'A Narrative in a Frame', 'Books', 'Recipes', 'Voyager Golden Record'];
+const PERSONAL = ['Films', 'A Narrative in a Frame', 'Books', 'Kitchen', 'Voyager Golden Record'];
 const REMOVED = ['Welcome', 'The Thread', 'Daily word'];
 /** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
 const firstH2 = (collection: string, slug: string): string =>
@@ -391,7 +391,7 @@ test.describe('desktop', () => {
     await serveShelves(page, 'empty');
     for (const [hash, name, note] of [
       ['books', 'Books', 'No books on the shelf yet.'],
-      ['recipes', 'Recipes', 'No recipes written up yet.'],
+      ['recipes', 'Kitchen', 'No recipes written up yet.'],
       ['voyager', 'Voyager Golden Record', 'This page is not published yet.'],
     ]) {
       await page.goto(`/os?embed=1#${hash}`);
@@ -414,7 +414,7 @@ test.describe('desktop', () => {
     await expect(books.locator('.os-status-cell').first()).toHaveText('2 books');
 
     await page.goto('/os?embed=1#recipes');
-    const recipes = page.getByRole('dialog', { name: 'Recipes' });
+    const recipes = page.getByRole('dialog', { name: 'Kitchen' });
     await recipes.getByRole('link', { name: /Sample loaf/ }).click();
     await expect(page).toHaveURL(/#recipes\/sample-loaf$/);
     await expect(recipes.getByRole('heading', { level: 2, name: 'Sample loaf' })).toBeVisible();
@@ -431,7 +431,7 @@ test.describe('desktop', () => {
     await expect(recipes.getByRole('img', { name: 'A test picture.' })).toBeVisible();
     await expect(recipes).toHaveCSS('opacity', '1');
     await page.reload();
-    await expect(page.getByRole('dialog', { name: 'Recipes' }).getByRole('heading', { level: 2, name: 'Sample loaf' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Kitchen' }).getByRole('heading', { level: 2, name: 'Sample loaf' })).toBeVisible();
     expect(await seriousAxeViolations(page), 'recipe').toEqual([]);
     await recipes.getByRole('link', { name: '‹ All recipes' }).click();
     await expect(recipes.getByRole('link', { name: /Sample loaf/ })).toBeVisible();
@@ -594,7 +594,7 @@ test.describe('iPhone 13', () => {
       [`code/${NAPARI.slug}/tree`, 'samcell-napari'],
       [`code/${NAPARI.slug}/blob/main/${NAPARI.file}`, 'samcell-napari'],
       ['books', 'Books'],
-      ['recipes/sample-loaf', 'Recipes'],
+      ['recipes/sample-loaf', 'Kitchen'],
       ['voyager', 'Voyager Golden Record'],
       ['personal', 'Personal'],
       ['photography', 'A Narrative in a Frame'],
