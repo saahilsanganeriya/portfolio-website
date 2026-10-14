@@ -226,6 +226,18 @@ test.describe('on a phone', () => {
     await expect(page.locator('html')).not.toHaveClass(/room-os/);
   });
 
+  /** Catches a boot screen that asks a phone for a key press, or hides its date under the room's controls (T52 fix 5). */
+  test('on a phone the boot screen says Tap to skip, and its date sits above the controls', async ({ page }) => {
+    await page.goto('/');
+    const boot = page.locator('[data-boot]');
+    await expect(boot.getByText('Tap to skip')).toBeVisible();
+    await expect(boot.getByText('Press any key to skip the intro')).toBeHidden();
+    await expect(boot.locator('[data-boot-today]')).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
+    const date = (await boot.locator('[data-boot-today]').boundingBox())!;
+    const controls = (await page.locator('.room-controls').boundingBox())!;
+    expect(date.y + date.height).toBeLessThanOrEqual(controls.y);
+  });
+
   /** Catches an address on a phone that loses its window on the way into the monitor. */
   test('a phone opening /about ends on About in SaahilOS', async ({ page }) => {
     await page.goto('/about');

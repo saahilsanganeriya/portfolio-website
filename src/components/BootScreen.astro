@@ -25,7 +25,7 @@
     </div>
 
     <footer class="boot-foot" aria-hidden="true">
-      <p>Press any key to skip the intro</p>
+      <p><span class="boot-skip-key">Press any key to skip the intro</span><span class="boot-skip-tap">Tap to skip</span></p>
       <p><time data-boot-today></time></p>
     </footer>
   </div>
@@ -68,6 +68,8 @@
     flex-direction: column;
     height: 100%;
     padding: clamp(1.5rem, 5vw, 3.5rem);
+    /* The room's Sound and Pause controls sit over the bottom edge; the footer's lines stay above them. */
+    padding-bottom: max(clamp(1.5rem, 5vw, 3.5rem), calc(var(--space-3) + 3rem));
     animation: gate-weave 0.5s steps(1) infinite;
   }
 
@@ -147,5 +149,20 @@
     justify-content: space-between;
     gap: 0.5rem 2rem;
     margin-top: auto;
+  }
+
+  /* A touch screen has no keys to press. */
+  .boot-skip-tap {
+    display: none;
+  }
+
+  @media (pointer: coarse) {
+    .boot-skip-key {
+      display: none;
+    }
+
+    .boot-skip-tap {
+      display: inline;
+    }
   }
 </style>

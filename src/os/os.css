@@ -625,19 +625,36 @@ body.os-moving iframe {
   font-size: 0.85em;
 }
 
+/* Diagrams are at most 60 columns (style guide), so in a narrow column the type shrinks until 60 fit (a monospace
+   column is 0.6 em): about 9 px on a phone, 14 px wherever there is room. Anything wider still scrolls, and then a
+   paper glow at the right edge says there is more; the walnut layer that travels with the text covers it at the end. */
 .os-prose pre {
+  container-type: inline-size;
   padding: 12px 14px;
   overflow-x: auto;
-  background: var(--walnut);
+  background:
+    linear-gradient(to left, var(--walnut) 45%, rgb(59 42 30 / 0)) right / 2.5rem 100% no-repeat local,
+    linear-gradient(to left, rgb(237 228 211 / 0.3), rgb(237 228 211 / 0)) right / 1.5rem 100% no-repeat scroll,
+    var(--walnut);
   color: var(--paper);
   font-size: 14px;
   line-height: 1.5;
 }
 
 .os-prose pre code {
+  /* A block, so its lines take its own line height, not the pre's 14 px strut. */
+  display: block;
   padding: 0;
   background: none;
-  font-size: inherit;
+  font-size: min(14px, 100cqi / 36.6);
+  line-height: 1.5;
+}
+
+/* A phone's column: narrower margins inside the diagram leave its 60 columns a little more room. */
+@container (max-width: 440px) {
+  .os-prose pre {
+    padding: 10px 8px;
+  }
 }
 
 .os-prose table {

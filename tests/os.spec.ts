@@ -638,6 +638,21 @@ test.describe('iPhone 13', () => {
     await expect(page.getByRole('button', { name: 'Code', exact: true })).toBeVisible();
   });
 
+  /** Catches a diagram whose right-hand columns fall off a phone's column with nothing to show they scroll (T52 fix 5). */
+  test('every diagram in a post or project fits a phone’s column', async ({ page }) => {
+    for (const hash of ['projects/swe-sim', 'projects/entity-resolution-and-anonymization', 'blog/hard-for-whom', 'blog/safe-to-run-twice']) {
+      await page.goto(`/os?embed=0#${hash}`);
+      await page.reload();
+      const pres = page.locator('.os-prose pre');
+      await expect(pres.first(), hash).toBeVisible();
+      for (const pre of await pres.all()) {
+        const fit = await pre.evaluate((el) => ({ over: el.scrollWidth - el.clientWidth, px: parseFloat(getComputedStyle(el.querySelector('code')!).fontSize) }));
+        expect(fit.over, `${hash}: a diagram scrolls sideways`).toBeLessThanOrEqual(0);
+        expect(fit.px, `${hash}: diagram type`).toBeGreaterThanOrEqual(8);
+      }
+    }
+  });
+
   /** Catches the new and changed windows failing axe, or spilling sideways, on a phone. */
   test('About, Code, the shelves, the folder and the photographs fit a phone and pass axe', async ({ page }) => {
     await serveShelves(page, 'sample');
