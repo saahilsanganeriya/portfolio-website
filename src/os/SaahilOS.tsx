@@ -193,9 +193,17 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
                   onSelect={setSelectedIcon}
                   onOpen={(id) => open(id)}
                 />
-                <p className="os-desktop-hint">
-                  {phone ? 'Tap an app to open it.' : 'Double-click an icon to open it.'}
-                </p>
+                <div className="os-desktop-foot">
+                  <p className="os-desktop-hint">
+                    {phone ? 'Tap an app to open it.' : 'Double-click an icon to open it.'}
+                  </p>
+                  {/* ESA/Webb's licence (CC BY 4.0) asks for the full credit line, visible beside the picture. */}
+                  <p className="os-wallpaper-credit">
+                    Wallpaper:{' '}
+                    <a href="https://esawebb.org/images/weic2216a/">Pillars of Creation, James Webb Space Telescope</a>.
+                    NASA, ESA, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan (STScI). CC BY 4.0.
+                  </p>
+                </div>
                 {phone ? (
                   <PhoneWindows windows={state.windows} os={os} onBack={close} />
                 ) : (

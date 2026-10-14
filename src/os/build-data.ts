@@ -1,5 +1,5 @@
 // Build-time data for /os that is not in a content collection: the "In the oven" list, the favourite films, the
-// project figures and the wallpaper. Imported by src/pages/os.astro only, so zod and astro:assets stay out of the island.
+// project figures, the wallpaper and the About portrait. Imported by src/pages/os.astro only, so zod and astro:assets stay out of the island.
 import type { ImageMetadata } from 'astro';
 import { getImage } from 'astro:assets';
 import { getCollection } from 'astro:content';
@@ -93,11 +93,13 @@ export const projectFigures = (slug: string): Promise<OsFigure[]> =>
     (EXTRA_FIGURES[slug] ?? []).map(async ({ src, alt, ...text }) => ({ ...(await osImage(src, alt)), ...text })),
   );
 
+// A starfield is all fine detail, so it stays at 1280 px at most (the monitor's width): about the bytes the old
+// wallpaper cost the room's first load.
 export async function osWallpaper(): Promise<OsWallpaper> {
-  const widths = [960, 1600];
+  const widths = [960, 1280];
   const [avif, webp] = await Promise.all([
-    getImage({ src: wallpaper, widths, format: 'avif', quality: 55 }),
-    getImage({ src: wallpaper, widths, format: 'webp', quality: 70 }),
+    getImage({ src: wallpaper, widths, format: 'avif', quality: 40 }),
+    getImage({ src: wallpaper, widths, format: 'webp', quality: 62 }),
   ]);
   return { avif: avif.srcSet.attribute, webp: webp.srcSet.attribute, src: webp.src };
 }
