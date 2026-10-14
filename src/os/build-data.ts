@@ -21,6 +21,7 @@ import type {
 } from './types';
 
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}/);
+const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 
 const ovenSchema = z.object({
   items: z
@@ -154,6 +155,8 @@ export async function photographs(): Promise<OsPhotograph[]> {
         place: data.place,
         series: data.series,
         caption: data.caption,
+        ...(data.date ? { date: isoDate(data.date) } : {}),
+        ...(data.igCaption ? { igCaption: data.igCaption } : {}),
         featured: data.featured,
         order: data.order ?? Number.MAX_SAFE_INTEGER,
         thumb,

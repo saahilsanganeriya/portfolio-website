@@ -82,6 +82,12 @@ const photography = defineCollection({
       featured: z.boolean(),
       onWall: z.boolean(),
       order: z.number().int().optional(),
+      /** The few words he writes on the print in the room, in marker. */
+      sharpie: z.string().max(40).optional(),
+      /** When he took or posted it. */
+      date: z.coerce.date().optional(),
+      /** His own Instagram caption for it, as posted. */
+      igCaption: z.string().optional(),
     }),
 });
 

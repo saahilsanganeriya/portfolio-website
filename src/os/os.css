@@ -1614,6 +1614,29 @@ body.os-moving iframe {
   -webkit-font-smoothing: auto;
 }
 
+/* His Instagram caption, his own words as posted, set apart from the line about the picture. */
+.os-photo-ig {
+  margin: 14px 0 0;
+  padding-left: 12px;
+  border-left: 1px solid var(--dust);
+}
+
+.os-photo-ig p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-style: italic;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.os-photo-ig footer {
+  margin-top: 4px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--dust);
+}
+
 .os-photo-nav {
   display: flex;
   flex-wrap: wrap;

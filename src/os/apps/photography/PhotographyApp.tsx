@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { formatDay } from '../../format';
 import type { OsApi, OsPhotograph, OsPicture } from '../../types';
 import { useWindowStatus } from '../../wm/Window';
 
@@ -92,8 +93,23 @@ function Photograph({ photo, photos }: { photo: OsPhotograph; photos: OsPhotogra
       </figure>
       <div className="os-photo-text">
         <h2 className="os-photo-title">{photo.title}</h2>
-        <p className="os-photo-meta">{placeAndYear(photo)}</p>
+        <p className="os-photo-meta">
+          {photo.date ? (
+            <>
+              {photo.place ? `${photo.place}, ` : ''}
+              <time dateTime={photo.date}>{formatDay(photo.date)}</time>
+            </>
+          ) : (
+            placeAndYear(photo)
+          )}
+        </p>
         <p className="os-photo-caption">{photo.caption}</p>
+        {photo.igCaption && (
+          <blockquote className="os-photo-ig">
+            <p>{photo.igCaption}</p>
+            <footer>His caption on Instagram</footer>
+          </blockquote>
+        )}
       </div>
       <nav className="os-photo-nav" aria-label="Photographs">
         <a className="os-tool" href={`#photography/${previous.slug}`}>
