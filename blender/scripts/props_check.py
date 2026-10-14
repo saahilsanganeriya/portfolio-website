@@ -20,18 +20,17 @@ REQUIRED = {
     "fujica_st": ["fujica_st"],
     "super8_camera": ["super8_camera"],
     "projector_8mm": ["projector_8mm", "projector_8mm_reel_front", "projector_8mm_reel_rear", "projector_lens"],
-    "projector_screen": ["projector_screen", "projector_screen_surface", "projector_screen_center"],
     "nas_4bay": ["nas_4bay", "nas_led_0", "nas_led_1", "nas_led_2", "nas_led_3"],
     "mango_plant": ["mango_plant", "mango_plant_leaves", "mango_fruit"],
     "film_canister": ["film_canister_a", "film_canister_b", "film_canister_c"],
     "books_stack": ["books_stack"],
     "poster_frame": ["poster_frame", "poster_frame_glass", "poster_frame_art"],
     "lava_lamp": ["lava_lamp", "lava_lamp_glass", "lava_lamp_light"],
-    "ceiling_fan": ["ceiling_fan", "ceiling_fan_blades"],
-    "espresso_machine": ["espresso_machine", "espresso_steam"],
-    "countertop_oven": ["countertop_oven", "oven_glow"],
+    "espresso_machine": ["espresso_machine", "espresso_cup", "espresso_coffee", "espresso_spout", "espresso_steam"],
+    "countertop_oven": ["countertop_oven", "oven_door", "oven_glow", "croissant"],
 }
-HANGING = {"ceiling_fan"}  # origin at the mount point on top: the top, not the base, sits at z = 0
+PROP_BUDGETS = {"countertop_oven": 18000}  # the oven carries its door, cavity and the croissant
+HANGING = set()  # props whose origin is a mount point on top (none since the ceiling fan left the room)
 CAMERAS = {"fujifilm_x100", "fujifilm_xt", "fujica_st", "super8_camera"}
 PLAN_EXPR = "import bpy; print(sum(len(o.data.polygons) for o in bpy.data.objects if o.type=='MESH'))"
 PROBE = """
@@ -76,7 +75,7 @@ def main():
         path = os.path.join(PROPS_DIR, f"{name}.blend")
         polys = [ln for ln in blender_expr(path, PLAN_EXPR).splitlines() if ln.strip().isdigit()][-1].strip()
         probe = next(json.loads(ln[6:]) for ln in blender_expr(path, PROBE).splitlines() if ln.startswith("PROBE "))
-        budget = CAMERA_BUDGET if name in CAMERAS else PROP_BUDGET
+        budget = CAMERA_BUDGET if name in CAMERAS else PROP_BUDGETS.get(name, PROP_BUDGET)
         problems = []
         if probe["triangles"] > budget:
             problems.append("over budget")

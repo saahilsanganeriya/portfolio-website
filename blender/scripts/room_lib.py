@@ -8,11 +8,17 @@ import bpy
 from mathutils import Matrix, Vector
 
 # ---- Room dimensions (metres, Blender Z up; the viewer stands at -Y looking toward +Y) ----
-X_LEFT, X_RIGHT = -2.55, 2.35  # left wall inner face, open right end of the back wall
-Y_FRONT, Y_BACK = -2.75, 0.42  # open front edge, back wall inner face
-WALL_T, WALL_H, FLOOR_T = 0.12, 2.62, 0.06
-WIN_X0, WIN_X1, WIN_Z0, WIN_Z1 = 0.88, 1.78, 0.92, 2.12
+# Three walls: the back wall, the left wall and a short return on the right (its front end at RETURN_Y), under a
+# ceiling band that runs along all three; the front and the rest of the right side are open.
+X_LEFT, X_RIGHT = -3.30, 3.10  # left wall inner face, right return wall inner face
+Y_FRONT, Y_BACK = -4.00, 0.42  # open front edge, back wall inner face
+RETURN_Y = -2.00  # front end of the right return wall
+WALL_T, WALL_H, FLOOR_T = 0.12, 2.85, 0.06
+WIN_X0, WIN_X1, WIN_Z0, WIN_Z1 = 1.10, 2.60, 0.86, 2.30
 DADO_Z = 0.88
+# Doorway in the left wall near the back corner (clear opening along y), and the ceiling band's depth from the walls.
+DOOR_Y0, DOOR_Y1, DOOR_H = -0.52, 0.30, 2.08
+BAND_D, BAND_T = 0.42, 0.14
 
 
 # ---- Small helpers ----

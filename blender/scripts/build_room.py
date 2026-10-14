@@ -23,11 +23,13 @@ import import_henry  # noqa: E402
 from import_henry import CACHE, REPO, fetch_cached  # noqa: E402
 import room_dressing  # noqa: E402
 import window_view  # noqa: E402
-from room_lib import (DADO_Z, FLOOR_T, WALL_H, WALL_T, WIN_X0, WIN_X1, WIN_Z0, WIN_Z1, X_LEFT, X_RIGHT,  # noqa: E402
-                      Y_BACK, Y_FRONT, Mat, add_box, add_cylinder, collection, new_object, smooth_by_angle, socket,
-                      srgb)
+from room_lib import (BAND_D, BAND_T, DADO_Z, DOOR_H, DOOR_Y0, DOOR_Y1, FLOOR_T, RETURN_Y, WALL_H, WALL_T,  # noqa: E402
+                      WIN_X0, WIN_X1, WIN_Z0, WIN_Z1, X_LEFT, X_RIGHT, Y_BACK, Y_FRONT, Mat, add_box, add_cylinder,
+                      collection, new_object, smooth_by_angle, socket, srgb)
 
-BLEND = REPO / "blender" / "room.blend"
+BLEND = Path(os.environ.get("ROOM_BLEND", REPO / "blender" / "room.blend"))
+# ROOM_QUICK=1 skips the window view (the slowest part) for layout work; never for a build that gets baked.
+QUICK = os.environ.get("ROOM_QUICK") == "1"
 # ROOM_PROPS_DIR points at another checkout's props while they are on an unmerged branch.
 PROPS_DIR = Path(os.environ.get("ROOM_PROPS_DIR", REPO / "blender" / "props"))
 POSTERS_DIR = REPO / "blender" / "posters"
@@ -54,6 +56,16 @@ TEXTURES = {
 HDRI = ("sunset_jhbcentral_4k.hdr", "eb388d9816eaf79db2f3e8bd391117ae24f10437ea9e00d1a9a24e083150cf97")
 HDRI_ROTATION_Z = math.radians(-14)
 
+# ---- Layout (plan view; the camera looks in from the open front) ----
+#
+#        back wall: posters + lava lamp | desk, shelf, pennant | big window, mango on the sill
+#   left wall:    doorway (hallway beyond), photo wall, projection wall, kitchen nook
+#   right return: bookcase, Voyager record, Pale Blue Dot, Japanese-literature print; armchair corner in front
+KITCHEN_TOP = 0.90  # counter height of the kitchen nook (room_dressing builds it)
+CREDENZA_TOP = 0.60  # the low walnut credenza under the posters that carries the lava lamp
+PROJECTOR_TABLE = (-1.38, -2.45, 0.55)  # side table top centre; the projector throws -X onto the left wall
+PROJECTION = (-2.45, 1.52, 1.00, 0.5625)  # left wall: centre y, centre z, width, height (16:9)
+
 # Props from blender/props/<name>.blend (each faces -Y with its origin at the base): placement in metres,
 # z-rotation in degrees or the name of the prop its front should face, and a placeholder size for a missing file.
 PROPS = {
@@ -61,43 +73,71 @@ PROPS = {
     "fujifilm_xt": ((-0.62, 0.30, 1.6475), -12, (0.135, 0.065, 0.095)),
     "fujica_st": ((-0.25, 0.31, 1.6475), 8, (0.145, 0.09, 0.095)),
     "super8_camera": ((0.12, 0.30, 1.6475), -20, (0.07, 0.24, 0.17)),
-    "film_canister": ((-1.97, -2.06, 0.211), 25, (0.27, 0.14, 0.05)),
+    "film_canister": ((PROJECTOR_TABLE[0] - 0.02, PROJECTOR_TABLE[1], 0.211), 25, (0.27, 0.14, 0.05)),
     "books_stack": ((-0.88, 0.30, 2.0075), 90, (0.16, 0.24, 0.20)),
-    "projector_8mm": ((-1.95, -2.08, 0.55), "projector_screen", (0.21, 0.33, 0.33)),
-    "projector_screen": ((-1.86, -0.12, 0.0), "projector_8mm", (1.09, 0.92, 1.80)),
+    "projector_8mm": (PROJECTOR_TABLE, -90, (0.21, 0.33, 0.33)),
     "nas_4bay": ((0.545, 0.135, 0.7325), 30, (0.27, 0.31, 0.23)),
-    "mango_plant": ((0.98, 0.355, 0.92), 0, (0.45, 0.40, 0.45)),
-    # Kitchen corner on the sideboard under the posters (fronts turned to the room, +X); the fan hangs from the
-    # ceiling line (its origin is its mount).
-    "countertop_oven": ((-2.355, -1.03, 0.76), 90, (0.40, 0.33, 0.23)),
-    "espresso_machine": ((-2.395, -1.45, 0.76), 90, (0.23, 0.38, 0.55)),
-    "lava_lamp": ((-2.42, -1.745, 0.76), 90, (0.15, 0.15, 0.41)),
-    "ceiling_fan": ((-1.45, -1.55, 2.62), 12, (1.14, 1.14, 0.62)),
+    "mango_plant": ((1.44, 0.345, WIN_Z0), 0, (0.45, 0.40, 0.45)),
+    # Kitchen nook on the counter at the left wall's front end, fronts turned to the room (+X).
+    "espresso_machine": ((-3.02, -3.30, KITCHEN_TOP), 90, (0.23, 0.38, 0.55)),
+    "countertop_oven": ((-3.00, -3.70, KITCHEN_TOP), 90, (0.40, 0.33, 0.23)),
+    # Alone on the credenza under the posters, where its glow lights the frames and the wall.
+    "lava_lamp": ((-2.20, 0.25, CREDENZA_TOP), 0, (0.15, 0.15, 0.41)),
 }
 PROP_SCALE = {"nas_4bay": 1.35}  # owner round 2: bigger, so it reads from cam_idle
-# Nodes named in the round-2 contract keep their own names; every other prop mesh gets the props_ prefix.
-CONTRACT_NAMES = {"lava_lamp", "lava_lamp_glass", "ceiling_fan", "ceiling_fan_blades", "espresso_machine",
-                  "countertop_oven", "oven_glow", "mango_fruit"}
+# Nodes named in the room contract keep their own names; every other prop mesh gets the props_ prefix.
+CONTRACT_NAMES = {"lava_lamp", "lava_lamp_glass", "espresso_machine", "espresso_cup", "espresso_coffee",
+                  "countertop_oven", "oven_door", "oven_glow", "croissant", "mango_fruit"}
 # Poster click proxies keep their T3 names; slot i is the i-th frame from the left as seen from the room.
 POSTER_IDS = ["the-odyssey-2026", "la-la-land", "chungking-express", "marty-supreme"]
 POSTER_SIZE = (0.40, 0.60)  # visible art, 2:3
-POSTER_Y = [-0.95, -1.43, -1.91, -2.39]
-POSTER_Z = 1.66
+POSTER_X = [-2.94, -2.46, -1.98, -1.50]  # on the back wall, left of the desk
+POSTER_Z = 1.70
 # Art shown in the stills only (the site draws poster_art_<slot> from src/content/favorites.json at runtime).
 STILL_POSTERS = ["la-la-land", "yi-yi", "normal-people-2020", "black-swan"]
 
 CAMERAS = {
     # name: (position, target) in metres; vertical field of view is 35 degrees for every framing.
-    "cam_loading": ((6.6, -8.8, 5.2), (-0.2, -0.8, 0.7)),
-    "cam_idle": ((3.75, -4.95, 2.7), (-0.25, -0.9, 0.98)),
+    "cam_loading": ((3.8, -13.9, 5.0), (-0.45, -1.35, 0.95)),
+    "cam_idle": ((2.2, -9.2, 2.75), (-0.45, -1.35, 0.95)),
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
-    "cam_shelf": ((-0.36, -1.12, 1.78), (-0.36, 0.30, 1.84)),
-    "cam_window": ((1.33, -0.95, 1.46), (1.33, 1.40, 1.36)),
-    "cam_photos": ((-1.78, -0.86, 2.17), (-1.78, 0.42, 2.17)),
+    "cam_window": ((1.85, -1.75, 1.55), (1.85, 1.40, 1.50)),
+    "cam_shelf": ((2.02, -0.76, 0.98), (3.10, -0.76, 0.60)),
+    "cam_photos": ((-1.85, -1.22, 1.78), (-3.30, -1.22, 1.78)),
+    "cam_projector": ((-0.45, -2.45, 1.62), (-3.30, -2.45, 1.42)),
+    "cam_espresso": ((-2.22, -3.18, 1.36), (-3.02, -3.30, 1.10)),
+    "cam_oven": ((-2.18, -3.62, 1.26), (-3.00, -3.70, 0.98)),
+    # Arrival: from the loading framing past the window and the mango plant onto the desk (the site glides
+    # cam_loading -> arrival_0..2 -> cam_desk).
+    "cam_arrival_0": ((2.75, -2.85, 1.95), (1.85, 0.42, 1.45)),
+    "cam_arrival_1": ((1.30, -1.10, 1.45), (1.44, 0.35, 1.10)),
+    "cam_arrival_2": ((0.40, -1.80, 1.42), (0.0, 0.0, 1.05)),
+    # The tour: one framing per stop, the professional stops first (desk, window, books, space wall), then the rest.
+    "cam_tour_0": ((0.05, -2.35, 1.62), (-0.10, 0.10, 1.05)),
+    "cam_tour_1": ((1.85, -1.75, 1.55), (1.85, 1.40, 1.50)),
+    "cam_tour_2": ((2.02, -0.76, 0.98), (3.10, -0.76, 0.60)),
+    "cam_tour_3": ((1.78, -0.90, 1.72), (3.10, -0.90, 1.74)),
+    "cam_tour_4": ((-1.55, -2.95, 1.70), (-3.05, -3.50, 1.10)),
+    "cam_tour_5": ((-1.60, -2.00, 1.45), (-2.20, 0.42, 1.18)),
+    "cam_tour_6": ((-0.45, -2.45, 1.62), (-3.30, -2.45, 1.42)),
+    "cam_tour_7": ((-1.85, -1.22, 1.78), (-3.30, -1.22, 1.78)),
+    "cam_tour_8": ((-2.22, -1.95, 1.62), (-2.22, 0.42, 1.62)),
+    "cam_tour_9": ((0.55, -3.35, 1.62), (2.35, -1.35, 0.80)),
 }
-# cam_projector is set square-on to the screen from the screen's own frame (see build_markers).
-PROJECTOR_CAM_DISTANCE = 1.85
+# The tour's stops in order: (id, label, camera, the plan-view point the map marks).
+TOUR_STOPS = [
+    ("desk", "Desk", "cam_tour_0", (-0.16, -0.10)),
+    ("window", "Window", "cam_tour_1", (1.85, 0.20)),
+    ("books", "Bookshelf", "cam_tour_2", (2.92, -0.78)),
+    ("space", "Space wall", "cam_tour_3", (3.00, -0.75)),
+    ("kitchen", "Kitchen nook", "cam_tour_4", (-2.98, -3.50)),
+    ("lava-lamp", "Lava lamp", "cam_tour_5", (-2.20, 0.25)),
+    ("projector", "Projector wall", "cam_tour_6", (-3.15, -2.45)),
+    ("photos", "Photo wall", "cam_tour_7", (-3.15, -1.22)),
+    ("posters", "Posters", "cam_tour_8", (-2.22, 0.30)),
+    ("armchair", "Armchair corner", "cam_tour_9", (2.25, -1.80)),
+]
 CAMERA_FOV_DEG = 35.0
 EXPOSURE = 2.15  # owner round 2: about +0.5 EV over T3's 1.65, same lights and mood
 LAVA_GLOW = 0.45
@@ -236,41 +276,9 @@ def build_materials() -> dict[str, bpy.types.Material]:
     mats["ceramic"] = Mat("ceramic").set(base=srgb("#E3DACA"), rough=0.22, spec=0.6).mat
     mats["placeholder"] = Mat("placeholder").set(base=srgb("#8A8378"), rough=0.6).mat
 
-    m = Mat("rug")
-    size = TEXTURES["poly_wool_herringbone"][0]
-    wool = m.image(texture_path("poly_wool_herringbone", "diff"), non_color=True, scale=size)
-    ramp = m.node("ShaderNodeValToRGB", (-400, 0))
-    m.link(wool.outputs["Color"], ramp.inputs["Fac"])
-    ramp.color_ramp.elements[0].color = srgb("#2C1612")
-    ramp.color_ramp.elements[1].color = srgb("#6A3329")
-    # A plain border band in dust, 9-12 cm in from the rug's edge, from the rug's generated coordinates.
-    coords = m.node("ShaderNodeTexCoord", (-900, -400))
-    sep = m.node("ShaderNodeSeparateXYZ", (-700, -400))
-    m.link(coords.outputs["Generated"], sep.inputs["Vector"])
-    bands = []
-    for axis, length in (("X", 2.1), ("Y", 1.45)):
-        edge = m.node("ShaderNodeMath", (-500, -400), operation="PINGPONG")
-        m.link(sep.outputs[axis], edge.inputs[0])
-        edge.inputs[1].default_value = 0.5
-        dist = m.node("ShaderNodeMath", (-350, -400), operation="MULTIPLY")
-        m.link(edge.outputs["Value"], dist.inputs[0])
-        dist.inputs[1].default_value = length
-        inside = m.node("ShaderNodeMath", (-200, -400), operation="COMPARE")
-        m.link(dist.outputs["Value"], inside.inputs[0])
-        inside.inputs[1].default_value = 0.105
-        inside.inputs[2].default_value = 0.015
-        bands.append(inside)
-    band = m.node("ShaderNodeMath", (-50, -400), operation="MAXIMUM")
-    m.link(bands[0].outputs["Value"], band.inputs[0])
-    m.link(bands[1].outputs["Value"], band.inputs[1])
-    mixed = m.node("ShaderNodeMix", (0, 0), data_type="RGBA", blend_type="MULTIPLY")
-    m.link(band.outputs["Value"], socket(mixed, "Factor", "VALUE"))
-    m.link(ramp.outputs["Color"], socket(mixed, "A", "RGBA"))
-    socket(mixed, "B", "RGBA").default_value = (2.2, 1.9, 1.6, 1)
-    m.link(socket(mixed, "Result", "RGBA", output=True), m.bsdf.inputs["Base Color"])
-    m.set(rough=0.95, sheen=0.4)
-    m.bump(wool.outputs["Color"], strength=0.35, distance=0.002)
-    mats["rug"] = m.mat
+    mats["rug"] = rug_material("rug", (2.5, 1.8), "#2C1612", "#6A3329")
+    mats["rug_corner"] = rug_material("rug_corner", (1.7, 1.25), "#3A2A14", "#8A6A32")
+    mats["rug_runner"] = rug_material("rug_runner", (0.62, 2.35), "#241A16", "#5A3A2C", border=0.06)
 
     m = Mat("crt_glass")
     coords = m.node("ShaderNodeTexCoord", (-900, 0))
@@ -303,6 +311,45 @@ def build_materials() -> dict[str, bpy.types.Material]:
 
     mats["sky"] = sky_material()
     return mats
+
+
+def rug_material(name, size, dark, light, border=0.105) -> bpy.types.Material:
+    """Wool herringbone recoloured between two tones, with a plain border band in dust a little in from the edge
+    (from the rug's generated coordinates, so `size` must match the rug's size in metres)."""
+    m = Mat(name)
+    tile = TEXTURES["poly_wool_herringbone"][0]
+    wool = m.image(texture_path("poly_wool_herringbone", "diff"), non_color=True, scale=tile)
+    ramp = m.node("ShaderNodeValToRGB", (-400, 0))
+    m.link(wool.outputs["Color"], ramp.inputs["Fac"])
+    ramp.color_ramp.elements[0].color = srgb(dark)
+    ramp.color_ramp.elements[1].color = srgb(light)
+    coords = m.node("ShaderNodeTexCoord", (-900, -400))
+    sep = m.node("ShaderNodeSeparateXYZ", (-700, -400))
+    m.link(coords.outputs["Generated"], sep.inputs["Vector"])
+    bands = []
+    for axis, length in (("X", size[0]), ("Y", size[1])):
+        edge = m.node("ShaderNodeMath", (-500, -400), operation="PINGPONG")
+        m.link(sep.outputs[axis], edge.inputs[0])
+        edge.inputs[1].default_value = 0.5
+        dist = m.node("ShaderNodeMath", (-350, -400), operation="MULTIPLY")
+        m.link(edge.outputs["Value"], dist.inputs[0])
+        dist.inputs[1].default_value = length
+        inside = m.node("ShaderNodeMath", (-200, -400), operation="COMPARE")
+        m.link(dist.outputs["Value"], inside.inputs[0])
+        inside.inputs[1].default_value = border
+        inside.inputs[2].default_value = 0.015
+        bands.append(inside)
+    band = m.node("ShaderNodeMath", (-50, -400), operation="MAXIMUM")
+    m.link(bands[0].outputs["Value"], band.inputs[0])
+    m.link(bands[1].outputs["Value"], band.inputs[1])
+    mixed = m.node("ShaderNodeMix", (0, 0), data_type="RGBA", blend_type="MULTIPLY")
+    m.link(band.outputs["Value"], socket(mixed, "Factor", "VALUE"))
+    m.link(ramp.outputs["Color"], socket(mixed, "A", "RGBA"))
+    socket(mixed, "B", "RGBA").default_value = (2.2, 1.9, 1.6, 1)
+    m.link(socket(mixed, "Result", "RGBA", output=True), m.bsdf.inputs["Base Color"])
+    m.set(rough=0.95, sheen=0.4)
+    m.bump(wool.outputs["Color"], strength=0.35, distance=0.002)
+    return m.mat
 
 
 def sky_material() -> bpy.types.Material:
@@ -369,11 +416,13 @@ def place_henry(mats):
 # ---- The room shell ----
 
 def build_shell(mats):
+    """Floor, the back wall (window cut), the left wall (doorway cut), the right return wall, skirting and dado rail
+    along all three, and the ceiling band: the ceiling cut a band's depth from the walls, with a cornice."""
     wall, section, floor, walnut = mats["wall_paint"], mats["section"], mats["floor"], mats["walnut"]
 
     bm = bmesh.new()
-    add_box(bm, (X_RIGHT - X_LEFT + WALL_T, Y_BACK - Y_FRONT + WALL_T, FLOOR_T),
-            ((X_LEFT - WALL_T + X_RIGHT) / 2, (Y_FRONT + Y_BACK + WALL_T) / 2, -FLOOR_T / 2))
+    add_box(bm, (X_RIGHT - X_LEFT + 2 * WALL_T, Y_BACK - Y_FRONT + WALL_T, FLOOR_T),
+            ((X_LEFT + X_RIGHT) / 2, (Y_FRONT + Y_BACK + WALL_T) / 2, -FLOOR_T / 2))
     for f in list(bm.faces):
         if f.normal.z < -0.5:
             bm.faces.remove(f)
@@ -381,41 +430,154 @@ def build_shell(mats):
             f.material_index = 1
     new_object("env_floor", bm, "env", "env", [floor, section])
 
-    # Back wall with the window opening; the outside face and the hidden bottom are removed.
     bm = bmesh.new()
-    add_box(bm, (X_RIGHT - X_LEFT + WALL_T, WALL_T, WALL_H),
-            ((X_LEFT - WALL_T + X_RIGHT) / 2, Y_BACK + WALL_T / 2, WALL_H / 2))
+    add_box(bm, (X_RIGHT - X_LEFT + 2 * WALL_T, WALL_T, WALL_H),
+            ((X_LEFT + X_RIGHT) / 2, Y_BACK + WALL_T / 2, WALL_H / 2))
     back = new_object("env_wall_back", bm, "env", "env", [wall, section])
-    cut_window(back)
+    cut_opening(back, (WIN_X1 - WIN_X0, 1.0, WIN_Z1 - WIN_Z0), ((WIN_X0 + WIN_X1) / 2, Y_BACK, (WIN_Z0 + WIN_Z1) / 2))
     tidy_wall(back, outward=Vector((0, 1, 0)))
 
     bm = bmesh.new()
     add_box(bm, (WALL_T, Y_BACK - Y_FRONT + WALL_T, WALL_H),
             (X_LEFT - WALL_T / 2, (Y_FRONT + Y_BACK + WALL_T) / 2, WALL_H / 2))
     left = new_object("env_wall_left", bm, "env", "env", [wall, section])
+    cut_opening(left, (1.0, DOOR_Y1 - DOOR_Y0, DOOR_H * 2), (X_LEFT, (DOOR_Y0 + DOOR_Y1) / 2, 0.0))
     tidy_wall(left, outward=Vector((-1, 0, 0)))
 
-    # Walnut skirting along both walls, with a rounded top edge.
     bm = bmesh.new()
-    add_box(bm, (X_RIGHT - X_LEFT, 0.016, 0.095), ((X_LEFT + X_RIGHT) / 2, Y_BACK - 0.008, 0.0475), bevel=0.004)
-    add_box(bm, (0.016, Y_BACK - Y_FRONT, 0.095), (X_LEFT + 0.008, (Y_FRONT + Y_BACK) / 2, 0.0475), bevel=0.004)
-    # Dado rail: a small walnut moulding where the lower, deeper paint begins.
-    add_box(bm, (X_RIGHT - X_LEFT, 0.02, 0.04), ((X_LEFT + X_RIGHT) / 2, Y_BACK - 0.01, DADO_Z + 0.01), bevel=0.006)
-    add_box(bm, (0.02, Y_BACK - Y_FRONT, 0.04), (X_LEFT + 0.01, (Y_FRONT + Y_BACK) / 2, DADO_Z + 0.01), bevel=0.006)
+    add_box(bm, (WALL_T, Y_BACK - RETURN_Y + WALL_T, WALL_H),
+            (X_RIGHT + WALL_T / 2, (RETURN_Y + Y_BACK + WALL_T) / 2, WALL_H / 2))
+    right = new_object("env_wall_right", bm, "env", "env", [wall, section])
+    tidy_wall(right, outward=Vector((1, 0, 0)), keep_outward=True)
+
+    # Skirting and the dado rail run along every wall face, broken by the doorway, the window's sill and the kitchen
+    # nook's tiles; runs are (axis, fixed coordinate, inward sign, start, end).
+    skirting = [("x", Y_BACK, -1, X_LEFT, X_RIGHT), ("y", X_LEFT, 1, Y_FRONT, DOOR_Y0), ("y", X_LEFT, 1, DOOR_Y1, Y_BACK),
+                ("y", X_RIGHT, -1, RETURN_Y, Y_BACK)]
+    dado = [("x", Y_BACK, -1, X_LEFT, WIN_X0 - 0.12), ("x", Y_BACK, -1, WIN_X1 + 0.12, X_RIGHT),
+            ("y", X_LEFT, 1, -3.06, DOOR_Y0), ("y", X_LEFT, 1, DOOR_Y1, Y_BACK), ("y", X_RIGHT, -1, RETURN_Y, Y_BACK)]
+    bm = bmesh.new()
+    for runs, depth, height, z0, bevel in ((skirting, 0.016, 0.095, 0.0, 0.004), (dado, 0.02, 0.04, DADO_Z - 0.01, 0.006)):
+        for axis, fixed, inward, a, b in runs:
+            mid = (a + b) / 2
+            if axis == "x":
+                add_box(bm, (b - a, depth, height), (mid, fixed + inward * depth / 2, z0 + height / 2), bevel=bevel)
+            else:
+                add_box(bm, (depth, b - a, height), (fixed + inward * depth / 2, mid, z0 + height / 2), bevel=bevel)
     smooth_by_angle(new_object("env_skirting", bm, "env", "env", [walnut]))
+    build_ceiling_band(mats)
+    build_doorway(mats)
+
+
+def build_ceiling_band(mats):
+    """The ceiling, cut BAND_D from each wall: its underside painted, its cut faces in the section colour, and a
+    stepped cornice where it meets the walls. From below it reads as the room's ceiling edge, so the walls no longer
+    end in a bare line."""
+    ceiling = Mat("ceiling_paint").set(base=srgb("#C9BFAE"), rough=0.9).mat
+    z0 = WALL_H - BAND_T
+    bm = bmesh.new()
+    strips = [((X_RIGHT - X_LEFT, BAND_D), ((X_LEFT + X_RIGHT) / 2, Y_BACK - BAND_D / 2)),
+              ((BAND_D, Y_BACK - BAND_D - Y_FRONT), (X_LEFT + BAND_D / 2, (Y_FRONT + Y_BACK - BAND_D) / 2)),
+              ((BAND_D, Y_BACK - BAND_D - RETURN_Y), (X_RIGHT - BAND_D / 2, (RETURN_Y + Y_BACK - BAND_D) / 2))]
+    for (sx, sy), (cx, cy) in strips:
+        add_box(bm, (sx, sy, BAND_T), (cx, cy, z0 + BAND_T / 2))
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    for f in bm.faces:
+        f.material_index = 0 if f.normal.z < -0.9 else 1
+    smooth_by_angle(new_object("env_ceiling", bm, "env", "env", [ceiling, mats["section"]]), 30)
+
+    cream = mats["cream_paint"]
+    bm = bmesh.new()
+    for depth, height in ((0.035, 0.07), (0.07, 0.03)):
+        zc = z0 - height / 2 - (0.0 if depth > 0.05 else 0.03)
+        add_box(bm, (X_RIGHT - X_LEFT, depth, height), ((X_LEFT + X_RIGHT) / 2, Y_BACK - depth / 2, zc), bevel=0.004)
+        add_box(bm, (depth, Y_BACK - Y_FRONT, height), (X_LEFT + depth / 2, (Y_FRONT + Y_BACK) / 2, zc), bevel=0.004)
+        add_box(bm, (depth, Y_BACK - RETURN_Y, height), (X_RIGHT - depth / 2, (RETURN_Y + Y_BACK) / 2, zc), bevel=0.004)
+    smooth_by_angle(new_object("env_cornice", bm, "env", "env", [cream]), 40)
+
+
+HALL_X = X_LEFT - WALL_T - 1.15  # the hallway's far wall
+HALL_Y0, HALL_Y1, HALL_H = -1.75, 1.10, 2.45
+HALL_SCONCE_Y = (DOOR_Y0 + DOOR_Y1) / 2 - 0.08
+
+
+def build_doorway(mats):
+    """The doorway in the left wall: walnut architrave, a cream panelled door swung open into the hallway, and the
+    hallway itself (warm plaster, the floor running on, a runner) lit by a sconce, so the room opens onto a space
+    beyond it."""
+    walnut = mats["walnut"]
+    hall_paint = Mat("hall_paint").set(base=srgb("#B9A88C"), rough=0.88).mat
+    bm = bmesh.new()
+    a, t = 0.075, 0.022
+    for y in (DOOR_Y0 - a / 2, DOOR_Y1 + a / 2):
+        add_box(bm, (t, a, DOOR_H + a), (X_LEFT + t / 2, y, (DOOR_H + a) / 2), bevel=0.005)
+    add_box(bm, (t, DOOR_Y1 - DOOR_Y0 + 2 * a, a), (X_LEFT + t / 2, (DOOR_Y0 + DOOR_Y1) / 2, DOOR_H + a / 2), bevel=0.005)
+    smooth_by_angle(new_object("env_door_frame", bm, "env", "env", [walnut]), 40)
+
+    xb = X_LEFT - WALL_T
+    bm = bmesh.new()
+    add_box(bm, (xb - HALL_X, HALL_Y1 - HALL_Y0, 0.02), ((xb + HALL_X) / 2, (HALL_Y0 + HALL_Y1) / 2, -0.01))
+    for f in [f for f in bm.faces if f.normal.z < 0.9]:
+        bm.faces.remove(f)
+    new_object("env_hall_floor", bm, "env", "env", [mats["floor"]])
+    bm = bmesh.new()
+    for size, centre, normal in (
+            ((0.02, HALL_Y1 - HALL_Y0, HALL_H), (HALL_X - 0.01, (HALL_Y0 + HALL_Y1) / 2, HALL_H / 2), (1, 0, 0)),
+            ((xb - HALL_X, 0.02, HALL_H), ((xb + HALL_X) / 2, HALL_Y1 + 0.01, HALL_H / 2), (0, -1, 0)),
+            ((xb - HALL_X, 0.02, HALL_H), ((xb + HALL_X) / 2, HALL_Y0 - 0.01, HALL_H / 2), (0, 1, 0)),
+            ((xb - HALL_X, HALL_Y1 - HALL_Y0, 0.02), ((xb + HALL_X) / 2, (HALL_Y0 + HALL_Y1) / 2, HALL_H + 0.01), (0, 0, -1))):
+        before = set(bm.faces)
+        add_box(bm, size, centre)
+        n = Vector(normal)
+        for f in [f for f in bm.faces if f not in before]:
+            if f.normal.dot(n) < 0.9:
+                bm.faces.remove(f)
+    new_object("env_hall", bm, "env", "env", [hall_paint])
+    # Skirting along the far wall and a wool runner down the hall.
+    bm = bmesh.new()
+    add_box(bm, (0.016, HALL_Y1 - HALL_Y0, 0.095), (HALL_X + 0.008, (HALL_Y0 + HALL_Y1) / 2, 0.0475), bevel=0.003)
+    new_object("env_hall_trim", bm, "env", "env", [walnut])
+    bm = bmesh.new()
+    add_box(bm, (0.62, HALL_Y1 - HALL_Y0 - 0.5, 0.008), ((xb + HALL_X) / 2 - 0.02, (HALL_Y0 + HALL_Y1) / 2, 0.004),
+            bevel=0.002)
+    smooth_by_angle(new_object("env_hall_runner", bm, "env", "env", [mats["rug_runner"]]))
+
+    # A brass up-light on the far wall, opposite the doorway.
+    bm = bmesh.new()
+    add_box(bm, (0.012, 0.09, 0.14), (HALL_X + 0.006, HALL_SCONCE_Y, 1.76), bevel=0.003)
+    add_cylinder(bm, 0.06, 0.09, (HALL_X + 0.06, HALL_SCONCE_Y, 1.80), segments=20, radius_top=0.075)
+    smooth_by_angle(new_object("env_hall_sconce", bm, "env", "env", [mats["brass"]]), 50)
+
+    # The door: a cream four-panel leaf hinged on the back jamb, swung about 100 degrees into the hallway.
+    paint = mats["cream_paint"]
+    brass = mats["brass"]
+    w, h, thick = DOOR_Y1 - DOOR_Y0 - 0.006, DOOR_H - 0.01, 0.04
+    bm = bmesh.new()
+    add_box(bm, (thick, w, h), (0, -w / 2, h / 2), bevel=0.003)
+    for zc, hh in ((0.55, 0.78), (1.52, 0.86)):
+        for yc in (-w * 0.27, -w * 0.73):
+            add_box(bm, (thick + 0.008, w * 0.36, hh), (0, yc, zc), bevel=0.012, segments=2)
+    for sx in (-1, 1):
+        add_cylinder(bm, 0.026, 0.012, (sx * (thick / 2 + 0.006), -w + 0.065, 1.0), segments=20, axis="X", mat=1)
+        add_cylinder(bm, 0.018, 0.03, (sx * (thick / 2 + 0.02), -w + 0.065, 1.0), segments=20, axis="X", mat=1)
+    door = new_object("env_door", bm, "env", "env", [paint, brass])
+    smooth_by_angle(door, 40)
+    hinge = Vector((xb - 0.005, DOOR_Y1 - 0.003, 0.004))
+    door.matrix_world = Matrix.Translation(hinge) @ Matrix.Rotation(math.radians(-100), 4, "Z")
 
 
 def build_ghosts(mats):
-    """Camera-invisible ceiling, front and right walls: the room bounces light like a closed room while every
-    camera sees an open cutaway. Ghosts carry no atlas, so they are never baked or exported."""
-    ceiling = Mat("ghost_ceiling").set(base=srgb("#A39B8E"), rough=0.9).mat
+    """Camera-invisible ceiling, front wall and the open stretch of the right side: the room bounces light like a
+    closed room while every camera sees an open cutaway. Ghosts carry no atlas, so they are never baked or exported."""
+    ceiling = Mat("ghost_ceiling").set(base=srgb("#C9BFAE"), rough=0.9).mat
+    z_ceiling = WALL_H - BAND_T
     for name, size, centre, mat in (
         ("ghost_ceiling", (X_RIGHT - X_LEFT + 0.4, Y_BACK - Y_FRONT + 0.4, 0.1),
-         ((X_LEFT + X_RIGHT) / 2, (Y_FRONT + Y_BACK) / 2, WALL_H + 0.05), ceiling),
+         ((X_LEFT + X_RIGHT) / 2, (Y_FRONT + Y_BACK) / 2, z_ceiling + 0.05), ceiling),
         ("ghost_wall_front", (X_RIGHT - X_LEFT + 0.4, WALL_T, WALL_H),
          ((X_LEFT + X_RIGHT) / 2, Y_FRONT - WALL_T / 2 - 0.3, WALL_H / 2), mats["wall_paint"]),
-        ("ghost_wall_right", (WALL_T, Y_BACK - Y_FRONT + 0.4, WALL_H),
-         (X_RIGHT + WALL_T / 2 + 0.3, (Y_FRONT + Y_BACK) / 2, WALL_H / 2), mats["wall_paint"]),
+        ("ghost_wall_right", (WALL_T, RETURN_Y - Y_FRONT + 0.3, WALL_H),
+         (X_RIGHT + WALL_T / 2, (Y_FRONT - 0.3 + RETURN_Y) / 2, WALL_H / 2), mats["wall_paint"]),
     ):
         bm = bmesh.new()
         add_box(bm, size, centre)
@@ -423,12 +585,11 @@ def build_ghosts(mats):
         obj.visible_camera = False
 
 
-def cut_window(wall):
+def cut_opening(wall, size, centre):
     cutter_bm = bmesh.new()
-    add_box(cutter_bm, (WIN_X1 - WIN_X0, 1.0, WIN_Z1 - WIN_Z0),
-            ((WIN_X0 + WIN_X1) / 2, Y_BACK, (WIN_Z0 + WIN_Z1) / 2))
+    add_box(cutter_bm, size, centre)
     cutter = new_object("cutter", cutter_bm, "env", None)
-    mod = wall.modifiers.new("window", "BOOLEAN")
+    mod = wall.modifiers.new("opening", "BOOLEAN")
     mod.operation, mod.solver, mod.object = "DIFFERENCE", "EXACT", cutter
     bpy.context.view_layer.objects.active = wall
     with bpy.context.temp_override(object=wall, active_object=wall):
@@ -436,19 +597,22 @@ def cut_window(wall):
     bpy.data.objects.remove(cutter, do_unlink=True)
 
 
-def tidy_wall(obj, outward: Vector):
-    """Drop faces nobody sees (outside, bottom) and give the cut edges the section material."""
+def tidy_wall(obj, outward: Vector, keep_outward=False):
+    """Drop faces nobody sees (outside, bottom) and give the cut faces (tops, the left wall's open front end) the
+    section material; the right return's front end stays painted, a finished wall end, and its outside face (seen
+    from the loading camera, out to the right) is kept in the section colour."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     for f in list(bm.faces):
         n = f.normal
-        if n.dot(outward) > 0.9 or n.z < -0.9 and f.calc_center_median().z < 0.01:
+        c = f.calc_center_median()
+        is_outside = n.dot(outward) > 0.9
+        if is_outside and not keep_outward or n.z < -0.9 and c.z < 0.01:
             bm.faces.remove(f)
             continue
-        c = f.calc_center_median()
         is_top = n.z > 0.9 and c.z > WALL_H - 0.01
-        is_end = (abs(n.x) > 0.9 and c.x > X_RIGHT - 0.01) or (abs(n.y) > 0.9 and c.y < Y_FRONT + 0.01)
-        f.material_index = 1 if (is_top or is_end) else 0
+        is_end = abs(n.y) > 0.9 and c.y < Y_FRONT + 0.01
+        f.material_index = 1 if (is_top or is_end or is_outside) else 0
     bm.to_mesh(obj.data)
     bm.free()
 
@@ -456,53 +620,52 @@ def tidy_wall(obj, outward: Vector):
 # ---- Window, sill, sky ----
 
 def build_window(mats):
+    """The window, wider and taller than the round-two sash: a painted frame in the reveal, a central mullion (the
+    seam of the view behind it), a transom with upper lights and one glazing bar across each lower casement."""
     paint, walnut = mats["cream_paint"], mats["walnut"]
     bm = bmesh.new()
     depth_mid = Y_BACK + WALL_T * 0.55
     w, h = WIN_X1 - WIN_X0, WIN_Z1 - WIN_Z0
     cx, cz = (WIN_X0 + WIN_X1) / 2, (WIN_Z0 + WIN_Z1) / 2
-    # Architrave on the room face.
-    t, a = 0.022, 0.07
+    t, a = 0.022, 0.08
     add_box(bm, (w + 2 * a, t, a), (cx, Y_BACK - t / 2, WIN_Z1 + a / 2), bevel=0.005)
     for x in (WIN_X0 - a / 2, WIN_X1 + a / 2):
         add_box(bm, (a, t, h), (x, Y_BACK - t / 2, cz), bevel=0.005)
-    # Frame in the reveal, two sashes, glazing bars (2 x 2 panes per sash).
-    f = 0.05
+    f = 0.055
     add_box(bm, (w, 0.06, f), (cx, depth_mid, WIN_Z1 - f / 2), bevel=0.004)
     add_box(bm, (w, 0.06, f), (cx, depth_mid, WIN_Z0 + f / 2), bevel=0.004)
     for x in (WIN_X0 + f / 2, WIN_X1 - f / 2):
         add_box(bm, (f, 0.06, h), (x, depth_mid, cz), bevel=0.004)
-    meet = cz + 0.05
-    add_box(bm, (w - 2 * f, 0.07, 0.045), (cx, depth_mid, meet), bevel=0.004)
+    add_box(bm, (0.06, 0.07, h - 2 * f), (cx, depth_mid, cz), bevel=0.004)
+    transom = WIN_Z1 - 0.40
+    add_box(bm, (w - 2 * f, 0.07, 0.05), (cx, depth_mid, transom), bevel=0.004)
     bar = 0.018
-    for x in (cx,):
-        add_box(bm, (bar, 0.03, h - 2 * f), (x, depth_mid - 0.012, cz), bevel=0.003)
-    for z in ((WIN_Z0 + f + meet) / 2, (meet + WIN_Z1 - f) / 2):
-        add_box(bm, (w - 2 * f, 0.03, bar), (cx, depth_mid - 0.012, z), bevel=0.003)
+    lower_mid = (WIN_Z0 + f + transom - 0.025) / 2
+    for x0, x1 in ((WIN_X0 + f, cx - 0.03), (cx + 0.03, WIN_X1 - f)):
+        add_box(bm, (x1 - x0, 0.03, bar), ((x0 + x1) / 2, depth_mid - 0.012, lower_mid), bevel=0.003)
     frame = new_object("env_window_frame", bm, "env", "env", [paint])
     smooth_by_angle(frame)
 
     build_curtains(mats, cx, w)
 
-    # Interior sill: a walnut board resting on the reveal, 16 cm proud of the wall so the mango pot fits.
+    # Interior sill: a walnut board resting on the reveal, 17 cm proud of the wall so the mango pot fits.
     bm = bmesh.new()
-    sill_front, sill_back = Y_BACK - 0.16, Y_BACK + WALL_T * 0.55
-    add_box(bm, (w + 0.16, sill_back - sill_front, 0.028), (cx, (sill_front + sill_back) / 2, WIN_Z0 - 0.014),
+    sill_front, sill_back = Y_BACK - 0.17, Y_BACK + WALL_T * 0.55
+    add_box(bm, (w + 0.18, sill_back - sill_front, 0.03), (cx, (sill_front + sill_back) / 2, WIN_Z0 - 0.015),
             bevel=0.006)
     smooth_by_angle(new_object("env_window_sill", bm, "env", "env", [walnut]))
 
-    # Sky card: a flat panel 15 cm outside the wall, sized so every framing (from cam_desk low and close to
-    # cam_loading high and far) sees it only through the window, never past the wall's top or open right end.
+    # Sky card: a flat emitter 15 cm outside the wall that lights the room through the window in the room bake;
+    # camera-invisible and without an atlas, so never baked or exported (the view is the window_view_* diorama).
     bm = bmesh.new()
     y = Y_BACK + WALL_T + 0.15
-    quad = [bm.verts.new((x, y, z)) for x, z in ((0.55, 0.6), (2.05, 0.6), (2.05, 2.45), (0.55, 2.45))]
+    quad = [bm.verts.new((x, y, z)) for x, z in ((WIN_X0 - 0.4, WIN_Z0 - 0.3), (WIN_X1 + 0.4, WIN_Z0 - 0.3),
+                                                 (WIN_X1 + 0.4, WIN_Z1 + 0.3), (WIN_X0 - 0.4, WIN_Z1 + 0.3))]
     bm.faces.new(quad)
     bm.normal_update()
     for face in bm.faces:
         if face.normal.y > 0:
             face.normal_flip()
-    # Since round two the view is the window_view_* diorama; the card stays as a camera-invisible emitter that lights
-    # the room through the window in the room bake. It has no atlas, so it is never baked or exported.
     sky = new_object("env_sky", bm, "env", None, [mats["sky"]])
     sky.visible_shadow = False
     sky.visible_camera = False
@@ -513,16 +676,16 @@ def build_curtains(mats, cx, w):
     """A brass rod over the window and two pleated linen panels drawn to the sides."""
     bm = bmesh.new()
     rod_z, rod_y = WIN_Z1 + 0.16, Y_BACK - 0.09
-    add_cylinder(bm, 0.011, w + 0.62, (cx, rod_y, rod_z), segments=16, axis="X")
+    add_cylinder(bm, 0.011, w + 0.66, (cx, rod_y, rod_z), segments=16, axis="X")
     for side in (-1, 1):
-        add_cylinder(bm, 0.02, 0.03, (cx + side * (w / 2 + 0.31), rod_y, rod_z), segments=16, axis="X")
-        add_box(bm, (0.014, 0.09, 0.014), (cx + side * (w / 2 + 0.22), Y_BACK - 0.045, rod_z), mat=0)
+        add_cylinder(bm, 0.02, 0.03, (cx + side * (w / 2 + 0.33), rod_y, rod_z), segments=16, axis="X")
+        add_box(bm, (0.014, 0.09, 0.014), (cx + side * (w / 2 + 0.24), Y_BACK - 0.045, rod_z), mat=0)
     smooth_by_angle(new_object("env_curtain_rod", bm, "env", "env", [mats["brass"]]), 50)
 
     bm = bmesh.new()
     pleats, width, top, bottom = 7, 0.30, rod_z - 0.03, WIN_Z0 - 0.12
     for side in (-1, 1):
-        x_outer = cx + side * (w / 2 + 0.3)
+        x_outer = cx + side * (w / 2 + 0.32)
         cols = pleats * 4 + 1
         grid = []
         for i in range(cols):
@@ -551,14 +714,14 @@ def build_curtains(mats, cx, w):
 def build_radiator(mats):
     paint = mats["cream_paint"]
     bm = bmesh.new()
-    sections, pitch = 11, 0.062
+    sections, pitch = 16, 0.062
     x0 = (WIN_X0 + WIN_X1) / 2 - (sections - 1) * pitch / 2
     y = Y_BACK - 0.075
     for i in range(sections):
         x = x0 + i * pitch
-        add_box(bm, (0.048, 0.075, 0.56), (x, y, 0.42), bevel=0.012, segments=3)
-    add_box(bm, (sections * pitch, 0.04, 0.04), ((WIN_X0 + WIN_X1) / 2, y, 0.68), bevel=0.01)
-    add_box(bm, (sections * pitch, 0.04, 0.04), ((WIN_X0 + WIN_X1) / 2, y, 0.16), bevel=0.01)
+        add_box(bm, (0.048, 0.075, 0.54), (x, y, 0.40), bevel=0.012, segments=3)
+    add_box(bm, (sections * pitch, 0.04, 0.04), ((WIN_X0 + WIN_X1) / 2, y, 0.65), bevel=0.01)
+    add_box(bm, (sections * pitch, 0.04, 0.04), ((WIN_X0 + WIN_X1) / 2, y, 0.15), bevel=0.01)
     for x in (x0, x0 + (sections - 1) * pitch):
         add_box(bm, (0.05, 0.08, 0.13), (x, y, 0.065), bevel=0.01)
     add_cylinder(bm, 0.012, 0.16, (x0 - 0.06, y, 0.08), segments=12)
@@ -581,7 +744,7 @@ def build_shelf(mats):
     return obj
 
 
-PICTURE_LIGHT = Vector((X_LEFT + 0.13, sum(POSTER_Y) / len(POSTER_Y), POSTER_Z + POSTER_SIZE[1] / 2 + 0.16))
+PICTURE_LIGHT = Vector((sum(POSTER_X) / len(POSTER_X), Y_BACK - 0.13, POSTER_Z + POSTER_SIZE[1] / 2 + 0.16))
 SHELF_LIGHT = Vector((-0.36, Y_BACK - 0.12, 1.962))
 
 
@@ -590,11 +753,12 @@ def build_fixtures(mats):
     brass = mats["brass"]
     bm = bmesh.new()
     p = PICTURE_LIGHT
-    add_cylinder(bm, 0.022, 1.6, p, segments=24, axis="Y")
-    add_box(bm, (0.012, 1.58, 0.012), p + Vector((0.01, 0, -0.022)))
-    for dy in (-0.45, 0.45):
-        add_box(bm, (0.13, 0.012, 0.012), Vector((X_LEFT + 0.065, p.y + dy, p.z + 0.03)), bevel=0.003)
-        add_cylinder(bm, 0.03, 0.012, Vector((X_LEFT + 0.006, p.y + dy, p.z + 0.03)), segments=24, axis="X")
+    span = POSTER_X[-1] - POSTER_X[0] + 0.25
+    add_cylinder(bm, 0.022, span, p, segments=24, axis="X")
+    add_box(bm, (span - 0.02, 0.012, 0.012), p + Vector((0, 0.01, -0.022)))
+    for dx in (-span * 0.3, span * 0.3):
+        add_box(bm, (0.012, 0.13, 0.012), Vector((p.x + dx, Y_BACK - 0.065, p.z + 0.03)), bevel=0.003)
+        add_cylinder(bm, 0.03, 0.012, Vector((p.x + dx, Y_BACK - 0.006, p.z + 0.03)), segments=24, axis="Y")
     smooth_by_angle(new_object("env_picture_light", bm, "env", "env", [brass]), 50)
 
     bm = bmesh.new()
@@ -603,9 +767,10 @@ def build_fixtures(mats):
 
 
 def build_side_table(mats):
+    """The projector's walnut side table: a round top, a lower shelf for the film cans, three splayed legs."""
     walnut = mats["walnut"]
     bm = bmesh.new()
-    cx, cy, top = -1.95, -2.08, 0.55
+    cx, cy, top = PROJECTOR_TABLE
     add_cylinder(bm, 0.21, 0.03, (cx, cy, top - 0.015), segments=48)
     add_cylinder(bm, 0.17, 0.022, (cx, cy, 0.20), segments=48)
     for i in range(3):
@@ -621,11 +786,18 @@ def build_side_table(mats):
     smooth_by_angle(new_object("env_side_table", bm, "env", "env", [walnut]), 45)
 
 
+RUGS = {
+    # name: (size, centre, material)
+    "env_rug": ((2.5, 1.8), (-0.15, -0.68), "rug"),
+    "env_rug_corner": ((1.7, 1.25), (2.15, -1.62), "rug_corner"),
+}
+
+
 def build_rug(mats):
-    bm = bmesh.new()
-    add_box(bm, (2.1, 1.45, 0.008), (-0.15, -0.55, 0.004), bevel=0.003)
-    rug = new_object("env_rug", bm, "env", "env", [mats["rug"]])
-    smooth_by_angle(rug)
+    for name, (size, (x, y), mat) in RUGS.items():
+        bm = bmesh.new()
+        add_box(bm, (size[0], size[1], 0.008), (x, y, 0.004), bevel=0.003)
+        smooth_by_angle(new_object(name, bm, "env", "env", [mats[mat]]))
 
 
 # ---- Desk lamp ----
@@ -895,14 +1067,15 @@ def poster_art_material(slot: int, template: bpy.types.Material | None) -> bpy.t
 
 
 def build_posters(mats):
-    """Four framed posters on the left wall, facing +X. The frames are baked; each picture is its own mesh,
-    poster_art_<slot> (slot 0 is the leftmost seen from the room), which the site textures at runtime."""
+    """Four framed posters on the back wall left of the desk, facing the room (-Y). The frames are baked; each
+    picture is its own mesh, poster_art_<slot> (slot 0 is the leftmost seen from the room), which the site textures
+    at runtime."""
     frame_materials = None
-    order = sorted(POSTER_Y)
-    for poster_id, y in zip(POSTER_IDS, POSTER_Y):
-        slot = order.index(y)
-        # The frame's front is -Y; a +90 degree turn about Z points it at the room (+X).
-        root = Matrix.Translation((X_LEFT, y, POSTER_Z - 0.319)) @ Matrix.Rotation(math.pi / 2, 4, "Z")
+    order = sorted(POSTER_X)
+    for poster_id, x in zip(POSTER_IDS, POSTER_X):
+        slot = order.index(x)
+        # The frame's front is -Y already: the room, seen from the back wall.
+        root = Matrix.Translation((x, Y_BACK, POSTER_Z - 0.319))
         meshes, _ = place_one("poster_frame", root, "props", "props", mats)
         for obj in meshes:
             base = obj.name.split(".")[0]
@@ -914,7 +1087,7 @@ def build_posters(mats):
                 obj.data = obj.data.copy()
                 obj.data.materials[0] = poster_art_material(slot, obj.data.materials[0])
                 # The print sits 0.3 mm off the backing board, which z-fights in the browser from afar.
-                obj.matrix_world = Matrix.Translation((0.002, 0, 0)) @ obj.matrix_world
+                obj.matrix_world = Matrix.Translation((0, -0.002, 0)) @ obj.matrix_world
                 obj["runtime_art"] = "poster"
                 w, h = POSTER_SIZE
                 obj["width_m"], obj["height_m"] = w, h
@@ -936,51 +1109,18 @@ def drop_faces_behind_print(frame):
     bm.from_mesh(frame.data)
     world = frame.matrix_world
     normal_matrix = world.to_3x3().inverted().transposed()
-    hidden = [f for f in bm.faces if (normal_matrix @ f.normal).normalized().x > 0.95
+    hidden = [f for f in bm.faces if (normal_matrix @ f.normal).normalized().y < -0.95
               and frame.data.materials[f.material_index].name.startswith("hardboard")]
     bmesh.ops.delete(bm, geom=hidden, context="FACES")
     bm.to_mesh(frame.data)
     bm.free()
 
 
-def screen_frame(anchors):
-    """The projector screen's picture area in the screen's own frame: (root matrix, centre, width, height)."""
-    root = anchors["projector_screen"]["root"]
-    surface = bpy.data.objects.get("props_projector_screen_surface")
-    if surface is not None:
-        to_root = root.inverted() @ surface.matrix_world
-        pts = [to_root @ v.co for v in surface.data.vertices]
-        lo = Vector([min(p[i] for p in pts) for i in range(3)])
-        hi = Vector([max(p[i] for p in pts) for i in range(3)])
-        centre = Vector(((lo.x + hi.x) / 2, lo.y - 0.003, (lo.z + hi.z) / 2))
-        return root, centre, hi.x - lo.x, hi.z - lo.z
-    _, _, size = PROPS["projector_screen"]
-    return root, Vector((0, -size[1] / 2 - 0.004, 1.2)), 0.8, 0.8
-
-
-def build_projection(mats, anchors):
-    """The lit picture on the projector screen: a 4:3 cool rectangle just in front of the screen surface."""
-    root, centre, sw, sh = screen_frame(anchors)
-    w = min(sw * 0.72, sh * 0.72 * 4 / 3)
-    h = w * 3 / 4
-    bm = bmesh.new()
-    uv = bm.loops.layers.uv.new("UVMap")
-    corners = [(-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2)]
-    face = bm.faces.new([bm.verts.new(centre + Vector((cx, 0, cz))) for cx, cz in corners])
-    for loop, coord in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
-        loop[uv].uv = coord
-    obj = new_object("props_projection", bm, "props", "props", [mats["projection"]])
-    obj.matrix_world = root
-    return root @ centre, (w, h)
-
-
 # ---- Proxies, markers, cameras ----
 
+# The shelf cameras have no hotspot (round 7: there, not featured); the camera on the desk keeps its own.
 HOTSPOTS = {
     "hit_fujifilm_a": "fujifilm_x100",
-    "hit_fujifilm_b": "fujifilm_xt",
-    "hit_fujifilm_c": "fujica_st",
-    "hit_super8": "super8_camera",
     "hit_projector": "projector_8mm",
     "hit_nas": "nas_4bay",
     "hit_mango": "mango_plant",
@@ -1012,24 +1152,24 @@ def build_proxies(placed, dressing, mats):
         objs = [o for o in bpy.data.objects if o.get("poster") == poster_id]
         hit = add_proxy(f"hit_poster_{poster_id}", *world_bounds(objs), mats, pad=0.01)
         hit["poster_slot"] = objs[0]["poster_slot"]
-    for hit, prop in (("hit_lava_lamp", "lava_lamp"), ("hit_espresso", "espresso_machine"), ("hit_oven", "countertop_oven")):
-        add_proxy(hit, *world_bounds(placed[prop]), mats)
-    # The fan's proxy covers the whole disc its blades sweep.
-    blades = bpy.data.objects["ceiling_fan_blades"]
-    hub = blades.matrix_world.translation
-    lo, hi = world_bounds(placed["ceiling_fan"])
-    reach = max((blades.matrix_world @ v.co - hub).to_2d().length for v in blades.data.vertices)
-    add_proxy("hit_fan", Vector((hub.x - reach, hub.y - reach, lo.z)), Vector((hub.x + reach, hub.y + reach, hi.z)),
-              mats, pad=0.0)
+    add_proxy("hit_lava_lamp", *world_bounds(placed["lava_lamp"]), mats)
+    machine = [o for o in placed["espresso_machine"] if o.name in ("espresso_machine", "espresso_cup")]
+    add_proxy("hit_espresso", *world_bounds(machine), mats)
+    oven = [o for o in placed["countertop_oven"] if o.name in ("countertop_oven", "oven_door")]
+    add_proxy("hit_oven", *world_bounds(oven), mats)
+    add_proxy("hit_croissant", *world_bounds([bpy.data.objects["croissant"]]), mats, pad=0.008)
     add_proxy("hit_window", Vector((WIN_X0, Y_BACK - 0.02, WIN_Z0)), Vector((WIN_X1, Y_BACK + WALL_T, WIN_Z1)), mats,
               pad=0.0)
-    screen = [o for o in placed["projector_screen"] if o.name == "props_projector_screen_surface"]
-    add_proxy("hit_projector_screen", *world_bounds(screen + [bpy.data.objects["props_projection"]]), mats, pad=0.01)
     add_proxy("hit_plaque", *world_bounds([dressing["plaque"]]), mats, pad=0.01)
     add_proxy("hit_photo_wall", *world_bounds(dressing["frames"]), mats, pad=0.01)
     add_proxy("hit_album", *world_bounds([dressing["album"]]), mats, pad=0.015)
     dial = [dressing["dial"], bpy.data.objects["props_projector_dial_plate"]]
     add_proxy("hit_projector_dial", *world_bounds(dial), mats, pad=0.02)
+    add_proxy("hit_books", *world_bounds([dressing["bookshelf"], *dressing["books"]]), mats, pad=0.01)
+    add_proxy("hit_voyager", *world_bounds([dressing["voyager_record"]]), mats, pad=0.01)
+    add_proxy("hit_pale_blue_dot", *world_bounds([dressing["pale_blue_dot_frame"]]), mats, pad=0.01)
+    add_proxy("hit_print_japanese_lit", *world_bounds([dressing["print_japanese_lit"]]), mats, pad=0.01)
+    add_proxy("hit_pennant_gatech", *world_bounds([dressing["pennant"]]), mats, pad=0.015)
 
 
 def add_empty(name, location, rotation=None, coll="markers", **props):
@@ -1045,25 +1185,24 @@ def add_empty(name, location, rotation=None, coll="markers", **props):
     return empty
 
 
-def build_markers(placed, anchors, screen_centre):
+def build_markers(placed, anchors, dressing):
+    """Empties the site reads: the projector's lens and the centre of its picture on the wall, the lava lamp's light,
+    the espresso machine's spout and steam, the album's open spread, and every camera framing."""
     # Projector: glTF -Z along the beam is Blender local +Y (the exporter converts Z-up to Y-up).
     bpy.context.view_layer.update()
+    surface = dressing["projection"]
+    screen_centre = surface.matrix_world @ (sum((v.co for v in surface.data.vertices), Vector()) / len(surface.data.vertices))
     lens = anchors["projector_8mm"].get("projector_lens")
     if lens is None:
         lo, hi = world_bounds(placed["projector_8mm"])
-        lens = Vector(((lo.x + hi.x) / 2, hi.y + 0.005, lo.z + (hi.z - lo.z) * 0.55))
+        lens = Vector((lo.x - 0.005, (lo.y + hi.y) / 2, lo.z + (hi.z - lo.z) * 0.55))
     beam = (screen_centre - lens).normalized()
     add_empty("projector_lens", lens, beam.to_track_quat("Y", "Z"))
     add_empty("projector_screen_center", screen_centre)
     add_empty("lava_lamp_light", anchors["lava_lamp"]["lava_lamp_light"])
+    add_empty("espresso_spout", anchors["espresso_machine"]["espresso_spout"])
     add_empty("espresso_steam", anchors["espresso_machine"]["espresso_steam"])
-    cameras = dict(CAMERAS)
-    # Square-on to the screen: back along the screen's normal (its prop faces -Y) at the picture's height.
-    normal = (anchors["projector_screen"]["root"].to_3x3() @ Vector((0, -1, 0))).normalized()
-    normal.z = 0
-    cameras["cam_projector"] = (tuple(screen_centre + normal.normalized() * PROJECTOR_CAM_DISTANCE),
-                                tuple(screen_centre))
-    for name, (pos, target) in cameras.items():
+    for name, (pos, target) in CAMERAS.items():
         add_empty(name, pos, coll="cameras", fov_deg=CAMERA_FOV_DEG)
         add_empty(f"{name}_target", target, coll="cameras")
     # Where the opened album floats: 0.55 m in front of cam_desk, facing it (local +Z toward the camera, like
@@ -1071,7 +1210,8 @@ def build_markers(placed, anchors, screen_centre):
     eye, target = Vector(CAMERAS["cam_desk"][0]), Vector(CAMERAS["cam_desk"][1])
     view = (target - eye).normalized()
     add_empty("album_open_anchor", eye + view * 0.55, (-view).to_track_quat("Z", "Y"), width_m=0.46, height_m=0.31)
-    return lens, beam
+    picture = (surface["width_m"], surface["height_m"])
+    return lens, beam, screen_centre, picture
 
 
 # ---- Lights, world, render settings ----
@@ -1112,8 +1252,9 @@ def build_lights(lens, beam, picture, screen_centre, mats):
 
     # The shelf light's narrow spread keeps it on the lower shelf; wider, it spilled past the shelf's front edge
     # and flooded the desk, flattening the lamp's pool.
+    span = POSTER_X[-1] - POSTER_X[0] + 0.25
     for name, loc, size, tilt, energy, spread in (
-        ("picture_light", PICTURE_LIGHT + Vector((0, 0, -0.03)), (0.04, 1.55), Euler((0, math.radians(-38), 0)), 28.0,
+        ("picture_light", PICTURE_LIGHT + Vector((0, 0, -0.03)), (span, 0.04), Euler((math.radians(38), 0, 0)), 30.0,
          120),
         ("shelf_light", SHELF_LIGHT + Vector((0, 0, -0.014)), (1.05, 0.02), Euler((0, 0, 0)), 7.0, 70),
     ):
@@ -1131,7 +1272,7 @@ def build_lights(lens, beam, picture, screen_centre, mats):
     win = bpy.data.lights.new("window_dusk", "AREA")
     win.shape, win.size, win.size_y = "RECTANGLE", WIN_X1 - WIN_X0, WIN_Z1 - WIN_Z0
     win.color = (0.78, 0.62, 0.72)
-    win.energy = 25.0
+    win.energy = 25.0 * (WIN_X1 - WIN_X0) * (WIN_Z1 - WIN_Z0) / 1.08  # same radiance as the round-two window
     win.spread = math.radians(110)
     obj = bpy.data.objects.new("light_window", win)
     obj.location = ((WIN_X0 + WIN_X1) / 2, Y_BACK + WALL_T + 0.01, (WIN_Z0 + WIN_Z1) / 2)
@@ -1139,8 +1280,8 @@ def build_lights(lens, beam, picture, screen_centre, mats):
     lights.objects.link(obj)
 
 
-def build_round2_lights(dressing):
-    """The lights that came with the round-two props, each with its source in the room."""
+def build_practical_lights(dressing):
+    """The lights that come with the room's things, each with its source in view or just out of it."""
     lights = collection("lights")
 
     def add(name, kind, loc, color, energy, size=0.02, rot=None, **extra):
@@ -1152,6 +1293,9 @@ def build_round2_lights(dressing):
             data.spread = math.radians(extra.get("spread", 120))
         else:
             data.shadow_soft_size = size
+        if kind == "SPOT":
+            data.spot_size = math.radians(extra.get("cone", 80))
+            data.spot_blend = extra.get("blend", 0.6)
         obj = bpy.data.objects.new(f"light_{name}", data)
         obj.location = loc
         if rot is not None:
@@ -1160,28 +1304,28 @@ def build_round2_lights(dressing):
         lights.objects.link(obj)
         return obj
 
-    # Lava lamp: a warm red-orange glow from the liquid washes the lower posters, the plaque and the sideboard.
+    down = Vector((0, 0, -1)).to_track_quat("-Z", "Y")
+    # Lava lamp: alone on the credenza, its red-orange glow washes up the posters and the plaque.
     lava = bpy.data.objects["lava_lamp_light"].location
-    add("lava_lamp", "POINT", lava + Vector((0.03, 0, 0)), (1.0, 0.32, 0.10), 9.0, size=0.045)
-    # Oven: the elements' glow spills from the door window onto the sideboard top.
+    add("lava_lamp", "POINT", lava + Vector((0, -0.03, 0)), (1.0, 0.32, 0.10), 11.0, size=0.045)
+    # Oven: the elements' glow spills from the door window onto the counter.
     oven = bpy.data.objects["oven_glow"]
     lo, hi = world_bounds([oven])
     add("oven_glow", "POINT", Vector((hi.x + 0.04, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2)), (1.0, 0.42, 0.12), 2.5,
         size=0.05)
-    # Darkroom safelight beside the prints, and a small picture lamp over them.
-    safelight = bpy.data.objects["props_safelight"]
-    lo, hi = world_bounds([safelight])
-    add("safelight", "AREA", Vector(((lo.x + hi.x) / 2, lo.y - 0.004, (lo.z + hi.z) / 2 + 0.05)),
-        (1.0, 0.06, 0.02), 2.2, size=(0.10, 0.12), rot=Vector((0, -1, 0)).to_track_quat("-Z", "Y"), spread=150)
+    # Picture lamp over the photo wall.
     p = dressing["photo_light"]
-    aim = Vector((p.x, Y_BACK, p.z - 0.35)) - p
-    add("photo_light", "AREA", p + Vector((0, 0.0, -0.022)), (1.0, 0.62, 0.32), 16.0, size=(0.60, 0.03),
+    aim = Vector((X_LEFT, p.y, p.z - 0.35)) - p
+    add("photo_light", "AREA", p + Vector((0.0, 0.0, -0.022)), (1.0, 0.62, 0.32), 14.0, size=(0.66, 0.03),
         rot=aim.normalized().to_track_quat("-Z", "Y"), spread=110)
-    # Paper lantern in the reading corner: a warm bulb inside the globe, pooling on the floor and the chair.
-    add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 9.0, size=0.12)
-    # Fairy lights along the top shelf: a long faint strip under the string, so the books catch their glow.
-    add("fairy_lights", "AREA", Vector((-0.36, 0.165, 1.975)), (1.0, 0.62, 0.30), 6.0, size=(1.25, 0.03),
-        rot=Vector((0, 0.55, -1)).normalized().to_track_quat("-Z", "Y"), spread=160)
+    # Paper lantern in the reading corner: a warm bulb inside the globe, pooling on the rug and the chair.
+    add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 10.0, size=0.12)
+    # Kitchen pendant: a warm cone onto the counter, and the bulb's glow inside the shade.
+    pendant = dressing["pendant"]
+    add("pendant", "SPOT", pendant, (1.0, 0.56, 0.24), 55.0, size=0.04, rot=down, cone=95, blend=0.7)
+    add("pendant_glow", "POINT", pendant + Vector((0, 0, 0.02)), (1.0, 0.56, 0.24), 3.0, size=0.03)
+    # Hallway sconce on the far wall, seen through the door: the hall glows warm beyond the room.
+    add("hall_sconce", "POINT", Vector((HALL_X + 0.09, HALL_SCONCE_Y, 1.80)), (1.0, 0.55, 0.22), 14.0, size=0.05)
 
 
 def setup_world_and_render():
@@ -1232,8 +1376,7 @@ def aim_camera(name: str):
 DECIMATE = {
     "props_fujifilm_xt": 0.4, "props_fujifilm_x100": 0.4, "props_fujica_st": 0.4, "props_super8_camera": 0.4,
     "props_projector_8mm": 0.3, "props_projector_8mm_reel_front": 0.4, "props_projector_8mm_reel_rear": 0.4,
-    "props_projector_screen": 0.35, "props_nas_4bay": 0.5, "espresso_machine": 0.55, "ceiling_fan": 0.5,
-    "ceiling_fan_blades": 0.55, "countertop_oven": 0.7, "props_alarm_clock": 0.45,
+    "props_nas_4bay": 0.5, "espresso_machine": 0.6, "countertop_oven": 0.75, "props_alarm_clock": 0.45,
     "props_haworthia": 0.5, "props_vase": 0.5, "props_tea_tin": 0.6, "props_lota": 0.6, "props_pen_cup": 0.7,
     "props_books_stack": 0.7, "props_film_canister_b": 0.6, "lava_lamp": 0.7, "desk_keyboard": 0.7,
     "env_radiator": 0.6, "props_mango_plant": 0.6,
@@ -1270,22 +1413,29 @@ def reduce_geometry():
             bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
-# Share of its atlas per object relative to its surface area (1 = by area): the poster type, the city view and
-# the CRT get more texels, the large dark walls fewer.
+# Share of its atlas per object relative to its surface area (1 = by area): type, the view, the CRT and the
+# things the tour stops at get more texels; the large walls, the ceiling band and the hallway fewer. Objects that
+# set their own "texel" (the six books, the Voyager record, the prints, the pennant) keep it.
 TEXEL_WEIGHTS = {
-    "env_wall_back": 0.6, "env_wall_left": 0.6, "env_floor": 0.7, "env_rug": 0.8, "env_curtains": 0.8,
-    "env_window_frame": 1.3, "env_sideboard": 1.1,
-    "poster_plaque": 6.0, "desk_notebook": 2.2, "desk_sticky_notes": 1.6, "photo_album": 1.4,
-    "props_books_top": 1.3, "props_books_low": 1.3, "props_records": 0.9, "props_fairy_lights": 1.5,
-    "props_jacket": 0.9, "props_lounge_chair": 0.8, "props_lantern": 0.9, "props_floor_books": 1.0,
-    "espresso_machine": 1.4, "countertop_oven": 1.4, "lava_lamp": 1.4, "lava_lamp_glass": 1.8, "oven_glow": 1.6,
-    "ceiling_fan": 0.8, "ceiling_fan_blades": 0.7, "projector_dial": 2.0, "props_projector_dial_plate": 2.0,
+    "env_wall_back": 0.55, "env_wall_left": 0.55, "env_wall_right": 0.5, "env_floor": 0.6, "env_ceiling": 0.3,
+    "env_cornice": 0.45, "env_hall": 0.22, "env_hall_floor": 0.25, "env_hall_runner": 0.3, "env_hall_trim": 0.3,
+    "env_hall_sconce": 0.6, "env_door": 0.45, "env_door_frame": 0.8, "env_rug": 0.7, "env_rug_corner": 0.7,
+    "env_curtains": 0.8, "env_window_frame": 1.3, "env_credenza": 1.0, "kitchen_counter": 1.1, "env_kitchen_top": 1.2,
+    "env_kitchen_tiles": 1.3, "env_kitchen_shelf": 1.0, "env_reading_table": 1.0, "env_side_table": 0.9,
+    "poster_plaque": 6.0, "desk_notebook": 2.2, "photo_album": 1.4,
+    "props_books_top": 1.3, "props_books_low": 1.3, "props_records": 0.9, "bookshelf": 1.0,
+    "props_bookcase_books": 1.2, "props_bookend": 1.2, "props_kitchen_jars": 1.4, "props_kitchen_pendant": 1.2,
+    "props_chopping_board": 1.0, "props_jacket": 0.9, "props_lounge_chair": 0.8, "props_lantern": 0.9,
+    "props_reading_mug": 1.4, "props_floor_books": 1.0,
+    "espresso_machine": 1.6, "espresso_cup": 2.2, "espresso_coffee": 1.0, "countertop_oven": 1.6, "oven_door": 1.8,
+    "croissant": 3.0, "lava_lamp": 1.6, "lava_lamp_glass": 1.8, "oven_glow": 1.6,
+    "projector_dial": 2.0, "props_projector_dial_plate": 2.0,
     "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_crt": 1.6, "crt_glow": 2.0, "desk_keyboard": 1.6,
-    "desk_computer": 1.3, "desk_lamp_shade": 1.3,
-    "props_projector_screen": 0.6, "props_projector_screen_surface": 0.8, "props_projection": 0.3,
-    "props_mango_plant_leaves": 1.4,
+    "desk_computer": 1.3, "desk_lamp_shade": 1.3, "props_mango_plant_leaves": 1.4,
 }
-SUPPORT_Z = (0.0, 0.732, 0.55, 0.76, 0.92, 0.987, 1.6475, 2.0075)
+# Heights things rest on (their bottoms there are hidden): floor, desk, side and reading tables, credenza, sill,
+# counter, desk shelf, kitchen shelf, bookcase levels.
+SUPPORT_Z = (0.0, 0.732, 0.55, 0.52, 0.60, 0.86, 0.90, 1.6475, 2.0075, 1.646, 0.075, 0.415, 0.755, 1.06)
 
 
 def tune_atlas_objects():
@@ -1308,7 +1458,8 @@ def tune_atlas_objects():
             weight = 1.6
         if weight is not None:
             obj["texel"] = weight
-        if name in ("lamp_bulb", "crt_glow", "lava_lamp_glass", "oven_glow") or name.startswith("nas_led_"):
+        if name in ("lamp_bulb", "crt_glow", "lava_lamp_glass", "oven_glow", "oven_door", "croissant") or \
+                name.startswith("nas_led_"):
             continue
         bm = bmesh.new()
         bm.from_mesh(obj.data)
@@ -1330,12 +1481,14 @@ def tune_atlas_objects():
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    subprocess.run(["node", str(REPO / "blender" / "scripts" / "room_art.mjs"), str(CACHE / "art")], check=True)
     mats = build_materials()
     place_henry(mats)
     build_shell(mats)
     build_ghosts(mats)
     build_window(mats)
-    window_view.build_window_view()
+    if not QUICK:
+        window_view.build_window_view(CAMERAS)
     build_radiator(mats)
     build_shelf(mats)
     build_fixtures(mats)
@@ -1346,11 +1499,10 @@ def main():
     placed, anchors = place_props(mats)
     build_posters(mats)
     dressing = room_dressing.build_dressing(mats, placed)
-    screen_centre, picture = build_projection(mats, anchors)
     build_proxies(placed, dressing, mats)
-    lens, beam = build_markers(placed, anchors, screen_centre)
+    lens, beam, screen_centre, picture = build_markers(placed, anchors, dressing)
     build_lights(lens, beam, picture, screen_centre, mats)
-    build_round2_lights(dressing)
+    build_practical_lights(dressing)
     tone_room_emitters()
     reduce_geometry()
     tune_atlas_objects()

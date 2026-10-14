@@ -1,8 +1,11 @@
 """espresso_machine: a small home lever espresso machine in the 1960s style, 47 cm to the lever ball, unbranded.
 
 Polished brass boiler with a pressure gauge, a group head with its lever up, a portafilter with a walnut handle,
-a steam wand, a sight glass and a demitasse of coffee on the drip tray. Objects: espresso_machine and the empty
-espresso_steam at the portafilter spouts (where the site starts its steam). Faces -Y, origin at the base.
+a steam wand, a sight glass and a demitasse on its saucer on the drip tray. Objects: espresso_machine; its
+children espresso_cup (the demitasse and saucer, empty) and espresso_coffee (the coffee's surface, at the full level;
+the site lowers it by its extras' fill_depth_m and raises it while it pours); the empty espresso_spout between the
+portafilter's two spouts (where the stream starts, falling along -Z) and the empty espresso_steam just over the
+cup's rim. Faces -Y, origin at the base.
 """
 import math
 import os
@@ -110,20 +113,33 @@ def main():
     b.cylinder(0.006, 0.004, segments=14, loc=(0.072, -0.124, 0.012), rot=(90, 0, 0), mat=jewel)
     b.cylinder(0.0075, 0.003, segments=16, loc=(0.072, -0.1255, 0.012), rot=(90, 0, 0), mat=brass)
 
-    # A demitasse of coffee on its saucer under the spouts.
-    cup = GROUP + Vector((0, 0, 0.040))
-    b.lathe([(0.0, 0.0), (0.040, 0.0), (0.050, 0.004), (0.048, 0.007), (0.020, 0.005), (0.0, 0.005)],
-            segments=40, loc=tuple(cup), mat=porcelain)
-    b.lathe([(0.0, 0.005), (0.016, 0.005), (0.022, 0.012), (0.027, 0.030), (0.029, 0.050), (0.026, 0.050),
-             (0.024, 0.032), (0.019, 0.016), (0.0, 0.014)], segments=36, loc=tuple(cup), mat=porcelain,
-            cap_start=False, cap_end=False)
-    b.cylinder(0.0245, 0.001, segments=36, loc=tuple(cup + Vector((0, 0, 0.040))), mat=coffee)
-    b.torus(0.010, 0.0028, segments=16, sides=6, loc=tuple(cup + Vector((0.034, 0, 0.032))), rot=(90, 0, 0),
-            mat=porcelain, arc=math.radians(230))
-
     machine = b.finish(col, smooth_angle=38)
     machine["source"] = "made for this site"
-    pl.empty("espresso_steam", col, tuple(GROUP + Vector((0, 0, SPOUT_Z))), size=0.03, parent=machine,
+
+    # A demitasse on its saucer under the spouts, its own object so the site can pour into it.
+    cup = GROUP + Vector((0, 0, 0.040))
+    c = pl.Builder("espresso_cup")
+    c.lathe([(0.0, 0.0), (0.040, 0.0), (0.050, 0.004), (0.048, 0.007), (0.020, 0.005), (0.0, 0.005)],
+            segments=40, loc=tuple(cup), mat=porcelain)
+    c.lathe([(0.0, 0.005), (0.016, 0.005), (0.022, 0.012), (0.027, 0.030), (0.029, 0.050), (0.026, 0.050),
+             (0.024, 0.032), (0.019, 0.016), (0.0, 0.014)], segments=36, loc=tuple(cup), mat=porcelain,
+            cap_start=False, cap_end=False)
+    c.torus(0.010, 0.0028, segments=16, sides=6, loc=tuple(cup + Vector((0.034, 0, 0.032))), rot=(90, 0, 0),
+            mat=porcelain, arc=math.radians(230))
+    cup_obj = c.finish(col, smooth_angle=50)
+    cup_obj["source"] = "made for this site"
+    pl.parent_keep_transform(cup_obj, machine)
+    full = cup + Vector((0, 0, 0.040))
+    f = pl.Builder("espresso_coffee")
+    f.cylinder(0.0245, 0.001, segments=36, mat=coffee)
+    coffee_obj = f.finish(col, smooth_angle=50)
+    coffee_obj.location = full
+    coffee_obj["fill_depth_m"] = 0.026  # from the full level down to the cup's floor
+    coffee_obj["source"] = "made for this site"
+    pl.parent_keep_transform(coffee_obj, machine)
+    pl.empty("espresso_spout", col, tuple(GROUP + Vector((0, 0, SPOUT_Z - 0.006))), size=0.03, parent=machine,
+             display="SINGLE_ARROW")
+    pl.empty("espresso_steam", col, tuple(cup + Vector((0, 0, 0.056))), size=0.03, parent=machine,
              display="SINGLE_ARROW")
     pl.report(NAME, col, 15000)
     pl.save_prop(NAME)

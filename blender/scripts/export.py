@@ -3,15 +3,16 @@
     blender -b blender/room.blend -P blender/scripts/export.py               # glb + window textures + stills
     blender -b blender/room.blend -P blender/scripts/export.py -- --no-stills
 
-The glb follows the node contract in the site plan: unlit materials whose base colour is the baked atlas on
-TEXCOORD_0, env_* / desk_* / props_* meshes, invisible hit_* proxies, the runtime meshes (crt_glow, lamp_bulb,
-lava_lamp_glass, oven_glow, nas_led_*) with their own materials, the art meshes (poster_art_*, photo_print_*: art
-UVs on TEXCOORD_0, the baked light on them on TEXCOORD_1), the two halves of the window view (window_view_sf,
-window_view_delhi) whose textures are separate files, pivots for the parts that turn (ceiling_fan_blades,
-projector_dial), and the monitor, projector, camera and anchor empties. gltf-transform then encodes the atlases as
-KTX2 (ETC1S) and the geometry with meshopt; the view's day textures are referenced by URI, so the site loads them
-next to the glb and blends in the night pair by local time. Stills are Cycles renders of the same scene, with the
-view shown from its bakes, composited on the site's ink colour.
+The glb follows the room's node contract (site plan, round 7 section 3): unlit materials whose base colour is the
+baked atlas on TEXCOORD_0, env_* / desk_* / props_* meshes, invisible hit_* proxies, the runtime meshes (crt_glow,
+lamp_bulb, lava_lamp_glass, oven_glow, nas_led_*) with their own materials, the art meshes (poster_art_*,
+photo_print_*, print_pale_blue_dot, projection_surface, sticky_note_*: art UVs on TEXCOORD_0, the baked light on
+them on TEXCOORD_1), the two halves of the window view (window_view_sf, window_view_delhi) whose textures are
+separate files, pivots for the parts that turn (projector_dial, oven_door), and the monitor, projector, espresso,
+camera and anchor empties. gltf-transform then encodes the atlases as KTX2 (ETC1S) and the geometry with meshopt;
+the view's day textures are referenced by URI, so the site loads them next to the glb and blends in the night pair
+by local time. It also writes public/room/floorplan.json (floorplan.py) and pale-blue-dot.ktx2. Stills are Cycles
+renders of the same scene, with the view shown from its bakes, composited on the site's ink colour.
 """
 
 import argparse
@@ -38,21 +39,33 @@ EXPORT_SIZES = {"env": 2560, "desk": 3584, "props": 2944}
 VIEW_ATLASES = {"window_sf": "window_view_sf", "window_delhi": "window_view_delhi"}
 RUNTIME_MESHES = {"crt_glow": "crt_glow", "lamp_bulb": "lamp_bulb", "lava_lamp_glass": "lava_lamp_glass",
                   "oven_glow": "oven_glow"}  # mesh name -> material name
-PIVOTS = ("ceiling_fan_blades", "projector_dial")  # turn about their own local +Y (Blender +Z)
+# Parts that turn: an empty at the object's own origin holds the mesh; the site turns the empty about turn_axis
+# (glTF axes: Blender's local +Z is glTF's +Y; +X stays +X).
+PIVOTS = {
+    "projector_dial": {"turn_axis": "+Y", "program_angles_deg": {"reel": 50, "photographs": 0, "short_films": -50}},
+    "oven_door": {"turn_axis": "+X", "open_angle_deg": 82.0},
+}
 GLTF_TRANSFORM = ["npx", "--yes", "-p", "@gltf-transform/cli@4.5.1", "gltf-transform"]
-MAX_GLB_BYTES = 4_300_000  # PLAN 11.3: glb plus the two day textures keep the initial 3D payload under 6 MB
-MAX_VIEW_DAY_BYTES = 400_000
+MAX_GLB_BYTES = 4_600_000  # glb plus the two day textures keep the initial 3D payload under 6 MB (round 7 budget)
+MAX_VIEW_DAY_BYTES = 560_000
 INK = "0x14110F"
+PALE_DOT_SOURCE = (5230, 5175)  # PIA23645's size; the print crops it square
+PALE_DOT_PX = 1024
 # The stills show San Francisco at dusk and Delhi by day: the view's night share per half.
 STILL_NIGHT = {"window_sf": 0.72, "window_delhi": 0.0}
 STILLS = {
-    # file stem: (camera framing, width, height)
-    "room_idle": ("cam_idle", 1600, 1000),
-    "room_desk": ("cam_desk", 1600, 1000),
-    "room_shelf": ("cam_shelf", 1600, 1000),
-    "room_window": ("cam_window", 1600, 1000),
-    "room_projector": ("cam_projector", 1600, 1000),
-    "room_photos": ("cam_photos", 1600, 1000),
+    # file stem: (camera framing, width, height); the round-two stills (room_*.png) stay beside them for comparison.
+    "room_v3_idle": ("cam_idle", 1600, 1000),
+    "room_v3_desk": ("cam_desk", 1600, 1000),
+    "room_v3_window": ("cam_window", 1600, 1000),
+    "room_v3_kitchen": ("cam_tour_4", 1600, 1000),
+    "room_v3_oven": ("cam_oven", 1600, 1000),
+    "room_v3_shelf": ("cam_shelf", 1600, 1000),
+    "room_v3_space": ("cam_tour_3", 1600, 1000),
+    "room_v3_armchair": ("cam_tour_9", 1600, 1000),
+    "room_v3_projector": ("cam_projector", 1600, 1000),
+    "room_v3_photos": ("cam_photos", 1600, 1000),
+    "room_v3_posters": ("cam_tour_8", 1600, 1000),
 }
 
 
@@ -197,9 +210,9 @@ def prepare_meshes() -> list[bpy.types.Object]:
 
 def add_pivots(meshes):
     """Give each turning part an empty at its own origin that holds the mesh: gltf-transform's quantization moves a
-    mesh node's origin to its bounds' centre, which would put the fan's axis 5 cm off its hub."""
+    mesh node's origin to its bounds' centre, which would put a hinge or an axle off its true axis."""
     pivots = []
-    for name in PIVOTS:
+    for name, extras in PIVOTS.items():
         obj = bpy.data.objects[name]
         world = obj.matrix_world.copy()
         loc, rot, _ = world.decompose()
@@ -207,10 +220,11 @@ def add_pivots(meshes):
         pivot = bpy.data.objects.new(name, None)
         bpy.context.scene.collection.objects.link(pivot)
         pivot.matrix_world = Matrix.LocRotScale(loc, rot, None)
-        pivot["turn_axis"] = "+Y"
-        if name == "projector_dial":
-            # Turn about +Y by these degrees to point the knob at each program's mark (it rests on Photographs).
-            pivot["program_angles_deg"] = {"reel": 50, "photographs": 0, "short_films": -50}
+        for key, value in extras.items():
+            pivot[key] = value
+        for key in ("turn_axis", "open_angle_deg"):
+            if key in obj:
+                del obj[key]
         obj.parent = pivot
         obj.matrix_parent_inverse = Matrix.Identity(4)
         obj.matrix_world = world
@@ -311,36 +325,72 @@ def export_view_textures():
         raise SystemExit(f"export: the day textures are {day:,} bytes, over the {MAX_VIEW_DAY_BYTES:,} budget")
 
 
+def export_pale_blue_dot():
+    """public/room/pale-blue-dot.ktx2: NASA/JPL's Pale Blue Dot Revisited (PIA23645, public domain), cropped square
+    and sized for the print on the space wall; ETC1S with mipmaps, sRGB. The site draws it over the print's light."""
+    src = CACHE / "nasa" / "PIA23645_orig.jpg"
+    if not src.exists():
+        raise SystemExit(f"export: missing {src}; run build_room.py first")
+    square = CACHE / "export" / "pale-blue-dot.png"
+    square.parent.mkdir(parents=True, exist_ok=True)
+    ffmpeg("-i", src, "-vf", f"crop={PALE_DOT_SOURCE[1]}:{PALE_DOT_SOURCE[1]},scale={PALE_DOT_PX}:{PALE_DOT_PX}:flags=lanczos",
+           square)
+    dst = OUT_DIR / "pale-blue-dot.ktx2"
+    run("ktx", "create", "--format", "R8G8B8_SRGB", "--encode", "basis-lz", "--qlevel", "255", "--clevel", "4",
+        "--generate-mipmap", "--threads", "8", square, dst)
+    print(f"export: {dst.name} {dst.stat().st_size:,} bytes ({PALE_DOT_PX} px)")
+
+
+def write_floorplan():
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import floorplan
+    floorplan.main()
+
+
 REQUIRED_NODES = (
-    ["hit_fujifilm_a", "hit_fujifilm_b", "hit_fujifilm_c", "hit_super8", "hit_projector", "hit_nas", "hit_mango"]
+    # PLAN 3.6, less the shelf cameras' proxies (round 7: no hotspot) and the projector screen
+    ["hit_fujifilm_a", "hit_projector", "hit_nas", "hit_mango"]
     + [f"hit_poster_{p}" for p in ("the-odyssey-2026", "la-la-land", "chungking-express", "marty-supreme")]
     + [f"nas_led_{i}" for i in range(4)]
     + ["crt_glow", "lamp_bulb", "monitor_screen", "projector_lens", "projector_screen_center"]
     + [f"{c}{s}" for c in ("cam_loading", "cam_idle", "cam_desk", "cam_monitor", "cam_shelf", "cam_projector",
-                           "cam_window", "cam_photos") for s in ("", "_target")]
-    # PLAN 11.1 (round 2)
-    + ["window_view_sf", "window_view_delhi", "lava_lamp", "lava_lamp_glass", "lava_lamp_light",
-       "ceiling_fan_blades", "espresso_machine", "espresso_steam", "countertop_oven", "oven_glow", "mango_fruit",
-       "poster_plaque", "hit_window", "hit_projector_screen", "hit_lava_lamp", "hit_fan", "hit_espresso", "hit_oven",
-       "hit_plaque"]
+                           "cam_window", "cam_photos", "cam_espresso", "cam_oven", "cam_arrival_0", "cam_arrival_1",
+                           "cam_arrival_2", *(f"cam_tour_{i}" for i in range(10))) for s in ("", "_target")]
+    # PLAN 11.1 and 12.1, less the ceiling fan and the projector screen
+    + ["window_view_sf", "window_view_delhi", "lava_lamp", "lava_lamp_glass", "lava_lamp_light", "espresso_machine",
+       "espresso_steam", "countertop_oven", "oven_glow", "mango_fruit", "poster_plaque", "hit_window", "hit_lava_lamp",
+       "hit_espresso", "hit_oven", "hit_plaque"]
     + [f"poster_art_{i}" for i in range(4)]
-    # PLAN 12.1 (rounds 3-5)
     + [f"photo_print_{i}" for i in range(5)]
     + ["hit_photo_wall", "photo_album", "hit_album", "album_open_anchor", "projector_dial", "hit_projector_dial"]
+    # Round 7 (PLAN-ROUND-7 section 3)
+    + ["kitchen_counter", "espresso_cup", "espresso_coffee", "espresso_spout", "oven_door", "croissant",
+       "hit_croissant", "projection_surface", "bookshelf", "hit_books", "print_japanese_lit", "hit_print_japanese_lit",
+       "pennant_gatech", "hit_pennant_gatech", "voyager_record", "hit_voyager", "print_pale_blue_dot",
+       "hit_pale_blue_dot"]
+    + [f"book_spine_{slug}" for slug in ("the-wind-up-bird-chronicle", "kafka-on-the-shore", "1q84", "kitchen",
+                                         "on-earth-were-briefly-gorgeous", "the-elegant-universe")]
+    + [f"sticky_note_{i}" for i in range(6)]
 )
+# Names the room no longer has (round 7); the export fails if one comes back.
+REMOVED_NODES = ("ceiling_fan", "ceiling_fan_blades", "hit_fan", "hit_projector_screen", "props_projector_screen",
+                 "props_projector_screen_surface", "props_projection", "hit_fujifilm_b", "hit_fujifilm_c", "hit_super8")
 
 
 def check_contract(path: Path):
     gltf, _ = read_glb(path)
     names = {n.get("name") for n in gltf["nodes"]}
     missing = [n for n in REQUIRED_NODES if n not in names]
+    back = [n for n in REMOVED_NODES if n in names]
     used = set(gltf.get("extensionsUsed", []))
     needed = {"KHR_materials_unlit", "KHR_texture_basisu", "EXT_meshopt_compression"}
     embedded = [i for i in gltf.get("images", []) if "bufferView" in i]
     size = path.stat().st_size
-    if missing or not needed <= used or len(embedded) > len(ATLASES) or size > MAX_GLB_BYTES:
-        raise SystemExit(f"export: contract broken: missing={missing} extensions={sorted(used)} "
-                         f"embedded images={len(embedded)} size={size:,} (max {MAX_GLB_BYTES:,})")
+    if missing or back or not needed <= used or len(embedded) > len(ATLASES) or size > MAX_GLB_BYTES:
+        raise SystemExit(f"export: contract broken: missing={missing} removed but present={back} "
+                         f"extensions={sorted(used)} embedded images={len(embedded)} size={size:,} "
+                         f"(max {MAX_GLB_BYTES:,})")
     print(f"export: contract ok ({len(names)} nodes, {len(embedded)} atlases + {len(gltf['images']) - len(embedded)} "
           f"by URI, {sorted(used)}, {size:,} bytes)")
 
@@ -449,7 +499,9 @@ def main():
         render_stills(args.samples, args.threads, set(filter(None, args.only.split(","))))
     if not args.no_glb:
         export_view_textures()
+        export_pale_blue_dot()
         export_glb()
+        write_floorplan()
 
 
 if __name__ == "__main__":
