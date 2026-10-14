@@ -66,13 +66,10 @@ export function useContent<T>(collection: string, slug: string): ContentState<T>
   return result.state === 'ready' ? { state: 'ready', entry: result.value } : result;
 }
 
-/** Link attributes for an href inside the OS: other sites open in a new tab, plain pages replace the whole tab. */
+/** Link attributes for an href inside the OS: links with a window get none (SaahilOS opens it); other sites a new tab. */
 export function linkAttributes(href: string): { target?: string; rel?: string } {
   const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
-  const kind = classifyLink(href, origin).kind;
-  if (kind === 'external') return { target: '_blank', rel: 'noopener' };
-  if (kind === 'top') return { target: '_top' };
-  return {};
+  return classifyLink(href, origin).kind === 'external' ? { target: '_blank', rel: 'noopener' } : {};
 }
 
 // Rendered Markdown links get the same treatment as the OS's own links.

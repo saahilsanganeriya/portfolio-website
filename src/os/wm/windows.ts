@@ -1,4 +1,4 @@
-import { APP_IDS, type AppId, type Route } from '../types';
+import { DESKTOP_APPS, type AppId, type Route } from '../types';
 
 export interface Frame {
   x: number;
@@ -105,11 +105,14 @@ export interface AppWindowSize {
 const SIZES: Record<AppId | 'reader', AppWindowSize> = {
   photography: { width: 860, height: 640 },
   projects: { width: 640, height: 500 },
+  code: { width: 900, height: 640 },
+  browser: { width: 900, height: 640 },
   oven: { width: 560, height: 620 },
   blog: { width: 600, height: 440 },
   reader: { width: 720, height: 580 },
   films: { width: 780, height: 580 },
   books: { width: 640, height: 560 },
+  personal: { width: 520, height: 300 },
   recipes: { width: 720, height: 600 },
   voyager: { width: 720, height: 600 },
   terminal: { width: 760, height: 440 },
@@ -127,7 +130,7 @@ const CASCADE_STEP = 28;
 // Short desktops wrap the icons into more columns; new windows open to the right of all of them.
 function iconGutter(desktopHeight: number): number {
   const rows = Math.max(1, Math.floor((desktopHeight - 2 * ICONS_TOP) / ICON_ROW));
-  return 8 + Math.ceil(APP_IDS.length / rows) * ICON_COLUMN + 8;
+  return 8 + Math.ceil(DESKTOP_APPS.length / rows) * ICON_COLUMN + 8;
 }
 
 /** Where a new window opens: cascading down-right from the icon column, always inside the desktop. */

@@ -1,0 +1,150 @@
+{
+  "owner": "saahilsanganeriya",
+  "fetchedAt": "2026-10-14T05:44:26.332Z",
+  "repos": [
+    {
+      "owner": "saahilsanganeriya",
+      "name": "portfolio-website",
+      "description": "Personal site: a vintage room, SaahilOS, projects and a blog",
+      "language": "TypeScript",
+      "fork": false,
+      "pushedAt": "2026-10-14T05:37:21Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "projectionist",
+      "description": "Home media pipeline for a Synology NAS: renames, notes, subtitles, posters, collections, Plex/Jellyfin sync (Go, Docker)",
+      "language": "Go",
+      "fork": false,
+      "pushedAt": "2026-10-14T05:22:11Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "real_time_streaming",
+      "description": "",
+      "language": "Java",
+      "fork": false,
+      "pushedAt": "2026-10-14T04:03:44Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "saahil-brain",
+      "description": "One memory for coding agents on a laptop and a devbox: prompt hooks, a search index, an hourly dream that files what sessions learned, and an agent mesh (Go, Temporal)",
+      "language": "Go",
+      "fork": false,
+      "pushedAt": "2026-10-13T22:18:58Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "SAMCell",
+      "description": "",
+      "language": "Jupyter Notebook",
+      "fork": true,
+      "pushedAt": "2026-10-12T14:25:31Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "Accident-Risk-Assessor",
+      "description": "",
+      "language": "Jupyter Notebook",
+      "fork": false,
+      "pushedAt": "2026-10-12T07:27:15Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "samcell-napari",
+      "description": "",
+      "language": "Python",
+      "fork": false,
+      "pushedAt": "2026-10-12T03:47:08Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "Scratch-Implementation",
+      "description": "",
+      "language": "Jupyter Notebook",
+      "fork": true,
+      "pushedAt": "2026-10-12T03:44:47Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "context_distillation",
+      "description": "Efficient LLM Context Distillation - CS 7643 Deep Learning Project comparing vanilla vs pattern-based fine-tuning approaches for natural language understanding",
+      "language": "Python",
+      "fork": false,
+      "pushedAt": "2026-10-12T03:40:03Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "DeepFakeDetection",
+      "description": "Code for the paper: CNN-generated images are surprisingly easy to spot... for now https://peterwang512.github.io/CNNDetection/",
+      "language": "Python",
+      "fork": true,
+      "pushedAt": "2026-10-12T03:37:42Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "tideman-voting-algorithm-implementation",
+      "description": "",
+      "language": "C",
+      "fork": false,
+      "pushedAt": "2026-10-12T03:28:45Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "TNMT-Frogger-Android",
+      "description": "",
+      "language": "Java",
+      "fork": false,
+      "pushedAt": "2026-10-12T03:26:40Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "DINOCell",
+      "description": "",
+      "language": "Python",
+      "fork": false,
+      "pushedAt": "2026-10-12T03:25:55Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "Fireball-GBAGame",
+      "description": "",
+      "language": "C",
+      "fork": false,
+      "pushedAt": "2026-10-12T03:19:57Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "GraphML-imts",
+      "description": "",
+      "language": "Jupyter Notebook",
+      "fork": false,
+      "pushedAt": "2026-10-12T03:09:39Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "referral-network",
+      "description": "A cycle-checked referral graph in Python: reach counts, flow centrality, and a referral-bonus growth model",
+      "language": "Python",
+      "fork": false,
+      "pushedAt": "2026-10-12T03:01:03Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "travel-agent-gym",
+      "description": "A Gymnasium RL environment for an AI travel agent: interview a client with hidden preferences, search, plan, book, then survive the trip's disruptions.",
+      "language": "Python",
+      "fork": false,
+      "pushedAt": "2026-10-12T02:53:10Z"
+    },
+    {
+      "owner": "saahilsanganeriya",
+      "name": "swe-sim",
+      "description": "Turns underspecified GitHub issues into graded coding-agent tasks with a simulated stakeholder and hidden tests",
+      "language": "Python",
+      "fork": false,
+      "pushedAt": "2026-10-12T01:31:27Z"
+    }
+  ]
+}

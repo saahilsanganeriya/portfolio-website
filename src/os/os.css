@@ -64,7 +64,7 @@ body.os-moving iframe {
 
 /* ---- Desktop ---- */
 
-/* The wallpaper: a film-look render of the room (src/os/assets/wallpaper/build.mjs). Walnut shows until it loads. */
+/* The wallpaper: Webb's Pillars of Creation (ESA/Webb, CC BY 4.0). Walnut shows until it loads. */
 .os-wallpaper img {
   position: absolute;
   inset: 0;
@@ -83,7 +83,7 @@ body.os-moving iframe {
 
 /* Labels sit on a photograph, so each carries a hard ink drop and a soft ink halo, the way later Windows did. */
 .os-icon-label,
-.os-desktop-hint,
+.os-desktop-foot,
 .os-phonebar {
   text-shadow:
     1px 1px 0 var(--ink),
@@ -146,12 +146,30 @@ body.os-moving iframe {
   color: var(--os-light);
 }
 
-.os-desktop-hint {
+.os-desktop-foot {
   position: absolute;
   right: 16px;
-  bottom: 12px;
-  margin: 0;
+  bottom: 10px;
+  max-width: min(34rem, calc(100% - 120px));
   color: var(--dust);
+  text-align: right;
+}
+
+.os-desktop-foot p {
+  margin: 0;
+}
+
+.os-wallpaper-credit {
+  margin-top: 4px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--paper);
+}
+
+.os-wallpaper-credit a {
+  color: inherit;
+  text-underline-offset: 0.2em;
 }
 
 .os-phonebar {
@@ -928,6 +946,435 @@ body.os-moving iframe {
   margin-top: 0.5em;
 }
 
+/* ---- Code: his repositories, read on paper. Chrome in the OS face, README and docs in the reader type ---- */
+
+.os-code {
+  min-height: 100%;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: auto;
+}
+
+.os-code-head {
+  padding: 14px clamp(12px, 3%, 24px) 0;
+  background: var(--os-face);
+  box-shadow: inset 0 -1px var(--os-shade);
+}
+
+.os-code-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.os-code-title h2 {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.os-code-owner {
+  color: var(--os-muted);
+}
+
+.os-code-head .os-tool {
+  background: var(--os-face);
+  box-shadow: var(--os-raised);
+}
+
+.os-code-description {
+  margin: 6px 0 0;
+  max-width: 46rem;
+}
+
+.os-code-facts {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--os-muted);
+}
+
+/* Win98 property-sheet tabs: the current one is raised and joins the page below. */
+.os-code-tabs {
+  display: flex;
+  gap: 2px;
+  margin-top: 12px;
+}
+
+.os-code-tabs a {
+  padding: 5px 14px 4px;
+  background: var(--os-face);
+  box-shadow:
+    inset 1px 1px var(--os-light),
+    inset -1px 0 var(--os-dark),
+    inset -2px 0 var(--os-shade);
+  color: var(--os-dark);
+  font-family: var(--os-chrome);
+  font-size: 15px;
+  text-decoration: none;
+  -webkit-font-smoothing: none;
+}
+
+.os-code-tabs a[aria-current='page'] {
+  position: relative;
+  top: 1px;
+  padding-bottom: 6px;
+  background: var(--os-light);
+  font-weight: 700;
+}
+
+.os-code-tabs a:focus-visible {
+  outline: 1px dotted var(--os-dark);
+  outline-offset: -4px;
+}
+
+.os-code-body {
+  padding: 16px clamp(12px, 3%, 24px) 28px;
+}
+
+.os-code-body a,
+.os-code-intro a {
+  color: inherit;
+  text-decoration-color: var(--thread);
+  text-underline-offset: 0.2em;
+}
+
+.os-code-intro {
+  padding: 12px 8px 14px;
+}
+
+.os-code-intro h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.os-code-intro p {
+  margin: 4px 0 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+
+.os-code-crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.os-code-crumbs li + li::before {
+  content: '/';
+  padding: 0 6px;
+  color: var(--os-muted);
+}
+
+.os-code-files {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.os-code-files th {
+  padding: 3px 8px;
+  background: var(--os-face);
+  box-shadow: var(--os-raised);
+  font-family: var(--os-chrome);
+  font-size: 15px;
+  text-align: left;
+  -webkit-font-smoothing: none;
+}
+
+.os-code-files th:last-child,
+.os-code-files td:last-child {
+  width: 6.5rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.os-code-files td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--paper);
+}
+
+.os-code-files td:first-child {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
+.os-code-files svg {
+  flex: none;
+}
+
+.os-code-aside {
+  margin: 14px 0 0;
+  font-size: 13.5px;
+  color: var(--os-muted);
+}
+
+.os-code-filelinks {
+  display: flex;
+  gap: 16px;
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.os-code-failure {
+  padding: 12px 14px;
+  background: var(--os-face);
+  box-shadow: var(--os-sunken);
+}
+
+.os-code-failure p {
+  margin: 0;
+}
+
+.os-code-failure p + p {
+  margin-top: 6px;
+}
+
+.os-code-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: repeating-conic-gradient(var(--paper) 0 25%, var(--os-light) 0 50%) 0 0 / 16px 16px;
+  box-shadow: 0 0 0 1px var(--os-shade);
+}
+
+.os-code-image {
+  margin: 0;
+}
+
+/* Source: walnut like the essays' code blocks, numbered lines, colours from the room (each 5:1 or more on walnut). */
+.os-code-text {
+  margin: 0;
+  padding: 10px 0;
+  overflow: auto;
+  max-height: none;
+  background: var(--walnut);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  tab-size: 4;
+  counter-reset: line;
+}
+
+.os-code-text:focus-visible {
+  outline: 1px dotted var(--paper);
+  outline-offset: -3px;
+}
+
+.os-code-text code {
+  display: block;
+  min-width: max-content;
+  padding: 0 14px 0 0;
+}
+
+.os-code-text .l {
+  display: block;
+  padding-left: 4.2em;
+  text-indent: -3.6em;
+  counter-increment: line;
+  white-space: pre;
+}
+
+.os-code-text .l::before {
+  content: counter(line);
+  display: inline-block;
+  width: 2.8em;
+  margin-right: 0.8em;
+  color: var(--dust);
+  text-align: right;
+  text-indent: 0;
+  user-select: none;
+}
+
+.tk-c {
+  color: var(--dust);
+  font-style: italic;
+}
+
+.tk-k,
+.tk-t {
+  color: #e2c384;
+  font-style: italic;
+}
+
+.tk-s {
+  color: #b9c48f;
+}
+
+.tk-n,
+.tk-a {
+  color: #efb892;
+}
+
+.os-notebook > * + * {
+  margin-top: 12px;
+}
+
+.os-notebook-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+}
+
+/* README and docs: the reader's type, GitHub's own code colours mapped onto the room's. */
+.os-readme {
+  max-width: 46rem;
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+.os-readme :is(h1, h2) {
+  margin-top: 1.4em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--os-shade);
+  font-weight: 500;
+}
+
+.os-readme h1 {
+  font-size: 1.75rem;
+}
+
+.os-readme > :first-child {
+  margin-top: 0;
+}
+
+.os-readme pre {
+  max-width: 100%;
+  font-family: var(--font-mono);
+}
+
+.os-readme img {
+  max-width: 100%;
+}
+
+.os-readme p:has(> a > img[data-canonical-src*='shields.io']) img {
+  display: inline-block;
+  height: 20px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.os-readme :is(.pl-k, .pl-ent) {
+  color: #e2c384;
+  font-style: italic;
+}
+
+.os-readme :is(.pl-s, .pl-pds, .pl-sr, .pl-pse) {
+  color: #b9c48f;
+}
+
+.os-readme :is(.pl-c1, .pl-e, .pl-v) {
+  color: #efb892;
+}
+
+.os-readme .pl-c {
+  color: var(--dust);
+  font-style: italic;
+}
+
+.os-readme table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.os-readme details summary {
+  cursor: default;
+}
+
+/* ---- Browser: another site in a sandboxed frame under a read-only address bar ---- */
+
+.os-browser {
+  display: flex;
+  flex-direction: column;
+  height: 100cqh;
+}
+
+.os-browser-bar {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  padding: 4px;
+  background: var(--os-face);
+}
+
+.os-browser-address {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  background: var(--os-light);
+  box-shadow: var(--os-sunken);
+  color: var(--os-dark);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.os-browser-bar .os-tool {
+  background: var(--os-face);
+  box-shadow: var(--os-raised);
+}
+
+.os-browser-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
+/* ---- Folder: large icons, one click each ---- */
+
+.os-folder ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  list-style: none;
+}
+
+.os-folder-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  min-height: 88px;
+  padding: 8px 4px;
+  color: var(--os-dark);
+  font-size: 15px;
+  line-height: 1.15;
+  text-align: center;
+  text-decoration: none;
+}
+
+.os-folder-item:hover,
+.os-folder-item:focus-visible {
+  background: var(--os-desk);
+  color: var(--paper);
+}
+
+.os-folder-item:focus-visible {
+  outline: 1px dotted var(--paper);
+  outline-offset: -4px;
+}
+
 /* ---- About: the window SaahilOS opens first. Portrait and name, four big ways on, then the page itself ---- */
 
 .os-about {
@@ -1622,8 +2069,9 @@ body.os-moving iframe {
     height: 55px;
   }
 
-  html:not([data-embedded]) .os-desktop-hint {
+  html:not([data-embedded]) .os-desktop-foot {
     position: static;
+    max-width: none;
     padding: 0 16px 24px;
     text-align: center;
   }

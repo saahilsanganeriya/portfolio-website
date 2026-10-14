@@ -145,6 +145,7 @@ export interface OsIndex {
 export const APP_IDS = [
   'about',
   'projects',
+  'code',
   'oven',
   'blog',
   'photography',
@@ -152,11 +153,18 @@ export const APP_IDS = [
   'books',
   'recipes',
   'voyager',
+  'personal',
   'terminal',
   'resume',
   'credits',
+  'browser',
 ] as const;
 export type AppId = (typeof APP_IDS)[number];
+
+/** The desktop and the phone's home screen: the work first, the personal windows in one folder, then the machine. */
+export const DESKTOP_APPS: readonly AppId[] = ['about', 'projects', 'blog', 'code', 'resume', 'oven', 'personal', 'terminal', 'credits'];
+/** What the Personal folder holds; the room's props open each of these directly too. */
+export const PERSONAL_APPS: readonly AppId[] = ['films', 'photography', 'books', 'recipes', 'voyager'];
 
 /** A window address, written `<app>` or `<app>/<slug>` in the hash and in `open` messages. */
 export interface Route {

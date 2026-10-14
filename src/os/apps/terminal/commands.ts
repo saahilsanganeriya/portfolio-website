@@ -1,6 +1,6 @@
 import { SITE } from '../../../site';
 import { parseTarget } from '../../routes';
-import { APP_IDS, type OsIndex } from '../../types';
+import { DESKTOP_APPS, PERSONAL_APPS, type OsIndex } from '../../types';
 
 export type Tone = 'plain' | 'muted' | 'info' | 'warn' | 'echo';
 
@@ -106,7 +106,10 @@ export async function runCommand(input: string, ctx: TermContext): Promise<TermR
         const width = Math.max(...index.posts.map((p) => p.slug.length)) + 2;
         return { lines: index.posts.map((p) => line(`${p.date}  ${pad(p.slug, width)}${p.title}`)) };
       }
-      if (arg === '') return { lines: [line(APP_IDS.map((id) => (id === 'projects' || id === 'blog' ? `${id}/` : id)).join('  '))] };
+      if (arg === '') {
+        const apps = [...DESKTOP_APPS.filter((id) => id !== 'personal'), ...PERSONAL_APPS];
+        return { lines: [line(apps.map((id) => (id === 'projects' || id === 'blog' ? `${id}/` : id)).join('  '))] };
+      }
       return { lines: [line(`ls: ${arg}: no such shelf. Try ls projects or ls blog.`, 'warn')] };
     case 'cat': {
       if (arg !== 'about') return { lines: [line(`cat: ${arg || '(nothing)'}: no such file. Try cat about.`, 'warn')] };

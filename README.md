@@ -146,11 +146,21 @@ favourites stays in `blender/posters/`.
 | `projects` | `src/content/projects/<slug>.mdx` | `/projects`, `/projects/<slug>` |
 | `blog` | `src/content/blog/<slug>.mdx` | `/blog`, `/blog/<slug>`, `/rss.xml` |
 | `pages` | `src/content/pages/{about,resume}.mdx` | `/about`, `/resume` |
-| `story` | `src/content/story/<nn>-<slug>.mdx` | `/story` (The Thread) |
 | `photography` | `src/content/photography/<name>.yaml` (`npm run photos:ingest`) | the photography exhibit (SaahilOS, the room) |
+| `books` | `src/content/books.json`: `[{ title, author, year, line }]`, in shelf order | `/#books` (the bookshelf) |
+| `recipes` | `src/content/recipes/<slug>.mdx`: `title, date, summary, yield, time, ingredients` (lines, or `{ group, items }`), optional `photo` + `photoAlt`; body `## Method`, `## Notes` | `/#recipes`, `/#recipes/<slug>` (the oven) |
+| `voyager` | `src/content/voyager.mdx`: `title, summary`, then the text | `/#voyager` (the Golden Record) |
 
-The schemas are in `src/content.config.ts`. Every entry is also served as static JSON at
-`/content/<collection>/<slug>.json` (`{ data, html }`), which SaahilOS reader windows load.
+The schemas are in `src/content.config.ts`. Books, recipes and the Voyager page may be absent or empty; the build
+passes and the window says so. Every entry is also served as static JSON at `/content/<collection>/<slug>.json`
+(`{ data, html }`), which SaahilOS reader windows load; `/content/books.json` and `/content/recipes.json` hold the
+two lists. `src/content/story/` is no longer a collection: nothing builds or serves it.
+
+SaahilOS's Code window reads the owner's public GitHub repositories from a snapshot committed in
+`src/os/apps/code/snapshot/` (README and Markdown files as GitHub renders them, the file tree, the last 30 commits),
+and each file's text from raw.githubusercontent.com when it is opened. Links to github.com inside SaahilOS open that
+window; links to the few sites that allow framing (`FRAMEABLE_HOSTS` in `src/os/routes.ts`) open its browser window;
+every other link opens a new tab, so nothing takes the visitor out of the room.
 
 Films come from the Letterboxd diary of `saahilsan`. The archive is the export in `src/data/letterboxd/` (diary,
 ratings, reviews, watched; the Tags column is removed). `/api/films.json`, the only server route, merges the public RSS
@@ -168,12 +178,13 @@ review that names one of those people.
 | `npm run preview` | Serves the last build from `.vercel/output/`, `/api/films.json` included (`astro preview` does not support the Vercel adapter). |
 | `npm run check` | Type-checks the project (`astro check`). |
 | `npm run test:e2e` | Playwright tests in `tests/*.spec.ts`. They build with `SAMPLES=1` (draft posts included) and serve the build themselves. |
-| `node scripts/check-routes.mjs` | Builds, then checks every address: each entry's page is the room opening its window, with its JSON body; no page exists beyond those, `/os` and `/story` (framed inside the room) and `/404`; each page has a title, description, `og:title`, `og:image` and one `<h1>`; no internal link is broken. `--samples` includes draft posts. |
+| `node scripts/check-routes.mjs` | Builds, then checks every address: each entry's page is the room opening its window, with its JSON body; no page exists beyond those, `/os` (framed inside the room) and `/404`; each page has a title, description, `og:title`, `og:image` and one `<h1>`; no internal link is broken. `--samples` includes draft posts. |
 | `npm run photos:ingest -- <folder>` | Strips all metadata from the photos in a folder, writes AVIF and WebP sizes, and adds an entry per photo (see "Add photos in one step"). |
 | `npm run films` | Writes `src/content/films.json`: the archive and the cached copy, with the Letterboxd feed merged over them. When the feed fails, it keeps the cached copy and exits 0. |
 | `npm run posters [-- <slug> ...]` | Draws the hand-drawn posters into `blender/posters/` (SVG and 2048-px PNG). |
 | `npm run posters:runtime [-- <slug> ...]` | Writes the runtime copies of the favourites' posters to `public/room/posters/` (AVIF 683×1024 and KTX2 512×768, 120 KB or less each). |
 | `npm run favorites -- <export folder>` | Writes `src/content/favorites.json` from a Letterboxd export's `profile.csv`. |
+| `GH_TOKEN=$(gh auth token --user saahilsanganeriya) REPOS_WITHHOLD='<pattern>' npm run repos [-- <repo> ...]` | Refreshes the Code window's snapshot of the public repositories (local only: it needs a token, and refuses to run on Vercel). Email addresses are removed; any file, doc or commit line matching `REPOS_WITHHOLD` (the trace-scan pattern and anything kept off the site, held outside this repo) is left out and counted. Commit the result. |
 | `node scripts/posters/glyphs.mjs` | Writes `src/lib/poster-glyphs.ts`, the glyph outlines `renderPoster` uses. Run it again only when the fonts or the character sets change. |
 | `npm run measure:payload`, `npm run measure:fps` | Measure the room's payload (the initial load until the room is interactive, and what a visit loads on demand) and its frame rate in each framing. |
 

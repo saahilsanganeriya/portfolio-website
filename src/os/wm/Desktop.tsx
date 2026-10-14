@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { PixelIcon } from '../assets/PixelIcon';
 import { iconMaskUrl } from '../assets/icons';
 import { APPS } from '../apps/registry';
-import { APP_IDS, type AppId } from '../types';
+import { DESKTOP_APPS, type AppId } from '../types';
 
 interface DesktopIconsProps {
   phone: boolean;
@@ -16,7 +16,7 @@ export function DesktopIcons({ phone, selected, onSelect, onOpen }: DesktopIcons
   return (
     <nav className="os-icons-nav" aria-label="Apps">
       <ul className="os-icons">
-        {APP_IDS.map((id) => (
+        {DESKTOP_APPS.map((id) => (
           <li key={id}>
             <button
               type="button"

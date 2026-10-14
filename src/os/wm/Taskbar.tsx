@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { PixelIcon } from '../assets/PixelIcon';
 import { APPS, describeWindow } from '../apps/registry';
-import { APP_IDS, type AppId, type OsIndex } from '../types';
+import { DESKTOP_APPS, PERSONAL_APPS, type AppId, type OsIndex } from '../types';
 import type { WindowState } from './windows';
+
+// The Start menu: the work, then what the Personal folder holds, then the machine.
+const START_GROUPS: AppId[][] = [
+  DESKTOP_APPS.filter((id) => id !== 'personal' && id !== 'terminal' && id !== 'credits'),
+  [...PERSONAL_APPS],
+  ['terminal', 'credits'],
+];
 
 const clockFormat = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 
@@ -78,14 +85,17 @@ export function Taskbar({ windows, activeId, index, clock, onTab, onOpen, onShut
           </p>
           <nav aria-label="Start menu">
             <ul>
-              {APP_IDS.map((id) => (
-                <li key={id}>
-                  <button type="button" className="os-menu-item" onClick={() => choose(() => onOpen(id))}>
-                    <PixelIcon name={APPS[id].icon} size={16} />
-                    <span>{APPS[id].label}</span>
-                  </button>
-                </li>
-              ))}
+              {START_GROUPS.map((group, g) => [
+                g > 0 && <li key={`rule-${g}`} className="os-menu-rule" aria-hidden="true" />,
+                ...group.map((id) => (
+                  <li key={id}>
+                    <button type="button" className="os-menu-item" onClick={() => choose(() => onOpen(id))}>
+                      <PixelIcon name={APPS[id].icon} size={16} />
+                      <span>{APPS[id].label}</span>
+                    </button>
+                  </li>
+                )),
+              ])}
               <li className="os-menu-rule" aria-hidden="true" />
               <li>
                 <button type="button" className="os-menu-item" onClick={() => choose(onShutDown)}>

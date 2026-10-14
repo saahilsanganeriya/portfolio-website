@@ -1,10 +1,16 @@
+import { codeSlugForGithub, parseCodeSlug } from './apps/code/model';
 import { APP_IDS, type AppId, type Route } from './types';
 
 const isAppId = (value: string): value is AppId => (APP_IDS as readonly string[]).includes(value);
 
 /** `projects/swe-sim`, `#films/la-la-land` or `about` → a route; anything else → null. */
 export function parseTarget(target: string): Route | null {
-  const clean = decodeURIComponent(target.replace(/^#/, '').trim()).replace(/\/+$/, '');
+  let clean: string;
+  try {
+    clean = decodeURIComponent(target.replace(/^#/, '').trim()).replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
   const [app, ...rest] = clean.split('/');
   if (!isAppId(app)) return null;
   const slug = rest.join('/');
@@ -15,8 +21,13 @@ export function formatRoute(route: Route): string {
   return route.slug ? `${route.app}/${route.slug}` : route.app;
 }
 
-// Projects and posts open one reader window per slug; a films or photography slug points inside that app's one window.
+// Projects and posts open one reader window per slug, repositories one Code window each; a films, photography or
+// recipes slug points inside that app's one window.
 export function windowIdFor(route: Route): string {
+  if (route.app === 'code' && route.slug) {
+    const code = parseCodeSlug(route.slug);
+    if (code) return `code/${code.owner}/${code.repo}`.toLowerCase();
+  }
   return route.slug && (route.app === 'projects' || route.app === 'blog') ? formatRoute(route) : route.app;
 }
 
@@ -37,10 +48,13 @@ export function windowHref(route: Route): string | null {
     case 'voyager':
       return `/#${route.app}`;
     case 'recipes':
-      return route.slug ? `/#recipes/${route.slug}` : '/#recipes';
+    case 'code':
+      return route.slug ? `/#${route.app}/${route.slug}` : `/#${route.app}`;
     case 'photography':
     case 'terminal':
     case 'oven':
+    case 'browser':
+    case 'personal':
       return null;
   }
 }
@@ -54,10 +68,10 @@ const PATH_APPS: Record<string, AppId> = {
   credits: 'credits',
 };
 
-/** A same-site URL that has an OS window (`/projects/x`, `/about`, `/os#films`) → its route. */
+/** A same-site URL that has an OS window (`/projects/x`, `/about`, `/os#films`, `/#books`) → its route. */
 function routeForUrl(url: URL): Route | null {
   const parts = url.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
-  if (parts[0] === 'os') return url.hash ? parseTarget(url.hash) : null;
+  if (parts.length === 0 || parts[0] === 'os') return url.hash ? parseTarget(url.hash) : null;
   const app = PATH_APPS[parts[0] ?? ''];
   if (!app || parts.length > 2) return null;
   if (parts[1] && app !== 'projects' && app !== 'blog') return null;
@@ -65,9 +79,26 @@ function routeForUrl(url: URL): Route | null {
   return parts[1] ? { app, slug: parts[1] } : { app };
 }
 
-type LinkTarget = { kind: 'window'; route: Route } | { kind: 'top' } | { kind: 'external' } | { kind: 'other' };
+// Sites checked to allow framing (no X-Frame-Options and no frame-ancestors; evidence/T45/frame-headers.txt) open in
+// SaahilOS's own browser window; every other site opens in a new tab. GitHub forbids framing: the Code window reads it.
+export const FRAMEABLE_HOSTS: readonly string[] = [
+  'en.wikipedia.org',
+  'commons.wikimedia.org',
+  'saahilsanganeriaphotography.wordpress.com',
+  'esawebb.org',
+  'napari.org',
+  'opensource.org',
+  'polyhaven.com',
+  'ambientcg.com',
+  'threejs.org',
+];
 
-/** How a link inside the OS behaves: open a window, replace the whole tab, or open a new tab. */
+type LinkTarget = { kind: 'window'; route: Route } | { kind: 'external' } | { kind: 'other' };
+
+/**
+ * How a link inside the OS behaves. Own pages, GitHub and the framable sites open a window; everything else opens in
+ * a new tab. Nothing replaces the whole tab, so a visitor never leaves the room.
+ */
 export function classifyLink(href: string, origin: string): LinkTarget {
   if (href.startsWith('#')) {
     const route = parseTarget(href);
@@ -80,9 +111,14 @@ export function classifyLink(href: string, origin: string): LinkTarget {
     return { kind: 'other' };
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return { kind: 'other' };
-  if (url.origin !== origin) return { kind: 'external' };
+  if (url.origin !== origin) {
+    const code = codeSlugForGithub(url);
+    if (code !== null) return { kind: 'window', route: code ? { app: 'code', slug: code } : { app: 'code' } };
+    if (FRAMEABLE_HOSTS.includes(url.hostname)) return { kind: 'window', route: { app: 'browser', slug: url.href } };
+    return { kind: 'external' };
+  }
   // Files (the résumé PDF, feeds) open in a new tab rather than inside the monitor.
   if (/\.[a-z0-9]+$/i.test(url.pathname)) return { kind: 'external' };
-  const route = routeForUrl(url);
-  return route ? { kind: 'window', route } : { kind: 'top' };
+  // An own address with no window of its own (the room's front page) opens About, the window the room opens first.
+  return { kind: 'window', route: routeForUrl(url) ?? { app: 'about' } };
 }

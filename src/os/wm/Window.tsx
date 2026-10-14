@@ -13,6 +13,7 @@ import {
 } from 'react';
 import { PixelIcon } from '../assets/PixelIcon';
 import type { IconName } from '../assets/icons';
+import { linkAttributes } from '../apps/content';
 import { springOrInstant } from './motion';
 import type { WindowState } from './windows';
 
@@ -76,13 +77,13 @@ function CopyLink({ href }: { href: string }) {
   );
 }
 
-/** The window's toolbar: the project's repository, and a link to this window to share. */
+/** The window's toolbar: the project's repository (read in the Code window), and a link to this window to share. */
 export function WindowTools({ shareHref, sourceHref }: { shareHref: string | null; sourceHref: string | null }) {
   if (!shareHref && !sourceHref) return null;
   return (
     <div className="os-toolbar">
       {sourceHref && (
-        <a className="os-tool" href={sourceHref} target="_blank" rel="noopener">
+        <a className="os-tool" href={sourceHref} {...linkAttributes(sourceHref)}>
           <PixelIcon name="source" size={13} />
           View source
         </a>
