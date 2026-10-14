@@ -209,21 +209,30 @@ def fill_gaps(image):
     px = np.empty(w * h * 4, dtype=np.float32)
     image.pixels.foreach_get(px)
     px = px.reshape(h, w, 4)
-    known = px[..., 3] > 0.5
-    levels = [(px[..., :3] * known[..., None], known.astype(np.float32))]
+    px[..., :3] = push_pull(px[..., :3], px[..., 3] > 0.5)
+    px[..., 3] = 1.0
+    image.pixels.foreach_set(px.ravel())
+    image.update()
+
+
+def push_pull(rgb, known):
+    """Colours for the unknown texels of rgb from the known ones (see fill_gaps). Any size: a level with an odd side
+    is padded with one empty row or column before it halves (6144 = 3 x 2048 halves to 3, then pads to 4)."""
+    levels = [(rgb * known[..., None], known.astype(np.float32))]
     while min(levels[-1][1].shape) > 1:
         c, m = levels[-1]
+        pad_h, pad_w = c.shape[0] % 2, c.shape[1] % 2
+        if pad_h or pad_w:
+            c = np.pad(c, ((0, pad_h), (0, pad_w), (0, 0)))
+            m = np.pad(m, ((0, pad_h), (0, pad_w)))
         ch, cw = c.shape[0] // 2, c.shape[1] // 2
         levels.append((c.reshape(ch, 2, cw, 2, 3).sum(axis=(1, 3)), m.reshape(ch, 2, cw, 2).sum(axis=(1, 3))))
     c, m = levels[-1]
     colour = c / np.maximum(m, 1e-8)[..., None]
     for c, m in reversed(levels[:-1]):
-        parent = np.repeat(np.repeat(colour, 2, axis=0), 2, axis=1)
+        parent = np.repeat(np.repeat(colour, 2, axis=0), 2, axis=1)[: m.shape[0], : m.shape[1]]
         colour = np.where((m > 0)[..., None], c / np.maximum(m, 1e-8)[..., None], parent)
-    px[..., :3] = np.where(known[..., None], px[..., :3], colour)
-    px[..., 3] = 1.0
-    image.pixels.foreach_set(px.ravel())
-    image.update()
+    return np.where(known[..., None], rgb, colour)
 
 
 def denoise_and_save(image, path: Path, exr: Path | None = None):
