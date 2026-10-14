@@ -2,9 +2,8 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import type { IconName } from '../assets/icons';
 import { formatDay } from '../format';
 import { windowHref } from '../routes';
-import { PERSONAL_APPS, type AppId, type OsApi, type OsIndex, type Route } from '../types';
+import type { AppId, OsApi, OsIndex, Route } from '../types';
 import { AboutApp } from './AboutApp';
-import { FolderApp } from './FolderApp';
 import { parseCodeSlug } from './code/model';
 import { BlogApp, ProjectsApp } from './Lists';
 import { OvenApp } from './OvenApp';
@@ -23,7 +22,6 @@ export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   books: { label: 'Books', icon: 'books' },
   recipes: { label: 'Kitchen', icon: 'recipes' },
   voyager: { label: 'Voyager Golden Record', icon: 'voyager' },
-  personal: { label: 'Personal', icon: 'folder' },
   terminal: { label: 'Terminal', icon: 'terminal' },
   resume: { label: 'Résumé', icon: 'resume' },
   credits: { label: 'Credits', icon: 'credits' },
@@ -98,7 +96,6 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     books: '',
     recipes: '',
     voyager: '',
-    personal: `${PERSONAL_APPS.length} items`,
     terminal: 'Type help for the commands',
     about: '',
     resume: '',
@@ -146,7 +143,5 @@ function AppContent({ route, os }: { route: Route; os: OsApi }): ReactNode {
       return <CodeApp slug={route.slug} />;
     case 'browser':
       return <BrowserApp url={route.slug} />;
-    case 'personal':
-      return <FolderApp apps={PERSONAL_APPS} label="Personal" />;
   }
 }

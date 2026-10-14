@@ -54,7 +54,6 @@ export function windowHref(route: Route): string | null {
     case 'terminal':
     case 'oven':
     case 'browser':
-    case 'personal':
       return null;
   }
 }

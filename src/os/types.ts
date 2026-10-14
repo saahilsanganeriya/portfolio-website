@@ -166,7 +166,6 @@ export const APP_IDS = [
   'books',
   'recipes',
   'voyager',
-  'personal',
   'terminal',
   'resume',
   'credits',
@@ -174,10 +173,12 @@ export const APP_IDS = [
 ] as const;
 export type AppId = (typeof APP_IDS)[number];
 
-/** The desktop and the phone's home screen: the work first, the personal windows in one folder, then the machine. */
-export const DESKTOP_APPS: readonly AppId[] = ['about', 'projects', 'blog', 'code', 'resume', 'oven', 'personal', 'terminal', 'credits'];
-/** What the Personal folder holds; the room's props open each of these directly too. */
+/** The desktop's left side, most important first: the work, then the machine. */
+export const WORK_APPS: readonly AppId[] = ['about', 'projects', 'blog', 'code', 'resume', 'oven', 'terminal', 'credits'];
+/** The desktop's right side, the rest of his life; the room's props open each of these directly too. */
 export const PERSONAL_APPS: readonly AppId[] = ['films', 'photography', 'books', 'recipes', 'voyager'];
+/** Every app a visitor reaches from the desktop, in reading and Tab order; the phone's home screen is this one grid. */
+export const DESKTOP_APPS: readonly AppId[] = [...WORK_APPS, ...PERSONAL_APPS];
 
 /** A window address, written `<app>` or `<app>/<slug>` in the hash and in `open` messages. */
 export interface Route {

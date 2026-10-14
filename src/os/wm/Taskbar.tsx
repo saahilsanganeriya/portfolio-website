@@ -1,15 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { PixelIcon } from '../assets/PixelIcon';
 import { APPS, describeWindow } from '../apps/registry';
-import { DESKTOP_APPS, PERSONAL_APPS, type AppId, type OsIndex } from '../types';
+import { PERSONAL_APPS, WORK_APPS, type AppId, type OsIndex } from '../types';
 import type { WindowState } from './windows';
 
-// The Start menu: the work, then what the Personal folder holds, then the machine.
-const START_GROUPS: AppId[][] = [
-  DESKTOP_APPS.filter((id) => id !== 'personal' && id !== 'terminal' && id !== 'credits'),
-  [...PERSONAL_APPS],
-  ['terminal', 'credits'],
-];
+// The Start menu: the work, then the personal windows, then the machine.
+const MACHINE: readonly AppId[] = ['terminal', 'credits'];
+const START_GROUPS: AppId[][] = [WORK_APPS.filter((id) => !MACHINE.includes(id)), [...PERSONAL_APPS], [...MACHINE]];
 
 const clockFormat = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 

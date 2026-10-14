@@ -83,6 +83,7 @@ body.os-moving iframe {
 
 /* Labels sit on a photograph, so each carries a hard ink drop and a soft ink halo, the way later Windows did. */
 .os-icon-label,
+.os-icon-caption,
 .os-desktop-foot,
 .os-phonebar {
   text-shadow:
@@ -91,15 +92,37 @@ body.os-moving iframe {
     0 0 10px rgb(20 17 15 / 0.7);
 }
 
-.os-icons {
+/* Two sides, the work on the left and life off the clock on the right; sizes match iconGutter in wm/windows.ts. */
+.os-icon-group {
   position: absolute;
   top: 12px;
+  bottom: 12px;
   left: 8px;
+}
+
+/* Stops above the hint and the wallpaper credit in the corner. */
+.os-icon-group[data-side='personal'] {
+  right: 8px;
+  bottom: 88px;
+  left: auto;
+}
+
+.os-icon-caption {
+  width: 88px;
+  height: 24px;
+  margin: 0;
+  color: var(--dust);
+  font: inherit;
+  text-align: center;
+}
+
+/* A definite height, so the rows fill first and only a short desktop wraps a side into a second column. */
+.os-icons {
+  height: calc(100% - 24px);
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: repeat(auto-fill, 88px);
   gap: 0 4px;
-  height: calc(100% - 24px);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1379,42 +1402,6 @@ body.os-moving iframe {
   background: #fff;
 }
 
-/* ---- Folder: large icons, one click each ---- */
-
-.os-folder ul {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 16px;
-  list-style: none;
-}
-
-.os-folder-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-  min-height: 88px;
-  padding: 8px 4px;
-  color: var(--os-dark);
-  font-size: 15px;
-  line-height: 1.15;
-  text-align: center;
-  text-decoration: none;
-}
-
-.os-folder-item:hover,
-.os-folder-item:focus-visible {
-  background: var(--os-desk);
-  color: var(--paper);
-}
-
-.os-folder-item:focus-visible {
-  outline: 1px dotted var(--paper);
-  outline-offset: -4px;
-}
-
 /* ---- About: the window SaahilOS opens first. Portrait and name, four big ways on, then the page itself ---- */
 
 .os-about {
@@ -2086,14 +2073,33 @@ body.os-moving iframe {
     margin: 0;
   }
 
-  html:not([data-embedded]) .os-icons {
+  /* One grid on a phone: the work's rows, then the personal ones, at the same column widths and row gap. */
+  html:not([data-embedded]) .os-icons-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 24px 12px;
+  }
+
+  html:not([data-embedded]) .os-icon-group {
     position: static;
+  }
+
+  html:not([data-embedded]) .os-icon-caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  html:not([data-embedded]) .os-icons {
     grid-auto-flow: row;
     grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
     grid-template-rows: none;
     gap: 16px 4px;
     height: auto;
-    padding: 24px 12px;
   }
 
   html:not([data-embedded]) .os-icon {

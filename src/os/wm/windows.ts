@@ -1,4 +1,4 @@
-import { DESKTOP_APPS, type AppId, type Route } from '../types';
+import { PERSONAL_APPS, WORK_APPS, type AppId, type Route } from '../types';
 
 export interface Frame {
   x: number;
@@ -119,7 +119,7 @@ export interface AppWindowSize {
   height: number;
 }
 
-// Three sizes so windows feel of a set: lists, readers and wide windows; About (the first view) and the folder are their own.
+// Three sizes so windows feel of a set: lists, readers and wide windows; About (the first view) is its own.
 const LIST: AppWindowSize = { width: 640, height: 520 };
 const READER: AppWindowSize = { width: 720, height: 600 };
 const WIDE: AppWindowSize = { width: 880, height: 640 };
@@ -140,39 +140,44 @@ const SIZES: Record<AppId | 'reader', AppWindowSize> = {
   films: WIDE,
   photography: WIDE,
   terminal: { width: 760, height: 460 },
-  personal: { width: 520, height: 300 },
 };
 
-// Must match the icon grid in os.css: rows of 88 px from 12 px down, columns 88 px wide with 4 px between.
+// Must match the icon grid in os.css: a caption, then rows of 88 px, columns 88 px wide with 4 px between; the right
+// side stops above the hint and the wallpaper credit.
 const ICON_ROW = 88;
 const ICON_COLUMN = 92;
 const ICONS_TOP = 12;
+const ICONS_CAPTION = 24;
+const RIGHT_ICONS_BOTTOM = 88;
 const CASCADE_STEP = 28;
 // A visit's first window (About, or the window its address names) stands nearly the desktop's height, so its opening
 // lines are above the fold; later windows cascade at their own sizes.
 const FIRST_WIDTH = 880;
 const FIRST_MARGIN = 12;
 
-// Short desktops wrap the icons into more columns; new windows open to the right of all of them.
-function iconGutter(desktopHeight: number): number {
-  const rows = Math.max(1, Math.floor((desktopHeight - 2 * ICONS_TOP) / ICON_ROW));
-  return 8 + Math.ceil(DESKTOP_APPS.length / rows) * ICON_COLUMN + 8;
+// The width each side's icons take, with its margins; short desktops wrap a side into more columns.
+function iconGutter(count: number, columnHeight: number): number {
+  const rows = Math.max(1, Math.floor(columnHeight / ICON_ROW));
+  return 8 + Math.ceil(count / rows) * ICON_COLUMN + 8;
 }
 
-/** Where a new window opens: cascading down-right from the icon column, always inside the desktop. */
+/** Where a new window opens: cascading down-right from the work icons, between the two sides when it fits there. */
 export function frameFor(route: Route, cascade: number, desktop: { width: number; height: number }, first = false): Frame {
   const size = route.slug && (route.app === 'projects' || route.app === 'blog') ? SIZES.reader : SIZES[route.app];
+  const left = iconGutter(WORK_APPS.length, desktop.height - 2 * ICONS_TOP - ICONS_CAPTION);
+  const right = iconGutter(PERSONAL_APPS.length, desktop.height - ICONS_TOP - RIGHT_ICONS_BOTTOM - ICONS_CAPTION);
+  // The rightmost x a window of this width may take: clear of the personal icons, unless the gap is too narrow for it.
+  const maxX = (width: number) => (left + width <= desktop.width - right ? desktop.width - right : desktop.width - 8) - width;
   const clamp = (value: number, max: number) => Math.max(8, Math.min(value, max));
-  // The folder is a handful of icons: it keeps its size even when it opens first.
-  if (first && route.app !== 'personal') {
+  if (first) {
     const width = Math.min(Math.max(size.width, FIRST_WIDTH), desktop.width - 16);
-    return { x: clamp(iconGutter(desktop.height), desktop.width - width - 8), y: FIRST_MARGIN, width, height: desktop.height - 2 * FIRST_MARGIN };
+    return { x: clamp(left, maxX(width)), y: FIRST_MARGIN, width, height: desktop.height - 2 * FIRST_MARGIN };
   }
   const width = Math.min(size.width, desktop.width - 16);
   const height = Math.min(size.height, desktop.height - 16);
   const step = (cascade % 8) * CASCADE_STEP;
   return {
-    x: clamp(iconGutter(desktop.height) + step, desktop.width - width - 8),
+    x: clamp(left + step, maxX(width)),
     y: clamp(16 + step, desktop.height - height - 8),
     width,
     height,
