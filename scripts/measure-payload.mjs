@@ -46,12 +46,14 @@ try {
   };
 
   await page.goto(new URL('/', server.url).href);
-  await page.waitForFunction(() => window.__room && window.__room.phase === 'idle' && !window.__room.moving, null, { timeout: 180_000 });
+  await page.waitForFunction(() => window.__room && window.__room.phase === 'desk' && !window.__room.moving, null, { timeout: 180_000 });
   const { origin, interactiveAt } = await page.evaluate(() => ({ origin: performance.timeOrigin, interactiveAt: window.__room.interactiveAt }));
   const interactiveEpoch = origin + interactiveAt;
   steps.push({ name: 'by itself', at: interactiveEpoch });
 
-  // What the room pulls in by itself once interactive: the reel (its screen is in the idle view) and the prints.
+  // What the room pulls in by itself once interactive, seen from the wide view: the reel (its screen is there) and the prints.
+  await page.evaluate(() => window.__room.goto('idle'));
+  await settle();
   await room(() => ['playing', 'paused', 'failed'].includes(window.__room.reel?.state ?? 'failed'));
   await room(() => window.__room.world.prints.length === 0 || window.__room.world.prints.every((p) => p.shown > 0));
   // A visit: sound, one turn of the projector's dial, the album opened and paged.

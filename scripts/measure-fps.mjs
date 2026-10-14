@@ -1,11 +1,11 @@
 // Frame rate of the room on the "2020 laptop" profile (PLAN 3.9): Playwright Chromium at 1440x900, device scale 2,
-// software WebGL (SwiftShader) standing in for a 2020 integrated GPU. Counts requestAnimationFrame frames for 10 s in
-// each phase: the first drift (no input), every framing the room has, the monitor, a hovered prop, and across camera
-// moves, and the photo album open with a page turning every 1.2 s; passes when every phase's median is at least 50
-// fps. By default everything moves at once after the drift (PLAN 11.3, 12.3): the fan at its top speed, the espresso
-// machine brewing and the projector playing in view or not; --calm leaves the room as a visitor finds it. --phone
-// measures the light tier on an emulated iPhone 13 instead: the wide view, the desk, moves, and the glide into the
-// monitor until SaahilOS takes over. The reel column is the share of frames in which the projector was playing;
+// software WebGL (SwiftShader) standing in for a 2020 integrated GPU. Counts requestAnimationFrame frames during the
+// arrival glide on / (no input), then for 10 s in each phase: every framing the room has (the desk, the monitor and the
+// tour's stops among them), a hovered prop, across camera moves, and the photo album open with a page turning every
+// 1.2 s; passes when every phase's median is at least 50 fps. By default everything moves at once after the arrival
+// (PLAN 11.3, 12.3): the fan at its top speed, the espresso machine brewing and the projector playing in view or not;
+// --calm leaves the room as a visitor finds it. --phone measures the light tier on an emulated iPhone 13 instead: the
+// arrival, the glide into the monitor until SaahilOS takes over, the wide view, the desk and moves. The reel column is the share of frames in which the projector was playing;
 // --reel-always plays only the reel in every phase; --no-reel blocks it (the screen keeps its baked still), as a
 // baseline. The light tier has no reel.
 //
@@ -36,11 +36,7 @@ try {
   });
   const settle = (station) =>
     page.waitForFunction((s) => window.__room && !window.__room.moving && (!s || window.__room.phase === s), station, { timeout: 60_000 });
-  await page.waitForFunction(() => window.__room?.phase === 'idle' && !window.__room.moving, null, { timeout: 180_000 });
-  if (!phone) {
-    await page.waitForFunction(() => window.__room.reel?.state !== 'loading' && window.__room.reel?.state !== 'waiting', null, { timeout: 60_000 });
-    if (flag('--reel-always')) await page.evaluate(() => window.__room.forceReel(true));
-  }
+  await page.waitForFunction(() => window.__room?.arrival && window.__room.moving, null, { timeout: 180_000 });
 
   const everything = !phone && !flag('--calm') && !flag('--reel-always') && !flag('--no-reel');
 
@@ -59,6 +55,7 @@ try {
             times.push(t);
             const projector = window.__room.world?.projector;
             if (projector ? projector.state === 'playing' : window.__room.reel?.state === 'playing') reelFrames++;
+            if (mode === 'arrival' && !window.__room.moving) return resolve({ times, tier: window.__room.tier, reel: reelFrames / times.length });
             if (mode === 'move' && !window.__room.moving) {
               window.__room.goto(next);
               next = next === 'desk' ? 'idle' : 'desk';
@@ -100,8 +97,12 @@ try {
     if (!row.pass) failed = true;
   };
 
+  // The arrival glide on /, from the boot framing to the desk, measured while nothing touches the page.
+  record('arrival', await count(30_000, 'arrival'));
+  await settle('desk');
+
   if (phone) {
-    // The phone holds the wide view briefly, then glides into the monitor by itself: measure that glide first.
+    // The phone holds the desk briefly, then glides into the monitor by itself: measure that glide first.
     await page.waitForFunction(() => window.__room.moving, null, { timeout: 30_000 });
     const zoomMs = await page.evaluate(() => {
       const start = performance.now();
@@ -121,9 +122,11 @@ try {
       record(phase, await count(seconds * 1000, phase === 'move' ? 'move' : 'still'));
     }
   } else {
-    // The drift starts by itself a moment after the intro; it is measured while nothing touches the page.
-    await page.waitForFunction(() => window.__room.drifting && window.__room.moving, null, { timeout: 30_000 });
-    record('drift', await count(seconds * 1000));
+    // The reel loads once the room is interactive; it plays while its screen is in the wide view.
+    await page.evaluate(() => window.__room.goto('idle'));
+    await settle('idle');
+    await page.waitForFunction(() => !window.__room.reel || (window.__room.reel.state !== 'loading' && window.__room.reel.state !== 'waiting'), null, { timeout: 60_000 });
+    if (flag('--reel-always')) await page.evaluate(() => window.__room.forceReel(true));
     if (everything) await page.evaluate(() => window.__room.forceEverything(true));
     const stations = await page.evaluate(() => window.__room.stations);
     for (const station of ['idle', ...stations.filter((s) => s !== 'idle')]) {
@@ -160,7 +163,7 @@ try {
   console.log(
     phone
       ? `iPhone 13 (390x664 @3x), light tier, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps`
-      : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${everything ? ', everything moving after the drift (fan top speed, steam, projector forced on)' : ''}${flag('--reel-always') ? ', reel forced on' : ''}${flag('--no-reel') ? ', reel blocked' : ''}`,
+      : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${everything ? ', everything moving after the arrival (fan top speed, steam, projector forced on)' : ''}${flag('--reel-always') ? ', reel forced on' : ''}${flag('--no-reel') ? ', reel blocked' : ''}`,
   );
   console.log('phase      frames  mean   median  p5     tier  reel  pass');
   for (const r of rows) {
