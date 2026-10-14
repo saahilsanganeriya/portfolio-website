@@ -232,7 +232,9 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       setTimeout(() => (boot.hidden = true), 400);
       const open = target ?? (osRequested ? DEFAULT_WINDOW : null);
       room.start({ open: open ?? undefined, fast: skipped });
-      status.textContent = 'The room is ready. Sound starts with your first click or key press; the Sound button turns it off.';
+      status.textContent = room.audio.muted
+        ? 'The room is ready. Its sound is off, as you left it; the Sound button turns it on.'
+        : 'The room is ready. Sound starts with your first click, tap or key press; the Sound button turns it off.';
       if (osRequested) monitor()?.focus({ preventScroll: true });
     };
 

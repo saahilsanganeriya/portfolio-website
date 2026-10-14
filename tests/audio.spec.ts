@@ -121,6 +121,7 @@ test('volume and mute are remembered; a remembered mute keeps the first input si
   await expect(volume).toHaveValue('80');
   // A visitor who turned the sound off is not nagged by the glow, and neither a key nor a click turns it back on.
   await expect(sound).not.toHaveAttribute('data-hint');
+  await expect(page.locator('[data-room-status]')).toHaveText(/sound is off, as you left it/);
   await page.keyboard.press('KeyA');
   await page.mouse.click(720, 880);
   expect(await graph(page)).toMatchObject({ context: 'none', muted: true, volume: 0.8 });
