@@ -41,6 +41,6 @@ describe('links inside SaahilOS', () => {
     expect(where('/#books')).toEqual({ kind: 'window', route: { app: 'books' } });
     expect(where('/projects/samcell')).toEqual({ kind: 'window', route: { app: 'projects', slug: 'samcell' } });
     expect(where('/not-a-window')).toEqual({ kind: 'window', route: { app: 'about' } });
-    expect(where('/resume/saahil-sanganeriya-resume.pdf').kind).toBe('external');
+    expect(where('/resume.pdf').kind).toBe('external');
   });
 });

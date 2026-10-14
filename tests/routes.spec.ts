@@ -34,6 +34,13 @@ test('/rss.xml is valid XML with the post in it', async ({ page, request }) => {
   expect(result.titles).toContain(POST.title);
 });
 
+/** Catches the stable résumé link serving a stale copy instead of the PDF resume-builder's workflow last published. */
+test('/resume.pdf is the published résumé PDF', async ({ request }) => {
+  const response = await request.get('/resume.pdf');
+  const published = readFileSync(new URL('../public/resume/saahil-sanganeriya-resume.pdf', import.meta.url));
+  expect(Buffer.compare(await response.body(), published)).toBe(0);
+});
+
 /** Catches the reader-window endpoint returning frontmatter without the rendered body, which leaves OS windows empty. */
 test('/content/<collection>/<slug>.json carries frontmatter and rendered HTML', async ({ request }) => {
   const body = await (await request.get(`/content/blog/${POST.slug}.json`)).json();
