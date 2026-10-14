@@ -138,6 +138,8 @@ const recipes = defineCollection({
           .min(1),
         photo: image().optional(),
         photoAlt: z.string().optional(),
+        /** The recipe it is adapted from, credited with a link, when it is not wholly his. */
+        adaptedFrom: z.object({ name: z.string().min(1), url: z.url() }).optional(),
       })
       .refine((recipe) => !recipe.photo || Boolean(recipe.photoAlt), {
         message: 'a recipe photo needs photoAlt',

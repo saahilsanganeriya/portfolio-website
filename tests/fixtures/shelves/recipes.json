@@ -23,6 +23,10 @@
         "width": 1200,
         "height": 630,
         "alt": "A test picture."
+      },
+      "adaptedFrom": {
+        "name": "A Test Kitchen, Sample Loaf",
+        "url": "https://example.org/sample-loaf"
       }
     }
   ]

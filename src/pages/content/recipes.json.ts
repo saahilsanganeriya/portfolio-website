@@ -15,6 +15,7 @@ export async function GET() {
       yield: data.yield,
       time: data.time,
       ingredients: data.ingredients,
+      adaptedFrom: data.adaptedFrom ?? null,
       photo: data.photo
         ? await getImage({ src: data.photo, widths: [320, 640, 960], format: 'webp', quality: 78 }).then((image) => ({
             src: image.src,

@@ -419,6 +419,10 @@ test.describe('desktop', () => {
     await expect(page).toHaveURL(/#recipes\/sample-loaf$/);
     await expect(recipes.getByRole('heading', { level: 2, name: 'Sample loaf' })).toBeVisible();
     await expect(recipes.locator('.os-facts')).toContainText('1 loaf');
+    // An adapted recipe credits its source with a link, which opens in a new tab.
+    const credit = recipes.getByRole('link', { name: 'A Test Kitchen, Sample Loaf' });
+    await expect(credit).toHaveAttribute('href', 'https://example.org/sample-loaf');
+    await expect(credit).toHaveAttribute('target', '_blank');
     const ingredients = recipes.getByRole('region', { name: 'Ingredients' });
     await expect(ingredients.getByRole('heading', { level: 4, name: 'For the levain' })).toBeVisible();
     await expect(ingredients.getByRole('listitem')).toHaveText(['500 g flour', '50 g starter', '50 g water']);

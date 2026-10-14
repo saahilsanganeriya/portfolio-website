@@ -121,6 +121,8 @@ export interface OsRecipe {
   time: string;
   ingredients: OsIngredient[];
   photo: OsImage | null;
+  /** The recipe it is adapted from, credited with a link. */
+  adaptedFrom: { name: string; url: string } | null;
 }
 
 export interface OsWallpaper {

@@ -2,7 +2,7 @@ import { useEffect, useId, type ReactNode } from 'react';
 import { formatDay } from '../format';
 import type { OsBook, OsIngredient, OsRecipe } from '../types';
 import { useWindowStatus } from '../wm/Window';
-import { useContent, useJson, type Loaded } from './content';
+import { linkAttributes, useContent, useJson, type Loaded } from './content';
 import { DetailsList } from './Lists';
 import { Body, Picture, ThreadLoader } from './Reader';
 
@@ -121,6 +121,16 @@ function Recipe({ recipe }: { recipe: OsRecipe }) {
           <dd>
             <time dateTime={recipe.date}>{formatDay(recipe.date)}</time>
           </dd>
+          {recipe.adaptedFrom && (
+            <>
+              <dt>Adapted from</dt>
+              <dd>
+                <a href={recipe.adaptedFrom.url} {...linkAttributes(recipe.adaptedFrom.url)}>
+                  {recipe.adaptedFrom.name}
+                </a>
+              </dd>
+            </>
+          )}
         </dl>
       </header>
       <Ingredients items={recipe.ingredients} />
