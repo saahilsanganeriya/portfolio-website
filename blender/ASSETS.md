@@ -154,6 +154,9 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
 |---|---|---|---|---|---|
+| Projector film "Worth the distance" (`public/room/story-film.webm`, `story-film.mp4`, `story-film.poster.avif`) | the projector on the wall: his story in six chapters, 81.5 s, silent; manifest in `src/scene/reel.json` | none (built from the rows below by a rebuild script kept with the site's working files, outside the repo) | Saahil Sanganeriya (made for this site) | own work | 640 × 360, 24 fps; VP9 and H.264; intertitles set in Newsreader and IBM Plex Sans (see Fonts); warm grade, no grain or gate weave (the room adds them) |
+| Photographs and phone clips in the projector film | the film's shots | the owner's own photographs in src/assets/photography (cansupport, when-yarn-breaks, rome-in-love, manhattan-bridge, diner, brownstone) and photos of him in src/assets/me (childhood-cap, childhood-home, georgia-tech, graduation, prague); from his own Instagram archive: 2021 stories (boarding pass, Atlanta, a lab sign at Georgia Tech, the waterjet clip, his poster wall clip) and a 2021 Ladakh post | Saahil Sanganeriya; the photos of him come from his family's and his own albums | own work | cropped to 16:9 and moved slowly; Instagram text stickers cropped out; the airline number on the boarding pass blurred; the posters on his dorm wall appear only as part of his own clip |
+| samcell-napari screenshot | the film's "Seeing cells" shot | https://github.com/saahilsanganeriya/samcell-napari/blob/main/docs/images/samcell-napari.jpg | Saahil Sanganeriya | MIT | cropped to the cell image |
 
 ## Code
 
