@@ -51,6 +51,11 @@ export function localClock(date: Date, timeZone: string) {
 
 /** The sun's height above the horizon in degrees, in `city` at `date`. */
 export function sunElevation(city: City, date: Date): number {
+  return solarPosition(city, date).elevation;
+}
+
+/** The sun's height (degrees) and hour angle (degrees, 0 at local solar noon, negative in the morning). */
+export function solarPosition(city: City, date: Date): { elevation: number; hourAngle: number } {
   const { hours, dayOfYear, offsetHours } = localClock(date, city.timeZone);
   const g = ((2 * Math.PI) / 365) * (dayOfYear - 1 + (hours - 12) / 24);
   const equationOfTime =
@@ -67,13 +72,29 @@ export function sunElevation(city: City, date: Date): number {
   const hourAngle = ((solarMinutes / 4 - 180) * Math.PI) / 180;
   const latitude = (city.latitude * Math.PI) / 180;
   const cosZenith = Math.sin(latitude) * Math.sin(declination) + Math.cos(latitude) * Math.cos(declination) * Math.cos(hourAngle);
-  return 90 - (Math.acos(Math.min(1, Math.max(-1, cosZenith))) * 180) / Math.PI;
+  const elevation = 90 - (Math.acos(Math.min(1, Math.max(-1, cosZenith))) * 180) / Math.PI;
+  return { elevation, hourAngle: ((((hourAngle * 180) / Math.PI + 540) % 360) + 360) % 360 - 180 };
 }
 
 /** 0 in full day, 1 in full night, a smooth blend through dusk and dawn. */
 export function nightWeight(city: City, date: Date): number {
-  const t = Math.min(1, Math.max(0, (DAY_ABOVE_DEG - sunElevation(city, date)) / (DAY_ABOVE_DEG - NIGHT_BELOW_DEG)));
+  return nightAt(sunElevation(city, date));
+}
+
+/** nightWeight for a sun this many degrees above the horizon. */
+export function nightAt(elevation: number): number {
+  const t = Math.min(1, Math.max(0, (DAY_ABOVE_DEG - elevation) / (DAY_ABOVE_DEG - NIGHT_BELOW_DEG)));
   return t * t * (3 - 2 * t);
+}
+
+// A new moon (2000-01-06 18:14 UTC) and the mean synodic month, good to about half a day over decades.
+const NEW_MOON_MS = Date.UTC(2000, 0, 6, 18, 14);
+const SYNODIC_DAYS = 29.530588853;
+
+/** The moon's age as a share of its month: 0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter. */
+export function moonAge(date: Date): number {
+  const days = (date.getTime() - NEW_MOON_MS) / 86_400_000;
+  return (((days / SYNODIC_DAYS) % 1) + 1) % 1;
 }
 
 const clockFormatters = new Map<string, Intl.DateTimeFormat>();

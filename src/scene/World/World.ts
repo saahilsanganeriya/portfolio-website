@@ -127,7 +127,7 @@ export class World {
       : null;
     this.instax = n.prints.length ? new Instax(n.prints, this.lamp, HOTSPOTS, n.printsAreInstax) : null;
     this.stickies = n.stickies.length ? new StickyNotes(n.stickies, this.lamp) : null;
-    this.windowView = n.windowViews.length ? new WindowView(n.windowViews, this.textures) : null;
+    this.windowView = n.windowViews.length ? new WindowView(n.windowViews, n.windowSky, this.textures, { reducedMotion: still }) : null;
     this.lava = n.lava ? new LavaLamp(n.lava.glass, n.lava.light, this.lamp, scene, room.root) : null;
     this.espresso = n.espresso ? new Espresso(n.espresso, scene) : null;
     this.steam = n.steam ? new Steam(n.steam, scene) : null;

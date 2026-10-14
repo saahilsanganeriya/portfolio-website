@@ -14,6 +14,13 @@ export interface WindowViewNode {
   nightFile: string | null;
 }
 
+/** The sky over the window: its dome, where sky directions start, and the window framing's eye. */
+export interface WindowSkyNode {
+  mesh: THREE.Mesh;
+  centre: THREE.Vector3;
+  eye: THREE.Vector3;
+}
+
 /** A runtime art surface (poster, print, sticky note): its slot and the shape of its face. */
 export interface ArtNode {
   slot: number;
@@ -69,6 +76,7 @@ export interface ProjectorNodes {
 
 export interface WorldNodes {
   windowViews: WindowViewNode[];
+  windowSky: WindowSkyNode | null;
   posters: ArtNode[];
   /** The Pale Blue Dot print on the space wall and its picture's file beside the room (public/room/). */
   paleBlueDot: { node: ArtNode; file: string } | null;
@@ -293,6 +301,12 @@ export function readWorld(room: RoomNodes): WorldNodes {
     }
   }
 
+  const skyMesh = mesh('window_sky');
+  const skyCentre = find('window_sky_centre');
+  const skyEye = find('window_sky_eye');
+  const windowSky =
+    skyMesh && skyCentre && skyEye ? { mesh: skyMesh, centre: worldPosition(skyCentre), eye: worldPosition(skyEye) } : null;
+
   const posters: ArtNode[] = [];
   for (let n = 0; n < POSTER_SLOTS; n++) {
     const art = mesh(`poster_art_${n}`);
@@ -343,6 +357,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
 
   return {
     windowViews,
+    windowSky,
     posters,
     paleBlueDot,
     prints,
