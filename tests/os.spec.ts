@@ -12,6 +12,9 @@ const APPS = [
   'Writing',
   'A Narrative in a Frame',
   'Films',
+  'Books',
+  'Recipes',
+  'Voyager Golden Record',
   'Terminal',
   'Résumé',
   'Credits',
@@ -30,6 +33,21 @@ const PROJECT = {
   title: 'A real-time streaming pipeline (Amazon internship)',
   repo: 'https://github.com/saahilsanganeriya/real_time_streaming',
 };
+
+// Books, Recipes and Voyager read build-time JSON; these stand in for it, empty and with synthetic entries.
+const shelf = (name: string) =>
+  JSON.parse(readFileSync(new URL(`./fixtures/shelves/${name}.json`, import.meta.url), 'utf8')) as unknown;
+async function serveShelves(page: Page, mode: 'empty' | 'sample') {
+  const empty = mode === 'empty';
+  await page.route('**/content/books.json', (route) => route.fulfill({ json: empty ? { books: [] } : shelf('books') }));
+  await page.route('**/content/recipes.json', (route) =>
+    route.fulfill({ json: empty ? { recipes: [] } : shelf('recipes') }),
+  );
+  await page.route('**/content/recipes/sample-loaf.json', (route) => route.fulfill({ json: shelf('recipe-sample-loaf') }));
+  await page.route('**/content/voyager/voyager.json', (route) =>
+    empty ? route.fulfill({ status: 404, body: '' }) : route.fulfill({ json: shelf('voyager') }),
+  );
+}
 
 async function seriousAxeViolations(page: Page): Promise<string[]> {
   const { violations } = await new AxeBuilder({ page })
@@ -150,7 +168,6 @@ test.describe('desktop', () => {
     // The page body is the About page as written, with each photo the page names set beside its paragraph.
     await expect(about.locator('.os-prose p').filter({ hasText: ABOUT.firstWords })).toBeVisible();
     await expect(about.locator('.os-prose img')).toHaveCount(ABOUT.photos);
-    await expect(page).toHaveURL(/\/os\?embed=1$/);
   });
 
   /** Catches a photograph's deep link opening the wrong one, and full-size files loading before a photograph is opened. */
@@ -181,6 +198,68 @@ test.describe('desktop', () => {
     await photo.getByRole('link', { name: 'Next ›' }).click();
     await expect(page).toHaveURL(/#photography\/[a-z0-9-]+$/);
     await expect(photo.getByRole('heading', { level: 2, name: 'colorful tshirts on monochrome afternoons' })).toBeHidden();
+  });
+
+  /** Catches a shelf window that errors or reads as broken while its content is not written yet (zero entries). */
+  test('Books, Recipes and Voyager read well with nothing published', async ({ page }) => {
+    await serveShelves(page, 'empty');
+    for (const [hash, name, note] of [
+      ['books', 'Books', 'No books on the shelf yet.'],
+      ['recipes', 'Recipes', 'No recipes written up yet.'],
+      ['voyager', 'Voyager Golden Record', 'This page is not published yet.'],
+    ]) {
+      await page.goto(`/os?embed=1#${hash}`);
+      const win = page.getByRole('dialog', { name });
+      await expect(win.locator('.os-note'), hash).toHaveText(note);
+      await expect(win).toHaveCSS('opacity', '1');
+      expect(await seriousAxeViolations(page), hash).toEqual([]);
+    }
+  });
+
+  /** Catches the shelves dropping what the content gives them: a book's line, a recipe's ingredients or method, the record's text. */
+  test('Books, Recipes and Voyager render their entries', async ({ page }) => {
+    await serveShelves(page, 'sample');
+    await page.goto('/os?embed=1#books');
+    const books = page.getByRole('dialog', { name: 'Books' });
+    await expect(books.getByRole('listitem')).toHaveCount(2);
+    await expect(books.getByRole('heading', { level: 3, name: 'Sample Book One' })).toBeVisible();
+    await expect(books.getByText('Test Author, 1994')).toBeVisible();
+    await expect(books.getByText('A line about the first book.')).toBeVisible();
+    await expect(books.locator('.os-status-cell').first()).toHaveText('2 books');
+
+    await page.goto('/os?embed=1#recipes');
+    const recipes = page.getByRole('dialog', { name: 'Recipes' });
+    await recipes.getByRole('link', { name: /Sample loaf/ }).click();
+    await expect(page).toHaveURL(/#recipes\/sample-loaf$/);
+    await expect(recipes.getByRole('heading', { level: 2, name: 'Sample loaf' })).toBeVisible();
+    await expect(recipes.locator('.os-facts')).toContainText('1 loaf');
+    const ingredients = recipes.getByRole('region', { name: 'Ingredients' });
+    await expect(ingredients.getByRole('heading', { level: 4, name: 'For the levain' })).toBeVisible();
+    await expect(ingredients.getByRole('listitem')).toHaveText(['500 g flour', '50 g starter', '50 g water']);
+    await expect(recipes.getByRole('heading', { level: 2, name: 'Method' })).toBeVisible();
+    await expect(recipes.getByText('Bake.')).toBeVisible();
+    await expect(recipes.getByRole('img', { name: 'A test picture.' })).toBeVisible();
+    await expect(recipes).toHaveCSS('opacity', '1');
+    await page.reload();
+    await expect(page.getByRole('dialog', { name: 'Recipes' }).getByRole('heading', { level: 2, name: 'Sample loaf' })).toBeVisible();
+    expect(await seriousAxeViolations(page), 'recipe').toEqual([]);
+    await recipes.getByRole('link', { name: '‹ All recipes' }).click();
+    await expect(recipes.getByRole('link', { name: /Sample loaf/ })).toBeVisible();
+
+    await page.goto('/os?embed=1#voyager');
+    const voyager = page.getByRole('dialog', { name: 'Voyager Golden Record' });
+    await expect(voyager.getByRole('heading', { level: 2, name: 'The Voyager Golden Record' })).toBeVisible();
+    await expect(voyager.getByText('A test paragraph.')).toBeVisible();
+    // One window per fresh load: a hash change alone stacks windows, whose overlapping controls axe then flags.
+    for (const [hash, name] of [
+      ['books', 'Books'],
+      ['voyager', 'Voyager Golden Record'],
+    ]) {
+      await page.goto(`/os?embed=1#${hash}`);
+      await page.reload();
+      await expect(page.getByRole('dialog', { name })).toHaveCSS('opacity', '1');
+      expect(await seriousAxeViolations(page), hash).toEqual([]);
+    }
   });
 
   /** Catches the wallpaper going missing, which leaves the flat walnut colour the owner ruled out. */

@@ -2,7 +2,7 @@ import { PixelIcon } from '../assets/PixelIcon';
 import { formatDay } from '../format';
 import type { OsApi, OsImage, OsProject } from '../types';
 
-interface Row {
+export interface Row {
   href: string;
   title: string;
   summary: string;
@@ -38,7 +38,7 @@ function Thumb({ image, large }: { image: OsImage | null; large: boolean }) {
 
 // Win98's "Details" view: one row per file, a name column and a narrow column on the right. Featured projects
 // use the "Thumbnails" variant: a framed picture on the left of each row.
-function DetailsList({
+export function DetailsList({
   heading,
   metaLabel,
   rows,

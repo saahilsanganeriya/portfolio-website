@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
@@ -82,4 +85,67 @@ const photography = defineCollection({
     }),
 });
 
-export const collections = { projects, blog, pages, photography };
+// ---- SaahilOS shelves: Books, Recipes and Voyager. Each may be empty (or absent) and the build still passes. ----
+
+// src/content/books.json: an array of { title, author, year, line }, kept in the order written.
+const books = defineCollection({
+  loader: {
+    name: 'books-json',
+    load: async ({ config, store, parseData, watcher }) => {
+      const file = new URL('src/content/books.json', config.root);
+      watcher?.add(fileURLToPath(file));
+      store.clear();
+      if (!existsSync(file)) return;
+      const list: unknown = JSON.parse(await readFile(file, 'utf8'));
+      if (!Array.isArray(list)) throw new Error('src/content/books.json: expected an array of books');
+      for (const [order, book] of list.entries()) {
+        const id = String(order);
+        store.set({ id, data: await parseData({ id, data: { ...book, order } }) });
+      }
+    },
+  },
+  schema: z.object({
+    title: z.string().min(1),
+    author: z.string().min(1),
+    year: z.number().int(),
+    /** One line in his voice. */
+    line: z.string().min(1),
+    order: z.number().int(),
+  }),
+});
+
+// src/content/recipes/<slug>.mdx: frontmatter below, body `## Method` and `## Notes`.
+const recipes = defineCollection({
+  loader: entries('recipes'),
+  schema: ({ image }) =>
+    z
+      .object({
+        title: z.string(),
+        /** The day it was first published here. */
+        date: z.coerce.date(),
+        summary: z.string(),
+        yield: z.string(),
+        time: z.string(),
+        /** Plain lines, or groups ("For the dough") of lines. */
+        ingredients: z
+          .array(z.union([z.string().min(1), z.object({ group: z.string().min(1), items: z.array(z.string().min(1)).min(1) })]))
+          .min(1),
+        photo: image().optional(),
+        photoAlt: z.string().optional(),
+      })
+      .refine((recipe) => !recipe.photo || Boolean(recipe.photoAlt), {
+        message: 'a recipe photo needs photoAlt',
+        path: ['photoAlt'],
+      }),
+});
+
+// src/content/voyager.mdx: the Voyager Golden Record window.
+const voyager = defineCollection({
+  loader: glob({ base: './src/content', pattern: 'voyager.{md,mdx}' }),
+  schema: z.object({
+    title: z.string(),
+    summary: z.string(),
+  }),
+});
+
+export const collections = { projects, blog, pages, photography, books, recipes, voyager };

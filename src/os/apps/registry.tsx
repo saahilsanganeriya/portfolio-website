@@ -9,6 +9,7 @@ import { BlogApp, ProjectsApp } from './Lists';
 import { OvenApp } from './OvenApp';
 import { PhotographyApp } from './photography/PhotographyApp';
 import { PostReader, ProjectReader } from './Reader';
+import { BooksApp, RecipesApp, VoyagerApp } from './ShelfApps';
 import { CreditsApp, ResumeApp } from './SmallApps';
 import { TerminalApp } from './TerminalApp';
 
@@ -20,6 +21,9 @@ export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   blog: { label: 'Writing', icon: 'page' },
   photography: { label: 'A Narrative in a Frame', icon: 'camera' },
   films: { label: 'Films', icon: 'films' },
+  books: { label: 'Books', icon: 'books' },
+  recipes: { label: 'Recipes', icon: 'recipes' },
+  voyager: { label: 'Voyager Golden Record', icon: 'voyager' },
   terminal: { label: 'Terminal', icon: 'terminal' },
   resume: { label: 'Résumé', icon: 'resume' },
   credits: { label: 'Credits', icon: 'credits' },
@@ -65,6 +69,9 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     oven: `${plural(index.oven.items.length, 'thing')} in the oven`,
     blog: plural(index.posts.length, 'post'),
     films: 'Films from the Letterboxd diary',
+    books: '',
+    recipes: '',
+    voyager: '',
     terminal: 'Type help for the commands',
     about: '',
     resume: '',
@@ -85,6 +92,12 @@ export function AppBody({ route, os }: { route: Route; os: OsApi }): ReactNode {
       return route.slug ? <PostReader slug={route.slug} os={os} /> : <BlogApp os={os} />;
     case 'films':
       return <FilmsApp slug={route.slug} os={os} />;
+    case 'books':
+      return <BooksApp />;
+    case 'recipes':
+      return <RecipesApp slug={route.slug} />;
+    case 'voyager':
+      return <VoyagerApp />;
     case 'terminal':
       return <TerminalApp os={os} />;
     case 'about':

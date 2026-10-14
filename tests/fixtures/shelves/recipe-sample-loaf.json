@@ -1,0 +1,21 @@
+{
+  "data": {
+    "title": "Sample loaf",
+    "date": "2026-10-01T00:00:00.000Z",
+    "summary": "A test recipe.",
+    "yield": "1 loaf",
+    "time": "1 day",
+    "ingredients": [
+      "500 g flour",
+      {
+        "group": "For the levain",
+        "items": [
+          "50 g starter",
+          "50 g water"
+        ]
+      }
+    ],
+    "photoAlt": "A test picture."
+  },
+  "html": "<h2 id=\"method\">Method</h2>\n<ol>\n<li>Mix.</li>\n<li>Bake.</li>\n</ol>\n<h2 id=\"notes\">Notes</h2>\n<p>A note.</p>"
+}

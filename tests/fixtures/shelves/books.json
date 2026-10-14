@@ -1,0 +1,16 @@
+{
+    "books": [
+        {
+            "title": "Sample Book One",
+            "author": "Test Author",
+            "year": 1994,
+            "line": "A line about the first book."
+        },
+        {
+            "title": "Sample Book Two",
+            "author": "Another Author",
+            "year": 2019,
+            "line": "A line about the second book."
+        }
+    ]
+}

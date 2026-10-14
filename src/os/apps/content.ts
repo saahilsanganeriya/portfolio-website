@@ -12,34 +12,43 @@ export type ContentState<T> =
   | { state: 'missing' }
   | { state: 'failed'; reason: string };
 
+/** A JSON file the build writes, as a window sees it while it loads. */
+export type Loaded<T> =
+  | { state: 'loading' }
+  | { state: 'ready'; value: T }
+  | { state: 'missing' }
+  | { state: 'failed'; reason: string };
+
 class MissingContent extends Error {}
 
-// One request per entry for the life of the page; the cache holds at most one item per published page.
-const requests = new Map<string, Promise<ContentEntry<unknown>>>();
+// One request per file for the life of the page; the cache holds at most one item per published file.
+const requests = new Map<string, Promise<unknown>>();
 
-export function loadContent<T>(collection: string, slug: string): Promise<ContentEntry<T>> {
-  const key = `${collection}/${slug}`;
-  let request = requests.get(key);
+export function loadJson<T>(url: string): Promise<T> {
+  let request = requests.get(url);
   if (!request) {
-    request = fetch(`/content/${key}.json`).then(async (response) => {
-      if (response.status === 404) throw new MissingContent(key);
+    request = fetch(url).then(async (response) => {
+      if (response.status === 404) throw new MissingContent(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return (await response.json()) as ContentEntry<unknown>;
+      return response.json();
     });
-    request.catch(() => requests.delete(key));
-    requests.set(key, request);
+    request.catch(() => requests.delete(url));
+    requests.set(url, request);
   }
-  return request as Promise<ContentEntry<T>>;
+  return request as Promise<T>;
 }
 
-/** Window bodies come from the static `/content/<collection>/<slug>.json` files the build writes. */
-export function useContent<T>(collection: string, slug: string): ContentState<T> {
-  const [result, setResult] = useState<ContentState<T>>({ state: 'loading' });
+export const loadContent = <T>(collection: string, slug: string): Promise<ContentEntry<T>> =>
+  loadJson<ContentEntry<T>>(`/content/${collection}/${slug}.json`);
+
+/** Loads a JSON file the build writes; a 404 means "not published yet", anything else a failure to show. */
+export function useJson<T>(url: string): Loaded<T> {
+  const [result, setResult] = useState<Loaded<T>>({ state: 'loading' });
   useEffect(() => {
     let live = true;
     setResult({ state: 'loading' });
-    loadContent<T>(collection, slug).then(
-      (entry) => live && setResult({ state: 'ready', entry }),
+    loadJson<T>(url).then(
+      (value) => live && setResult({ state: 'ready', value }),
       (error: unknown) =>
         live &&
         setResult(error instanceof MissingContent ? { state: 'missing' } : { state: 'failed', reason: String(error) }),
@@ -47,8 +56,14 @@ export function useContent<T>(collection: string, slug: string): ContentState<T>
     return () => {
       live = false;
     };
-  }, [collection, slug]);
+  }, [url]);
   return result;
+}
+
+/** Window bodies come from the static `/content/<collection>/<slug>.json` files the build writes. */
+export function useContent<T>(collection: string, slug: string): ContentState<T> {
+  const result = useJson<ContentEntry<T>>(`/content/${collection}/${slug}.json`);
+  return result.state === 'ready' ? { state: 'ready', entry: result.value } : result;
 }
 
 /** Link attributes for an href inside the OS: other sites open in a new tab, plain pages replace the whole tab. */

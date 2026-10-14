@@ -32,6 +32,12 @@ export function windowHref(route: Route): string | null {
     case 'resume':
     case 'credits':
       return `/${route.app}`;
+    // No pages of their own: the room's address opens them on the monitor (the bookshelf, the oven, the record).
+    case 'books':
+    case 'voyager':
+      return `/#${route.app}`;
+    case 'recipes':
+      return route.slug ? `/#recipes/${route.slug}` : '/#recipes';
     case 'photography':
     case 'terminal':
     case 'oven':

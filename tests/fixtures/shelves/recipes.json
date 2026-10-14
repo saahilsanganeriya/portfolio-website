@@ -1,0 +1,29 @@
+{
+  "recipes": [
+    {
+      "slug": "sample-loaf",
+      "title": "Sample loaf",
+      "date": "2026-10-01",
+      "summary": "A test recipe.",
+      "yield": "1 loaf",
+      "time": "1 day",
+      "ingredients": [
+        "500 g flour",
+        {
+          "group": "For the levain",
+          "items": [
+            "50 g starter",
+            "50 g water"
+          ]
+        }
+      ],
+      "photo": {
+        "src": "/og/default.png",
+        "srcset": "/og/default.png 1200w",
+        "width": 1200,
+        "height": 630,
+        "alt": "A test picture."
+      }
+    }
+  ]
+}

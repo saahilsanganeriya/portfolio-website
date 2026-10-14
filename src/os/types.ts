@@ -95,6 +95,31 @@ export interface OvenList {
   updated: string;
 }
 
+/** One of the books on the shelf (src/content/books.json, served at /content/books.json). */
+export interface OsBook {
+  title: string;
+  author: string;
+  year: number;
+  /** One line in his voice. */
+  line: string;
+}
+
+/** A plain ingredient line, or a group of them under a heading ("For the dough"). */
+export type OsIngredient = string | { group: string; items: string[] };
+
+/** A recipe's header and ingredients (/content/recipes.json); its method and notes are the body. */
+export interface OsRecipe {
+  slug: string;
+  title: string;
+  /** Calendar day, YYYY-MM-DD. */
+  date: string;
+  summary: string;
+  yield: string;
+  time: string;
+  ingredients: OsIngredient[];
+  photo: OsImage | null;
+}
+
 export interface OsWallpaper {
   avif: string;
   webp: string;
@@ -124,6 +149,9 @@ export const APP_IDS = [
   'blog',
   'photography',
   'films',
+  'books',
+  'recipes',
+  'voyager',
   'terminal',
   'resume',
   'credits',
