@@ -97,11 +97,14 @@ void main() {
   vec3 e = normalize(vWorld - uEye);
   float w = windowBlend(vWorld);
   vec3 colour = blendDisplay(skyOf(0, d), skyOf(1, d), w);
-  colour += vec3(0.86, 0.88, 1.0) * starsAt(e, d) * mix(uStars[0], uStars[1], w);
+  // Each body is skipped while it is not shown (the same for every pixel, so the branch is cheap).
+  if (max(uStars[0], uStars[1]) > 0.0) colour += vec3(0.86, 0.88, 1.0) * starsAt(e, d) * mix(uStars[0], uStars[1], w);
   for (int side = 0; side < 2; side++) {
-    colour += sunOf(side, e);
-    vec4 moon = moonOf(side, e);
-    colour = colour * (1.0 - moon.a) + moon.rgb;
+    if (uSunShown[side] > 0.0) colour += sunOf(side, e);
+    if (uMoonShown[side] > 0.0) {
+      vec4 moon = moonOf(side, e);
+      colour = colour * (1.0 - moon.a) + moon.rgb;
+    }
   }
   gl_FragColor = vec4(min(colour, vec3(1.0)), 1.0);
   #include <colorspace_fragment>
