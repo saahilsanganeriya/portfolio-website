@@ -1,0 +1,178 @@
+---
+// The record crate by the armchair (PLAN-ROUND-7 §7): opened by a click on the record player, it holds four records to
+// put on, Stop, and every record's credit (the CC BY ones ask for it). It stays empty until the first visit to the
+// player, when src/scene/World/RecordPlayer.ts fills it, so no page carries the sleeves before they are wanted.
+---
+
+<section id="room-records" class="room-records" aria-labelledby="room-records-title" data-room-ui data-records hidden>
+  <header class="room-records-head">
+    <h2 id="room-records-title">Records</h2>
+    <button type="button" class="room-records-button" data-records-close>Close</button>
+  </header>
+  <ul class="room-records-crate" aria-label="The crate" data-records-list></ul>
+  <div class="room-records-now">
+    <p aria-live="polite" data-records-now></p>
+    <button type="button" class="room-records-button" data-records-stop disabled>Stop</button>
+  </div>
+  <p class="room-records-sound" data-records-sound hidden>
+    Sound is off. <button type="button" class="room-records-button" data-records-sound-on>Turn sound on</button>
+  </p>
+  <ul class="room-records-credits" aria-label="Credits" data-records-credits></ul>
+</section>
+
+<style>
+  .room-records {
+    position: absolute;
+    right: var(--space-3);
+    bottom: calc(var(--space-3) + 2.4rem);
+    z-index: 4;
+    width: min(26rem, calc(100vw - 2 * var(--space-3)));
+    max-height: calc(100% - 5rem);
+    overflow-y: auto;
+    padding: var(--space-3);
+    border: 1px solid rgb(168 159 145 / 0.5);
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+  }
+
+  :global(html.room-os) .room-records,
+  :global(html.room-2d) .room-records {
+    display: none;
+  }
+
+  .room-records-head,
+  .room-records-now {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .room-records-head {
+    margin-bottom: var(--space-3);
+  }
+
+  .room-records-head h2 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--size-meta);
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dust);
+  }
+
+  .room-records-button {
+    padding: 0.25rem 0.65rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    border-radius: 0;
+    background: var(--ink);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .room-records-button:hover:not(:disabled) {
+    border-color: var(--paper);
+  }
+
+  .room-records-button:disabled {
+    color: var(--dust);
+    cursor: default;
+  }
+
+  /* The crate: four sleeves side by side, flipped through left to right. */
+  .room-records-crate {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-2);
+    margin: 0 0 var(--space-3);
+    padding: 0;
+    list-style: none;
+  }
+
+  .room-records-crate :global(.room-records-record) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .room-records-crate :global(.room-records-sleeve) {
+    display: block;
+    aspect-ratio: 1;
+    outline: 1px solid rgb(168 159 145 / 0.35);
+    transition: transform 160ms ease-out;
+  }
+
+  .room-records-crate :global(.room-records-sleeve svg) {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .room-records-crate :global(.room-records-record:hover .room-records-sleeve) {
+    transform: translateY(-3px);
+  }
+
+  /* The record on the turntable: its sleeve is pulled up and underlined in the room's one accent. */
+  .room-records-crate :global(.room-records-record[aria-pressed='true'] .room-records-sleeve) {
+    transform: translateY(-5px);
+    outline: 1px solid var(--paper);
+    box-shadow: 0 3px 0 -1px var(--thread);
+  }
+
+  .room-records-crate :global(.room-records-caption) {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+  }
+
+  .room-records-crate :global(.room-records-title) {
+    font-family: var(--font-serif);
+    font-size: 0.95rem;
+  }
+
+  .room-records-crate :global(.room-records-meta) {
+    font-size: 0.75rem;
+    color: var(--dust);
+  }
+
+  .room-records-now p {
+    margin: 0;
+  }
+
+  .room-records-sound {
+    margin: var(--space-2) 0 0;
+    color: var(--dust);
+  }
+
+  .room-records-credits {
+    margin: var(--space-3) 0 0;
+    padding: var(--space-2) 0 0;
+    border-top: 1px solid rgb(168 159 145 / 0.3);
+    list-style: none;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--dust);
+  }
+
+  .room-records-credits :global(a) {
+    color: var(--paper);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .room-records-crate :global(.room-records-sleeve) {
+      transition: none;
+    }
+  }
+</style>
