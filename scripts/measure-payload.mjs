@@ -14,7 +14,10 @@
 // and before the first byte of any 3D response arrives (PLAN 12.3): the models, textures, the Basis transcoder and the
 // scene's code chunk.
 //
-//   node scripts/measure-payload.mjs [--no-build] [--url https://…]
+// --at <ISO time> shifts the page's Date to that moment (the window's pictures follow each city's clock); request
+// timings keep the real clock.
+//
+//   node scripts/measure-payload.mjs [--no-build] [--url https://…] [--at 2026-11-10T01:07:00Z]
 import { readdir, stat } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { serveBuild } from './lib/serve-build.mjs';
@@ -33,6 +36,23 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 let ok = false;
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+  if (option('--at')) {
+    // Only Date moves: Playwright's clock would also replace performance, which the request timings below need.
+    await page.addInitScript((at) => {
+      const RealDate = Date;
+      const offset = at - RealDate.now();
+      class ShiftedDate extends RealDate {
+        constructor(...args) {
+          super(...(args.length ? args : [RealDate.now() + offset]));
+        }
+        static now() {
+          return RealDate.now() + offset;
+        }
+      }
+      window.Date = ShiftedDate;
+    }, Date.parse(option('--at')));
+    console.log(`page clock: ${option('--at')}`);
+  }
   const finished = [];
   page.on('requestfinished', (request) => finished.push(request));
   const room = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 60_000 });
