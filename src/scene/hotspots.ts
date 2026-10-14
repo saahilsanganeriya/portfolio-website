@@ -7,8 +7,9 @@ import type { StationName } from './Application/RoomModel';
 
 /**
  * What a prop does in the room itself; World carries these out. An action World does not handle yet falls back to the
- * hotspot's `fly`, then its `target`, so the room and the world can land in either order. `fan` stays only while
- * World still switches on it: room v3 has no fan and no hotspot names it.
+ * hotspot's `fly`, then its `target`, so the room and the world can land in either order. `fan` and `dial` stay only
+ * while World still switches on them: room v3 has no fan and no programs to dial (the screen is gone), and no hotspot
+ * names them.
  */
 export type WorldAction = 'album' | 'dial' | 'lava' | 'espresso' | 'oven' | 'projector' | 'print' | 'window' | 'fan';
 
@@ -70,7 +71,6 @@ export const HOTSPOTS: readonly Hotspot[] = [
   { proxies: ['hit_croissant'], prop: 'The croissant in the oven', label: 'Recipes', target: 'recipes', href: '/#recipes' },
   { proxies: ['hit_lava_lamp'], prop: 'The lava lamp', label: 'Lava lamp', target: null, action: 'lava', href: '/' },
   { proxies: ['hit_projector'], prop: 'The projector', label: 'Projector', target: null, fly: 'projector', action: 'projector', href: '/' },
-  { proxies: ['hit_projector_dial'], prop: 'The projector’s program dial', label: 'Next program', target: 'films', action: 'dial', href: '/films' },
   ...posters,
   { proxies: ['hit_plaque'], prop: 'The plaque under the posters', label: 'Four favourites', target: 'films/favourites', href: '/films#favourites' },
   { proxies: ['hit_photo_wall'], prop: 'The print wall', label: 'Photographs', target: 'photography', fly: 'photos', href: '/#photography' },

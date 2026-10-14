@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
-// The living room (PLAN 11.1, 12.1): the window by each city's clock, the album, the projector's programs, and what
+// The living room (PLAN 11.1, 12.1): the window by each city's clock, the album, the on-demand media, and what
 // every hotspot does. Props are clicked where the room projects them on screen.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
@@ -120,29 +120,6 @@ test('with reduced motion the album’s pages cut instead of turning', async ({ 
   await page.waitForFunction(() => window.__room!.world.album?.state === 'open', null, { timeout: 30_000 });
   await page.keyboard.press('ArrowRight');
   expect(await page.evaluate(() => window.__room!.world.album)).toMatchObject({ state: 'open', spread: 1 });
-  expect((await world(page)).fan?.turnsPerSecond).toBe(0);
-});
-
-/** Catches a dial that does not change the program, or a screen that opens the wrong window for what it shows. */
-test('the projector’s dial steps through The Reel, Photographs and Short films', async ({ page }) => {
-  await inRoom(page);
-  await listenForSounds(page);
-  expect((await world(page)).projector?.program).toBe('reel');
-  await clickProp(page, 'hit_projector_dial');
-  await page.waitForFunction(() => window.__room!.world.projector?.program === 'photographs', null, { timeout: 5_000 });
-  await page.waitForFunction(() => window.__room!.world.projector?.state === 'playing', null, { timeout: 30_000 });
-  const photo = (await world(page)).projector!.photo;
-  expect(photo).toBeTruthy();
-
-  await backToIdle(page);
-  await clickProp(page, 'hit_projector_dial');
-  await page.waitForFunction(() => window.__room!.world.projector?.program === 'shorts', null, { timeout: 5_000 });
-  await page.waitForFunction(() => window.__room!.world.projector?.state === 'playing', null, { timeout: 10_000 });
-
-  await backToIdle(page);
-  await clickProp(page, 'hit_projector_dial');
-  await page.waitForFunction(() => window.__room!.world.projector?.program === 'reel', null, { timeout: 5_000 });
-  expect((await sounds(page)).filter((name) => name === 'projector-clack')).toHaveLength(3);
 });
 
 /** Catches a prop that does nothing when clicked, opens the wrong window, or plays no sound (PLAN 11.1, 12.1). */
@@ -199,15 +176,14 @@ test('every new hotspot does what it says, with a sound where the room has its r
   expect(await sounds(page)).toEqual(expect.arrayContaining(['lava', 'espresso', 'espresso-brew', 'projector-clack', 'oven']));
 });
 
-/** Catches on-demand media (reel, prints, photographs, album pages) creeping into the room's initial load. */
-test('the reel, the prints and the photographs load only after the room is interactive', async ({ page }) => {
+/** Catches on-demand media (prints, photographs, album pages) creeping into the room's initial load. */
+test('the prints and the photographs load only after the room is interactive', async ({ page }) => {
   const started: { url: string; at: number }[] = [];
   page.on('request', (request) => started.push({ url: request.url(), at: Date.now() }));
   await inRoom(page);
-  await page.waitForFunction(() => window.__room!.reel?.state === 'playing', null, { timeout: 30_000 });
   await page.waitForFunction(() => window.__room!.world.prints.every((p) => p.shown > 0), null, { timeout: 30_000 });
   const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
-  const onDemand = started.filter(({ url }) => /reel\.mp4|\/480\.[^/]*\.webp|\/960\.[^/]*\.webp|photographs\.[^/]*\.js|api\/films\.json/.test(url));
+  const onDemand = started.filter(({ url }) => /\/480\.[^/]*\.webp|\/960\.[^/]*\.webp|photographs\.[^/]*\.js|api\/films\.json/.test(url));
   expect(onDemand.length).toBeGreaterThan(3);
   expect(onDemand.filter(({ at }) => at < interactive).map(({ url }) => url)).toEqual([]);
   // The posters hang in the first view, so they are part of it.
