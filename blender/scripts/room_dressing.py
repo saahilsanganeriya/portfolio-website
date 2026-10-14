@@ -524,7 +524,7 @@ def build_projector_dial(placed):
     """A program dial on the projector's room side: a brass plate with three marks (baked) and a bakelite knob
     (projector_dial, its own node; it turns about its local +Z, glTF +Y)."""
     import build_room
-    projector = next(o for o in placed["projector_8mm"] if o.name == "props_projector_8mm")
+    projector = next(o for o in placed["projector_8mm"] if o.name == "projector")
     bpy.context.view_layer.update()
     tx, ty, tz = build_room.PROJECTOR_TABLE
     target = Vector((tx + 0.02, ty, tz + 0.14))

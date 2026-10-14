@@ -44,6 +44,8 @@ RUNTIME_MESHES = {"crt_glow": "crt_glow", "lamp_bulb": "lamp_bulb", "lava_lamp_g
 PIVOTS = {
     "projector_dial": {"turn_axis": "+Y", "program_angles_deg": {"reel": 50, "photographs": 0, "short_films": -50}},
     "oven_door": {"turn_axis": "+X", "open_angle_deg": 82.0},
+    "projector_reel_front": {},  # turn_axis set by build_room.py from the reel's own axle
+    "projector_reel_rear": {},
 }
 GLTF_TRANSFORM = ["npx", "--yes", "-p", "@gltf-transform/cli@4.5.1", "gltf-transform"]
 MAX_GLB_BYTES = 4_600_000  # glb plus the two day textures keep the initial 3D payload under 6 MB (round 7 budget)
@@ -77,6 +79,8 @@ def parse_args():
     parser.add_argument("--samples", type=int, default=256, help="Cycles samples for the stills")
     parser.add_argument("--threads", type=int, default=24)
     parser.add_argument("--only", default="", help="comma-separated still stems to render (default: all)")
+    parser.add_argument("--merge-static", action="store_true",
+                        help="join plain scenery per atlas material to cut draw calls (named nodes stay separate)")
     return parser.parse_args(argv)
 
 
@@ -208,6 +212,36 @@ def prepare_meshes() -> list[bpy.types.Object]:
     return exported
 
 
+# Scenery the site reads by name stays its own node when --merge-static joins the rest.
+MERGE_KEEP = {"env_wall_back", "env_wall_left", "env_wall_right", "env_floor", "env_ceiling", "props_fujifilm_xt",
+              "props_super8_camera"}
+
+
+def merge_static(meshes):
+    """Join the plain env_ / desk_ / props_ scenery on each shared atlas material into one node per atlas
+    (env_scenery, desk_scenery, props_scenery): fewer draw calls, at the cost of coarser frustum culling. Contract
+    nodes, scenery the site names, pivots' meshes and every object with its own material stay as they are."""
+    groups = {}
+    for obj in meshes:
+        mat = obj.data.materials[0] if obj.type == "MESH" and obj.data.materials else None
+        if (mat is None or mat.name not in {f"room_{a}" for a in ATLASES} or obj.name in REQUIRED_NODES
+                or obj.name in MERGE_KEEP or obj.name in PIVOTS or not obj.name.startswith(("env_", "desk_", "props_"))):
+            continue
+        groups.setdefault(mat.name, []).append(obj)
+    for mat_name, objs in groups.items():
+        if len(objs) < 2:
+            continue
+        with bpy.context.temp_override(active_object=objs[0], selected_editable_objects=objs, selected_objects=objs,
+                                       object=objs[0]):
+            bpy.ops.object.join()
+        joined = objs[0]
+        joined.name = joined.data.name = mat_name.replace("room_", "") + "_scenery"
+        for obj in objs[1:]:
+            meshes.remove(obj)
+        print(f"export: merged {len(objs)} meshes into {joined.name}")
+    return meshes
+
+
 def add_pivots(meshes):
     """Give each turning part an empty at its own origin that holds the mesh: gltf-transform's quantization moves a
     mesh node's origin to its bounds' centre, which would put a hinge or an axle off its true axis."""
@@ -220,7 +254,7 @@ def add_pivots(meshes):
         pivot = bpy.data.objects.new(name, None)
         bpy.context.scene.collection.objects.link(pivot)
         pivot.matrix_world = Matrix.LocRotScale(loc, rot, None)
-        for key, value in extras.items():
+        for key, value in {**{k: obj[k] for k in ("turn_axis", "open_angle_deg") if k in obj}, **extras}.items():
             pivot[key] = value
         for key in ("turn_axis", "open_angle_deg"):
             if key in obj:
@@ -232,8 +266,10 @@ def add_pivots(meshes):
     return pivots
 
 
-def export_glb():
+def export_glb(merge=False):
     meshes = prepare_meshes()
+    if merge:
+        meshes = merge_static(meshes)
     pivots = add_pivots(meshes)
     empties = [o for o in bpy.context.scene.objects if o.type == "EMPTY"
                and any(c.name in ("markers", "cameras") for c in o.users_collection)] + pivots
@@ -365,6 +401,7 @@ REQUIRED_NODES = (
     + [f"photo_print_{i}" for i in range(5)]
     + ["hit_photo_wall", "photo_album", "hit_album", "album_open_anchor", "projector_dial", "hit_projector_dial"]
     # Round 7 (PLAN-ROUND-7 section 3)
+    + ["projector", "projector_reel_front", "projector_reel_rear"]
     + ["kitchen_counter", "espresso_cup", "espresso_coffee", "espresso_spout", "oven_door", "croissant",
        "hit_croissant", "projection_surface", "bookshelf", "hit_books", "print_japanese_lit", "hit_print_japanese_lit",
        "pennant_gatech", "hit_pennant_gatech", "voyager_record", "hit_voyager", "print_pale_blue_dot",
@@ -442,6 +479,19 @@ def show_current_photos():
             obj.data.materials.append(room_dressing.photo_material(int(obj["photo_slot"])))
 
 
+def show_current_notes():
+    """Redraw the sticky notes' art from the current phrases (room_art.mjs reads src/content/sticky-notes.json) and
+    give each note its material again, so the stills show what the site writes on them."""
+    import room_dressing
+    run("node", REPO / "blender" / "scripts" / "room_art.mjs", CACHE / "art")
+    for image in [i for i in bpy.data.images if i.filepath and "sticky_note_" in i.filepath]:
+        image.reload()
+    for obj in bpy.context.scene.objects:
+        if obj.get("runtime_art") == "sticky":
+            obj.data.materials.clear()
+            obj.data.materials.append(room_dressing.sticky_material(int(obj.name.rsplit("_", 1)[1])))
+
+
 def render_stills(samples: int, threads: int, only: set[str]):
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -449,6 +499,7 @@ def render_stills(samples: int, threads: int, only: set[str]):
 
     show_view_from_bakes()
     show_current_photos()
+    show_current_notes()
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.samples = samples
@@ -500,7 +551,7 @@ def main():
     if not args.no_glb:
         export_view_textures()
         export_pale_blue_dot()
-        export_glb()
+        export_glb(merge=args.merge_static)
         write_floorplan()
 
 

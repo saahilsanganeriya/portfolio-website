@@ -995,6 +995,26 @@ def place_one(name, root, coll, atlas, mats):
     return meshes, anchors
 
 
+def name_projector_parts(meshes):
+    """The projector's body takes the contract's name, projector; each reel becomes projector_reel_front / _rear with
+    its origin on its axle (its bounds' centre) and turn_axis naming the axle in glTF terms, so the site can spin it
+    while the film plays (export.py puts a pivot there)."""
+    gltf_axis = {0: "+X", 1: "-Z", 2: "+Y"}  # Blender local x, y, z as glTF axes
+    for obj in meshes:
+        base = obj.name.split(".")[0]
+        if base == "props_projector_8mm":
+            obj.name = obj.data.name = "projector"
+        elif base.startswith("props_projector_8mm_reel_"):
+            obj.name = obj.data.name = base.replace("props_projector_8mm_", "projector_")
+            pts = [v.co for v in obj.data.vertices]
+            lo = Vector([min(p[i] for p in pts) for i in range(3)])
+            hi = Vector([max(p[i] for p in pts) for i in range(3)])
+            centre = (lo + hi) / 2
+            obj.data.transform(Matrix.Translation(-centre))
+            obj.matrix_world = obj.matrix_world @ Matrix.Translation(centre)
+            obj["turn_axis"] = gltf_axis[min(range(3), key=lambda i: hi[i] - lo[i])]
+
+
 def place_props(mats):
     placed, anchors = {}, {}
     for name, (loc, _, _) in PROPS.items():
@@ -1010,6 +1030,8 @@ def place_props(mats):
                 obj.name = f"props_{base}"
             if obj.name == "props_mango_plant_leaves":
                 obj["double_sided"] = True  # single-layer leaves; export gives them a double-sided material
+        if name == "projector_8mm":
+            name_projector_parts(meshes)
         if name == "film_canister":
             # The flat 8 mm tin read as a bagel from the wide framing (owner, round 2): only the 35 mm canister and
             # cassette stay, on the side table's lower shelf.
@@ -1375,7 +1397,7 @@ def aim_camera(name: str):
 # so the glb's geometry stays near 100k vertices with the round-two dressing (PLAN 11.3, room.glb <= 4.3 MB).
 DECIMATE = {
     "props_fujifilm_xt": 0.4, "props_fujifilm_x100": 0.4, "props_fujica_st": 0.4, "props_super8_camera": 0.4,
-    "props_projector_8mm": 0.3, "props_projector_8mm_reel_front": 0.4, "props_projector_8mm_reel_rear": 0.4,
+    "projector": 0.3, "projector_reel_front": 0.4, "projector_reel_rear": 0.4,
     "props_nas_4bay": 0.5, "espresso_machine": 0.6, "countertop_oven": 0.75, "props_alarm_clock": 0.45,
     "props_haworthia": 0.5, "props_vase": 0.5, "props_tea_tin": 0.6, "props_lota": 0.6, "props_pen_cup": 0.7,
     "props_books_stack": 0.7, "props_film_canister_b": 0.6, "lava_lamp": 0.7, "desk_keyboard": 0.7,
