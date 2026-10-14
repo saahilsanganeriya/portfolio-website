@@ -59,12 +59,16 @@ HDRI_ROTATION_Z = math.radians(-14)
 # ---- Layout (plan view; the camera looks in from the open front) ----
 #
 #        back wall: posters + lava lamp | desk, shelf, pennant | big window, mango on the sill
-#   left wall:    doorway (hallway beyond), photo wall, projection wall, kitchen nook
-#   right return: bookcase, Voyager record, Pale Blue Dot, Japanese-literature print; armchair corner in front
+#   left wall:    doorway (hallway beyond), Instax board, roller screen, mini kitchen
+#   right return: bookcase, Voyager record, Pale Blue Dot, Japanese-literature print, the projector's shelf high at
+#                 its front end; armchair, record cabinet and paper lantern in front
 KITCHEN_TOP = 0.90  # counter height of the kitchen nook (room_dressing builds it)
 CREDENZA_TOP = 0.60  # the low walnut credenza under the posters that carries the lava lamp
-PROJECTOR_TABLE = (-1.38, -2.45, 0.55)  # side table top centre; the projector throws -X onto the left wall
-PROJECTION = (-2.45, 1.52, 1.00, 0.5625)  # left wall: centre y, centre z, width, height (16:9)
+# The projector stands on a walnut wall shelf high at the right return wall's front end (shelf x0, x1, y0, y1, top),
+# above the space wall's prints so its click box clears theirs from the wide view, and throws -X across the room onto
+# the roller screen on the left wall.
+PROJECTOR_SHELF = (X_RIGHT - 0.36, X_RIGHT, -1.98, -1.50, 2.24)
+PROJECTOR_AT = (X_RIGHT - 0.175, -1.86, 2.24)
 
 # Props from blender/props/<name>.blend (each faces -Y with its origin at the base): placement in metres,
 # z-rotation in degrees or the name of the prop its front should face, and a placeholder size for a missing file.
@@ -73,13 +77,13 @@ PROPS = {
     "fujifilm_xt": ((-0.62, 0.30, 1.6475), -12, (0.135, 0.065, 0.095)),
     "fujica_st": ((-0.25, 0.31, 1.6475), 8, (0.145, 0.09, 0.095)),
     "super8_camera": ((0.12, 0.30, 1.6475), -20, (0.07, 0.24, 0.17)),
-    "film_canister": ((PROJECTOR_TABLE[0] - 0.02, PROJECTOR_TABLE[1], 0.211), 25, (0.27, 0.14, 0.05)),
+    "film_canister": ((X_RIGHT - 0.17, -1.63, 2.24), 25, (0.27, 0.14, 0.05)),
     "books_stack": ((-0.88, 0.30, 2.0075), 90, (0.16, 0.24, 0.20)),
-    "projector_8mm": (PROJECTOR_TABLE, -90, (0.21, 0.33, 0.33)),
+    "projector_8mm": (PROJECTOR_AT, -90, (0.21, 0.33, 0.33)),
     "nas_4bay": ((0.545, 0.135, 0.7325), 30, (0.27, 0.31, 0.23)),
     "mango_plant": ((1.44, 0.345, WIN_Z0), 0, (0.45, 0.40, 0.45)),
     # Kitchen nook on the counter at the left wall's front end, fronts turned to the room (+X).
-    "espresso_machine": ((-3.02, -3.30, KITCHEN_TOP), 90, (0.23, 0.38, 0.55)),
+    "espresso_machine": ((-3.02, -3.11, KITCHEN_TOP), 90, (0.23, 0.38, 0.55)),
     "countertop_oven": ((-3.00, -3.70, KITCHEN_TOP), 90, (0.40, 0.33, 0.23)),
     # Alone on the credenza under the posters, where its glow lights the frames and the wall.
     "lava_lamp": ((-2.20, 0.25, CREDENZA_TOP), 0, (0.15, 0.15, 0.41)),
@@ -98,19 +102,20 @@ STILL_POSTERS = ["la-la-land", "yi-yi", "normal-people-2020", "black-swan"]
 
 CAMERAS = {
     # name: (position, target) in metres; vertical field of view is 35 degrees for every framing.
-    "cam_loading": ((3.8, -13.9, 5.0), (-0.45, -1.35, 0.95)),
-    "cam_idle": ((2.2, -9.2, 2.75), (-0.45, -1.35, 0.95)),
+    "cam_loading": ((2.72, -11.89, 2.24), (-0.45, -1.40, 1.30)),
+    "cam_idle": ((1.85, -9.0, 1.98), (-0.45, -1.40, 1.30)),
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
     "cam_window": ((1.85, -1.75, 1.55), (1.85, 1.40, 1.50)),
     "cam_shelf": ((1.80, -0.68, 0.98), (3.10, -0.62, 0.55)),
-    "cam_photos": ((-1.85, -1.22, 1.78), (-3.30, -1.22, 1.78)),
-    "cam_projector": ((0.80, -2.05, 1.25), (-3.30, -2.55, 1.05)),
+    "cam_photos": ((-1.92, -1.13, 1.74), (-3.30, -1.13, 1.74)),
+    "cam_projector": ((-0.35, -2.08, 1.62), (-3.30, -2.16, 1.66)),
+    "cam_record_player": ((1.55, -3.45, 1.40), (2.72, -2.55, 0.60)),
     "cam_espresso": ((-2.22, -3.18, 1.36), (-3.02, -3.30, 1.10)),
     "cam_oven": ((-2.18, -3.62, 1.26), (-3.00, -3.70, 0.98)),
     # Arrival: from the loading framing past the window and the mango plant onto the desk (the site glides
     # cam_loading -> arrival_0..2 -> cam_desk).
-    "cam_arrival_0": ((2.75, -2.85, 1.95), (1.85, 0.42, 1.45)),
+    "cam_arrival_0": ((2.55, -2.60, 1.90), (1.85, 0.42, 1.45)),
     "cam_arrival_1": ((1.30, -1.10, 1.45), (1.44, 0.35, 1.10)),
     "cam_arrival_2": ((0.40, -1.80, 1.42), (0.0, 0.0, 1.05)),
     # The tour: one framing per stop, the professional stops first (desk, window, books, space wall), then the rest.
@@ -120,10 +125,11 @@ CAMERAS = {
     "cam_tour_3": ((1.78, -0.90, 1.72), (3.10, -0.90, 1.74)),
     "cam_tour_4": ((-1.50, -2.90, 1.88), (-3.05, -3.52, 1.30)),
     "cam_tour_5": ((-1.60, -2.00, 1.45), (-2.20, 0.42, 1.18)),
-    "cam_tour_6": ((0.80, -2.05, 1.25), (-3.30, -2.55, 1.05)),
-    "cam_tour_7": ((-1.85, -1.22, 1.78), (-3.30, -1.22, 1.78)),
+    "cam_tour_6": ((-0.35, -2.08, 1.62), (-3.30, -2.16, 1.66)),
+    "cam_tour_7": ((-1.92, -1.13, 1.74), (-3.30, -1.13, 1.74)),
     "cam_tour_8": ((-2.22, -1.95, 1.62), (-2.22, 0.42, 1.62)),
     "cam_tour_9": ((0.55, -3.35, 1.62), (2.35, -1.35, 0.80)),
+    "cam_tour_10": ((1.55, -3.45, 1.40), (2.72, -2.55, 0.60)),
 }
 # The tour's stops in order: (id, label, camera, the plan-view point the map marks).
 TOUR_STOPS = [
@@ -133,13 +139,14 @@ TOUR_STOPS = [
     ("space", "Space wall", "cam_tour_3", (3.00, -0.75)),
     ("kitchen", "Kitchen nook", "cam_tour_4", (-2.98, -3.50)),
     ("lava-lamp", "Lava lamp", "cam_tour_5", (-2.20, 0.25)),
-    ("projector", "Projector wall", "cam_tour_6", (-3.15, -2.45)),
-    ("photos", "Photo wall", "cam_tour_7", (-3.15, -1.22)),
+    ("projector", "Projector", "cam_tour_6", (-3.15, -2.16)),
+    ("photos", "Photo board", "cam_tour_7", (-3.15, -1.13)),
     ("posters", "Posters", "cam_tour_8", (-2.22, 0.30)),
-    ("armchair", "Armchair corner", "cam_tour_9", (2.25, -1.80)),
+    ("armchair", "Armchair corner", "cam_tour_9", (2.02, -2.22)),
+    ("records", "Record player", "cam_tour_10", (2.72, -2.61)),
 ]
 CAMERA_FOV_DEG = 35.0
-EXPOSURE = 2.3  # round 7: a little brighter than round two's 2.15 (owner: a bit more professional), same lights
+EXPOSURE = 2.45  # round 7: brighter than round two's 2.15 (owner: a touch brighter overall), same lights
 LAVA_GLOW = 0.45
 
 
@@ -766,30 +773,28 @@ def build_fixtures(mats):
     smooth_by_angle(new_object("env_shelf_light", bm, "env", "env", [brass]), 50)
 
 
-def build_side_table(mats):
-    """The projector's walnut side table: a round top, a lower shelf for the film cans, three splayed legs."""
-    walnut = mats["walnut"]
+def build_projector_shelf(mats):
+    """The projector's wall shelf: a walnut board on two brass brackets at the right return wall's front end."""
+    x0, x1, y0, y1, top = PROJECTOR_SHELF
     bm = bmesh.new()
-    cx, cy, top = PROJECTOR_TABLE
-    add_cylinder(bm, 0.21, 0.03, (cx, cy, top - 0.015), segments=48)
-    add_cylinder(bm, 0.17, 0.022, (cx, cy, 0.20), segments=48)
-    for i in range(3):
-        ang = math.radians(90 + 120 * i)
-        foot = Vector((cx + 0.2 * math.cos(ang), cy + 0.2 * math.sin(ang), 0.0))
-        head = Vector((cx + 0.13 * math.cos(ang), cy + 0.13 * math.sin(ang), top - 0.03))
-        leg = bmesh.ops.create_cone(bm, cap_ends=True, segments=12, radius1=0.012, radius2=0.018,
-                                    depth=(head - foot).length)
-        mid = (head + foot) / 2
-        rot = (head - foot).to_track_quat("Z", "Y").to_matrix()
-        for v in leg["verts"]:
-            v.co = rot @ v.co + mid
-    smooth_by_angle(new_object("env_side_table", bm, "env", "env", [walnut]), 45)
+    add_box(bm, (x1 - x0, y1 - y0, 0.028), ((x0 + x1) / 2, (y0 + y1) / 2, top - 0.014), bevel=0.005, segments=3)
+    for y in (y0 + 0.08, y1 - 0.08):
+        add_box(bm, (0.012, 0.022, 0.24), (X_RIGHT - 0.006, y, top - 0.028 - 0.12), bevel=0.002, mat=1)
+        add_box(bm, (x1 - x0 - 0.04, 0.022, 0.012), ((x0 + x1) / 2 + 0.02, y, top - 0.034), bevel=0.002, mat=1)
+        brace = bmesh.ops.create_cube(bm, size=1.0)
+        for v in brace["verts"]:
+            v.co = Vector((v.co.x * 0.24, v.co.y * 0.016, v.co.z * 0.010))
+            v.co = Matrix.Rotation(math.radians(42), 3, "Y") @ v.co + Vector((X_RIGHT - 0.10, y, top - 0.13))
+        for f in {f for v in brace["verts"] for f in v.link_faces}:
+            f.material_index = 1
+    obj = new_object("env_projector_shelf", bm, "env", "env", [mats["walnut"], mats["brass"]])
+    smooth_by_angle(obj, 40)
 
 
 RUGS = {
     # name: (size, centre, material)
     "env_rug": ((2.5, 1.8), (-0.15, -0.68), "rug"),
-    "env_rug_corner": ((1.7, 1.25), (2.15, -1.62), "rug_corner"),
+    "env_rug_corner": ((1.7, 1.25), (2.10, -2.02), "rug_corner"),
 }
 
 
@@ -1034,7 +1039,7 @@ def place_props(mats):
             name_projector_parts(meshes)
         if name == "film_canister":
             # The flat 8 mm tin read as a bagel from the wide framing (owner, round 2): only the 35 mm canister and
-            # cassette stay, on the side table's lower shelf.
+            # cassette stay, beside the projector on its shelf.
             for obj in [o for o in meshes if o.name.endswith("film_canister_c")]:
                 meshes.remove(obj)
                 bpy.data.objects.remove(obj, do_unlink=True)
@@ -1183,7 +1188,12 @@ def build_proxies(placed, dressing, mats):
     add_proxy("hit_window", Vector((WIN_X0, Y_BACK - 0.02, WIN_Z0)), Vector((WIN_X1, Y_BACK + WALL_T, WIN_Z1)), mats,
               pad=0.0)
     add_proxy("hit_plaque", *world_bounds([dressing["plaque"]]), mats, pad=0.01)
-    add_proxy("hit_photo_wall", *world_bounds(dressing["frames"]), mats, pad=0.01)
+    # The board's box stops just behind the prints, so a print's own box (the site adds it in front) takes its click.
+    lo, hi = world_bounds([dressing["photo_board"]])
+    hi.x = X_LEFT + 0.004
+    add_proxy("hit_photo_board", lo, hi, mats, pad=0.01)
+    turntable = [dressing["record_player"], dressing["platter"], dressing["tonearm"]]
+    add_proxy("hit_record_player", *world_bounds(turntable), mats, pad=0.015)
     add_proxy("hit_album", *world_bounds([dressing["album"]]), mats, pad=0.015)
     dial = [dressing["dial"], bpy.data.objects["props_projector_dial_plate"]]
     add_proxy("hit_projector_dial", *world_bounds(dial), mats, pad=0.02)
@@ -1232,13 +1242,11 @@ def build_markers(placed, anchors, dressing):
     eye, target = Vector(CAMERAS["cam_desk"][0]), Vector(CAMERAS["cam_desk"][1])
     view = (target - eye).normalized()
     add_empty("album_open_anchor", eye + view * 0.55, (-view).to_track_quat("Z", "Y"), width_m=0.46, height_m=0.31)
-    picture = (surface["width_m"], surface["height_m"])
-    return lens, beam, screen_centre, picture
 
 
 # ---- Lights, world, render settings ----
 
-def build_lights(lens, beam, picture, screen_centre, mats):
+def build_lights(mats):
     lights = collection("lights")
 
     # Desk lamp: a spot inside the shade throws the warm pool; a faint point light fills the shade itself.
@@ -1257,19 +1265,6 @@ def build_lights(lens, beam, picture, screen_centre, mats):
     glow.color, glow.energy, glow.shadow_soft_size = (1.0, 0.56, 0.24), 10.0, 0.02
     obj = bpy.data.objects.new("light_lamp_glow", glow)
     obj.location = LAMP_BULB
-    lights.objects.link(obj)
-
-    proj = bpy.data.lights.new("projector", "SPOT")
-    proj.color = srgb("#9DB4C0")[:3]
-    proj.energy = 8.0
-    half_diag = math.hypot(*picture) / 2
-    proj.spot_size = 2 * math.atan(half_diag / (screen_centre - lens).length) * 1.15
-    proj.spot_blend = 0.25
-    proj.shadow_soft_size = 0.01
-    obj = bpy.data.objects.new("light_projector", proj)
-    obj.location = lens
-    obj.rotation_mode = "QUATERNION"
-    obj.rotation_quaternion = beam.to_track_quat("-Z", "Y")
     lights.objects.link(obj)
 
     # The shelf light's narrow spread keeps it on the lower shelf; wider, it spilled past the shelf's front edge
@@ -1335,16 +1330,19 @@ def build_practical_lights(dressing):
     lo, hi = world_bounds([oven])
     add("oven_glow", "POINT", Vector((hi.x + 0.04, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2)), (1.0, 0.42, 0.12), 2.5,
         size=0.05)
-    # Picture lamp over the photo wall.
+    # Picture lamp over the Instax board.
     p = dressing["photo_light"]
-    aim = Vector((X_LEFT, p.y, p.z - 0.35)) - p
-    add("photo_light", "AREA", p + Vector((0.0, 0.0, -0.022)), (1.0, 0.62, 0.32), 14.0, size=(0.66, 0.03),
+    aim = Vector((X_LEFT, p.y, p.z - 0.55)) - p
+    add("photo_light", "AREA", p + Vector((0.0, 0.0, -0.022)), (1.0, 0.62, 0.32), 10.0, size=(0.66, 0.03),
         rot=aim.normalized().to_track_quat("-Z", "Y"), spread=110)
-    # Paper lantern in the reading corner: a warm bulb inside the globe, pooling on the rug and the chair.
-    add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 10.0, size=0.12)
+    # Paper lantern between the armchair and the record cabinet: a warm bulb inside the globe, kept below the desk
+    # lamp and the CRT so the eye goes to the desk first.
+    add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 3.5, size=0.12)
+    # The light bar under the kitchen shelf: a warm wash down the tiles onto the counter.
+    add("under_shelf", "AREA", dressing["under_shelf"], (1.0, 0.60, 0.30), 9.0, size=(0.016, 0.98), rot=down, spread=140)
     # Kitchen pendant: a warm cone onto the counter, and the bulb's glow inside the shade.
     pendant = dressing["pendant"]
-    add("pendant", "SPOT", pendant, (1.0, 0.56, 0.24), 55.0, size=0.04, rot=down, cone=95, blend=0.7)
+    add("pendant", "SPOT", pendant, (1.0, 0.56, 0.24), 40.0, size=0.04, rot=down, cone=95, blend=0.7)
     add("pendant_glow", "POINT", pendant + Vector((0, 0, 0.02)), (1.0, 0.56, 0.24), 3.0, size=0.03)
     # Hallway sconce on the far wall, seen through the door: the hall glows warm beyond the room.
     add("hall_sconce", "POINT", Vector((HALL_X + 0.09, HALL_SCONCE_Y, 1.80)), (1.0, 0.55, 0.22), 28.0, size=0.05)
@@ -1401,7 +1399,7 @@ DECIMATE = {
     "props_nas_4bay": 0.5, "espresso_machine": 0.6, "countertop_oven": 0.75, "props_alarm_clock": 0.45,
     "props_haworthia": 0.5, "props_vase": 0.5, "props_tea_tin": 0.6, "props_lota": 0.6, "props_pen_cup": 0.7,
     "props_books_stack": 0.7, "props_film_canister_b": 0.6, "lava_lamp": 0.7, "desk_keyboard": 0.7,
-    "env_radiator": 0.6, "props_mango_plant": 0.6,
+    "env_radiator": 0.6, "props_mango_plant": 0.6, "props_board_croissant_0": 0.45, "props_board_croissant_1": 0.45,
 }
 
 
@@ -1443,9 +1441,12 @@ TEXEL_WEIGHTS = {
     "env_cornice": 0.45, "env_hall": 0.22, "env_hall_floor": 0.25, "env_hall_runner": 0.3, "env_hall_trim": 0.3,
     "env_hall_sconce": 0.6, "env_door": 0.45, "env_door_frame": 0.8, "env_rug": 0.7, "env_rug_corner": 0.7,
     "env_curtains": 0.8, "env_window_frame": 1.3, "env_credenza": 1.0, "kitchen_counter": 1.1, "env_kitchen_top": 1.2,
-    "env_kitchen_tiles": 1.3, "env_kitchen_shelf": 1.0, "env_reading_table": 1.0, "env_side_table": 0.9,
+    "env_kitchen_tiles": 1.3, "env_kitchen_shelf": 1.0, "env_record_cabinet": 1.0, "env_projector_shelf": 1.0,
     "poster_plaque": 6.0, "desk_notebook": 2.2, "photo_album": 1.4,
-    "props_books_top": 1.3, "props_books_low": 1.3, "props_records": 0.9, "bookshelf": 1.0,
+    "props_books_top": 1.3, "props_books_low": 1.3, "bookshelf": 1.0, "photo_board": 1.4,
+    "roller_screen_housing": 1.2, "roller_screen": 0.5, "record_player": 2.2, "platter": 2.4, "tonearm": 2.4,
+    "record_crate": 1.2, "props_kitchen_spices": 1.6, "props_kitchen_mugs": 1.4, "props_pour_over": 1.6,
+    "props_bakery_board": 2.0, "props_cinnamon_rolls": 2.0, "props_under_shelf_light": 1.0,
     "props_bookcase_books": 1.2, "props_bookend": 1.2, "props_kitchen_jars": 1.4, "props_kitchen_pendant": 1.2,
     "props_chopping_board": 1.0, "props_jacket": 0.9, "props_lounge_chair": 0.8, "props_lantern": 0.9,
     "props_reading_mug": 1.4, "props_floor_books": 1.0,
@@ -1455,9 +1456,9 @@ TEXEL_WEIGHTS = {
     "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_crt": 1.6, "crt_glow": 2.0, "desk_keyboard": 1.6,
     "desk_computer": 1.3, "desk_lamp_shade": 1.3, "props_mango_plant_leaves": 1.4,
 }
-# Heights things rest on (their bottoms there are hidden): floor, desk, side and reading tables, credenza, sill,
-# counter, desk shelf, kitchen shelf, bookcase levels.
-SUPPORT_Z = (0.0, 0.732, 0.55, 0.52, 0.60, 0.86, 0.90, 1.6475, 2.0075, 1.646, 0.075, 0.415, 0.755, 1.06)
+# Heights things rest on (their bottoms there are hidden): floor, desk, record cabinet, credenza, sill, counter,
+# desk shelf, kitchen shelf, bookcase levels, projector shelf.
+SUPPORT_Z = (0.0, 0.732, 0.56, 0.60, 0.86, 0.90, 1.6475, 2.0075, 1.646, 0.075, 0.415, 0.755, 1.06, 2.24)
 
 
 def tune_atlas_objects():
@@ -1470,8 +1471,6 @@ def tune_atlas_objects():
         weight = TEXEL_WEIGHTS.get(name)
         if weight is None and name.startswith("props_poster_frame_"):
             weight = 0.35
-        elif weight is None and name.startswith("props_photo_frame_"):
-            weight = 1.2  # cam_photos looks at them from 1.3 m
         elif obj.get("runtime_art"):
             # Only the light on the picture is baked (the site draws the art), and light is smooth.
             weight = 0.45
@@ -1501,6 +1500,51 @@ def tune_atlas_objects():
         bm.free()
 
 
+# Zones: the scene graph groups the room's meshes under empties at the origin (identity, so world positions are
+# unchanged), one per part of the room; cameras, markers and click proxies stay at the top. A mesh goes to the first
+# zone whose names claim it, else to the first zone whose plan box (x0, x1, y0, y1, z0, z1) holds its bounds' centre,
+# else to zone_room (the shell, which claims the walls, floor, ceiling, hallway and rugs by name).
+ZONES = [
+    ("zone_room", ("env_wall", "env_floor", "env_ceiling", "env_cornice", "env_skirting", "env_band", "env_hall",
+                   "env_door", "env_sky", "env_rug", "ghost_"), None),
+    ("zone_kitchen", ("kitchen_counter", "env_kitchen", "espresso", "countertop_oven", "oven_", "croissant",
+                      "props_kitchen", "props_bakery", "props_board_croissant", "props_cinnamon", "props_pour_over",
+                      "props_under_shelf", "props_chopping_board", "props_tea_tin"), (-3.4, -2.3, -4.1, -2.7, 0.0, 2.6)),
+    ("zone_photos", ("photo_board", "instax_slot_", "env_photo_light"), (-3.4, -2.9, -1.65, -0.60, 1.2, 2.4)),
+    ("zone_projector", ("projector", "env_projector_shelf", "props_film_canister", "roller_screen",
+                        "projection_surface", "props_projector_dial"), (2.5, 3.2, -2.0, -1.45, 1.4, 2.4)),
+    ("zone_records", ("env_record_cabinet", "record_", "platter", "tonearm", "props_reading_mug"),
+     (2.0, 3.2, -3.4, -2.2, 0.0, 1.4)),
+    ("zone_reading", ("props_lounge_chair", "props_lantern", "env_rug_corner"), (1.2, 3.2, -4.0, -1.9, 0.0, 2.0)),
+    ("zone_wall_space", ("bookshelf", "props_bookcase", "props_bookend", "book_spine_", "voyager", "print_pale_blue_dot",
+                         "props_frame_pale_blue_dot", "print_japanese_lit", "props_frame_japanese_lit", "props_haworthia"),
+     (2.55, 3.2, -1.30, 0.45, 0.0, 2.8)),
+    ("zone_window", ("window_view", "window_sf", "window_delhi", "env_window", "env_curtains", "env_radiator",
+                     "props_mango", "mango_"),
+     (1.0, 2.75, -0.7, 0.6, 0.0, 2.8)),
+    ("zone_posters", ("poster_", "props_poster_frame", "env_credenza", "lava_lamp"), (-3.3, -1.25, -0.7, 0.45, 0.0, 2.6)),
+    ("zone_desk", ("desk_", "monitor_", "crt_", "lamp_", "nas_", "props_nas", "sticky_note_", "photo_album",
+                   "pennant_gatech"), (-1.25, 1.0, -1.2, 0.45, 0.0, 2.6)),
+]
+
+
+def assign_zones():
+    """Parent every room mesh to its zone empty (see ZONES)."""
+    bpy.context.view_layer.update()
+    zones = {name: add_empty(name, (0.0, 0.0, 0.0), coll="zones") for name, _, _ in ZONES}
+    skip = {"cameras", "markers", "proxies", "lights", "zones"}
+    for obj in list(bpy.context.scene.objects):
+        if obj.type != "MESH" or obj.parent is not None or {c.name for c in obj.users_collection} & skip:
+            continue
+        lo, hi = world_bounds([obj])
+        c = (lo + hi) / 2
+        zone = next((z for z, names, _ in ZONES if obj.name.startswith(names)), None)
+        zone = zone or next((z for z, _, box in ZONES if box and box[0] <= c.x <= box[1] and box[2] <= c.y <= box[3]
+                             and box[4] <= c.z <= box[5]), "zone_room")
+        obj.parent = zones[zone]
+        obj.matrix_parent_inverse = Matrix.Identity(4)
+
+
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     subprocess.run(["node", str(REPO / "blender" / "scripts" / "room_art.mjs"), str(CACHE / "art")], check=True)
@@ -1514,7 +1558,7 @@ def main():
     build_radiator(mats)
     build_shelf(mats)
     build_fixtures(mats)
-    build_side_table(mats)
+    build_projector_shelf(mats)
     build_rug(mats)
     build_lamp(mats)
     build_crt_glass(mats)
@@ -1522,12 +1566,13 @@ def main():
     build_posters(mats)
     dressing = room_dressing.build_dressing(mats, placed)
     build_proxies(placed, dressing, mats)
-    lens, beam, screen_centre, picture = build_markers(placed, anchors, dressing)
-    build_lights(lens, beam, picture, screen_centre, mats)
+    build_markers(placed, anchors, dressing)
+    build_lights(mats)
     build_practical_lights(dressing)
     tone_room_emitters()
     reduce_geometry()
     tune_atlas_objects()
+    assign_zones()
     setup_world_and_render()
     bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
     for img in bpy.data.images:

@@ -134,7 +134,7 @@ def main():
     glow["source"] = "made for this site"
     pl.parent_keep_transform(glow, oven)
 
-    pastry = build_croissant(col, Vector(((CAV_X0 + CAV_X1) / 2, FRONT + CAV_D * 0.48, rack_z + 0.0025)))
+    pastry = pl.croissant("croissant", col, Vector(((CAV_X0 + CAV_X1) / 2, FRONT + CAV_D * 0.48, rack_z + 0.0025)))
     pl.parent_keep_transform(pastry, oven)
     pl.report(NAME, col, 18000)
     pl.save_prop(NAME)
@@ -156,79 +156,6 @@ def cut_cavity(oven):
     mod.operation, mod.solver, mod.object = "DIFFERENCE", "EXACT", cutter
     pl.apply_modifier(oven, mod)
     bpy.data.objects.remove(cutter, do_unlink=True)
-
-
-def build_croissant(col, base):
-    """A plain, well-made croissant: a crescent of seven laminated rolls swept along an arc, thickest in the middle
-    and curling to tapered tips, its cross-section flattened underneath; UVMap carries (along the crescent, around
-    it), which the material uses for the rolls' darker crests and paler, flaky grooves."""
-    bm = bmesh.new()
-    uv = bm.loops.layers.uv.new("UVMap")
-    n_s, n_t = 56, 20
-    span = math.radians(150)
-    radius = 0.050
-    rows = []
-    for i in range(n_s + 1):
-        s = i / n_s
-        a = -span / 2 + span * s
-        centre = Vector((radius * math.sin(a), -radius * math.cos(a) + radius * 0.55, 0.0))
-        outward = Vector((math.sin(a), -math.cos(a), 0.0))
-        taper = math.sin(math.pi * s) ** 0.7
-        rolls = 1.0 + 0.13 * math.cos(2 * math.pi * 7 * s) * taper
-        r = (0.0055 + 0.021 * taper) * rolls
-        ring = []
-        for j in range(n_t):
-            t = 2 * math.pi * j / n_t
-            ox, oz = math.cos(t), math.sin(t)
-            w = r * 1.25 * ox
-            h = r * (0.95 * oz if oz > 0 else 0.35 * oz)
-            p = centre + outward * w + Vector((0, 0, h + r * 0.36))
-            ring.append(bm.verts.new(p))
-        rows.append((ring, s))
-    for i in range(n_s):
-        (ra, sa), (rb, sb) = rows[i], rows[i + 1]
-        for j in range(n_t):
-            j2 = (j + 1) % n_t
-            face = bm.faces.new((ra[j], rb[j], rb[j2], ra[j2]))
-            for loop, (s_, t_) in zip(face.loops, ((sa, j / n_t), (sb, j / n_t), (sb, (j + 1) / n_t), (sa, (j + 1) / n_t))):
-                loop[uv].uv = (s_, t_)
-    for ring, _ in (rows[0], rows[-1]):
-        cap = bm.faces.new(list(reversed(ring)) if ring is rows[0][0] else ring)
-        for loop in cap.loops:
-            loop[uv].uv = (0.0 if ring is rows[0][0] else 1.0, 0.5)
-    bm.normal_update()
-    bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
-    me = bpy.data.meshes.new("croissant")
-    bm.to_mesh(me)
-    bm.free()
-    me.materials.append(croissant_material())
-    obj = bpy.data.objects.new("croissant", me)
-    col.objects.link(obj)
-    me.shade_smooth()
-    obj.location = base
-    obj["source"] = "made for this site"
-    return obj
-
-
-def croissant_material():
-    """Golden laminated dough: deep brown on the crests of the rolls, paler and flaky in the grooves, an egg-wash
-    sheen, a little subsurface."""
-    mat, k = pl.new_material("croissant")
-    uvn = k.node("ShaderNodeUVMap", uv_map="UVMap").outputs["UV"]
-    sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": uvn})
-    rolls = k.math("COSINE", k.math("MULTIPLY", sep.outputs["X"], 2 * math.pi * 7))
-    crest = k.map_range(rolls, -0.2, 1.0)
-    flakes = k.noise(k.coords("Object", 1.0), 900.0, detail=4.0)
-    top = k.map_range(k.math("SINE", k.math("MULTIPLY", sep.outputs["Y"], 2 * math.pi)), -0.3, 0.6)
-    base = k.mix_color(crest, (0.78, 0.52, 0.22, 1.0), (0.42, 0.20, 0.06, 1.0))
-    base = k.mix_color(k.math("MULTIPLY", top, 0.5), base, (0.36, 0.16, 0.04, 1.0))
-    base = k.mix_color(k.map_range(flakes, 0.45, 0.62, 0.0, 0.35), base, (0.88, 0.70, 0.42, 1.0))
-    bump = k.node("ShaderNodeBump", inputs={"Strength": 0.35, "Distance": 0.0008, "Height": k.math("ADD", crest, k.math("MULTIPLY", flakes, 0.4))})
-    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": base, "Roughness": 0.5, "Coat Weight": 0.35,
-                                                      "Coat Roughness": 0.25, "Subsurface Weight": 0.08,
-                                                      "Normal": bump.outputs[0]})
-    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs[0])
-    return mat
 
 
 def glow_material():

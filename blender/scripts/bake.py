@@ -1,7 +1,7 @@
 """Bake the room's lighting (Cycles, CPU) into its atlases, and the window view by day and by night; save
 room.blend with the bake UVs.
 
-    blender -b blender/room.blend -P blender/scripts/bake.py                     # final: full size, 128 samples
+    blender -b blender/room.blend -P blender/scripts/bake.py                     # final: full size, 160 samples
     blender -b blender/room.blend -P blender/scripts/bake.py -- --scale 0.25 --samples 32 --atlas desk   # test
     blender -b blender/room.blend -P blender/scripts/bake.py -- --atlas window_sf,window_delhi            # view only
 
@@ -42,7 +42,7 @@ STATES = ("day", "night")
 # The world seen through the open front of the view while it bakes: a pale sky by day, a dark one by night.
 VIEW_WORLD = {"day": ((0.62, 0.70, 0.82, 1.0), 0.35), "night": ((0.010, 0.012, 0.022, 1.0), 0.35)}
 
-MAX_THREADS = 24
+MAX_THREADS = 16  # the devbox is shared: the coordinator caps Blender at 16 threads
 TARGET_NODE = "bake_target"
 
 
@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument("--atlas", default=",".join(ATLAS_SIZES), help="comma-separated atlas names")
     parser.add_argument("--states", default=",".join(STATES), help="view states to bake (window atlases)")
     parser.add_argument("--scale", type=float, default=1.0, help="fraction of the final atlas size (tests)")
-    parser.add_argument("--samples", type=int, default=128)
+    parser.add_argument("--samples", type=int, default=160)
     parser.add_argument("--threads", type=int, default=MAX_THREADS)
     parser.add_argument("--no-save", action="store_true", help="do not write room.blend")
     return parser.parse_args(argv)

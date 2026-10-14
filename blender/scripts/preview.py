@@ -3,7 +3,7 @@
     blender -b <file.blend> -P blender/scripts/preview.py -- <out_dir> [--engine eevee|cycles] [--samples N]
         [--size 960x600] [cam_name | name=x,y,z:tx,ty,tz ...]
 
-Cycles previews run on 24 threads at low samples with denoising; EEVEE previews are faster and show the lights
+Cycles previews run on 16 threads at low samples with denoising; EEVEE previews are faster and show the lights
 roughly (EEVEE ignores camera ray visibility, so the ghost walls and the sky card are hidden for it). A
 name=x,y,z:tx,ty,tz argument tries a framing that is not in the blend. Nothing is saved back to the blend.
 """
@@ -38,7 +38,7 @@ def main():
         scene.render.engine = "CYCLES"
         scene.cycles.samples = args.samples
         scene.cycles.use_denoising = True
-        scene.render.threads_mode, scene.render.threads = "FIXED", 24
+        scene.render.threads_mode, scene.render.threads = "FIXED", 16
     else:
         scene.render.engine = "BLENDER_EEVEE"
         scene.eevee.taa_render_samples = args.samples

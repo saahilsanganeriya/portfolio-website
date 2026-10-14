@@ -89,7 +89,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
   { proxies: ['hit_projector_dial'], prop: 'The projector’s program dial', label: 'Next program', target: null, fly: 'projector', action: 'dial', href: '/' },
   ...posters,
   { proxies: ['hit_plaque'], prop: 'The plaque under the posters', label: 'Four favourites', target: 'films/favourites', href: '/films#favourites' },
-  { proxies: ['hit_photo_wall'], prop: 'The print wall', label: 'Photographs', target: 'photography', fly: 'photos', href: '/#photography' },
+  { proxies: ['hit_photo_board', 'hit_photo_wall'], prop: 'The photo board', label: 'Photographs', target: 'photography', fly: 'photos', href: '/#photography' },
   ...prints,
   { proxies: ['hit_album'], prop: 'The photo album', label: 'The photo album', target: 'photography', fly: 'desk', action: 'album', href: '/#photography' },
   ...notes,

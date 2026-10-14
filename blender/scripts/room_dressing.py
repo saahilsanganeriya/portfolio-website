@@ -1,11 +1,11 @@
-"""The lived-in layer of the room: the credenza and plaque under the posters, the kitchen nook, the photo wall, the
-projection wall, the album, the projector's program dial, the bookcase with the six books, the space wall (Voyager
+"""The lived-in layer of the room: the credenza and plaque under the posters, the mini kitchen, the Instax board, the
+roller screen, the album, the projector's program dial, the bookcase with the six books, the space wall (Voyager
 record, Pale Blue Dot), the Japanese-literature print, the Georgia Tech pennant, the sticky notes, desk clutter, the
-reading corner and CC0 plants and objects.
+record corner, the reading corner and CC0 plants and objects.
 
-build_room.py calls build_dressing() after the props are placed. Everything here is baked into an atlas except the
-runtime art (photo_print_*, print_pale_blue_dot, projection_surface, sticky_note_*), which the site textures over the
-light baked on it, like the posters.
+build_room.py calls build_dressing() after the props are placed. Everything here is baked into an atlas; the runtime
+art (instax_slot_*, record_sleeve_*, print_pale_blue_dot, projection_surface, sticky_note_*) keeps 0-1 art UVs and the
+site draws over the light baked on it, like the posters.
 """
 
 import math
@@ -34,18 +34,24 @@ PALE_BLUE_DOT = ("https://images-assets.nasa.gov/image/PIA23645/PIA23645~orig.jp
 # The credenza under the posters on the back wall, and the kitchen nook at the left wall's front end.
 CREDENZA = (-3.10, -1.32, Y_BACK - 0.42, Y_BACK)  # x0, x1, y0, y1
 CREDENZA_TOP = 0.60
-KITCHEN_Y0, KITCHEN_Y1, KITCHEN_DEPTH, KITCHEN_TOP = -3.98, -3.08, 0.62, 0.90
+KITCHEN_Y0, KITCHEN_Y1, KITCHEN_DEPTH, KITCHEN_TOP = -3.98, -2.75, 0.62, 0.90
 PENDANT = Vector((X_LEFT + 0.34, (KITCHEN_Y0 + KITCHEN_Y1) / 2, 1.98))
 
 PLAQUE_CENTRE = Vector((-2.22, Y_BACK - 0.006, 1.27))
 PLAQUE_TEXT = "Four favourites — from Letterboxd"
 
-# Photo wall on the left wall between the doorway and the projection wall: (y, z) centre of the picture, picture
-# width and height. Slots 0-2 take the aspect of the prints the photography marks for the wall (square, 4:3,
-# 16:9); 3 and 4 are a 3:2 landscape and a 4:5 portrait for the rest of the collection.
-PHOTO_SLOTS = [((-1.22, 1.92), (0.26, 0.26)), ((-0.82, 2.00), (0.24, 0.18)), ((-0.86, 1.58), (0.30, 0.169)),
-               ((-1.62, 2.00), (0.21, 0.14)), ((-1.58, 1.60), (0.16, 0.20))]
+# The Instax bulletin board on the left wall between the doorway and the roller screen: cork board centre (y, z),
+# cork size, and twenty prints pinned and taped across it (Instax Mini and Wide proportions at 1.2x real size, so
+# they read from the board's framing).
+BOARD_CENTRE, BOARD_SIZE = (-1.13, 1.74), (0.82, 0.60)
+INSTAX_COUNT = 20
+INSTAX = {"mini": (0.054 * 1.2, 0.086 * 1.2), "wide": (0.108 * 1.2, 0.086 * 1.2)}
+# Image area inside the print (fractions of width and height from the bottom-left): Mini 46 x 62 mm in 54 x 86 mm,
+# Wide 99 x 62 mm in 108 x 86 mm; the thick margin is at the bottom.
+INSTAX_IMAGE = {"mini": (4 / 54, 18 / 86, 50 / 54, 80 / 86), "wide": (4.5 / 108, 18 / 86, 103.5 / 108, 80 / 86)}
 PHOTO_MAT, PHOTO_FRAME = 0.034, 0.016
+# The roller screen on the left wall: centre y, the housing's top z, screen width and drop (16:9).
+ROLLER = (-2.16, 2.02, 0.90, 0.506)
 # Stills only: the prints come from the photographs the collection marks for the wall (still_photo_slugs).
 SITE_SRC = Path(__file__).resolve().parents[2] / "src"
 
@@ -58,9 +64,14 @@ PALE_DOT_SIZE = 0.30  # the square print; the image is 5230 x 5175
 JP_PRINT = (Vector((X_RIGHT - 0.085, -1.02, 1.06)), (0.30, 0.42), 9.0)  # base on the bookcase top, size, lean
 PENNANT = (Vector((-0.30, Y_BACK - 0.012, 2.50)), 0.78, 0.24)  # hoist top-left corner, length, hoist height
 
-READING_CHAIR = (Vector((2.22, -1.86, 0.0)), -118.0)  # turned toward the desk and the room
-FLOOR_LAMP = Vector((2.86, -2.42, 0.0))
-READING_TABLE = Vector((2.80, -1.40, 0.0))
+READING_CHAIR = (Vector((2.02, -2.22, 0.0)), -122.0)  # turned toward the desk and the room
+FLOOR_LAMP = Vector((2.92, -3.15, 0.0))
+LANTERN = (0.19, 1.16, 0.40)  # globe radius, centre height, height
+# The record corner beside the armchair, free-standing in front of the right return wall's end so that from the wide
+# view it sits below the line to the bookcase: a low cabinet (x0, x1, y0, y1, top) facing the chair, the turntable on
+# it, a small crate of records on the floor in front of it (position, turn in degrees).
+RECORD_CABINET = (2.50, 2.92, -2.92, -2.30, 0.56)
+RECORD_CRATE = (Vector((2.25, -3.10, 0.0)), -30.0)
 
 DESK_TOP = 0.7325
 SHELF_LOW, SHELF_TOP = 1.6475, 2.0075
@@ -87,12 +98,12 @@ def build_dressing(mats, placed):
     found["credenza"] = build_credenza(mats)
     found["plaque"] = build_plaque(mats)
     found.update(build_kitchen_nook(mats))
-    found.update(build_photo_wall(mats))
-    found["projection"] = build_projection_surface()
+    found.update(build_photo_board(mats))
+    found.update(build_roller_screen(mats))
     found["album"] = build_album()
     found["dial"] = build_projector_dial(placed)
     build_books(rng)
-    build_records(rng)
+    found.update(build_record_corner(mats, rng))
     found["sticky_notes"] = build_desk_clutter(rng)
     found.update(build_bookcase(mats, rng))
     found.update(build_space_wall(mats))
@@ -143,7 +154,7 @@ def place(obj, loc, rot_z_deg=0.0, rot=None):
 # ---- credenza and kitchen nook ----
 
 def mid_century_cabinet(bm, x0, x1, y0, y1, top_z, leg_h, front, doors=2):
-    """A walnut cabinet in bm: slab top, carcass, sliding doors with brass pulls on the `front` side (-Y or +X),
+    """A walnut cabinet in bm: slab top, carcass, sliding doors with brass pulls on the `front` side (-Y, +X or -X),
     tapered splayed legs. Material slots: 0 walnut, 1 brass."""
     top_t = 0.028
     add_box(bm, (x1 - x0, y1 - y0, top_t), ((x0 + x1) / 2, (y0 + y1) / 2, top_z - top_t / 2), bevel=0.006, segments=3)
@@ -163,14 +174,15 @@ def mid_century_cabinet(bm, x0, x1, y0, y1, top_z, leg_h, front, doors=2):
             add_box(bm, (0.012, 0.006, 0.10), (px, by0 - 0.018 - 0.008 * (k % 2), leg_h + 0.015 + door_h * 0.55),
                     bevel=0.002, mat=1)
     else:
+        side, face = (1, bx1) if front == "+X" else (-1, bx0)
         span, base = by1 - by0 - 0.02, by0 + 0.01
         for k in range(doors):
             w = span / doors
             cy = base + w * (k + 0.5)
-            add_box(bm, (0.014, w - 0.004, door_h), (bx1 + 0.007 + 0.008 * (k % 2), cy, leg_h + 0.015 + door_h / 2),
-                    bevel=0.003)
+            add_box(bm, (0.014, w - 0.004, door_h),
+                    (face + side * (0.007 + 0.008 * (k % 2)), cy, leg_h + 0.015 + door_h / 2), bevel=0.003)
             py = cy + (w / 2 - 0.05) * (1 if k % 2 == 0 else -1)
-            add_box(bm, (0.006, 0.012, 0.10), (bx1 + 0.018 + 0.008 * (k % 2), py, leg_h + 0.015 + door_h * 0.55),
+            add_box(bm, (0.006, 0.012, 0.10), (face + side * (0.018 + 0.008 * (k % 2)), py, leg_h + 0.015 + door_h * 0.55),
                     bevel=0.002, mat=1)
     for lx in (bx0 + 0.05, bx1 - 0.05):
         for ly in (by0 + 0.05, by1 - 0.05):
@@ -251,7 +263,7 @@ def build_kitchen_nook(mats):
                 arc=math.radians(220))
     finish(b, "props_kitchen_jars", smooth=40)
 
-    # A walnut chopping board leaning on the tiles beside the oven.
+    # A walnut chopping board leaning on the tiles behind the bakery board.
     wood = pl.ambientcg("Wood051")
     board = pl.surface("chopping_board", (0.40, 0.26, 0.15), 0.6, color_tex=wood["Color"], tint=(0.85, 0.62, 0.45),
                        tile=0.3, edge_wear=0.4, grime=0.5, color_var=0.08)
@@ -259,7 +271,7 @@ def build_kitchen_nook(mats):
     b.box((0.022, 0.26, 0.38), loc=(0, 0, 0.19), mat=board, corner=0.03, corner_seg=4, corner_axis="X", bevel=0.003)
     b.cylinder(0.014, 0.03, segments=12, loc=(0, 0, 0.335), rot=(0, 90, 0), mat=board)
     cb = finish(b, "props_chopping_board", smooth=30)
-    place(cb, Vector((X_LEFT + 0.09, -3.46, KITCHEN_TOP)), 0.0, rot=Matrix.Rotation(math.radians(-10), 4, "Y"))
+    place(cb, Vector((X_LEFT + 0.07, -3.37, KITCHEN_TOP)), 0.0, rot=Matrix.Rotation(math.radians(-10), 4, "Y"))
 
     # The pendant: a cord from the ceiling band to a cream enamel dome with a brass cap and a bulb inside.
     enamel = pl.surface("pendant_enamel", (0.74, 0.68, 0.55), 0.3, edge_wear=0.3, edge_color=(0.2, 0.15, 0.1),
@@ -275,7 +287,190 @@ def build_kitchen_nook(mats):
             cap_end=False)
     b.lathe([(0.0, 0.07), (0.022, 0.08), (0.03, 0.11), (0.018, 0.14), (0.0, 0.145)], segments=16, loc=tuple(p), mat=bulb)
     finish(b, "props_kitchen_pendant", smooth=50)
-    return {"kitchen_counter": obj, "pendant": p + Vector((0, 0, 0.10))}
+    under_shelf = build_kitchen_detail(mats, shelf_z, glass, lids)
+    return {"kitchen_counter": obj, "pendant": p + Vector((0, 0, 0.10)), "under_shelf": under_shelf}
+
+
+def build_kitchen_detail(mats, shelf_z, glass, lids):
+    """The mini kitchen's lived-in layer: a row of spice jars and three mugs on hooks under the shelf, a warm light
+    bar under it, a pour-over and a gooseneck kettle at the counter's back end, a board of bagels and croissants
+    beside the espresso machine, and a rack of cinnamon rolls cooling on the oven. Returns the light bar's centre."""
+    rng = random.Random(SEED + 23)
+    spices = [pl.surface(f"spice_{k}", rgb, 0.85, micro_bump=(1400, 0.4), color_var=0.10)
+              for k, rgb in enumerate([(0.80, 0.50, 0.04), (0.52, 0.07, 0.03), (0.40, 0.25, 0.12), (0.36, 0.45, 0.20),
+                                       (0.07, 0.06, 0.05)])]
+    b = pl.Builder("props_kitchen_spices")
+    top = shelf_z + 0.026
+    for k in range(5):
+        loc = Vector((X_LEFT + 0.10 + rng.uniform(-0.01, 0.01), -2.86 - 0.052 * k, top))
+        b.lathe([(0.0, 0.0), (0.021, 0.0), (0.022, 0.004), (0.022, 0.068), (0.018, 0.074), (0.0, 0.074)], segments=16,
+                loc=tuple(loc), mat=glass)
+        b.cylinder(0.0195, 0.052 - 0.006 * (k % 2), segments=14, loc=tuple(loc + Vector((0, 0, 0.004))),
+                   mat=spices[k])
+        b.cylinder(0.019, 0.012, segments=16, loc=tuple(loc + Vector((0, 0, 0.074))), mat=lids, bevel=0.0015)
+    finish(b, "props_kitchen_spices", smooth=40)
+
+    # Mugs on brass hooks under the shelf's front edge, hanging by their handles, mouths to the room.
+    brass = mats["brass"]
+    glazes = [pl.surface(f"mug_glaze_{k}", rgb, 0.18, coat=0.5, edge_wear=0.3, edge_color=(0.75, 0.70, 0.62),
+                         grime=0.3, color_var=0.05)
+              for k, rgb in enumerate([(0.10, 0.22, 0.30), (0.70, 0.62, 0.48), (0.42, 0.14, 0.08)])]
+    b = pl.Builder("props_kitchen_mugs")
+    for k, y in enumerate((-3.56, -3.68, -3.80)):
+        hook = Vector((X_LEFT + 0.19, y, shelf_z))
+        b.tube([hook, hook + Vector((0, 0, -0.035)), hook + Vector((0.008, 0, -0.045)), hook + Vector((0.016, 0, -0.038))],
+               0.0018, sides=6, mat=brass)
+        r, mh = 0.038, 0.090
+        mug = pl.Builder("probe_mug")
+        mug.lathe([(0.0, 0.0), (r - 0.004, 0.0), (r, 0.006), (r, mh), (r - 0.004, mh), (r - 0.005, 0.008), (0.0, 0.008)],
+                  segments=22, mat=glazes[k], cap_start=False, cap_end=False)
+        mug.torus(0.022, 0.0055, segments=14, sides=6, loc=(r + 0.004, 0, mh / 2), rot=(90, 0, 0), mat=glazes[k],
+                  arc=math.radians(200), )
+        hang = (Matrix.Translation(hook + Vector((0.004, 0, -0.045 - (r + 0.026))))
+                @ Matrix.Rotation(math.radians(-90 + rng.uniform(-6, 6)), 4, "Y")
+                @ Matrix.Translation((-(r + 0.004), 0, -mh / 2)))
+        verts = mug.bm.verts[:]
+        bmesh.ops.transform(mug.bm, matrix=hang, verts=verts)
+        me = bpy.data.meshes.new("probe_mug")
+        mug.bm.to_mesh(me)
+        mug.bm.free()
+        b.append_mesh(me, mat=glazes[k])
+        bpy.data.meshes.remove(me)
+    finish(b, "props_kitchen_mugs", smooth=40)
+
+    # The light bar under the shelf: a slim brass channel with a warm diffuser.
+    diffuser = pl.surface("under_shelf_diffuser", (0.9, 0.82, 0.68), 0.4, emission=((1.0, 0.64, 0.34), 6.0),
+                          color_var=0.0)
+    b = pl.Builder("props_under_shelf_light")
+    bar_y0, bar_y1 = -2.84, -3.86
+    centre = Vector((X_LEFT + 0.07, (bar_y0 + bar_y1) / 2, shelf_z - 0.008))
+    b.box((0.026, bar_y0 - bar_y1, 0.012), loc=tuple(centre), mat=brass, bevel=0.002)
+    b.box((0.018, bar_y0 - bar_y1 - 0.01, 0.002), loc=tuple(centre + Vector((0, 0, -0.0065))), mat=diffuser)
+    finish(b, "props_under_shelf_light", smooth=30)
+
+    # Pour-over at the back end: a gooseneck kettle and an hourglass carafe with a wooden collar and leather tie.
+    kettle_mat = pl.surface("kettle_black", (0.03, 0.03, 0.03), 0.45, metallic=0.4, edge_wear=0.4,
+                            edge_color=(0.35, 0.33, 0.30), smudges=0.3, color_var=0.02)
+    oak = pl.surface("pourover_oak", (0.55, 0.40, 0.24), 0.55, color_tex=pl.ambientcg("Wood051")["Color"],
+                     tint=(1.0, 0.85, 0.65), tile=0.2, color_var=0.06)
+    leather = pl.surface("pourover_tie", (0.30, 0.16, 0.08), 0.7, color_var=0.05)
+    coffee = pl.surface("pourover_coffee", (0.10, 0.045, 0.02), 0.15, color_var=0.0)
+    b = pl.Builder("props_pour_over")
+    k_at = Vector((-3.12, -2.88, KITCHEN_TOP))
+    b.lathe([(0.0, 0.0), (0.072, 0.0), (0.078, 0.01), (0.076, 0.07), (0.062, 0.115), (0.03, 0.135), (0.0, 0.138)],
+            segments=32, loc=tuple(k_at), mat=kettle_mat)
+    b.cylinder(0.012, 0.02, segments=14, loc=tuple(k_at + Vector((0, 0, 0.135))), mat=oak)
+    spout = [k_at + Vector((0.07 * math.cos(math.radians(30)), -0.07 * math.sin(math.radians(30)), 0.02))]
+    for t in (0.25, 0.5, 0.75, 1.0):
+        spout.append(k_at + Vector((0.08 + 0.09 * t, -0.04 - 0.02 * t, 0.02 + 0.13 * t ** 0.6)))
+    b.tube(spout, 0.006, sides=10, mat=kettle_mat, radius_fn=lambda t: 0.006 * (1.0 - 0.6 * t))
+    b.tube([k_at + Vector((-0.06, 0.03, 0.11)), k_at + Vector((-0.11, 0.05, 0.11)), k_at + Vector((-0.12, 0.05, 0.05)),
+            k_at + Vector((-0.07, 0.03, 0.03))], 0.008, sides=8, mat=oak)
+    c_at = Vector((-2.86, -2.86, KITCHEN_TOP))
+    b.lathe([(0.0, 0.0), (0.060, 0.0), (0.070, 0.02), (0.068, 0.075), (0.030, 0.125), (0.026, 0.14), (0.05, 0.19),
+             (0.056, 0.215), (0.052, 0.215), (0.046, 0.192), (0.022, 0.142), (0.024, 0.124), (0.062, 0.075),
+             (0.064, 0.022), (0.054, 0.006), (0.0, 0.006)], segments=36, loc=tuple(c_at), mat=glass,
+            cap_start=False, cap_end=False)
+    b.lathe([(0.0, 0.006), (0.062, 0.006), (0.064, 0.022), (0.060, 0.050), (0.0, 0.050)], segments=28,
+            loc=tuple(c_at), mat=coffee)
+    b.lathe([(0.028, 0.105), (0.040, 0.112), (0.044, 0.140), (0.040, 0.165), (0.032, 0.172)], segments=24,
+            loc=tuple(c_at), mat=oak, cap_start=False, cap_end=False)
+    b.torus(0.042, 0.0025, segments=28, sides=5, loc=tuple(c_at + Vector((0, 0, 0.138))), mat=leather)
+    finish(b, "props_pour_over", smooth=40)
+
+    build_bakery_board(mats)
+    build_cinnamon_rolls()
+    return centre + Vector((0, 0, -0.012))
+
+
+def bagel_material():
+    """A baked bagel: glossy deep-golden crust darker on top, paler underneath, scattered sesame on the top half."""
+    mat, k = pl.new_material("bagel_crust")
+    normal = k.node("ShaderNodeNewGeometry").outputs["Normal"]
+    up = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": normal}).outputs["Z"]
+    top = k.map_range(up, -0.1, 0.7)
+    obj = k.coords("Object", 1.0)
+    mottle = k.noise(obj, 160.0, detail=3.0)
+    crust = k.mix_color(top, (0.50, 0.30, 0.12, 1.0), (0.30, 0.13, 0.035, 1.0))
+    crust = k.mix_color(k.map_range(mottle, 0.4, 0.65, 0.0, 0.35), crust, (0.28, 0.12, 0.04, 1.0))
+    seeds = k.node("ShaderNodeTexVoronoi", inputs={"Vector": obj, "Scale": 260.0})
+    seed = k.math("MULTIPLY", k.math("LESS_THAN", seeds.outputs["Distance"], 0.16), k.math("GREATER_THAN", up, 0.35))
+    color = k.mix_color(seed, crust, (0.86, 0.76, 0.56, 1.0))
+    bump = k.node("ShaderNodeBump", inputs={"Strength": 0.3, "Distance": 0.0006,
+                                            "Height": k.math("ADD", mottle, k.math("MULTIPLY", seed, 0.6))})
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": 0.42, "Coat Weight": 0.3,
+                                                      "Coat Roughness": 0.3, "Normal": bump.outputs[0]})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs[0])
+    return mat
+
+
+def build_bakery_board(mats):
+    """A walnut serving board flat on the counter between the espresso machine and the oven: two bagels and two
+    croissants from the morning's bake."""
+    wood = pl.ambientcg("Wood051")
+    board_mat = pl.surface("bakery_board", (0.40, 0.26, 0.15), 0.55, color_tex=wood["Color"], tint=(0.80, 0.58, 0.42),
+                           tile=0.25, edge_wear=0.4, grime=0.4, smudges=0.2, color_var=0.08)
+    at = Vector((-2.92, -3.37, KITCHEN_TOP))
+    b = pl.Builder("props_bakery_board")
+    b.box((0.34, 0.22, 0.018), loc=(0, 0, 0.009), mat=board_mat, corner=0.02, corner_seg=4, bevel=0.003)
+    crust = bagel_material()
+    for (x, y), tilt in (((-0.10, 0.045), 4), ((-0.025, -0.050), -6)):
+        b.torus(0.029, 0.020, segments=24, sides=10, loc=(x, y, 0.018 + 0.016), rot=(tilt, 0, 0), mat=crust)
+    board = finish(b, "props_bakery_board", smooth=50)
+    place(board, at, 0.0)
+    props = collection("props")
+    for k, ((x, y), turn) in enumerate((((0.075, 0.045), 30), ((0.095, -0.055), -150))):
+        c = pl.croissant(f"props_board_croissant_{k}", props, at + Vector((x, y, 0.018)), scale=0.92)
+        c.rotation_euler = (0, 0, math.radians(turn))
+        c["atlas"] = "props"
+
+
+def build_cinnamon_rolls():
+    """Six cinnamon rolls cooling on a wire rack on top of the oven, the spiral of cinnamon showing and a little
+    glaze drizzled across."""
+    oven = bpy.data.objects["countertop_oven"]
+    pts = [oven.matrix_world @ Vector(c) for c in oven.bound_box]
+    top = max(p.z for p in pts)
+    cx, cy = sum(p.x for p in pts) / 8, sum(p.y for p in pts) / 8
+    steel = pl.surface("rack_steel", (0.62, 0.62, 0.60), 0.3, metallic=1.0, grime=0.4, color_var=0.0)
+    dough = pl.surface("roll_dough", (0.48, 0.26, 0.09), 0.55, micro_bump=(500, 0.3), coat=0.2, subsurface=0.05,
+                       color_var=0.10)
+    cinnamon = pl.surface("roll_cinnamon", (0.12, 0.045, 0.015), 0.6, color_var=0.08)
+    glaze = pl.surface("roll_glaze", (0.86, 0.83, 0.76), 0.25, coat=0.4, color_var=0.02)
+    b = pl.Builder("props_cinnamon_rolls")
+    w, d, lift = 0.28, 0.20, 0.012
+    rim = [Vector((sx * w / 2, sy * d / 2, lift)) for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1), (-1, -1))]
+    b.tube(rim, 0.0022, sides=6, mat=steel, cap=False)
+    for k in range(1, 10):
+        x = -w / 2 + w * k / 10
+        b.tube([Vector((x, -d / 2, lift)), Vector((x, d / 2, lift))], 0.0011, sides=5, mat=steel)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            b.tube([Vector((sx * (w / 2 - 0.01), sy * (d / 2 - 0.01), 0.0)), Vector((sx * (w / 2 - 0.01), sy * (d / 2 - 0.01), lift))],
+                   0.0016, sides=5, mat=steel)
+    rng = random.Random(SEED + 29)
+    r, rh = 0.036, 0.032
+    for i in range(3):
+        for j in range(2):
+            c = Vector((-0.085 + 0.085 * i + rng.uniform(-0.004, 0.004), -0.045 + 0.09 * j + rng.uniform(-0.004, 0.004),
+                        lift + 0.002))
+            b.lathe([(0.0, 0.0), (r - 0.004, 0.0), (r, 0.008), (r, 0.022), (r - 0.006, rh - 0.002), (0.0, rh)],
+                    segments=20, loc=tuple(c), mat=dough)
+            spiral = []
+            phase = rng.uniform(0, 2 * math.pi)
+            for t in range(0, 37):
+                a = phase + 2 * math.pi * 2.6 * t / 36
+                rr = 0.004 + (r - 0.008) * t / 36
+                z = rh - 0.006 * (rr / r) ** 2 + 0.0008
+                spiral.append(c + Vector((rr * math.cos(a), rr * math.sin(a), z)))
+            b.tube(spiral, 0.0030, sides=5, mat=cinnamon, cap=True)
+    for k in range(2):
+        y = -d / 2 + 0.06 + k * 0.08
+        zig = [Vector((-w / 2 + 0.03 + (w - 0.06) * t / 8, y + (0.012 if t % 2 else -0.012), lift + rh + 0.004))
+               for t in range(9)]
+        b.tube(zig, 0.0011, sides=5, mat=glaze)
+    rolls = finish(b, "props_cinnamon_rolls", smooth=40)
+    place(rolls, Vector((cx, cy, top)), 90.0 + rng.uniform(-6, 6))
 
 
 def tile_material():
@@ -325,7 +520,7 @@ def build_plaque(mats):
     return obj
 
 
-# ---- photo wall ----
+# ---- photo board and roller screen ----
 
 def left_wall(u, z, depth=0.0):
     """Wall-local (u along the left wall, positive toward the back; depth out of the wall) to world."""
@@ -336,29 +531,156 @@ def left_wall(u, z, depth=0.0):
 LEFT_WALL_TURN = Matrix.Rotation(math.pi / 2, 4, "Z")
 
 
-def build_photo_wall(mats):
-    """Five framed prints on the left wall: thin black frames and mats are baked; each picture is its own unbaked
-    mesh (photo_print_<i>, UVs 0-1 over the picture) that the site textures from the photography."""
-    frame_mat = pl.surface("photo_frame_wood", (0.018, 0.014, 0.012), 0.42, edge_wear=0.3,
-                           edge_color=(0.10, 0.07, 0.05), dust=0.4, smudges=0.2, color_var=0.04)
-    mat_board = pl.surface("photo_mat_board", (0.78, 0.75, 0.68), 0.85, grime=0.3, dust=0.3, color_var=0.03)
-    mat_core = pl.surface("photo_mat_bevel", (0.88, 0.85, 0.77), 0.8, color_var=0.0)
-    found = {"prints": [], "frames": []}
-    for i, ((u, cz), (pw, ph)) in enumerate(PHOTO_SLOTS):
-        frame, art = framed_picture(f"props_photo_frame_{i}", f"photo_print_{i}", (pw, ph), frame_mat, mat_board,
-                                    mat_core, photo_material(i))
-        to_wall = Matrix.Translation(left_wall(u, cz)) @ LEFT_WALL_TURN
-        for obj in (frame, art):
-            obj.matrix_world = to_wall
-        frame["photo_slot"] = i
-        art["runtime_art"] = "photo"
-        art["photo_slot"] = i
-        art["aspect"] = round(pw / ph, 4)
-        art["width_m"], art["height_m"] = pw, ph
-        found["frames"].append(frame)
-        found["prints"].append(art)
-    found["photo_light"] = build_photo_light(mats)
-    return found
+def instax_layout(rng):
+    """Twenty prints across the cork in three loose rows: (format, centre u, centre z, angle in degrees), u along
+    the wall. Mostly Minis with a few Wides, slight angles, neighbours overlapping a little."""
+    (cu, cz), (bw, bh) = BOARD_CENTRE, BOARD_SIZE
+    rows = [(cz + bh * 0.29, ["mini", "wide", "mini", "mini", "wide", "mini", "mini"]),
+            (cz + bh * 0.0, ["wide", "mini", "mini", "wide", "mini", "mini"]),
+            (cz - bh * 0.29, ["mini", "mini", "wide", "mini", "wide", "mini", "mini"])]
+    out = []
+    for z, formats in rows:
+        widths = [INSTAX[f][0] for f in formats]
+        gap = (bw * 0.94 - sum(widths)) / (len(formats) - 1)
+        u = cu - bw * 0.47
+        for fmt, w in zip(formats, widths):
+            out.append((fmt, u + w / 2 + rng.uniform(-0.01, 0.01), z + rng.uniform(-0.018, 0.018), rng.uniform(-7, 7)))
+            u += w + gap
+    return out[:INSTAX_COUNT]
+
+
+def build_photo_board(mats):
+    """The Instax bulletin board: an oak-framed cork board with push pins, washi tape and a string of small wooden
+    clips (baked as photo_board), and twenty prints, each its own unbaked quad instax_slot_<i> (UVs 0-1 over the whole
+    print) whose transforms are the collage; the site draws photo, border and caption on each."""
+    rng = random.Random(SEED + 19)
+    cork_maps = pl.ambientcg("Cork001")
+    cork = pl.surface("board_cork", (0.55, 0.40, 0.25), 0.85, color_tex=cork_maps["Color"], tint=(0.74, 0.68, 0.50),
+                      rough_tex=cork_maps.get("Roughness"), height_tex=cork_maps.get("Displacement"), height_strength=0.2,
+                      tile=0.2, dust=0.3, grime=0.3, color_var=0.06)
+    oak = pl.surface("board_oak", (0.55, 0.42, 0.28), 0.5, color_tex=pl.ambientcg("Wood051")["Color"],
+                     tint=(1.0, 0.86, 0.68), tile=0.25, edge_wear=0.4, edge_color=(0.75, 0.62, 0.45), dust=0.3,
+                     color_var=0.06)
+    pin_colours = [(0.55, 0.05, 0.03), (0.75, 0.62, 0.15), (0.08, 0.20, 0.42), (0.86, 0.84, 0.80)]
+    pins = [pl.surface(f"board_pin_{k}", c, 0.25, coat=0.6, color_var=0.0) for k, c in enumerate(pin_colours)]
+    steel = pl.surface("board_pin_steel", (0.6, 0.6, 0.6), 0.3, metallic=1.0, color_var=0.0)
+    tapes = [pl.surface(f"board_tape_{k}", c, 0.7, color_var=0.03, alpha=1.0)
+             for k, c in enumerate([(0.82, 0.70, 0.52), (0.62, 0.72, 0.66), (0.80, 0.60, 0.58)])]
+    twine = pl.surface("board_twine", (0.45, 0.35, 0.22), 0.9, color_var=0.08)
+    (cu, cz), (bw, bh) = BOARD_CENTRE, BOARD_SIZE
+    b = pl.Builder("photo_board")
+    rail, depth = 0.028, 0.026
+    b.box((bw, 0.012, bh), loc=(0, -0.006, 0), mat=cork)
+    for (w, h), (x, z) in (((bw + 2 * rail, rail), (0, bh / 2 + rail / 2)), ((bw + 2 * rail, rail), (0, -bh / 2 - rail / 2)),
+                           ((rail, bh), (-bw / 2 - rail / 2, 0)), ((rail, bh), (bw / 2 + rail / 2, 0))):
+        b.box((w, depth, h), loc=(x, -depth / 2, z), mat=oak, bevel=0.003)
+    layout = instax_layout(rng)
+    for i, (fmt, u, z, ang) in enumerate(layout):
+        w, h = INSTAX[fmt]
+        local_u, local_z = u - cu, z - cz
+        top = Vector((local_u, -0.013 - 0.0006 * i, local_z)) + Vector((-math.sin(math.radians(ang)) * h * 0.42, 0, math.cos(math.radians(ang)) * h * 0.42))
+        if i % 3 != 1:
+            k = i % len(pins)
+            b.cylinder(0.0008, 0.013, segments=6, loc=(top.x, -0.004, top.z), rot=(90, 0, 0), mat=steel)
+            b.lathe([(0.0, 0.0), (0.0055, 0.0), (0.0058, 0.002), (0.0035, 0.004), (0.0042, 0.009), (0.0, 0.010)],
+                    segments=12, loc=tuple(top + Vector((0, -0.003, 0))), rot=(90, 0, 0), mat=pins[k])
+        else:
+            tape = tapes[i % len(tapes)]
+            b.box((0.032, 0.0006, 0.012), loc=tuple(top + Vector((0, -0.0012, 0))), rot=(0, ang + rng.uniform(-14, 14), 0),
+                  mat=tape)
+    # A string across the top with three small wooden clips.
+    y_s = -0.020
+    pts = [Vector((-bw / 2 + 0.04 + (bw - 0.08) * t / 10, y_s, bh / 2 - 0.035 - 0.02 * math.sin(math.pi * t / 10)))
+           for t in range(11)]
+    b.tube(pts, 0.0012, sides=5, mat=twine)
+    for t in (2.5, 5.0, 7.5):
+        q = Vector((-bw / 2 + 0.04 + (bw - 0.08) * t / 10, y_s - 0.002, bh / 2 - 0.045 - 0.02 * math.sin(math.pi * t / 10)))
+        b.box((0.007, 0.006, 0.026), loc=tuple(q), mat=oak, bevel=0.001)
+    board = finish(b, "photo_board", smooth=30)
+    board.matrix_world = Matrix.Translation(left_wall(cu, cz)) @ LEFT_WALL_TURN
+    board["texel"] = 2.5
+
+    prints = []
+    photos = still_photo_slugs()
+    for i, (fmt, u, z, ang) in enumerate(layout):
+        w, h = INSTAX[fmt]
+        bm = bmesh.new()
+        uv = bm.loops.layers.uv.new("UVMap")
+        n = 3
+        grid = []
+        for iu in range(n + 1):
+            col = []
+            for iv in range(n + 1):
+                fu, fv = iu / n, iv / n
+                curl = 0.0018 * (fu - 0.5) ** 2 * 4 + 0.0012 * max(0.0, 0.5 - fv) ** 2 * 4
+                col.append(bm.verts.new(((fu - 0.5) * w, -curl, (fv - 0.5) * h)))
+            grid.append(col)
+        for iu in range(n):
+            for iv in range(n):
+                face = bm.faces.new((grid[iu][iv], grid[iu + 1][iv], grid[iu + 1][iv + 1], grid[iu][iv + 1]))
+                for loop, (du, dv) in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+                    loop[uv].uv = ((iu + du) / n, (iv + dv) / n)
+        bm.normal_update()
+        for f in bm.faces:
+            if f.normal.y > 0:
+                f.normal_flip()
+        obj = new_object(f"instax_slot_{i}", bm, "props", "props", [instax_material(i, fmt, photos[i] if i < len(photos) else None)])
+        local = Matrix.Translation((u - cu, -0.0135 - 0.0006 * i, z - cz)) @ Matrix.Rotation(math.radians(ang), 4, "Y")
+        obj.matrix_world = Matrix.Translation(left_wall(cu, cz)) @ LEFT_WALL_TURN @ local
+        obj["runtime_art"] = "instax"
+        obj["instax_slot"] = i
+        obj["format"] = fmt
+        obj["width_m"], obj["height_m"], obj["aspect"] = round(w, 4), round(h, 4), round(w / h, 4)
+        obj["angle_deg"] = round(ang, 2)
+        x0, y0, x1, y1 = INSTAX_IMAGE[fmt]
+        obj["image_uv"] = [round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)]
+        prints.append(obj)
+    return {"photo_board": board, "instax": prints, "photo_light": build_photo_light(mats)}
+
+
+def instax_material(i, fmt, slug):
+    """An Instax print for the stills: cream-white card with the photograph in its image area (cropped like CSS
+    object-fit: cover), switched to white paper while bake.py bakes the light on it; the site draws photo, border and
+    caption itself."""
+    mat, k = pl.new_material(f"instax_slot_{i}")
+    uvn = k.node("ShaderNodeUVMap", uv_map="UVMap").outputs["UV"]
+    x0, y0, x1, y1 = INSTAX_IMAGE[fmt]
+    card = (0.86, 0.84, 0.80, 1.0)
+    image = still_photo(slug) if slug else None
+    if image is not None:
+        w, h = INSTAX[fmt]
+        area = (w * (x1 - x0)) / (h * (y1 - y0))
+        img_aspect = image.size[0] / max(image.size[1], 1)
+        sx, sy = (area / img_aspect, 1.0) if img_aspect > area else (1.0, img_aspect / area)
+        sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": uvn})
+        iu = k.math("DIVIDE", k.math("SUBTRACT", sep.outputs["X"], x0), x1 - x0)
+        iv = k.math("DIVIDE", k.math("SUBTRACT", sep.outputs["Y"], y0), y1 - y0)
+        inside = k.math("MULTIPLY", k.math("MULTIPLY", k.math("GREATER_THAN", iu, 0.0), k.math("LESS_THAN", iu, 1.0)),
+                        k.math("MULTIPLY", k.math("GREATER_THAN", iv, 0.0), k.math("LESS_THAN", iv, 1.0)))
+        vec = k.node("ShaderNodeCombineXYZ", inputs={"X": k.math("ADD", k.math("MULTIPLY", iu, sx), (1 - sx) / 2),
+                                                      "Y": k.math("ADD", k.math("MULTIPLY", iv, sy), (1 - sy) / 2)}).outputs[0]
+        tex = k.node("ShaderNodeTexImage", image=image, interpolation="Linear")
+        k.set(tex, "Vector", vec)
+        color = k.mix_color(inside, card, tex.outputs["Color"])
+    else:
+        color = card
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": 0.3, "Coat Weight": 0.3})
+    white = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.8, 0.8, 0.8, 1.0), "Roughness": 0.9})
+    probe = k.node("ShaderNodeValue", name="light_probe", label="light_probe")
+    probe.outputs[0].default_value = 0.0
+    mix = k.node("ShaderNodeMixShader", inputs={"Fac": probe.outputs[0], "Shader": bsdf.outputs[0],
+                                                "Shader_001": white.outputs[0]})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", mix.outputs[0])
+    return mat
+
+
+def mat_boards():
+    """The mat board and its bevelled core that the framed prints share (made once)."""
+    board = bpy.data.materials.get("photo_mat_board") or pl.surface("photo_mat_board", (0.78, 0.75, 0.68), 0.85,
+                                                                     grime=0.3, dust=0.3, color_var=0.03)
+    core = bpy.data.materials.get("photo_mat_bevel") or pl.surface("photo_mat_bevel", (0.88, 0.85, 0.77), 0.8,
+                                                                    color_var=0.0)
+    return board, core
 
 
 def framed_picture(frame_name, art_name, size, frame_mat, mat_board, mat_core, art_material, matte=PHOTO_MAT,
@@ -401,22 +723,52 @@ def framed_picture(frame_name, art_name, size, frame_mat, mat_board, mat_core, a
     return frame, art
 
 
-def build_projection_surface():
-    """projection_surface: the clear patch of the left wall the projector throws onto, a 16:9 quad 3 mm proud of
-    the plaster with UVs 0-1 over the picture. Baked as white paper (the light falling on the wall, the projector's
-    cool spill included); the site plays the film on it."""
-    import build_room
-    cy, cz, w, h = build_room.PROJECTION
+def build_roller_screen(mats):
+    """The slim pull-down roller screen on the left wall: roller_screen_housing (the case on two brackets, baked),
+    roller_screen (the matte fabric with its bottom bar, modelled fully down) and projection_surface (the 16:9 quad on
+    its face, art scheme). The screen and the surface are invisible to the bake's rays, so the wall behind bakes as if
+    the screen were rolled up (its rest state) while each still gets its own light; the site unrolls them from the
+    housing and plays the film on projection_surface. The projector's lamp is off in the bake."""
+    cy, top, w, drop = ROLLER
+    case = pl.surface("roller_case", (0.78, 0.75, 0.68), 0.35, edge_wear=0.3, edge_color=(0.3, 0.28, 0.25), dust=0.4,
+                      color_var=0.04)
+    brass = mats["brass"]
+    b = pl.Builder("roller_screen_housing")
+    case_len, r = w + 0.08, 0.026
+    b.cylinder(r, case_len, segments=20, loc=(-case_len / 2, -0.045, -r), rot=(0, 90, 0), mat=case, bevel=0.002)
+    for sx in (-1, 1):
+        b.cylinder(r + 0.002, 0.012, segments=20, loc=(case_len / 2 if sx > 0 else -case_len / 2 - 0.012, -0.045, -r),
+                   rot=(0, 90, 0), mat=brass)
+        b.box((0.012, 0.045, 0.03), loc=(sx * (case_len / 2 - 0.05), -0.022, -r), mat=brass, bevel=0.002)
+    housing = finish(b, "roller_screen_housing", smooth=40)
+    to_wall = Matrix.Translation(left_wall(cy, top)) @ LEFT_WALL_TURN
+    housing.matrix_world = to_wall
+
+    fabric = pl.surface("roller_fabric", (0.86, 0.85, 0.82), 0.95, micro_bump=(1200, 0.08), color_var=0.02)
+    bar = pl.surface("roller_bar", (0.10, 0.09, 0.08), 0.4, metallic=0.5, color_var=0.0)
+    b = pl.Builder("roller_screen")
+    y_face = -0.045 + r * 0.2
+    z_top = -2 * r + 0.004
+    b.box((w, 0.002, drop + 0.04), loc=(0, y_face, z_top - (drop + 0.04) / 2), mat=fabric)
+    b.cylinder(0.008, w + 0.02, segments=12, loc=(-(w + 0.02) / 2, y_face - 0.002, z_top - drop - 0.045), rot=(0, 90, 0),
+               mat=bar)
+    screen = finish(b, "roller_screen", smooth=30)
+    screen.matrix_world = to_wall
+    screen["drop_m"] = round(drop + 0.053, 4)
+    screen["width_m"] = w
+
     bm = bmesh.new()
     uv = bm.loops.layers.uv.new("UVMap")
-    x = X_LEFT + 0.003
-    corners = [(cy + w / 2, cz - h / 2), (cy - w / 2, cz - h / 2), (cy - w / 2, cz + h / 2), (cy + w / 2, cz + h / 2)]
-    face = bm.faces.new([bm.verts.new((x, y, z)) for y, z in corners])
+    z1 = z_top - 0.02
+    z0 = z1 - drop
+    face = bm.faces.new([bm.verts.new((x, y_face - 0.0015, z)) for x, z in ((-w / 2, z0), (w / 2, z0), (w / 2, z1), (-w / 2, z1))])
     for loop, coord in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
         loop[uv].uv = coord
     bm.normal_update()
-    if face.normal.x < 0:
+    if face.normal.y > 0:
         face.normal_flip()
+        for loop, coord in zip(face.loops, ((0, 0), (0, 1), (1, 1), (1, 0))):
+            loop[uv].uv = coord
     mat, k = pl.new_material("projection_surface")
     still = k.node("ShaderNodeEmission", inputs={"Color": (0.62, 0.71, 0.75, 1.0), "Strength": 0.12})
     white = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.8, 0.8, 0.8, 1.0), "Roughness": 0.9})
@@ -425,10 +777,15 @@ def build_projection_surface():
     mix = k.node("ShaderNodeMixShader", inputs={"Fac": probe.outputs[0], "Shader": still.outputs[0],
                                                 "Shader_001": white.outputs[0]})
     k.set(k.node("ShaderNodeOutputMaterial"), "Surface", mix.outputs[0])
-    obj = new_object("projection_surface", bm, "props", "props", [mat])
-    obj["runtime_art"] = "projection"
-    obj["width_m"], obj["height_m"], obj["aspect"] = w, h, round(w / h, 4)
-    return obj
+    surface = new_object("projection_surface", bm, "props", "props", [mat])
+    surface.matrix_world = to_wall
+    surface["runtime_art"] = "projection"
+    surface["width_m"], surface["height_m"], surface["aspect"] = w, drop, round(w / drop, 4)
+    for obj in (screen, surface):
+        obj.visible_diffuse = obj.visible_glossy = obj.visible_transmission = False
+        obj.visible_volume_scatter = obj.visible_shadow = False
+        obj["rest_hidden"] = True  # rolled up at rest: hidden in the stills
+    return {"roller_housing": housing, "roller_screen": screen, "projection": surface}
 
 
 def largest_photo(slug: str) -> Path | None:
@@ -437,29 +794,17 @@ def largest_photo(slug: str) -> Path | None:
     return files[-1] if files else None
 
 
-def still_photo_slugs() -> list[str | None]:
-    """The photograph each print slot shows in the stills: from those src/content/photography marks onWall, the unused
-    one closest to the slot's aspect, CanSupport placed first (the owner keeps it) and sweat-and-toil never (owner,
-    round 7: removed everywhere). The site picks its own at runtime; this only keeps the stills honest."""
-    candidates = {}
+def still_photo_slugs() -> list[str]:
+    """The photographs the board shows in the stills: those src/content/photography marks onWall, in the collection's
+    own order (its `order` field), as the site hangs them."""
+    rows = []
     for meta in sorted((SITE_SRC / "content" / "photography").glob("*.yaml")):
-        photo = largest_photo(meta.stem)
-        if "onWall: true" not in meta.read_text() or meta.stem == "sweat-and-toil" or photo is None:
+        text = meta.read_text()
+        if "onWall: true" not in text or largest_photo(meta.stem) is None:
             continue
-        image = bpy.data.images.load(str(photo), check_existing=True)
-        candidates[meta.stem] = image.size[0] / max(image.size[1], 1)
-    aspects = [pw / ph for _, (pw, ph) in PHOTO_SLOTS]
-    chosen: list[str | None] = [None] * len(PHOTO_SLOTS)
-    order = (["cansupport"] if "cansupport" in candidates else []) + [s for s in candidates if s != "cansupport"]
-    for slug in order:
-        free = [i for i, c in enumerate(chosen) if c is None]
-        if not free:
-            break
-        best = min(free, key=lambda i: abs(aspects[i] - candidates[slug]))
-        if slug == "cansupport" or abs(aspects[best] - candidates[slug]) < 0.12:
-            chosen[best] = slug
-    leftovers = [s for s in order if s not in chosen]
-    return [c if c is not None else (leftovers.pop(0) if leftovers else None) for c in chosen]
+        order = next((int(line.split(":")[1]) for line in text.splitlines() if line.startswith("order:")), 999)
+        rows.append((order, meta.stem))
+    return [slug for _, slug in sorted(rows)]
 
 
 def still_photo(slug: str | None) -> bpy.types.Image | None:
@@ -476,45 +821,15 @@ def still_photo(slug: str | None) -> bpy.types.Image | None:
     return bpy.data.images.load(str(png), check_existing=True)
 
 
-def photo_material(i):
-    """The print in slot i for the stills (cropped to the slot like CSS object-fit: cover), switched to white paper
-    (light_probe = 1) while bake.py bakes the light that falls on it; the site draws the photograph at runtime."""
-    mat, k = pl.new_material(f"photo_print_{i}")
-    uv = k.node("ShaderNodeUVMap", uv_map="UVMap").outputs["UV"]
-    image = still_photo(still_photo_slugs()[i])
-    if image is not None:
-        (_, _), (pw, ph) = PHOTO_SLOTS[i]
-        slot_aspect, img_aspect = pw / ph, image.size[0] / max(image.size[1], 1)
-        sx, sy = (slot_aspect / img_aspect, 1.0) if img_aspect > slot_aspect else (1.0, img_aspect / slot_aspect)
-        crop = k.node("ShaderNodeMapping", inputs={"Vector": uv, "Scale": (sx, sy, 1.0),
-                                                   "Location": ((1 - sx) / 2, (1 - sy) / 2, 0.0)})
-        tex = k.node("ShaderNodeTexImage", image=image, interpolation="Linear")
-        k.set(tex, "Vector", crop.outputs[0])
-        color = tex.outputs["Color"]
-    else:
-        color = (0.32, 0.30, 0.27, 1.0)
-    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": 0.35})
-    white = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.8, 0.8, 0.8, 1.0), "Roughness": 0.9})
-    # bake.py sets light_probe to 1 while it bakes the light falling on the print into the atlas.
-    probe = k.node("ShaderNodeValue", name="light_probe", label="light_probe")
-    probe.outputs[0].default_value = 0.0
-    mix = k.node("ShaderNodeMixShader", inputs={"Fac": probe.outputs[0], "Shader": bsdf.outputs[0],
-                                                "Shader_001": white.outputs[0]})
-    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", mix.outputs[0])
-    return mat
-
-
 def build_photo_light(mats):
-    """A small brass picture lamp on the left wall over the photo cluster."""
-    us = [u for (u, _), _ in PHOTO_SLOTS]
-    tops = [cz + ph / 2 + PHOTO_MAT + PHOTO_FRAME for (_, cz), (_, ph) in PHOTO_SLOTS]
-    u = (min(us) + max(us)) / 2
-    p = left_wall(u, max(tops) + 0.07, 0.11)
+    """A small brass picture lamp on the left wall over the photo board."""
+    (cu, cz), (_, bh) = BOARD_CENTRE, BOARD_SIZE
+    p = left_wall(cu, cz + bh / 2 + 0.028 + 0.07, 0.11)
     bm = bmesh.new()
     add_cylinder(bm, 0.018, 0.70, p, segments=20, axis="Y")
     for du in (-0.25, 0.25):
         add_box(bm, (0.11, 0.01, 0.01), p + Vector((-0.055, du, 0.02)), bevel=0.002)
-    add_cylinder(bm, 0.024, 0.008, Vector((X_LEFT + 0.004, u, p.z + 0.02)), segments=20, axis="X")
+    add_cylinder(bm, 0.024, 0.008, Vector((X_LEFT + 0.004, cu, p.z + 0.02)), segments=20, axis="X")
     obj = new_object("env_photo_light", bm, "env", "env", [mats["brass"]])
     smooth_by_angle(obj, 50)
     return p
@@ -554,8 +869,10 @@ def build_projector_dial(placed):
     import build_room
     projector = next(o for o in placed["projector_8mm"] if o.name == "projector")
     bpy.context.view_layer.update()
-    tx, ty, tz = build_room.PROJECTOR_TABLE
-    target = Vector((tx + 0.02, ty, tz + 0.14))
+    tx, ty, tz = build_room.PROJECTOR_AT
+    # Low and toward the back of the room-side face: from the wide view the knob then sits clear of the body's centre,
+    # where a click means the projector itself.
+    target = Vector((tx + 0.08, ty, tz + 0.08))
     hit = raycast(projector, target + Vector((0.0, -0.6, 0.0)), (0, 1, 0))
     if hit is None:
         raise RuntimeError("projector_dial: no projector side face found")
@@ -639,48 +956,210 @@ def build_books(rng):
     finish(b, "props_books_low", smooth=30)
 
 
-# ---- records crate ----
+# ---- record corner ----
 
-SLEEVES = ["#D8CDB5", "#1C1A18", "#7E2F24", "#B9A27A", "#2A3B4C", "#E3DCCB", "#556B4E", "#A5562E", "#3A2E2A",
-           "#C2B59A", "#8C7A5B", "#2D2D33", "#B8A99A", "#6E4A3A"]
+SLEEVES = ["#D8CDB5", "#1C1A18", "#7E2F24", "#B9A27A", "#2A3B4C", "#556B4E"]
+# The turntable in its own frame (front -Y, origin at the plinth's base centre): plinth, the spindle, the tonearm's
+# pivot, the arm's length to the stylus and the record's outer and inner grooves (radii).
+DECK = (0.44, 0.34, 0.096)
+SPINDLE = Vector((-0.065, 0.0))
+ARM_PIVOT = Vector((0.152, 0.092))
+ARM_LENGTH, ARM_HEIGHT = 0.222, 0.138
+GROOVES = (0.146, 0.060)
+SLEEVE = 0.312
 
 
-def build_records(rng):
-    """A slatted pine crate of LPs on the floor in the window bay, sleeves leaning back."""
+def build_record_corner(mats, rng):
+    """The record corner beside the armchair: a low walnut cabinet facing the chair, a walnut
+    turntable on it (record_player, baked) with its platter and record (platter, turns about the spindle) and its
+    tonearm (tonearm, swings about its base), and a small pine crate of records on the floor whose six sleeve fronts
+    are runtime art (record_sleeve_<i>, like the posters)."""
+    x0, x1, y0, y1, top = RECORD_CABINET
+    bm = bmesh.new()
+    mid_century_cabinet(bm, x0, x1, y0, y1, top, 0.16, "-X", doors=2)
+    cabinet = new_object("env_record_cabinet", bm, "env", "env", [mats["walnut"], mats["brass"]])
+    smooth_by_angle(cabinet, 40)
+
+    walnut = mats["walnut"]
+    deck = pl.surface("turntable_deck", (0.035, 0.033, 0.03), 0.42, edge_wear=0.25, edge_color=(0.25, 0.24, 0.22),
+                      dust=0.35, smudges=0.3, color_var=0.02)
+    alu = pl.surface("turntable_alu", (0.70, 0.70, 0.68), 0.28, metallic=1.0, scratches=0.3, smudges=0.2, color_var=0.0)
+    rubber = pl.surface("turntable_rubber", (0.02, 0.02, 0.02), 0.85, dust=0.4, color_var=0.0)
+    w, d, h = DECK
+    b = pl.Builder("record_player")
+    b.box((w, d, h - 0.026), loc=(0, 0, 0.022 + (h - 0.026) / 2), mat=walnut, bevel=0.005)
+    b.box((w - 0.012, d - 0.012, 0.006), loc=(0, 0, h - 0.004), mat=deck, bevel=0.0015)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            b.cylinder(0.024, 0.022, segments=20, loc=(sx * (w / 2 - 0.05), sy * (d / 2 - 0.05), 0.0), mat=rubber,
+                       bevel=0.002)
+    base = ARM_PIVOT
+    b.cylinder(0.030, 0.012, segments=28, loc=(base.x, base.y, h), mat=alu, bevel=0.0015)
+    b.cylinder(0.011, ARM_HEIGHT - h - 0.012, segments=16, loc=(base.x, base.y, h + 0.006), mat=alu)
+    rest = base + Vector((0.0, -0.170))
+    b.cylinder(0.005, ARM_HEIGHT - h - 0.008, segments=10, loc=(rest.x, rest.y, h), mat=alu)
+    b.box((0.022, 0.010, 0.006), loc=(rest.x, rest.y, ARM_HEIGHT - 0.008), mat=rubber, bevel=0.0015)
+    b.cylinder(0.005, 0.03, segments=10, loc=(base.x + 0.045, base.y - 0.04, h), mat=alu)
+    b.cylinder(0.016, 0.014, segments=24, loc=(-w / 2 + 0.045, -d / 2 + 0.045, h), mat=alu, bevel=0.002)
+    b.cylinder(0.009, 0.006, segments=16, loc=(0.060, -d / 2 + 0.028, h), mat=alu, bevel=0.0015)
+    b.cylinder(0.009, 0.006, segments=16, loc=(0.085, -d / 2 + 0.028, h), mat=deck, bevel=0.0015)
+    player = finish(b, "record_player", smooth=34)
+    at = Vector(((x0 + x1) / 2 + 0.01, (y0 + y1) / 2 + 0.06, top))
+    turn = Matrix.Translation(at) @ RIGHT_WALL_TURN
+    player.matrix_world = turn
+    player["texel"] = 2.4
+
+    platter_mat = pl.surface("turntable_platter", (0.66, 0.66, 0.64), 0.22, metallic=1.0, scratches=0.25,
+                             color_var=0.0)
+    mat_felt = pl.surface("turntable_mat", (0.06, 0.055, 0.05), 0.95, micro_bump=(700, 0.1), dust=0.3, color_var=0.02)
+    vinyl = vinyl_material()
+    label = pl.surface("record_label", (0.62, 0.16, 0.08), 0.6, color_tex=pl.ambientcg("Paper001")["Color"],
+                       tint=(0.75, 0.25, 0.14), tile=0.15, color_var=0.04)
+    b = pl.Builder("platter")
+    b.cylinder(0.150, 0.020, segments=48, loc=(0, 0, 0.0), mat=platter_mat, bevel=0.002)
+    b.cylinder(0.146, 0.003, segments=48, loc=(0, 0, 0.020), mat=mat_felt)
+    b.lathe([(0.0035, 0.023), (0.1515, 0.023), (0.1520, 0.0242), (0.1515, 0.025), (0.0035, 0.025)], segments=48,
+            mat=vinyl, cap_start=False, cap_end=False)
+    b.cylinder(0.050, 0.0006, segments=32, loc=(0, 0, 0.025), mat=label)
+    b.cylinder(0.0036, 0.016, segments=12, loc=(0, 0, 0.022), mat=alu)
+    platter = finish(b, "platter", smooth=40)
+    platter.matrix_world = turn @ Matrix.Translation((SPINDLE.x, SPINDLE.y, h))
+    platter["turn_axis"] = "+Y"
+    platter["rpm"] = 33.333
+
+    b = pl.Builder("tonearm")
+    tube_end = Vector((0.0, -ARM_LENGTH + 0.040))
+    b.tube([Vector((0, 0.020, 0)), Vector((0, tube_end.y, 0))], 0.0042, sides=12, mat=alu)
+    b.cylinder(0.009, 0.026, segments=16, loc=(-0.013, 0, 0), rot=(0, 90, 0), mat=alu)
+    b.cylinder(0.017, 0.030, segments=24, loc=(0, 0.063, 0), rot=(90, 0, 0), mat=alu, bevel=0.002)
+    head_dir = Vector((-math.sin(math.radians(22)), -math.cos(math.radians(22)), 0))
+    head_c = tube_end.to_3d() + head_dir * 0.022
+    b.box((0.017, 0.044, 0.004), loc=tuple(head_c), rot=(0, 0, -22), mat=deck, bevel=0.001)
+    b.box((0.010, 0.018, 0.010), loc=tuple(head_c + head_dir * 0.006 + Vector((0, 0, -0.007))), rot=(0, 0, -22),
+          mat=rubber, bevel=0.001)
+    b.box((0.006, 0.012, 0.002), loc=tuple(head_c + head_dir * 0.028 + Vector((0.004, 0, 0.0))), rot=(0, 0, -22),
+          mat=alu)
+    arm = finish(b, "tonearm", smooth=40)
+    arm.matrix_world = turn @ Matrix.Translation((base.x, base.y, ARM_HEIGHT))
+    stylus = (head_c + head_dir * 0.006).xy
+    arm["turn_axis"] = "+Y"
+    arm["rest_angle_deg"] = 0.0
+    arm["play_angle_deg"] = round(arm_angle_for(stylus, GROOVES[0]), 2)
+    arm["end_angle_deg"] = round(arm_angle_for(stylus, GROOVES[1]), 2)
+
+    crate, sleeves = build_record_crate(rng)
+    return {"record_player": player, "platter": platter, "tonearm": arm, "record_crate": crate,
+            "record_sleeves": sleeves, "record_cabinet": cabinet}
+
+
+def arm_angle_for(stylus: Vector, radius: float) -> float:
+    """The tonearm's turn (degrees about up, counterclockwise from above) that first puts the stylus on the groove at
+    `radius` from the spindle as the arm swings in from its rest; swinging in is clockwise here, so it is negative."""
+    centre = SPINDLE - ARM_PIVOT
+    for k in range(0, 9001):
+        ang = -math.radians(k / 100.0)
+        tip = Vector((stylus.x * math.cos(ang) - stylus.y * math.sin(ang),
+                      stylus.x * math.sin(ang) + stylus.y * math.cos(ang)))
+        if (tip - centre).length <= radius:
+            return math.degrees(ang)
+    raise ValueError(f"tonearm cannot reach the groove at {radius} m")
+
+
+def vinyl_material():
+    """Black vinyl: fine concentric grooves catching the light in rings, a glossier run-out near the label."""
+    mat, k = pl.new_material("record_vinyl")
+    obj = k.coords("Object")
+    sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": obj})
+    r = k.math("SQRT", k.math("ADD", k.math("MULTIPLY", sep.outputs["X"], sep.outputs["X"]),
+                              k.math("MULTIPLY", sep.outputs["Y"], sep.outputs["Y"])))
+    grooves = k.math("SINE", k.math("MULTIPLY", r, 2 * math.pi * 1200))
+    bands = k.map_range(k.noise(k.node("ShaderNodeCombineXYZ", inputs={"X": k.math("MULTIPLY", r, 40.0)}).outputs[0],
+                                3.0, detail=1.0), 0.45, 0.55, 0.25, 0.5)
+    rough = k.math("ADD", bands, k.math("MULTIPLY", grooves, 0.05))
+    bump = k.node("ShaderNodeBump", inputs={"Strength": 0.15, "Distance": 0.0002, "Height": grooves})
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.012, 0.012, 0.013, 1.0), "Roughness": rough,
+                                                      "Normal": bump.outputs[0], "Coat Weight": 0.2})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs[0])
+    return mat
+
+
+def build_record_crate(rng):
+    """A slatted pine crate of six LPs on the floor in front of the cabinet, sleeves leaning back in steps: the crate
+    and the records' edges are baked; each sleeve's front is its own quad (record_sleeve_<i>, UVs 0-1 over the cover,
+    the light baked on white paper) for the site to draw a cover on."""
     wood = pl.ambientcg("Wood051")
     pine = pl.surface("crate_pine", (0.42, 0.30, 0.18), 0.7, color_tex=wood["Color"], tint=(0.95, 0.75, 0.55),
                       tile=0.35, edge_wear=0.5, edge_color=(0.55, 0.42, 0.28), dust=0.7, grime=0.6, color_var=0.12)
-    sleeve_mats = []
-    for i, hexc in enumerate(SLEEVES):
-        h = hexc.lstrip("#")
-        rgb = tuple(((int(h[j:j + 2], 16) / 255) ** 2.2) for j in (0, 2, 4))
-        sleeve_mats.append(pl.surface(f"lp_sleeve_{i}", rgb, 0.75, color_tex=pl.ambientcg("Paper001")["Color"],
-                                      tint=rgb, tile=0.25, edge_wear=0.8, edge_color=(0.75, 0.70, 0.60),
-                                      dust=0.6, grime=0.4, color_var=0.08))
-    w, d, h = 0.36, 0.34, 0.27
-    b = pl.Builder("props_records")
+    card = pl.surface("lp_sleeve_card", (0.72, 0.68, 0.60), 0.8, color_tex=pl.ambientcg("Paper001")["Color"],
+                      tint=(0.92, 0.88, 0.80), tile=0.25, edge_wear=0.8, edge_color=(0.80, 0.76, 0.68), dust=0.6,
+                      color_var=0.08)
+    w, d, h = 0.36, 0.30, 0.25
+    b = pl.Builder("record_crate")
     for sx in (-1, 1):
         for k in range(3):
-            b.box((0.014, d, 0.07), loc=(sx * (w / 2 - 0.007), 0, 0.02 + 0.045 + k * 0.088), mat=pine, bevel=0.002)
+            b.box((0.014, d, 0.064), loc=(sx * (w / 2 - 0.007), 0, 0.02 + 0.042 + k * 0.080), mat=pine, bevel=0.002)
     for sy in (-1, 1):
         for k in range(3):
-            b.box((w - 0.028, 0.014, 0.07), loc=(0, sy * (d / 2 - 0.007), 0.02 + 0.045 + k * 0.088), mat=pine,
+            b.box((w - 0.028, 0.014, 0.064), loc=(0, sy * (d / 2 - 0.007), 0.02 + 0.042 + k * 0.080), mat=pine,
                   bevel=0.002)
     for sx in (-1, 1):
         for sy in (-1, 1):
             b.box((0.03, 0.03, h), loc=(sx * (w / 2 - 0.03), sy * (d / 2 - 0.03), h / 2), mat=pine, bevel=0.002)
     b.box((w - 0.03, d - 0.03, 0.012), loc=(0, 0, 0.026), mat=pine)
-    n = 14
-    for i in range(n):
-        y = -d / 2 + 0.03 + i * (d - 0.06) / (n - 1)
-        lean = 9 + rng.uniform(-3, 4)
-        faces = b.box((0.312, 0.0035, 0.312), loc=(rng.uniform(-0.006, 0.006), 0, 0.156), mat=rng.choice(sleeve_mats),
-                      bevel=0.0008, bevel_seg=1)
-        m = Matrix.Translation((0, y, 0.034)) @ pl.xform(rot=(-lean, 0, rng.uniform(-1.5, 1.5)))
+    poses = []
+    for i in range(len(SLEEVES)):
+        y = -d / 2 + 0.045 + i * 0.036
+        lean = 14 - i * 1.2 + rng.uniform(-1.5, 1.5)
+        lift = 0.036 + 0.004 * i
+        spin = rng.uniform(-1.5, 1.5)
+        m = Matrix.Translation((rng.uniform(-0.006, 0.006), y, lift)) @ pl.xform(rot=(-lean, 0, spin))
+        faces = b.box((SLEEVE, 0.0035, SLEEVE), loc=(0, 0, SLEEVE / 2), mat=card, bevel=0.0008, bevel_seg=1)
         bmesh.ops.transform(b.bm, matrix=m, verts=list({v for f in faces for v in f.verts}))
-    obj = finish(b, "props_records", smooth=30)
-    place(obj, Vector((2.84, 0.10, 0.0)), -6.0)
-    return obj
+        poses.append(m)
+    crate = finish(b, "record_crate", smooth=30)
+    at, turn_deg = RECORD_CRATE
+    place(crate, at, turn_deg)
+    crate["texel"] = 1.6
+
+    sleeves = []
+    for i, m in enumerate(poses):
+        bm = bmesh.new()
+        uv = bm.loops.layers.uv.new("UVMap")
+        s2 = SLEEVE / 2
+        y_front = -0.0018 - 0.0004
+        face = bm.faces.new([bm.verts.new((x, y_front, z)) for x, z in ((-s2, 0), (s2, 0), (s2, SLEEVE), (-s2, SLEEVE))])
+        for loop, coord in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+            loop[uv].uv = coord
+        bm.normal_update()
+        if face.normal.y > 0:
+            face.normal_flip()
+            for loop, coord in zip(face.loops, ((0, 0), (0, 1), (1, 1), (1, 0))):
+                loop[uv].uv = coord
+        obj = new_object(f"record_sleeve_{i}", bm, "props", "props", [sleeve_material(i)])
+        obj.matrix_world = crate.matrix_world @ m
+        obj["runtime_art"] = "sleeve"
+        obj["sleeve_slot"] = i
+        obj["width_m"] = obj["height_m"] = SLEEVE
+        obj["aspect"] = 1.0
+        sleeves.append(obj)
+    return crate, sleeves
+
+
+def sleeve_material(i):
+    """A sleeve's front for the stills (a plain coloured card), white paper while bake.py bakes the light on it."""
+    mat, k = pl.new_material(f"record_sleeve_{i}")
+    hexc = SLEEVES[i].lstrip("#")
+    rgb = tuple((int(hexc[j:j + 2], 16) / 255) ** 2.2 for j in (0, 2, 4))
+    paper = k.image(pl.ambientcg("Paper001")["Color"], k.coords("Object", 4.0))
+    color = k.mix_color(1.0, paper.outputs["Color"], rgb + (1.0,), blend="MULTIPLY")
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": 0.7})
+    white = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.8, 0.8, 0.8, 1.0), "Roughness": 0.9})
+    probe = k.node("ShaderNodeValue", name="light_probe", label="light_probe")
+    probe.outputs[0].default_value = 0.0
+    mix = k.node("ShaderNodeMixShader", inputs={"Fac": probe.outputs[0], "Shader": bsdf.outputs[0],
+                                                "Shader_001": white.outputs[0]})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", mix.outputs[0])
+    return mat
 
 
 # ---- desk clutter ----
@@ -1058,8 +1537,7 @@ def build_space_wall(mats):
 
     black = pl.surface("pale_dot_frame", (0.015, 0.014, 0.013), 0.4, edge_wear=0.2, edge_color=(0.1, 0.09, 0.08),
                        dust=0.3, color_var=0.03)
-    mat_board = bpy.data.materials["photo_mat_board"]
-    mat_core = bpy.data.materials["photo_mat_bevel"]
+    mat_board, mat_core = mat_boards()
     frame, art = framed_picture("props_frame_pale_blue_dot", "print_pale_blue_dot", (PALE_DOT_SIZE, PALE_DOT_SIZE),
                                 black, mat_board, mat_core, pale_blue_dot_material(), matte=0.05, moulding=0.018)
     for obj in (frame, art):
@@ -1114,8 +1592,7 @@ def build_print_japanese_lit(mats):
     base, (w, h), lean = JP_PRINT
     oak = pl.surface("oak_frame", (0.55, 0.42, 0.28), 0.5, color_tex=pl.ambientcg("Wood051")["Color"],
                      tint=(1.0, 0.86, 0.68), tile=0.25, edge_wear=0.3, color_var=0.06)
-    mat_board = bpy.data.materials["photo_mat_board"]
-    mat_core = bpy.data.materials["photo_mat_bevel"]
+    mat_board, mat_core = mat_boards()
     frame, art = framed_picture("props_frame_japanese_lit", "print_japanese_lit_art", (w - 0.07, h - 0.07), oak,
                                 mat_board, mat_core, image_material("print_japanese_lit", ART / "print_japanese_lit.png", 0.8),
                                 matte=0.0, moulding=0.035, depth=0.025)
@@ -1412,55 +1889,45 @@ def build_floor_books(rng):
 
 
 def build_reading_corner(mats):
-    """The armchair corner: a paper lantern on a tripod beside the lounge chair, glowing warm, and a small walnut
-    side table with a mug and a book left open on it."""
+    """The armchair corner: a tall paper lantern on a wooden tripod beyond the record cabinet, glowing warm over the
+    turntable, and a mug left on the cabinet beside it."""
     paper = pl.surface("lantern_paper", (0.86, 0.80, 0.68), 0.9, color_tex=pl.ambientcg("Paper001")["Color"],
-                       tint=(1.0, 0.94, 0.82), tile=0.3, translucency=0.6, emission=((1.0, 0.66, 0.36), 1.6),
+                       tint=(1.0, 0.94, 0.82), tile=0.3, translucency=0.45, emission=((1.0, 0.66, 0.36), 0.15),
                        color_var=0.04)
     rib = pl.surface("lantern_rib", (0.52, 0.42, 0.28), 0.7, color_var=0.05)
-    steel = pl.surface("lantern_steel", (0.02, 0.02, 0.02), 0.45, metallic=0.6, edge_wear=0.3,
-                       edge_color=(0.2, 0.2, 0.2), color_var=0.02)
+    oak = pl.surface("lantern_oak", (0.50, 0.36, 0.22), 0.55, color_tex=pl.ambientcg("Wood051")["Color"],
+                     tint=(0.95, 0.80, 0.62), tile=0.2, edge_wear=0.3, color_var=0.06)
     b = pl.Builder("props_lantern")
-    r, cz, h = 0.19, 0.42, 0.40
+    r, cz, h = LANTERN
     prof = [(0.0, cz - h / 2)]
     for k in range(1, 12):
         t = k / 12
         prof.append((r * math.sin(math.pi * t) ** 0.8, cz - h / 2 + h * t))
     prof.append((0.0, cz + h / 2))
     b.lathe(prof, segments=24, mat=paper)
-    for k in range(1, 12):
+    for k in range(1, 12, 2):
         t = k / 12
         rr = r * math.sin(math.pi * t) ** 0.8 + 0.0015
-        b.torus(rr, 0.0012, segments=28, sides=4, loc=(0, 0, cz - h / 2 + h * t), mat=rib)
+        b.torus(rr, 0.0012, segments=24, sides=4, loc=(0, 0, cz - h / 2 + h * t), mat=rib)
+    b.tube([Vector((0, 0, cz - h / 2 - 0.30)), Vector((0, 0, cz - h / 2 + 0.02))], 0.006, sides=8, mat=oak)
     for k in range(3):
         a_ = math.radians(90 + 120 * k)
-        foot = Vector((0.15 * math.cos(a_), 0.15 * math.sin(a_), 0.0))
-        b.tube([foot, Vector((0.05 * math.cos(a_), 0.05 * math.sin(a_), cz - h / 2 + 0.02))], 0.004, sides=6, mat=steel)
+        foot = Vector((0.22 * math.cos(a_), 0.22 * math.sin(a_), 0.0))
+        b.tube([foot, Vector((0.012 * math.cos(a_), 0.012 * math.sin(a_), cz - h / 2 - 0.28))], 0.010, sides=8, mat=oak,
+               radius_fn=lambda t: 0.010 * (1.0 - 0.35 * t))
     obj = finish(b, "props_lantern", smooth=40)
     place(obj, FLOOR_LAMP, 0.0)
 
-    walnut = mats["walnut"]
-    bm = bmesh.new()
-    t = READING_TABLE
-    add_cylinder(bm, 0.20, 0.026, t + Vector((0, 0, 0.507)), segments=40)
-    add_cylinder(bm, 0.022, 0.48, t + Vector((0, 0, 0.255)), segments=16)
-    add_cylinder(bm, 0.16, 0.022, t + Vector((0, 0, 0.011)), segments=32)
-    smooth_by_angle(new_object("env_reading_table", bm, "env", "env", [walnut]), 40)
     mug = pl.surface("reading_mug", (0.55, 0.30, 0.18), 0.25, coat=0.5, grime=0.3, color_var=0.04)
     tea = pl.surface("reading_tea", (0.18, 0.08, 0.03), 0.2, color_var=0.05)
     b = pl.Builder("props_reading_mug")
-    top = t + Vector((0.05, 0.06, 0.52))
+    x0, x1, y0, y1, top_z = RECORD_CABINET
+    top = Vector((x0 + 0.13, y0 + 0.09, top_z))
     b.lathe([(0.0, 0.0), (0.036, 0.0), (0.040, 0.006), (0.040, 0.092), (0.036, 0.092), (0.035, 0.008), (0.0, 0.008)],
             segments=24, loc=tuple(top), mat=mug, cap_start=False, cap_end=False)
     b.cylinder(0.035, 0.002, segments=24, loc=tuple(top + Vector((0, 0, 0.075))), mat=tea)
-    b.torus(0.022, 0.006, segments=14, sides=6, loc=tuple(top + Vector((0.046, 0, 0.048))), rot=(90, 0, 0), mat=mug,
-            arc=math.radians(220))
-    cloth = bpy.data.materials["book_cloth_1"]
-    pages = bpy.data.materials["book_pages"]
-    for side in (-1, 1):
-        b.box((0.11, 0.16, 0.012), loc=tuple(t + Vector((-0.05 + side * 0.056, -0.04, 0.526))), rot=(0, side * -4, 0),
-              mat=pages)
-        b.box((0.114, 0.164, 0.003), loc=tuple(t + Vector((-0.05 + side * 0.056, -0.04, 0.5215))), rot=(0, side * -4, 0),
-              mat=cloth)
+    b.torus(0.022, 0.006, segments=14, sides=6, loc=tuple(top + Vector((-0.032, -0.030, 0.048))), rot=(90, 0, 45),
+            mat=mug, arc=math.radians(220))
     finish(b, "props_reading_mug", smooth=40)
     return FLOOR_LAMP + Vector((0, 0, cz))
+

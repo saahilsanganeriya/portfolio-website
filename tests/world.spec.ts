@@ -122,16 +122,16 @@ test('every new hotspot does what it says', async ({ page }) => {
   // Props that take the camera to their framing.
   for (const [proxy, framing] of [
     ['hit_window', 'window'],
-    ['hit_photo_wall', 'photos'],
+    ['hit_photo_board', 'photos'],
   ] as const) {
     await backToIdle(page);
     await clickProp(page, proxy);
     await settledAt(page, framing);
   }
 
-  // At the print wall a print opens that photograph in SaahilOS.
+  // At the photo board a print opens that photograph in SaahilOS.
   await backToIdle(page);
-  await clickProp(page, 'hit_photo_wall');
+  await clickProp(page, 'hit_photo_board');
   await settledAt(page, 'photos');
   await clickProp(page, 'hit_photo_print_0');
   await settledAt(page, 'monitor');

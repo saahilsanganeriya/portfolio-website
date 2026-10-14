@@ -6,9 +6,10 @@
 The glb follows the room's node contract (site plan, round 7 section 3): unlit materials whose base colour is the
 baked atlas on TEXCOORD_0, env_* / desk_* / props_* meshes, invisible hit_* proxies, the runtime meshes (crt_glow,
 lamp_bulb, lava_lamp_glass, oven_glow, nas_led_*) with their own materials, the art meshes (poster_art_*,
-photo_print_*, print_pale_blue_dot, projection_surface, sticky_note_*: art UVs on TEXCOORD_0, the baked light on
-them on TEXCOORD_1), the two halves of the window view (window_view_sf, window_view_delhi) whose textures are
-separate files, pivots for the parts that turn (projector_dial, oven_door), and the monitor, projector, espresso,
+instax_slot_*, record_sleeve_*, print_pale_blue_dot, projection_surface, sticky_note_*: art UVs on TEXCOORD_0, the
+baked light on them on TEXCOORD_1), the two halves of the window view (window_view_sf, window_view_delhi) whose
+textures are separate files, pivots for the parts that turn (projector_dial, oven_door, the projector's reels, the
+turntable's platter and tonearm), the zone empties the meshes hang under, and the monitor, projector, espresso,
 camera and anchor empties. gltf-transform then encodes the atlases as KTX2 (ETC1S) and the geometry with meshopt;
 the view's day textures are referenced by URI, so the site loads them next to the glb and blends in the night pair
 by local time. It also writes public/room/floorplan.json (floorplan.py) and pale-blue-dot.ktx2. Stills are Cycles
@@ -46,9 +47,12 @@ PIVOTS = {
     "oven_door": {"turn_axis": "+X", "open_angle_deg": 82.0},
     "projector_reel_front": {},  # turn_axis set by build_room.py from the reel's own axle
     "projector_reel_rear": {},
+    "platter": {},  # turn_axis and rpm set by room_dressing.py at the spindle
+    "tonearm": {},  # turn_axis and its rest, play (outer groove) and end (inner groove) angles, set at its base
 }
+PIVOT_KEYS = ("turn_axis", "open_angle_deg", "rpm", "rest_angle_deg", "play_angle_deg", "end_angle_deg")
 GLTF_TRANSFORM = ["npx", "--yes", "-p", "@gltf-transform/cli@4.5.1", "gltf-transform"]
-MAX_GLB_BYTES = 4_600_000  # glb plus the two day textures keep the initial 3D payload under 6 MB (round 7 budget)
+MAX_GLB_BYTES = 4_900_000  # a backstop; the gate is the measured initial payload (<= 6 MB, scripts/measure-payload.mjs)
 MAX_VIEW_DAY_BYTES = 560_000
 INK = "0x14110F"
 PALE_DOT_SOURCE = (5230, 5175)  # PIA23645's size; the print crops it square
@@ -67,6 +71,8 @@ STILLS = {
     "room_v3_armchair": ("cam_tour_9", 1600, 1000),
     "room_v3_projector": ("cam_projector", 1600, 1000),
     "room_v3_photos": ("cam_photos", 1600, 1000),
+    "room_v3_records": ("cam_record_player", 1600, 1000),
+    "room_v3_lava": ("cam_tour_5", 1600, 1000),
     "room_v3_posters": ("cam_tour_8", 1600, 1000),
 }
 
@@ -77,7 +83,7 @@ def parse_args():
     parser.add_argument("--no-stills", action="store_true")
     parser.add_argument("--no-glb", action="store_true")
     parser.add_argument("--samples", type=int, default=256, help="Cycles samples for the stills")
-    parser.add_argument("--threads", type=int, default=24)
+    parser.add_argument("--threads", type=int, default=16)
     parser.add_argument("--only", default="", help="comma-separated still stems to render (default: all)")
     parser.add_argument("--merge-static", action="store_true",
                         help="join plain scenery per atlas material to cut draw calls (named nodes stay separate)")
@@ -253,12 +259,13 @@ def add_pivots(meshes):
         obj.name = obj.data.name = f"{name}_mesh"
         pivot = bpy.data.objects.new(name, None)
         bpy.context.scene.collection.objects.link(pivot)
+        pivot.parent = obj.parent  # its zone, an identity empty
         pivot.matrix_world = Matrix.LocRotScale(loc, rot, None)
-        for key, value in {**{k: obj[k] for k in ("turn_axis", "open_angle_deg") if k in obj}, **extras}.items():
+        for key in [k for k in PIVOT_KEYS if k in obj]:
+            pivot[key] = obj[key]
+            del obj[key]
+        for key, value in extras.items():
             pivot[key] = value
-        for key in ("turn_axis", "open_angle_deg"):
-            if key in obj:
-                del obj[key]
         obj.parent = pivot
         obj.matrix_parent_inverse = Matrix.Identity(4)
         obj.matrix_world = world
@@ -272,7 +279,7 @@ def export_glb(merge=False):
         meshes = merge_static(meshes)
     pivots = add_pivots(meshes)
     empties = [o for o in bpy.context.scene.objects if o.type == "EMPTY"
-               and any(c.name in ("markers", "cameras") for c in o.users_collection)] + pivots
+               and any(c.name in ("markers", "cameras", "zones") for c in o.users_collection)] + pivots
     for obj in bpy.context.view_layer.objects:
         obj.select_set(False)
     for obj in meshes + empties:
@@ -392,14 +399,15 @@ REQUIRED_NODES = (
     + ["crt_glow", "lamp_bulb", "monitor_screen", "projector_lens", "projector_screen_center"]
     + [f"{c}{s}" for c in ("cam_loading", "cam_idle", "cam_desk", "cam_monitor", "cam_shelf", "cam_projector",
                            "cam_window", "cam_photos", "cam_espresso", "cam_oven", "cam_arrival_0", "cam_arrival_1",
-                           "cam_arrival_2", *(f"cam_tour_{i}" for i in range(10))) for s in ("", "_target")]
+                           "cam_arrival_2", "cam_record_player", *(f"cam_tour_{i}" for i in range(11)))
+                           for s in ("", "_target")]
     # PLAN 11.1 and 12.1, less the ceiling fan and the projector screen
     + ["window_view_sf", "window_view_delhi", "lava_lamp", "lava_lamp_glass", "lava_lamp_light", "espresso_machine",
        "espresso_steam", "countertop_oven", "oven_glow", "mango_fruit", "poster_plaque", "hit_window", "hit_lava_lamp",
        "hit_espresso", "hit_oven", "hit_plaque"]
     + [f"poster_art_{i}" for i in range(4)]
-    + [f"photo_print_{i}" for i in range(5)]
-    + ["hit_photo_wall", "photo_album", "hit_album", "album_open_anchor", "projector_dial", "hit_projector_dial"]
+    + ["photo_board", "hit_photo_board", *(f"instax_slot_{i}" for i in range(20))]
+    + ["photo_album", "hit_album", "album_open_anchor", "projector_dial", "hit_projector_dial"]
     # Round 7 (PLAN-ROUND-7 section 3)
     + ["projector", "projector_reel_front", "projector_reel_rear"]
     + ["kitchen_counter", "espresso_cup", "espresso_coffee", "espresso_spout", "oven_door", "croissant",
@@ -409,10 +417,16 @@ REQUIRED_NODES = (
     + [f"book_spine_{slug}" for slug in ("the-wind-up-bird-chronicle", "kafka-on-the-shore", "1q84", "kitchen",
                                          "on-earth-were-briefly-gorgeous", "the-elegant-universe")]
     + [f"sticky_note_{i}" for i in range(6)]
+    # Round 7, the owner's additions: the roller screen, the record corner, the mini kitchen's counter, the zones
+    + ["roller_screen_housing", "roller_screen", "record_player", "platter", "tonearm", "record_crate",
+       "hit_record_player", *(f"record_sleeve_{i}" for i in range(6))]
+    + ["zone_desk", "zone_window", "zone_kitchen", "zone_reading", "zone_wall_space", "zone_photos", "zone_records",
+       "zone_projector", "zone_posters", "zone_room"]
 )
 # Names the room no longer has (round 7); the export fails if one comes back.
 REMOVED_NODES = ("ceiling_fan", "ceiling_fan_blades", "hit_fan", "hit_projector_screen", "props_projector_screen",
-                 "props_projector_screen_surface", "props_projection", "hit_fujifilm_b", "hit_fujifilm_c", "hit_super8")
+                 "props_projector_screen_surface", "props_projection", "hit_fujifilm_b", "hit_fujifilm_c", "hit_super8",
+                 "hit_photo_wall", *(f"photo_print_{i}" for i in range(5)))
 
 
 def check_contract(path: Path):
@@ -470,13 +484,16 @@ def show_view_from_bakes():
 
 
 def show_current_photos():
-    """Give the photo prints the wall's current photographs (src/assets/photography), read now rather than when the
-    room was built, so the stills follow the collection."""
+    """Give the Instax prints the board's current photographs (src/assets/photography), read now rather than when
+    the room was built, so the stills follow the collection."""
     import room_dressing
+    photos = room_dressing.still_photo_slugs()
     for obj in bpy.context.scene.objects:
-        if obj.get("runtime_art") == "photo":
+        if obj.get("runtime_art") == "instax":
+            slot = int(obj["instax_slot"])
             obj.data.materials.clear()
-            obj.data.materials.append(room_dressing.photo_material(int(obj["photo_slot"])))
+            obj.data.materials.append(room_dressing.instax_material(slot, obj["format"],
+                                                                    photos[slot] if slot < len(photos) else None))
 
 
 def show_current_notes():
@@ -504,7 +521,7 @@ def render_stills(samples: int, threads: int, only: set[str]):
     scene.render.engine = "CYCLES"
     scene.cycles.samples = samples
     scene.cycles.use_denoising = True
-    scene.render.threads_mode, scene.render.threads = "FIXED", min(threads, 24)
+    scene.render.threads_mode, scene.render.threads = "FIXED", min(threads, 16)
     scene.render.film_transparent = True
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGBA"
@@ -512,6 +529,10 @@ def render_stills(samples: int, threads: int, only: set[str]):
     work = CACHE / "stills"
     work.mkdir(parents=True, exist_ok=True)
     jobs = dict(STILLS, poster=("cam_idle", 1600, 1000), window_view=("cam_window", 1600, 1000))
+    # The roller screen rests rolled up: the stills leave it out, the glb keeps it.
+    rolled_up = [o for o in scene.objects if o.get("rest_hidden") and not o.hide_render]
+    for obj in rolled_up:
+        obj.hide_render = True
     for stem, (framing, width, height) in jobs.items():
         if only and stem not in only:
             continue
@@ -529,6 +550,8 @@ def render_stills(samples: int, threads: int, only: set[str]):
             ffmpeg(*avif_args(flat), OUT_DIR / "poster.avif")
             ffmpeg("-i", flat, "-q:v", "3", OUT_DIR / "poster.jpg")
         print(f"export: still {stem} from {framing}")
+    for obj in rolled_up:
+        obj.hide_render = False
 
 
 def avif_args(src):
