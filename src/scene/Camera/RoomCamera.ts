@@ -291,9 +291,13 @@ export class RoomCamera {
     let target: THREE.Vector3;
     let fov: number;
     if (phase === 'monitor') ({ position, target, fov } = this.monitorPose());
-    else {
-      const framing = phase === 'loading' ? this.framings.loading : this.framings[phase] ?? this.framings.idle;
-      ({ position, target, fov } = this.fromFraming(framing, phase === 'loading' ? 1 : this.aspectFit()));
+    else if (phase === 'loading') {
+      // The arrival starts from the wide view, which fills the frame with the room: from the boot framing, 14 m out,
+      // the set floated as a small box in black.
+      ({ position, target, fov } = this.fromFraming(this.framings.idle, 1));
+    } else {
+      const framing = this.framings[phase] ?? this.framings.idle;
+      ({ position, target, fov } = this.fromFraming(framing, this.aspectFit()));
     }
     this.goal[0] = position.x;
     this.goal[1] = position.y;
