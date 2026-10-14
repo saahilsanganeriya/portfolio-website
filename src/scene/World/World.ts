@@ -247,11 +247,11 @@ export class World {
         if (!projector) return false;
         const arriving = here !== 'projector';
         this.whenLanded('projector', () => {
-          const was = projector.running;
+          const was = projector.wanted;
           if (arriving) projector.play();
           else projector.toggle();
-          if (projector.running !== was || arriving) this.host.sfx('projector-clack');
-          this.announce(projector.running ? `The projector plays ${projector.label.toLowerCase()} on the wall.` : 'The projector stops.');
+          if (projector.wanted !== was) this.host.sfx('projector-clack');
+          this.announce(projector.wanted ? `The projector plays ${projector.label.toLowerCase()}.` : 'The projector stops.');
         });
         return true;
       }

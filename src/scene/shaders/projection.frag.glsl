@@ -1,7 +1,7 @@
-// The projector's picture on the wall. The room baked this patch of wall as lit by the projector's open gate (the
-// bright rectangle, its second UV set into the atlas); with film in the gate only the picture's light lands, so the
-// wall shows its other light (`uAmbient` of the bake, on the wall's own colour `uWall`) plus the gate's light times
-// the picture. Per film frame the
+// The projector's picture, on the roller screen or the wall. The first room baked this patch of wall as lit by the
+// projector's open gate (the bright rectangle, its second UV set into the atlas); with film in the gate only the
+// picture's light lands, so the wall shows its other light (`uAmbient` of the bake, on the wall's own colour `uWall`)
+// plus the gate's light times the picture. A roller screen is baked with the lamp off, so the picture adds to it. Per film frame the
 // picture weaves in the gate and the lamp flickers; grain runs over it and the light falls off toward the corners. A
 // program change rolls the film: frame A slides up out of the gate, frame B follows with the frame line between them.
 // `uStill` (reduced motion) holds the weave, flicker and grain still.
@@ -18,6 +18,7 @@ uniform float uAmbient;
 uniform vec3 uWall;
 uniform float uStill;
 uniform vec2 uFlip;
+uniform float uGateBaked;
 uniform vec3 uLampTint;
 uniform vec3 uRoomTint;
 uniform vec3 uLampPos;
@@ -62,7 +63,11 @@ void main() {
   float grain = (hash(floor(pictureUv * vec2(480.0, 270.0)) + uFrame * 17.0) - 0.5) * 0.06 * moving;
   vec3 lit = clamp(picture * flicker * hotspot + grain, 0.0, 1.0) * gate;
 
-  vec3 light = bake * mix(vec3(1.0), uWall * uAmbient + (1.0 - uAmbient) * lit, uShown);
+  // A bare wall baked under the open gate: the gate's light becomes the picture's. A roller screen baked with the lamp
+  // off: the picture's light is added to the room's.
+  vec3 underGate = bake * mix(vec3(1.0), uWall * uAmbient + (1.0 - uAmbient) * lit, uShown);
+  vec3 thrown = bake + uShown * 0.85 * lit;
+  vec3 light = mix(thrown, underGate, uGateBaked);
   float d = distance(vWorld, uLampPos) / uLampRange;
   light *= mix(vec3(1.0), uLampTint, 1.0 / (1.0 + 6.0 * d * d)) * uRoomTint;
   gl_FragColor = vec4(light, 1.0);

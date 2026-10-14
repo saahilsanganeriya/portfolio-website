@@ -7,10 +7,12 @@ import { artUvFlip, type ProjectorNodes } from './nodes';
 import type { Photograph } from './photographs';
 import type { TextureStore } from './textures';
 
-// The projector and its picture on the wall. A dial picks the program: his story (a short silent film, see film.ts)
-// or his photographs, one frame at a time with the film rolling between them. The lamp is always on: at rest the wall
-// shows the program's still (the film's poster, or the photograph in the gate); a click runs it, with the reels
-// turning and the projector's own sound, and a click stops it. The film plays once and returns to its poster; the
+// The projector and its picture. A dial picks the program: his story (a short silent film, see film.ts) or his
+// photographs, one frame at a time with the film rolling between them. With a roller screen (room v3's final layout,
+// owner 08:25Z) the screen is rolled up and the lamp off while the projector rests; a click rolls the screen down,
+// then the lamp comes on and the program runs, with the reels turning and the projector's own sound; the film plays
+// once, and then (or on a click) the lamp goes off and the screen rolls back up. Without one the film lands on the wall
+// and the lamp stays on, showing the program's still at rest (the film's poster, or the photograph in the gate). The
 // photographs run until stopped. Nothing loads before it is wanted: the poster once the room is interactive and the
 // wall is in view, the film on its first run. Reduced motion still plays what the visitor asked for, without the
 // gate's weave, flicker or grain, and cuts between photographs instead of rolling.
@@ -26,6 +28,8 @@ const CHANGE_S = 0.5;
 // the wall's own colour against the white the patch was baked as, so a black frame sinks into the dark green wall.
 const AMBIENT_SHARE = 0.26;
 const WALL = new THREE.Color(0.3, 0.5, 0.42);
+// The roller screen takes this long to come down or go up.
+const ROLL_S = 1.3;
 const PHOTO_HOLD_S = 6;
 const PHOTO_ROLL_S = 0.9;
 // The reels turn this many times a second while the film runs (Super 8 at 18 frames a second off a 7 cm reel).
@@ -448,6 +452,8 @@ export interface ProjectorState {
   time: number;
   /** The photograph in the gate, under Photographs. */
   photo: string | null;
+  /** How far the roller screen is down, 0 rolled up to 1 down (1 when the film lands on the wall). */
+  screen: number;
 }
 
 export interface ProjectorHost {
@@ -479,6 +485,13 @@ export class Projector {
   private interactive = false;
   private soundOn = false;
   private suspended = false;
+  /** The visitor wants the projector running: the screen down, the lamp on, the program going. */
+  private on = false;
+  /** The program has been started for this run (it starts once the screen is down). */
+  private started = false;
+  private wasRunning = false;
+  private drop: number;
+  private readonly rollerPivot: THREE.Group | null;
 
   constructor(
     private readonly nodes: ProjectorNodes,
@@ -517,11 +530,16 @@ export class Projector {
         uWall: { value: WALL },
         uStill: { value: reducedMotion ? 1 : 0 },
         uFlip: { value: artUvFlip(surface) },
+        // A bare wall was baked lit by the open gate; a roller screen is baked with the lamp off.
+        uGateBaked: { value: nodes.roller ? 0 : 1 },
         ...lamp,
       },
     });
     surface.material = this.material;
     this.bounds.setFromObject(surface);
+    this.drop = nodes.roller ? 0 : 1;
+    this.rollerPivot = nodes.roller ? this.hangRoller(nodes.roller, surface) : null;
+    this.placeRoller();
   }
 
   get label() {
@@ -536,8 +554,10 @@ export class Projector {
     return this.programs[this.current].running;
   }
 
-  /** The lamp's light in the beam: full while film runs, a little lower on a still. */
+  /** The lamp's light in the beam: with a roller screen, on only while the program runs on it; on a bare wall, full
+   * while film runs and a little lower on a still. */
   get beam() {
+    if (this.rollerPivot) return this.running && this.drop >= 1 ? 1 : 0;
     return this.running ? 1 : 0.75;
   }
 
@@ -556,6 +576,7 @@ export class Projector {
       inView: this.visible,
       time: Number(story.time.toFixed(2)),
       photo: program === photos ? photos.slug : null,
+      screen: Number(this.drop.toFixed(2)),
     };
   }
 
@@ -563,21 +584,19 @@ export class Projector {
     this.interactive = true;
   }
 
-  /** Runs the program on the wall, or stops it if it runs. Returns whether it now runs. */
+  /** Runs the program (the screen comes down first), or stops it if it runs. Returns whether it now runs. */
   toggle() {
-    const program = this.programs[this.current];
-    if (program.running || program.loading) {
-      program.stop();
+    if (this.on) {
+      this.halt();
       return false;
     }
-    void program.start();
+    this.on = true;
     return true;
   }
 
   /** Runs the program if it is not running already. */
   play() {
-    const program = this.programs[this.current];
-    if (!program.running && !program.loading) void program.start();
+    this.on = true;
   }
 
   /** The dial's next stop: the lamp dips while the film rolls over to the next program, which then runs. */
@@ -585,7 +604,9 @@ export class Projector {
     this.programs[this.current].stop();
     this.current = (this.current + 1) % this.programs.length;
     this.changing = this.reducedMotion ? 0 : CHANGE_S;
-    void this.programs[this.current].start();
+    this.on = true;
+    this.started = false;
+    this.wasRunning = false;
   }
 
   /** The room stopped drawing (off screen): the program pauses with it. */
@@ -599,6 +620,11 @@ export class Projector {
     if (on) this.play();
   }
 
+  /** Whether the visitor has it running (the screen may still be on its way down). */
+  get wanted() {
+    return this.on;
+  }
+
   update(camera: THREE.Camera, running: boolean, realDt: number) {
     this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.viewProjection);
@@ -606,9 +632,18 @@ export class Projector {
     this.updateDial(realDt);
 
     const program = this.programs[this.current];
+    // A run ends by itself (the film's last frame) or by failing: the lamp goes off and the screen goes up.
+    if (this.on && this.started && !program.loading && (program.failed || (this.wasRunning && !program.running))) this.halt();
+    this.wasRunning = program.running;
+    this.roll(realDt);
+    if (this.on && !this.started && this.drop >= 1) {
+      this.started = true;
+      void program.start();
+    }
     if ((this.visible || this.forced) && this.interactive) void program.prepare();
     const playing = this.isPlaying(program) && running;
-    const inputs = program.frame(realDt, playing, this.reducedMotion);
+    // A roller screen on its way, or rolled up, shows no picture.
+    const inputs = this.rollerPivot && this.drop < 1 ? null : program.frame(realDt, playing, this.reducedMotion);
 
     // The projector's sound and reels run while the film does.
     const sound = program.running && playing;
@@ -641,7 +676,7 @@ export class Projector {
 
   /** The film or the photographs are moving on the wall (frames must be drawn while motion is otherwise paused). */
   get animating() {
-    return this.programs[this.current].running || this.changing > 0;
+    return this.programs[this.current].running || this.changing > 0 || (this.rollerPivot !== null && this.drop !== (this.on ? 1 : 0));
   }
 
   dispose() {
@@ -652,7 +687,51 @@ export class Projector {
 
   /** The program advances while it runs, the wall is seen (or forced) and the tab is visible. */
   private isPlaying(program: Program) {
-    return program.running && (this.visible || this.forced) && !this.suspended && document.visibilityState === 'visible';
+    return program.running && this.drop >= 1 && (this.visible || this.forced) && !this.suspended && document.visibilityState === 'visible';
+  }
+
+  private halt() {
+    this.programs[this.current].stop();
+    this.on = false;
+    this.started = false;
+    this.wasRunning = false;
+  }
+
+  /** The roller screen follows `on`: down to run, up at rest (at once under reduced motion). */
+  private roll(dt: number) {
+    if (!this.rollerPivot) return;
+    const target = this.on ? 1 : 0;
+    if (this.drop === target) return;
+    this.drop = this.reducedMotion ? target : target > this.drop ? Math.min(1, this.drop + dt / ROLL_S) : Math.max(0, this.drop - dt / ROLL_S);
+    this.placeRoller();
+  }
+
+  private placeRoller() {
+    const pivot = this.rollerPivot;
+    if (!pivot) return;
+    const eased = this.drop * this.drop * (3 - 2 * this.drop);
+    pivot.scale.y = Math.max(0.001, eased);
+    pivot.visible = eased > 0.005;
+  }
+
+  /**
+   * Hangs the roller screen (modelled down) from its top edge, so scaling the hanger's height rolls it up into its
+   * housing; the picture's surface goes with it when it is not already part of the screen.
+   */
+  private hangRoller(roller: THREE.Object3D, surface: THREE.Mesh) {
+    const box = new THREE.Box3().setFromObject(roller);
+    const top = new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2);
+    const parent = roller.parent!;
+    const pivot = new THREE.Group();
+    pivot.name = 'roller_screen_hanger';
+    pivot.position.copy(parent.worldToLocal(top));
+    parent.add(pivot);
+    pivot.updateMatrixWorld(true);
+    pivot.attach(roller);
+    let inside = false;
+    surface.traverseAncestors((node) => (inside ||= node === roller));
+    if (surface !== roller && !inside) pivot.attach(surface);
+    return pivot;
   }
 
   private approach(value: number, target: number, dt: number) {

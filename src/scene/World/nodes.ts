@@ -56,13 +56,15 @@ export interface OvenNodes {
 }
 
 export interface ProjectorNodes {
-  /** The plane on the wall the film lands on, and its width and height (world units). */
+  /** The plane the film lands on (the roller screen's face when it is down, else the wall), and its size (world units). */
   surface: THREE.Mesh;
   width: number;
   height: number;
   lens: THREE.Vector3 | null;
   /** The reels turn while the film runs. */
   reels: PivotNode[];
+  /** The pull-down roller screen, modelled down; rolled up when the projector rests. Null: the film lands on the wall. */
+  roller: THREE.Object3D | null;
 }
 
 export interface WorldNodes {
@@ -317,7 +319,8 @@ export function readWorld(room: RoomNodes): WorldNodes {
   });
 
   // The picture on the wall answers a click too: from the projector's framing the projector is behind the camera.
-  const surface = mesh('projection_surface');
+  const roller = find('roller_screen');
+  const surface = mesh('projection_surface') ?? (roller instanceof THREE.Mesh ? roller : null);
   if (surface) room.proxies.push(proxyInFront(root, surface, 'hit_projection', 0.02));
 
   const glass = mesh('lava_lamp_glass');
@@ -367,6 +370,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
           height: (Number(surface.userData.height_m) || 0.5625) * WORLD_SCALE,
           lens: lens ? worldPosition(lens) : null,
           reels: ['projector_reel_front', 'projector_reel_rear'].flatMap((name) => pivotOf(find(name), 0, '+Z') ?? []),
+          roller,
         }
       : null,
     album: anchor
