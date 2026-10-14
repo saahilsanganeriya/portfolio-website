@@ -71,16 +71,27 @@ test('each half of the window shows its own cityâ€™s day or night, by that cityâ
  * initial payload over 6 MB. One picture per city loads with the room; each city's second follows after it.
  */
 test('at an hour when both cities blend, the room loads one window picture per city first and the rest after', async ({ page }) => {
-  const started: { url: string; at: number }[] = [];
-  page.on('request', (request) => /\/room\/window_[a-z]+_(day|night)\.ktx2$/.test(request.url()) && started.push({ url: request.url(), at: Date.now() }));
+  // Each window picture's fetch, and whether the room was interactive when it started (the mocked clock replaces
+  // performance, so there are no resource timings to compare).
+  await page.addInitScript(() => {
+    const log: { file: string; early: boolean }[] = [];
+    (window as unknown as { __pictures: typeof log }).__pictures = log;
+    const fetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const match = url.match(/\/room\/(window_[a-z]+_(?:day|night)\.ktx2)$/);
+      if (match) log.push({ file: match[1], early: window.__room?.interactiveAt == null });
+      return fetch(input, init);
+    };
+  });
   await page.clock.setFixedTime('2026-11-10T01:07:00Z');
   await inRoom(page);
-  const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
-  const first = started.filter(({ at }) => at < interactive).map(({ url }) => url.replace(/.*\/room\//, ''));
+  await page.waitForFunction(() => Object.values(window.__room!.world.window!).every((city) => city.loaded.length === 2), null, { timeout: 30_000 });
+  const pictures = await page.evaluate(() => (window as unknown as { __pictures: { file: string; early: boolean }[] }).__pictures);
+  const first = pictures.filter((p) => p.early).map((p) => p.file);
   expect(first).toHaveLength(2);
   expect(new Set(first.map((f) => f.split('_')[1]))).toEqual(new Set(['sf', 'delhi']));
-  await page.waitForFunction(() => Object.values(window.__room!.world.window!).every((city) => city.loaded.length === 2), null, { timeout: 30_000 });
-  expect(started).toHaveLength(4);
+  expect(pictures).toHaveLength(4);
 });
 
 /** Catches an album that does not open from the desk, does not page in both directions, or traps the visitor. */
