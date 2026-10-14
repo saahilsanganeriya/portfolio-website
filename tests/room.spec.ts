@@ -13,7 +13,7 @@ const PROJECT = { slug: 'entity-resolution-and-anonymization', title: 'Entity re
 const os = (page: Page) => page.frameLocator('.room-monitor iframe');
 const drawnOs = (page: Page) => page.frameLocator('[data-monitor-glass] iframe');
 
-async function settled(page: Page, phase: 'idle' | 'desk' | 'monitor' | 'projector', timeout = 120_000) {
+async function settled(page: Page, phase: 'idle' | 'desk' | 'monitor' | 'projector' | 'shelf', timeout = 120_000) {
   await page.waitForFunction((p) => window.__room?.phase === p && !window.__room.moving, phase, { timeout });
 }
 
@@ -247,6 +247,52 @@ test('hovering the mango plant labels it, and clicking it opens About in SaahilO
   await page.mouse.click(mango.x, mango.y);
   await settled(page, 'monitor', 15_000);
   await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
+});
+
+/**
+ * Catches a round-7 prop that opens the wrong window or none (books, the Japanese literature print, the Voyager record,
+ * the Pale Blue Dot print), a bookshelf that opens Books before flying to it, or a pennant that does more than label.
+ */
+test('the new props open their windows, and the Georgia Tech pennant only labels itself', async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.goto('/');
+  await settled(page, 'desk');
+  const fromWideView = async () => {
+    await page.evaluate(() => window.__room!.goto('idle'));
+    await settled(page, 'idle');
+  };
+  const click = async (name: string) => {
+    const point = await screenPoint(page, name);
+    // The monitor's frame is a page element over the canvas; wait until it has moved off the prop with the camera.
+    await expect.poll(() => page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, point)).not.toBe('IFRAME');
+    await page.mouse.click(point.x, point.y);
+  };
+
+  await fromWideView();
+  const pennant = await screenPoint(page, 'hit_pennant_gatech');
+  await page.mouse.move(pennant.x, pennant.y);
+  await expect(page.locator('.room-label')).toHaveText('Georgia Tech');
+  await page.mouse.click(pennant.x, pennant.y);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => window.__room!.destination)).toBe('idle');
+
+  for (const [proxy, window] of [
+    ['hit_voyager', 'Voyager Golden Record'],
+    ['hit_pale_blue_dot', 'A pale blue dot'],
+    ['hit_print_japanese_lit', 'Books'],
+  ] as const) {
+    await fromWideView();
+    await click(proxy);
+    await settled(page, 'monitor', 30_000);
+    await expect(os(page).getByRole('dialog', { name: window }), `${proxy} opens ${window}`).toBeVisible();
+  }
+
+  await fromWideView();
+  await click('hit_books');
+  await page.waitForFunction(() => window.__room?.phase === 'shelf' && !window.__room.moving, null, { timeout: 30_000 });
+  await click('hit_books');
+  await settled(page, 'monitor', 30_000);
+  await expect(os(page).getByRole('dialog', { name: 'Books' })).toBeVisible();
 });
 
 /** Catches the projector opening a window straight away instead of flying to its framing first (owner 07:56Z). */
