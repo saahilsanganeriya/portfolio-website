@@ -216,6 +216,7 @@ export class Application implements RoomHandle {
     this.renderer.gl.info.autoReset = false;
     this.renderer.gl.domElement.addEventListener('webglcontextlost', () => this.options.onLost?.());
     this.quality = new Quality(this.light ? LIGHT : FULL, (tier) => this.applyTier(tier));
+    this.renderer.setTier(this.quality.tier);
   }
 
   async load() {
@@ -536,7 +537,7 @@ export class Application implements RoomHandle {
   }
 
   private applyTier(tier: QualityTier) {
-    this.renderer.film.enabled = tier.film;
+    this.renderer.setTier(tier);
     this.renderer.setPixelRatio(this.pixelRatio(tier));
     this.effects.setTier(tier);
     this.world.setTier(tier);

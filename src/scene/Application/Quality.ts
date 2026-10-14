@@ -1,6 +1,9 @@
 export interface QualityTier {
   /** Multiplier on the capped device pixel ratio. */
   resolution: number;
+  /** The finishing pass: the tone curve and warm grade, bloom on the practical lights, film grain and vignette. */
+  grade: boolean;
+  bloom: boolean;
   film: boolean;
   motes: number;
   halos: boolean;
@@ -15,21 +18,22 @@ export interface QualityLadder {
 
 export const FULL: QualityLadder = {
   tiers: [
-    { resolution: 1, film: true, motes: 600, halos: true },
-    { resolution: 0.8, film: true, motes: 360, halos: true },
-    { resolution: 0.62, film: true, motes: 200, halos: true },
-    { resolution: 0.5, film: true, motes: 120, halos: false },
-    { resolution: 0.4, film: false, motes: 60, halos: false },
+    { resolution: 1, grade: true, bloom: true, film: true, motes: 600, halos: true },
+    { resolution: 0.8, grade: true, bloom: true, film: true, motes: 360, halos: true },
+    { resolution: 0.62, grade: true, bloom: true, film: true, motes: 200, halos: true },
+    { resolution: 0.5, grade: true, bloom: true, film: true, motes: 120, halos: false },
+    { resolution: 0.5, grade: false, bloom: false, film: true, motes: 120, halos: false },
+    { resolution: 0.4, grade: false, bloom: false, film: false, motes: 60, halos: false },
   ],
   dprCap: 1.5,
 };
 
-/** Phones and small windows: one CSS pixel per pixel at most, a little dust, no halos. */
+/** Phones and small windows: one CSS pixel per pixel at most, a little dust, no halos, the grade without bloom or grain. */
 export const LIGHT: QualityLadder = {
   tiers: [
-    { resolution: 1, film: true, motes: 120, halos: false },
-    { resolution: 0.8, film: true, motes: 60, halos: false },
-    { resolution: 0.62, film: false, motes: 30, halos: false },
+    { resolution: 1, grade: true, bloom: false, film: false, motes: 120, halos: false },
+    { resolution: 0.8, grade: true, bloom: false, film: false, motes: 60, halos: false },
+    { resolution: 0.62, grade: false, bloom: false, film: false, motes: 30, halos: false },
   ],
   dprCap: 1,
 };
@@ -49,11 +53,17 @@ export class Quality {
   private samples: number[] = [];
   private windowStart = 0;
   private warmingUp = true;
+  /** Screenshot runs set `window.__roomTier` before the page loads, so every shot is drawn at the same tier. */
+  private readonly pinned: boolean;
 
   constructor(
     readonly ladder: QualityLadder,
     private readonly onChange: (tier: QualityTier, index: number) => void,
-  ) {}
+  ) {
+    const pin = (globalThis as { __roomTier?: number }).__roomTier;
+    this.pinned = typeof pin === 'number' && pin >= 0 && pin < ladder.tiers.length;
+    if (this.pinned) this.index = pin as number;
+  }
 
   get tier() {
     return this.ladder.tiers[this.index];
@@ -67,6 +77,7 @@ export class Quality {
   }
 
   sample(now: number, frameMs: number) {
+    if (this.pinned) return;
     if (!this.windowStart) this.reset(now);
     // A gap this long is a stall (shader compile, tab switch, GC), not the renderer's speed.
     if (frameMs > 250) return;
