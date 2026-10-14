@@ -46,6 +46,9 @@ const MONITOR_MARGIN = 1.3;
 const REFERENCE_ASPECT = 900 / 1440;
 // Free look: the pointer turns the view a little; a drag turns it further, within these limits.
 const POINTER_LOOK = { yaw: 0.06, pitch: 0.035 };
+// Room v3's wide view stands about 8.5 m back, so its props are small on screen: the full lean slid the mango plant
+// 55 px from under a still pointer onto the window behind it. There the lean (and the eye's slide with it) is gentler.
+const WIDE_LEAN = 0.4;
 // The wide view already fills its frame with the cut-away room (the idle sway's ±8° is its edge); inside the room,
 // where walls surround the camera, a drag may look further.
 const DRAG_LIMITS = { wide: { yaw: 0.14, pitch: 0.08 }, inside: { yaw: 0.35, pitch: 0.18 } };
@@ -211,8 +214,9 @@ export class RoomCamera {
 
     if (station === 'monitor' || station === 'loading') this.pointer.set(0, 0);
     else this.pointer.copy(pointer);
-    this.lookGoal[0] = -this.pointer.x * POINTER_LOOK.yaw;
-    this.lookGoal[1] = this.pointer.y * POINTER_LOOK.pitch;
+    const lean = station === 'idle' ? WIDE_LEAN : 1;
+    this.lookGoal[0] = -this.pointer.x * POINTER_LOOK.yaw * lean;
+    this.lookGoal[1] = this.pointer.y * POINTER_LOOK.pitch * lean;
     this.lookGoal[2] = this.drag.yaw;
     this.lookGoal[3] = this.drag.pitch;
     this.look.step(this.lookGoal, dt, LOOK_SPRING);
