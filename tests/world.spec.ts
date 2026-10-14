@@ -16,11 +16,16 @@ async function inRoom(page: Page, path = '/') {
   await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 150_000 });
   await page.waitForFunction(() => window.__room!.world.interactive, null, { timeout: 10_000 });
   await page.evaluate(() => window.__room!.goto('idle'));
-  await page.waitForFunction(() => window.__room?.phase === 'idle' && !window.__room.moving, null, { timeout: 20_000 });
+  await settledAt(page, 'idle');
 }
 
+/**
+ * The camera rests at that framing and a frame has been drawn there: a cut (reduced motion) lands at once, but the
+ * monitor's CSS layer follows on the next frame, and a click before it would land on the old screen.
+ */
 async function settledAt(page: Page, phase: string, timeout = 20_000) {
   await page.waitForFunction((p) => window.__room?.phase === p && !window.__room.moving, phase, { timeout });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
 async function clickProp(page: Page, name: string) {
