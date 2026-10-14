@@ -6,7 +6,7 @@ import { devices, expect, test, type Page } from '@playwright/test';
 // ?embed=0 the same document unframed, for the phone layout here (linked nowhere).
 
 // The desktop holds the work and the machine; the Personal folder holds the rest (the room opens those directly too).
-const DESKTOP = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'In the oven', 'Personal', 'Terminal', 'Credits'];
+const DESKTOP = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'On the bench', 'Personal', 'Terminal', 'Credits'];
 const PERSONAL = ['Films', 'A Narrative in a Frame', 'Books', 'Kitchen', 'Voyager Golden Record'];
 const REMOVED = ['Welcome', 'The Thread', 'Daily word'];
 /** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
@@ -267,10 +267,10 @@ test.describe('desktop', () => {
   });
 
   /** Catches the oven hotspot's target (`#oven`) opening nothing, or the list arriving empty. */
-  test('#oven opens In the oven with its list', async ({ page }) => {
+  test('#oven opens On the bench with its list', async ({ page }) => {
     await page.goto('/os?embed=1#oven');
-    const oven = page.getByRole('dialog', { name: 'In the oven' });
-    await expect(oven.getByRole('heading', { level: 2, name: 'In the oven' })).toBeVisible();
+    const oven = page.getByRole('dialog', { name: 'On the bench' });
+    await expect(oven.getByRole('heading', { level: 2, name: 'On the bench' })).toBeVisible();
     await expect(oven.getByRole('listitem').first()).toBeVisible();
     await expect(oven.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}/);
   });
@@ -591,7 +591,7 @@ test.describe('desktop', () => {
     // Every window with its own colours or layout, each alone in a fresh load (stacked windows overlap their controls).
     for (const [hash, name, ready] of [
       ['films', 'Films', '#film-favourites'],
-      ['oven', 'In the oven', 'h3'],
+      ['oven', 'On the bench', 'h3'],
       ['projects', 'Projects', '.os-row'],
       ['about', 'About', '.os-prose p'],
       ['personal', 'Personal', '.os-folder-item'],

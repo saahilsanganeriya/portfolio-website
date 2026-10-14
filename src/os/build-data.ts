@@ -1,4 +1,4 @@
-// Build-time data for /os that is not in a content collection: the "In the oven" list, the favourite films, the
+// Build-time data for /os that is not in a content collection: the "On the bench" list, the favourite films, the
 // project figures, the wallpaper and the About portrait. Imported by src/pages/os.astro only, so zod and astro:assets stay out of the island.
 import type { ImageMetadata } from 'astro';
 import { getImage } from 'astro:assets';

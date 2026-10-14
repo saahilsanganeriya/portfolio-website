@@ -15,7 +15,7 @@ export function OvenApp({ os }: { os: OsApi }) {
   return (
     <article className="os-reader os-oven">
       <header className="os-reader-head">
-        <h2 className="os-reader-title">In the oven</h2>
+        <h2 className="os-reader-title">On the bench</h2>
         <p className="os-reader-lead">What I am building right now.</p>
         <p className="os-reader-meta">
           Updated <time dateTime={updated}>{formatDay(updated)}</time>

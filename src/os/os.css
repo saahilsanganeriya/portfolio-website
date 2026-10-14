@@ -863,7 +863,7 @@ body.os-moving iframe {
   user-select: text;
 }
 
-/* ---- In the oven ---- */
+/* ---- On the bench (the oven window: src/content/oven.json) ---- */
 
 .os-oven-list {
   margin: 0;
