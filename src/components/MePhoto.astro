@@ -6,15 +6,13 @@ interface Props {
   file: string;
   /** The side of the text column the print floats to. */
   side?: 'left' | 'right';
-  /** `page` for article text on ink; `reel` for a scene of The Thread, which is smaller. */
-  variant?: 'page' | 'reel';
 }
 
-const { file, side = 'right', variant = 'page' } = Astro.props;
+const { file, side = 'right' } = Astro.props;
 const photo = mePhoto(file);
-const width = variant === 'reel' ? 'clamp(4.75rem, 19cqmin, 8.25rem)' : 'clamp(6.5rem, 30%, 10.5rem)';
-const sizes = variant === 'reel' ? '(min-width: 48rem) 8.25rem, 5rem' : '(min-width: 48rem) 10.5rem, 6.5rem';
-const gap = variant === 'reel' ? '1.1em' : '1.5em';
+const width = 'clamp(6.5rem, 30%, 10.5rem)';
+const sizes = '(min-width: 48rem) 10.5rem, 6.5rem';
+const gap = '1.5em';
 // The layout and the film tone are inline so the print still sits beside the text where this HTML is reused without
 // the page's stylesheet (the OS reader windows render the JSON body of /about).
 const style = [
@@ -25,7 +23,7 @@ const style = [
 ].join('; ');
 ---
 
-<figure class:list={['me-photo', `me-photo--${variant}`]} style={style}>
+<figure class="me-photo" style={style}>
   <picture class="me-photo-film">
     <source type="image/avif" srcset={photo.avifSrcset} sizes={sizes} />
     <img

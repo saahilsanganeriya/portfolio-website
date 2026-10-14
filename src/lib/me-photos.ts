@@ -3,12 +3,12 @@ import { z } from 'astro/zod';
 import entries from '../content/me.json';
 
 // Photos of the owner: written by `npm run photos:ingest -- <folder> --me`, described in src/content/me.json, and only
-// ever shown beside the text they belong to (About, The Thread, the OS opening window, the résumé), never as a gallery.
+// ever shown beside the text they belong to (About), never as a gallery.
 
 const mePhotoSchema = z.object({
   file: z.string().regex(/^[a-z0-9-]+$/),
   alt: z.string().min(1, 'every photo in src/content/me.json needs alt text'),
-  use: z.enum(['opening', 'about', 'thread', 'resume']),
+  use: z.enum(['about']),
   caption: z.string().optional(),
 });
 
