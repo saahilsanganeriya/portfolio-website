@@ -189,6 +189,12 @@ export class RoomCamera {
     this.drag.pitch = THREE.MathUtils.clamp(this.drag.pitch + dy * radiansPerPixel, -limit.pitch, limit.pitch);
   }
 
+  /** The point the camera looks at, before the free look turns it (world units). */
+  get lookAt() {
+    const v = this.rig.value;
+    return new THREE.Vector3(v[3], v[4], v[5]);
+  }
+
   /** How far the view is turned from its framing (radians), for tests and measurements. */
   get lookAngles() {
     const [pointerYaw, pointerPitch, dragYaw, dragPitch] = this.look.value;

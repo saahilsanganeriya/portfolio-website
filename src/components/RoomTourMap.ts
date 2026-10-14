@@ -23,6 +23,8 @@ const PLAN_MARGIN_M = 0.35;
 const HERE_SCALE = 0.1;
 // Numbered markers closer than this (a share of the plan's width, about one marker) are pushed apart to stay readable.
 const MARKER_GAP = 0.075;
+// A camera resting elsewhere (the desk it lands at, a prop's close-up) is at the stop it looks at, if one is this near.
+const AT_STOP_M = 0.5;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** The floor plan, or null when the room has none (the tour then stays hidden). */
@@ -41,6 +43,7 @@ export async function loadFloorPlan(): Promise<FloorPlan | null> {
 interface Stop {
   label: string;
   station: StationName;
+  position: [number, number];
   item: HTMLButtonElement;
   marker: HTMLElement;
 }
@@ -131,7 +134,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     marker.style.left = `${((spots[i][0] - minX) / width) * 100}%`;
     marker.style.top = `${((spots[i][1] - minZ) / height) * 100}%`;
     markers.append(marker);
-    const entry = { label: stop.label, station, item, marker };
+    const entry = { label: stop.label, station, position: stop.position, item, marker };
     stops.push(entry);
     const go = () => {
       stopPlaying();
@@ -187,7 +190,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     here.setAttribute('transform', `translate(${view.x} ${view.z}) rotate(${angle}) scale(${width * HERE_SCALE})`);
     // The visitor moved the camera somewhere the played tour did not ask for: they lead now.
     if (playing && view.destination !== playing.expected) stopPlaying();
-    const at = view.moving ? undefined : stops.find((s) => s.station === view.destination);
+    const at = view.moving ? undefined : (stops.find((s) => s.station === view.destination) ?? nearestStop(view.targetX, view.targetZ));
     if (at === current) return;
     current?.item.removeAttribute('aria-current');
     current?.marker.removeAttribute('data-current');
@@ -195,6 +198,12 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     at?.item.setAttribute('aria-current', 'location');
     at?.marker.setAttribute('data-current', '');
     if (at && !playing) caption.textContent = `You are here: ${at.label}.`;
+  };
+
+  const nearestStop = (x: number, z: number) => {
+    const distance = (s: Stop) => Math.hypot(s.position[0] - x, s.position[1] - z);
+    const nearest = stops.reduce<Stop | undefined>((best, s) => (!best || distance(s) < distance(best) ? s : best), undefined);
+    return nearest && distance(nearest) <= AT_STOP_M ? nearest : undefined;
   };
 
   const setOpen = (on: boolean) => {

@@ -49,9 +49,11 @@ export interface StartOptions {
 export interface RoomView {
   x: number;
   z: number;
-  /** The horizontal direction the camera looks, normalised. */
+  /** The horizontal direction the camera looks, normalised, and the point it looks at. */
   dirX: number;
   dirZ: number;
+  targetX: number;
+  targetZ: number;
   /** The station the camera is at or flying to. */
   destination: CameraPhase;
   moving: boolean;
@@ -330,11 +332,14 @@ export class Application implements RoomHandle {
   view(): RoomView {
     const camera = this.camera.instance;
     const direction = camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
+    const target = this.camera.lookAt;
     return {
       x: camera.position.x / WORLD_SCALE,
       z: camera.position.z / WORLD_SCALE,
       dirX: direction.x,
       dirZ: direction.z,
+      targetX: target.x / WORLD_SCALE,
+      targetZ: target.z / WORLD_SCALE,
       destination: this.camera.destination,
       moving: this.camera.moving,
     };
