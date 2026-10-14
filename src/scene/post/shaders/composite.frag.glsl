@@ -27,12 +27,16 @@ void main() {
   vec3 color = scene.rgb;
   float solid = step(0.999, scene.a);
 
-  vec3 lutCoord = color * ((uLutSize - 1.0) / uLutSize) + 0.5 / uLutSize;
-  color = mix(color, texture(tLut, lutCoord).rgb, solid * uGrade);
-
-  // Screen-blended, so a bright source rolls off instead of clipping; only on the room, so none lands on the OS.
-  vec3 bloom = min(texture2D(tBloom, vUv).rgb * (uBloom * solid), vec3(1.0));
-  color = 1.0 - (1.0 - color) * (1.0 - bloom);
+  // Uniform branches: a tier without the grade or the bloom skips their lookups (SwiftShader pays for each one).
+  if (uGrade > 0.0) {
+    vec3 lutCoord = color * ((uLutSize - 1.0) / uLutSize) + 0.5 / uLutSize;
+    color = mix(color, texture(tLut, lutCoord).rgb, solid * uGrade);
+  }
+  if (uBloom > 0.0) {
+    // Screen-blended, so a bright source rolls off instead of clipping; only on the room, so none lands on the OS.
+    vec3 bloom = min(texture2D(tBloom, vUv).rgb * (uBloom * solid), vec3(1.0));
+    color = 1.0 - (1.0 - color) * (1.0 - bloom);
+  }
 
   float frame = mod(floor(uTime * 24.0), 64.0);
   float n = hash(floor(gl_FragCoord.xy / uGrainScale) + frame * vec2(37.0, 113.0));
