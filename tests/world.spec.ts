@@ -38,21 +38,6 @@ async function clickProp(page: Page, name: string) {
   await page.mouse.click(point!.x, point!.y);
 }
 
-/** Records every recording the room asks the audio layer for (before the first input it plays none of them). */
-async function listenForSounds(page: Page) {
-  await page.evaluate(() => {
-    const audio = window.__room!.audio as unknown as { sfx(name: string, at?: unknown): void };
-    const heard: string[] = [];
-    (window as unknown as { __sounds: string[] }).__sounds = heard;
-    const sfx = audio.sfx.bind(audio);
-    audio.sfx = (name, at) => {
-      heard.push(name);
-      sfx(name, at);
-    };
-  });
-}
-const sounds = (page: Page) => page.evaluate(() => (window as unknown as { __sounds: string[] }).__sounds);
-
 async function backToIdle(page: Page) {
   await page.evaluate(() => window.__room!.goto('idle'));
   await settledAt(page, 'idle');
@@ -126,23 +111,18 @@ test('with reduced motion the album’s pages cut instead of turning', async ({ 
   expect(await page.evaluate(() => window.__room!.world.album)).toMatchObject({ state: 'open', spread: 1 });
 });
 
-/** Catches a prop that does nothing when clicked, opens the wrong window, or plays no sound (PLAN 11.1, 12.1). */
-test('every new hotspot does what it says, with a sound where the room has its recording', async ({ page }) => {
+/**
+ * Catches a prop that does nothing when clicked or opens the wrong window (PLAN 11.1, 12.1). The props that act in the
+ * room (espresso, oven, lava lamp, projector) are interactions.spec.ts's.
+ */
+test('every new hotspot does what it says', async ({ page }) => {
   test.setTimeout(420_000);
   await inRoom(page);
-  await listenForSounds(page);
-
-  // Room actions that need no window.
-  await clickProp(page, 'hit_lava_lamp');
-  await expect.poll(async () => (await world(page)).lava).toBe('amber');
-  await clickProp(page, 'hit_espresso');
-  await expect.poll(async () => (await world(page)).steam?.brewing).toBe(true);
 
   // Props that take the camera to their framing.
   for (const [proxy, framing] of [
     ['hit_window', 'window'],
     ['hit_photo_wall', 'photos'],
-    ['hit_projector', 'projector'],
   ] as const) {
     await backToIdle(page);
     await clickProp(page, proxy);
@@ -157,12 +137,6 @@ test('every new hotspot does what it says, with a sound where the room has its r
   await settledAt(page, 'monitor');
   await expect(os(page).getByRole('dialog', { name: 'A Narrative in a Frame' })).toBeVisible();
 
-  // The oven takes the camera in (its door and the croissant are the world's); with no close-up framing in this room it
-  // goes straight for its window. The oven's own sound plays either way.
-  await backToIdle(page);
-  await clickProp(page, 'hit_oven');
-  await expect.poll(() => page.evaluate(() => window.__room!.destination)).not.toBe('idle');
-
   // Props whose content lives in a SaahilOS window.
   for (const [proxy, window] of [
     ['hit_plaque', 'Films'],
@@ -176,8 +150,6 @@ test('every new hotspot does what it says, with a sound where the room has its r
   }
   // #films/favourites brings the four favourites into view.
   await expect(os(page).locator('#film-favourites')).toBeVisible();
-
-  expect(await sounds(page)).toEqual(expect.arrayContaining(['lava', 'espresso', 'espresso-brew', 'projector-clack', 'oven']));
 });
 
 /** Catches on-demand media (prints, photographs, album pages) creeping into the room's initial load. */
@@ -185,7 +157,8 @@ test('the prints and the photographs load only after the room is interactive', a
   const started: { url: string; at: number }[] = [];
   page.on('request', (request) => started.push({ url: request.url(), at: Date.now() }));
   await inRoom(page);
-  await page.waitForFunction(() => window.__room!.world.prints.every((p) => p.shown > 0), null, { timeout: 30_000 });
+  await page.evaluate(() => window.__room!.goto('photos'));
+  await page.waitForFunction(() => window.__room!.world.instax!.prints.every((p) => p.shown > 0), null, { timeout: 30_000 });
   const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
   const onDemand = started.filter(({ url }) => /\/480\.[^/]*\.webp|\/960\.[^/]*\.webp|photographs\.[^/]*\.js|api\/films\.json/.test(url));
   expect(onDemand.length).toBeGreaterThan(3);
