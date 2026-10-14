@@ -337,6 +337,7 @@ export class Application implements RoomHandle {
 
   private onHotspot(hotspot: Hotspot, proxy: THREE.Object3D) {
     this.hover.pulse(proxy);
+    if (hotspot.labelOnly) return;
     this.audio.hotspot({ proxies: [proxy.name] });
     if (this.world.activate(hotspot)) return;
     if (hotspot.fly && this.camera.destination !== hotspot.fly && this.camera.has(hotspot.fly)) this.fly(hotspot.fly);

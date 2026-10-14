@@ -5,11 +5,12 @@ import * as THREE from 'three';
 export const WORLD_SCALE = 1000;
 
 const REQUIRED_FRAMINGS = ['loading', 'idle', 'desk', 'monitor'] as const;
-// cam_window and cam_photos come with the second room (PLAN 11.1, 12.1); the camera skips any the room lacks.
-const OPTIONAL_FRAMINGS = ['window', 'projector', 'shelf', 'photos'] as const;
-export type FramingName = (typeof REQUIRED_FRAMINGS)[number] | (typeof OPTIONAL_FRAMINGS)[number];
-/** A framing the camera can rest at (every framing but the boot one). */
-export type StationName = Exclude<FramingName, 'loading'>;
+// Close-ups and stops the room may add (PLAN-ROUND-7 §3); the camera skips any the room lacks.
+const OPTIONAL_FRAMINGS = ['window', 'projector', 'shelf', 'photos', 'espresso', 'oven'] as const;
+const TOUR_FRAMING = /^tour_(\d+)$/;
+const ARRIVAL_FRAMING = /^arrival_(\d+)$/;
+/** A framing the camera can rest at: every framing but the boot one, the tour's stops (`tour_<n>`) included. */
+export type StationName = Exclude<(typeof REQUIRED_FRAMINGS)[number], 'loading'> | (typeof OPTIONAL_FRAMINGS)[number] | `tour_${number}`;
 
 export interface Framing {
   position: THREE.Vector3;
@@ -32,7 +33,11 @@ export interface ProjectorPose {
 
 export interface RoomNodes {
   root: THREE.Object3D;
-  framings: Record<(typeof REQUIRED_FRAMINGS)[number], Framing> & Partial<Record<(typeof OPTIONAL_FRAMINGS)[number], Framing>>;
+  framings: Record<(typeof REQUIRED_FRAMINGS)[number], Framing> & Partial<Record<StationName, Framing>>;
+  /** The tour's stops (`cam_tour_<n>`) in their numbered order. */
+  tour: Extract<StationName, `tour_${number}`>[];
+  /** The waypoints the arrival on `/` passes between the boot framing and the desk (`cam_arrival_<n>`), in order. */
+  arrival: Framing[];
   monitor: MonitorPose;
   projector: ProjectorPose | null;
   proxies: THREE.Mesh[];
@@ -45,8 +50,8 @@ export interface RoomNodes {
   screenSurface: THREE.Mesh | null;
 }
 
-/** The first room has no proxy for the projector screen; this one, made from the screen's bounds, stands in for it. */
-const SCREEN_PROXY = 'hit_projector_screen';
+// Props that come as art meshes with no proxy box of their own: the room raycasts a box around the mesh instead.
+const DERIVED_PROXIES = ['print_japanese_lit', 'pennant_gatech'];
 
 /** Reads the PLAN 3.6 node contract from a loaded room (metres), after scaling it to world units. Throws on a missing required node. */
 export function readRoom(root: THREE.Object3D): RoomNodes {
@@ -81,6 +86,21 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
     const f = framing(name);
     if (f) framings[name] = f;
   }
+  const numbered = (pattern: RegExp) =>
+    [...byName.keys()]
+      .map((node) => /^cam_(.+)$/.exec(node)?.[1] ?? '')
+      .map((name) => ({ name, n: Number(pattern.exec(name)?.[1] ?? NaN) }))
+      .filter(({ n }) => Number.isInteger(n))
+      .sort((a, b) => a.n - b.n);
+  const tour: RoomNodes['tour'] = [];
+  for (const { name } of numbered(TOUR_FRAMING)) {
+    const f = framing(name);
+    if (!f) continue;
+    const station = name as `tour_${number}`;
+    framings[station] = f;
+    tour.push(station);
+  }
+  const arrival = numbered(ARRIVAL_FRAMING).flatMap(({ name }) => framing(name) ?? []);
 
   const screen = require('monitor_screen');
   const width = Number(screen.userData.width_m);
@@ -115,11 +135,12 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
     return node instanceof THREE.Mesh ? node : null;
   };
 
-  const screenSurface = mesh('props_projector_screen_surface');
-  if (screenSurface && !find(SCREEN_PROXY)) {
-    const box = new THREE.Box3().setFromObject(screenSurface);
+  for (const name of DERIVED_PROXIES) {
+    const art = find(name);
+    if (!art || find(`hit_${name}`)) continue;
+    const box = new THREE.Box3().setFromObject(art);
     const proxy = new THREE.Mesh(new THREE.BoxGeometry(...box.getSize(new THREE.Vector3()).divideScalar(WORLD_SCALE).toArray()));
-    proxy.name = SCREEN_PROXY;
+    proxy.name = `hit_${name}`;
     proxy.position.copy(root.worldToLocal(box.getCenter(new THREE.Vector3())));
     proxy.visible = false;
     root.add(proxy);
@@ -130,6 +151,8 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
   return {
     root,
     framings,
+    tour,
+    arrival,
     monitor,
     projector,
     proxies,
@@ -137,6 +160,6 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
     crtGlow: mesh('crt_glow'),
     lampBulb: mesh('lamp_bulb'),
     projection: mesh('props_projection'),
-    screenSurface,
+    screenSurface: mesh('props_projector_screen_surface'),
   };
 }
