@@ -7,7 +7,7 @@ import type { QualityTier } from '../Application/Quality';
 import type { RoomNodes, StationName } from '../Application/RoomModel';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import { Album } from './Album';
-import { lampUniforms, Posters } from './art';
+import { ArtSurface, lampUniforms, Posters } from './art';
 import { Espresso } from './Espresso';
 import { FILM } from './film';
 import { Instax } from './Instax';
@@ -84,6 +84,7 @@ export class World {
   private readonly textures: TextureStore;
   private readonly lamp = lampUniforms();
   private readonly posters: Posters;
+  private readonly paleBlueDot: ArtSurface | null;
   readonly instax: Instax | null;
   private readonly stickies: StickyNotes | null;
   private readonly windowView: WindowView | null;
@@ -121,6 +122,9 @@ export class World {
     const still = host.reducedMotion;
     this.textures = new TextureStore(ktx2);
     this.posters = new Posters(n.posters, this.lamp);
+    this.paleBlueDot = n.paleBlueDot
+      ? new ArtSurface(n.paleBlueDot.node, this.lamp, { ambient: 0.55, top: 0.6, lightAbove: 0.3, fall: 0.45 })
+      : null;
     this.instax = n.prints.length ? new Instax(n.prints, this.lamp, HOTSPOTS, n.printsAreInstax) : null;
     this.stickies = n.stickies.length ? new StickyNotes(n.stickies, this.lamp) : null;
     this.windowView = n.windowViews.length ? new WindowView(n.windowViews, this.textures) : null;
@@ -170,6 +174,7 @@ export class World {
       this.interactive = true;
       this.windowView?.allowOnDemand();
       this.projector?.allowOnDemand();
+      this.loadPaleBlueDot();
       if (this.instax) {
         this.printsWanted = true;
         void this.collection().then((photos) => this.instax?.hang(photos));
@@ -289,6 +294,7 @@ export class World {
     if (this.everything) this.keepEverythingRunning();
 
     this.posters.update(realDt);
+    this.paleBlueDot?.update(realDt);
     this.instax?.update(realDt);
     this.windowView?.setCloseUp(this.host.station() === 'window');
     this.windowView?.update(realDt);
@@ -354,6 +360,7 @@ export class World {
       interactive: this.interactive,
       window: this.windowView?.state() ?? null,
       posters: this.posters.loaded,
+      paleBlueDot: this.paleBlueDot?.shown ?? null,
       instax: this.instax?.probe() ?? null,
       stickies: this.stickies?.written ?? null,
       lava: this.lava?.probe() ?? null,
@@ -371,6 +378,7 @@ export class World {
   dispose() {
     clearTimeout(this.timer);
     this.posters.dispose();
+    this.paleBlueDot?.dispose();
     this.instax?.dispose();
     this.stickies?.dispose();
     this.windowView?.dispose();
@@ -389,6 +397,17 @@ export class World {
   openRecords() {
     const audio = this.host.audio;
     if (audio) void this.recordPlayer(audio).then((records) => records?.open());
+  }
+
+  /** The Pale Blue Dot's picture (NASA/JPL, public/room/pale-blue-dot.ktx2) loads on demand, after the first view. */
+  private loadPaleBlueDot() {
+    const dot = this.paleBlueDot;
+    const file = this.nodes.paleBlueDot?.file;
+    if (!dot || !file) return;
+    this.textures
+      .ktx2(`/room/${file}`)
+      .then((texture) => dot.show(texture, false))
+      .catch((error) => console.warn('room: the Pale Blue Dot print did not load', error));
   }
 
   /** The record player and its crate load the first time the visitor reaches them. */

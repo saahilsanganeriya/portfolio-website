@@ -70,6 +70,8 @@ export interface ProjectorNodes {
 export interface WorldNodes {
   windowViews: WindowViewNode[];
   posters: ArtNode[];
+  /** The Pale Blue Dot print on the space wall and its picture's file beside the room (public/room/). */
+  paleBlueDot: { node: ArtNode; file: string } | null;
   /** The Instax board's slots (`instax_slot_N`), or the framed prints (`photo_print_N`) of a room without the board. */
   prints: ArtNode[];
   printsAreInstax: boolean;
@@ -303,6 +305,10 @@ export function readWorld(room: RoomNodes): WorldNodes {
     .sort((a, b) => b.z - a.z)
     .forEach(({ proxy }, rank) => (proxy.name = `hit_poster_${Number(proxy.userData.poster_slot ?? rank)}`));
 
+  const dot = mesh('print_pale_blue_dot');
+  const dotFile = dot?.userData.texture;
+  const paleBlueDot = dot && typeof dotFile === 'string' ? { node: { slot: 0, mesh: dot, aspect: faceAspect(dot) }, file: dotFile } : null;
+
   // The Instax board when the room has it, else the framed prints of the first v3 export.
   const instax = numbered(byName, 'instax_slot');
   const printMeshes = instax.length ? instax : numbered(byName, 'photo_print');
@@ -338,6 +344,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
   return {
     windowViews,
     posters,
+    paleBlueDot,
     prints,
     printsAreInstax: instax.length > 0,
     stickies,

@@ -152,7 +152,10 @@ test('every new hotspot does what it says', async ({ page }) => {
   await expect(os(page).locator('#film-favourites')).toBeVisible();
 });
 
-/** Catches on-demand media (prints, photographs, album pages) creeping into the room's initial load. */
+/**
+ * Catches on-demand media (prints, photographs, album pages, the Pale Blue Dot's picture) creeping into the room's
+ * initial load, and a Pale Blue Dot print left as the bare white paper the room bakes under it.
+ */
 test('the prints and the photographs load only after the room is interactive', async ({ page }) => {
   const started: { url: string; at: number }[] = [];
   page.on('request', (request) => started.push({ url: request.url(), at: Date.now() }));
@@ -160,7 +163,8 @@ test('the prints and the photographs load only after the room is interactive', a
   await page.evaluate(() => window.__room!.goto('photos'));
   await page.waitForFunction(() => window.__room!.world.instax!.prints.every((p) => p.shown > 0), null, { timeout: 30_000 });
   const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
-  const onDemand = started.filter(({ url }) => /\/480\.[^/]*\.webp|\/960\.[^/]*\.webp|photographs\.[^/]*\.js|api\/films\.json/.test(url));
+  await page.waitForFunction(() => window.__room!.world.paleBlueDot! > 0, null, { timeout: 30_000 });
+  const onDemand = started.filter(({ url }) => /\/480\.[^/]*\.webp|\/960\.[^/]*\.webp|photographs\.[^/]*\.js|api\/films\.json|pale-blue-dot\.ktx2/.test(url));
   expect(onDemand.length).toBeGreaterThan(3);
   expect(onDemand.filter(({ at }) => at < interactive).map(({ url }) => url)).toEqual([]);
   // The posters hang in the first view, so they are part of it.
