@@ -198,7 +198,7 @@ test.describe('on a phone', () => {
   test('a phone opening /about ends on About in SaahilOS', async ({ page }) => {
     await page.goto('/about');
     await page.waitForFunction(() => /room-os|room-2d/.test(document.documentElement.className), null, { timeout: 120_000 });
-    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('heading', { name: 'About' }).first()).toBeVisible();
+    await expect(page.frameLocator('[data-monitor-glass] iframe').getByRole('dialog', { name: 'About' })).toBeVisible();
   });
 
   /** Catches the light room loading on a device that reports too little memory for it. */

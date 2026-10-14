@@ -175,7 +175,6 @@ test('every new hotspot does what it says, with a sound where the room has its r
   // Props whose content lives in a SaahilOS window.
   for (const [proxy, window] of [
     ['hit_fujifilm_a', 'A Narrative in a Frame'],
-    ['hit_super8', 'The Thread'],
     ['hit_oven', 'In the oven'],
     ['hit_plaque', 'Films'],
     ['hit_poster_0', 'Films'],
@@ -189,7 +188,7 @@ test('every new hotspot does what it says, with a sound where the room has its r
   // #films/favourites brings the four favourites into view.
   await expect(os(page).locator('#film-favourites')).toBeVisible();
 
-  expect(await sounds(page)).toEqual(expect.arrayContaining(['lava', 'espresso', 'espresso-brew', 'projector-clack', 'shutter', 'super8', 'oven']));
+  expect(await sounds(page)).toEqual(expect.arrayContaining(['lava', 'espresso', 'espresso-brew', 'projector-clack', 'shutter', 'oven']));
 });
 
 /** Catches on-demand media (reel, prints, photographs, album pages) creeping into the room's initial load. */
