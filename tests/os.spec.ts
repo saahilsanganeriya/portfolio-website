@@ -685,6 +685,27 @@ test.describe('desktop at 1440 × 900', () => {
   });
 });
 
+test.describe('on the monitor’s screen', () => {
+  // SaahilOS's own size inside the room's monitor (1280 px less the overscan on each side), measured in the room.
+  test.use({ viewport: { width: 1216, height: 941 } });
+
+  /** Catches windows that cascade over the personal side, where the wide ones (Code, Films) would land after a few opens. */
+  test('windows open between the two sides, however many cascade', async ({ page }) => {
+    await page.goto('/os?embed=1');
+    await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
+    const personal = page.getByRole('list', { name: 'Off the clock' }).getByRole('button');
+    const edge = Math.min(...(await personal.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().left))));
+    const apps = ['Projects', 'Writing', 'Code', 'Résumé', 'On the bench', 'Terminal', 'Films', 'A Narrative in a Frame'];
+    for (const app of apps) await page.getByRole('navigation', { name: 'Apps' }).getByRole('button', { name: app, exact: true }).dblclick();
+    for (const app of ['About', ...apps]) {
+      const win = page.getByRole('dialog', { name: app });
+      await expect(win, app).toHaveCSS('opacity', '1');
+      const box = (await win.boundingBox())!;
+      expect(box.x + box.width, app).toBeLessThanOrEqual(edge);
+    }
+  });
+});
+
 test.describe('iPhone 13', () => {
   // Chromium with the iPhone 13 viewport, touch and user agent; the project's browser stays Chromium.
   const { defaultBrowserType: _webkit, ...iPhone13 } = devices['iPhone 13'];
