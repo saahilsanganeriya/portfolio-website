@@ -1,12 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { readdirSync, readFileSync } from 'node:fs';
-import { devices, expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Locator, type Page } from '@playwright/test';
 
 // Opened on its own, /os becomes the room; ?embed=1 is the document the monitor frames (desktop layout), and
 // ?embed=0 the same document unframed, for the phone layout here (linked nowhere).
 
-// The desktop holds the work and the machine; the Personal folder holds the rest (the room opens those directly too).
-const DESKTOP = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'On the bench', 'Personal', 'Terminal', 'Credits'];
+// The desktop's two sides: the work on the left, most important first, and the rest of his life on the right.
+const WORK = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'On the bench', 'Terminal', 'Credits'];
 const PERSONAL = ['Films', 'A Narrative in a Frame', 'Books', 'Kitchen', 'Voyager Golden Record'];
 const REMOVED = ['Welcome', 'The Thread', 'Daily word'];
 /** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
@@ -90,22 +90,24 @@ async function seriousAxeViolations(page: Page): Promise<string[]> {
 }
 
 test.describe('desktop', () => {
-  /** Catches an app missing from the desktop or the Personal folder, or a window that never mounts for it. */
-  test('every app opens from its desktop icon or the Personal folder', async ({ page }) => {
+  /** Catches an app reachable only through a menu or a folder, or a desktop icon whose window never mounts. */
+  test('every app is a desktop icon that opens its window, and no folder is left', async ({ page }) => {
     await page.goto('/os?embed=1');
     const icons = page.getByRole('navigation', { name: 'Apps' });
-    await expect(icons.getByRole('button')).toHaveText(DESKTOP);
-    for (const app of DESKTOP) {
+    await expect(icons.getByRole('button')).toHaveText([...WORK, ...PERSONAL]);
+    for (const app of [...WORK, ...PERSONAL]) {
       await icons.getByRole('button', { name: app, exact: true }).dblclick();
       await expect(page.getByRole('dialog', { name: app })).toBeVisible();
     }
-    const folder = page.getByRole('dialog', { name: 'Personal' });
-    for (const app of PERSONAL) {
-      // Each window opens on top; opening the folder again brings it back to the front.
-      await icons.getByRole('button', { name: 'Personal' }).dblclick();
-      await folder.getByRole('link', { name: app }).click();
-      await expect(page.getByRole('dialog', { name: app })).toBeVisible();
-    }
+    // The Start menu offers nothing the desktop does not show.
+    await page.getByRole('button', { name: 'Start' }).click();
+    const offered = await page.getByRole('navigation', { name: 'Start menu' }).getByRole('button').allTextContents();
+    expect(offered.map((label) => label.trim()).filter((label) => label !== 'Shut down…').sort()).toEqual([...WORK, ...PERSONAL].sort());
+    // The old folder's address opens About, the window the OS opens when it does not know the name.
+    await page.goto('/os?embed=1#personal');
+    await page.reload();
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+    await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
   });
 
   /** Catches the deleted Welcome, The Thread or Daily word coming back on the desktop, in Start, or by their old hashes. */
@@ -598,7 +600,6 @@ test.describe('desktop', () => {
       ['oven', 'On the bench', 'h3'],
       ['projects', 'Projects', '.os-row'],
       ['about', 'About', '.os-prose p'],
-      ['personal', 'Personal', '.os-folder-item'],
       ['code', 'Code', '.os-row'],
       [`code/${NAPARI.slug}`, 'samcell-napari', '.os-readme h1'],
       [`code/${NAPARI.slug}/tree`, 'samcell-napari', '.os-code-files td'],
@@ -615,6 +616,72 @@ test.describe('desktop', () => {
       await expect(win).toHaveCSS('opacity', '1');
       expect(await seriousAxeViolations(page), hash).toEqual([]);
     }
+  });
+});
+
+test.describe('desktop at 1440 × 900', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  const boxes = (buttons: Locator) => buttons.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+
+  /** Catches the two sides mixing or out of order, a caption missing, or the first window covering either side's icons. */
+  test('the work stands on the left in order of importance, the personal apps on the right', async ({ page }) => {
+    await page.goto('/os?embed=1');
+    const work = page.getByRole('list', { name: 'Work' }).getByRole('button');
+    const personal = page.getByRole('list', { name: 'Off the clock' }).getByRole('button');
+    await expect(work).toHaveText(WORK);
+    await expect(personal).toHaveText(PERSONAL);
+    const left = await boxes(work);
+    const right = await boxes(personal);
+    // One column each at this size, top to bottom in list order, under its caption, at its own edge of the screen.
+    for (const [side, caption] of [
+      [left, 'Work'],
+      [right, 'Off the clock'],
+    ] as const) {
+      expect(new Set(side.map((box) => box.x)).size, caption).toBe(1);
+      for (let i = 1; i < side.length; i++) expect(side[i].y, caption).toBeGreaterThan(side[i - 1].y);
+      const head = (await page.getByRole('heading', { name: caption }).boundingBox())!;
+      expect(head.y + head.height, caption).toBeLessThanOrEqual(side[0].y + 1);
+    }
+    expect(left[0].x).toBeLessThan(24);
+    expect(right[0].x + right[0].width).toBeGreaterThan(1440 - 24);
+    // About, the first window, opens between them.
+    const about = page.getByRole('dialog', { name: 'About' });
+    await expect(about).toHaveCSS('opacity', '1');
+    const win = (await about.boundingBox())!;
+    expect(win.x).toBeGreaterThanOrEqual(left[0].x + left[0].width);
+    expect(win.x + win.width).toBeLessThanOrEqual(right[0].x);
+  });
+
+  /** Catches a Tab order that jumps between the sides, or one that does not follow the columns as they read. */
+  test('Tab walks the left side, then the right, in the order they read', async ({ page }) => {
+    await page.goto('/os?embed=1');
+    await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
+    const reached: string[] = [];
+    for (let i = 0; i < 40 && reached.length < WORK.length + PERSONAL.length; i++) {
+      await page.keyboard.press('Tab');
+      const label = await page.evaluate(() => document.activeElement?.closest('.os-icon')?.textContent?.trim() ?? null);
+      if (label && !reached.includes(label)) reached.push(label);
+    }
+    expect(reached).toEqual([...WORK, ...PERSONAL]);
+    // On screen: column by column from the left, top to bottom in each.
+    const icons = page.getByRole('navigation', { name: 'Apps' }).getByRole('button');
+    const labels = await icons.allTextContents();
+    const onScreen = (await boxes(icons))
+      .map((box, i) => ({ box, label: labels[i].trim() }))
+      .sort((a, b) => a.box.x - b.box.x || a.box.y - b.box.y)
+      .map((icon) => icon.label);
+    expect(onScreen).toEqual(reached);
+    // Enter opens the focused icon, the last one on the right.
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog', { name: PERSONAL.at(-1) })).toBeVisible();
+  });
+
+  /** Catches naming or ARIA failures on the bare desktop: its captions, icons and labels over the wallpaper. */
+  test('axe finds no serious violations on the desktop', async ({ page }) => {
+    await page.goto('/os?embed=1');
+    await page.getByRole('dialog', { name: 'About' }).getByRole('button', { name: 'Close About' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(await seriousAxeViolations(page)).toEqual([]);
   });
 });
 
@@ -642,6 +709,25 @@ test.describe('iPhone 13', () => {
     await expect(page.getByRole('button', { name: 'Code', exact: true })).toBeVisible();
   });
 
+  /** Catches the phone's home screen splitting into folders or sides, or showing a personal app before the work. */
+  test('the home screen is one grid, the work first, then the personal apps, and passes axe', async ({ page }) => {
+    await page.goto('/os?embed=0');
+    await page.getByRole('dialog', { name: 'About' }).getByRole('button', { name: '‹ Back' }).tap();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const icons = page.getByRole('navigation', { name: 'Apps' }).getByRole('button');
+    await expect(icons).toHaveText([...WORK, ...PERSONAL]);
+    const boxes = await icons.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+    // Read row by row, the grid gives the list's order; the personal apps stand in the work's columns, all on screen.
+    const rowByRow = boxes.map((box, i) => ({ box, i })).sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
+    expect(rowByRow.map(({ i }) => i)).toEqual(boxes.map((_, i) => i));
+    const columns = new Set(boxes.slice(0, WORK.length).map((box) => box.x));
+    for (const box of boxes) {
+      expect(columns.has(box.x)).toBe(true);
+      expect(box.x + box.width).toBeLessThanOrEqual(iPhone13.viewport.width);
+    }
+    expect(await seriousAxeViolations(page)).toEqual([]);
+  });
+
   /** Catches a diagram whose right-hand columns fall off a phone's column with nothing to show they scroll (T52 fix 5). */
   test('every diagram in a post or project fits a phone’s column', async ({ page }) => {
     for (const hash of ['projects/swe-sim', 'projects/entity-resolution-and-anonymization', 'blog/hard-for-whom', 'blog/safe-to-run-twice']) {
@@ -658,7 +744,7 @@ test.describe('iPhone 13', () => {
   });
 
   /** Catches the new and changed windows failing axe, or spilling sideways, on a phone. */
-  test('About, Code, the shelves, the folder and the photographs fit a phone and pass axe', async ({ page }) => {
+  test('About, Code, the shelves and the photographs fit a phone and pass axe', async ({ page }) => {
     await serveShelves(page, 'sample');
     await serveGithubFiles(page, '[build-system]\nrequires = ["setuptools>=42"]\n');
     for (const [hash, name] of [
@@ -670,7 +756,6 @@ test.describe('iPhone 13', () => {
       ['books', 'Books'],
       ['recipes/sample-loaf', 'Kitchen'],
       ['voyager', 'Voyager Golden Record'],
-      ['personal', 'Personal'],
       ['photography', 'A Narrative in a Frame'],
       ['photography/cansupport', 'A Narrative in a Frame'],
     ]) {
