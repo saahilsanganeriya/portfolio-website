@@ -44,10 +44,6 @@ export interface RoomNodes {
   leds: THREE.Mesh[];
   crtGlow: THREE.Mesh | null;
   lampBulb: THREE.Mesh | null;
-  /** The projected picture baked on the projector screen (`props_projection`); the reel plays over it. */
-  projection: THREE.Mesh | null;
-  /** The screen's fabric (`props_projector_screen_surface`), baked lit by the projector's open gate. */
-  screenSurface: THREE.Mesh | null;
 }
 
 // Props that come as art meshes with no proxy box of their own: the room raycasts a box around the mesh instead.
@@ -159,7 +155,5 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
     leds,
     crtGlow: mesh('crt_glow'),
     lampBulb: mesh('lamp_bulb'),
-    projection: mesh('props_projection'),
-    screenSurface: mesh('props_projector_screen_surface'),
   };
 }
