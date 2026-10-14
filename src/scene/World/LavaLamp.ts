@@ -5,54 +5,76 @@ import { ADD_LIGHT, haloTexture } from '../Application/Effects';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import type { LampUniforms } from './art';
 
-// The lava lamp: slow wax on the glass, and the warm light it throws on the posters above it (their own shader
-// reads LampUniforms) and on the wall behind them (an additive glow that keeps the canvas alpha). A click changes
-// its mood: rose, amber, or switched off.
+// The lava lamp: slow wax on the glass, and its light on the room. A click moves it to the next colour set; wax,
+// liquid and light blend over a second and a half while the blobs keep rising and sinking. The room's bake lit the
+// lamp red-orange (blender/scripts/build_room.py), so its light on the room is re-tinted rather than added: near the
+// lamp the baked colour turns to the new one's hue at the same brightness, and the whole room takes a faint trace of it.
 
-export const MOODS = ['rose', 'amber', 'off'] as const;
-export type Mood = (typeof MOODS)[number];
+export const COLOUR_SETS = [
+  // The first set is the colour the room was baked with.
+  { name: 'ember', wax: '#f2733a', liquid: '#6e1712', light: '#ff9959' },
+  { name: 'amber', wax: '#f0b347', liquid: '#7a3510', light: '#ffbf5c' },
+  { name: 'sea glass', wax: '#7fd8bf', liquid: '#123650', light: '#7fd6c8' },
+  { name: 'violet', wax: '#c98df5', liquid: '#2a1450', light: '#b98cff' },
+] as const;
+export type ColourSetName = (typeof COLOUR_SETS)[number]['name'];
 
-const PALETTES: Record<Mood, { wax: string; liquid: string; light: string; power: number; strength: number }> = {
-  rose: { wax: '#ffa58c', liquid: '#c23a52', light: '#ff8a5c', power: 1, strength: 0.32 },
-  amber: { wax: '#ffd27a', liquid: '#c2611c', light: '#ffa24a', power: 1, strength: 0.3 },
-  off: { wax: '#5a3a30', liquid: '#2a1a1c', light: '#000000', power: 0.4, strength: 0 },
-};
+const BAKED_LIGHT = new THREE.Color(COLOUR_SETS[0].light);
+// Re-tinting near the lamp stays within these bounds per channel, so a channel the bake barely lit is not blown up.
+const TINT_MIN = 0.35;
+const TINT_MAX = 2.6;
+// How much of the lamp's hue the whole room takes, and how far the lamp's own light reaches (metres).
+const ROOM_SHARE = 0.05;
+const REACH_M = 1.3;
+const BLEND_S = 1.6;
+
 // Each blob rises and sinks on its own slow period (seconds), like wax heating and cooling.
+// Radii are in the glass's half-widths: room v3's glass is squatter than the first room's, so the blobs are smaller.
 const BLOBS = [
-  { period: 38, phase: 0.1, x: -0.2, sway: 0.18, r: 0.5 },
-  { period: 47, phase: 2.2, x: 0.25, sway: 0.15, r: 0.42 },
-  { period: 29, phase: 4.1, x: 0.05, sway: 0.22, r: 0.36 },
-  { period: 55, phase: 1.3, x: -0.1, sway: 0.12, r: 0.55 },
-  { period: 33, phase: 5.0, x: 0.3, sway: 0.1, r: 0.3 },
-  { period: 61, phase: 3.3, x: -0.3, sway: 0.16, r: 0.4 },
+  { period: 38, phase: 0.1, x: -0.2, sway: 0.18, r: 0.36 },
+  { period: 47, phase: 2.2, x: 0.25, sway: 0.15, r: 0.3 },
+  { period: 29, phase: 4.1, x: 0.05, sway: 0.22, r: 0.26 },
+  { period: 55, phase: 1.3, x: -0.1, sway: 0.12, r: 0.4 },
+  { period: 33, phase: 5.0, x: 0.3, sway: 0.1, r: 0.22 },
+  { period: 61, phase: 3.3, x: -0.3, sway: 0.16, r: 0.29 },
 ];
-const MOOD_FADE_S = 0.8;
-const COLOURS = Object.fromEntries(
-  MOODS.map((mood) => [mood, { wax: new THREE.Color(PALETTES[mood].wax), liquid: new THREE.Color(PALETTES[mood].liquid), light: new THREE.Color(PALETTES[mood].light) }]),
-) as Record<Mood, { wax: THREE.Color; liquid: THREE.Color; light: THREE.Color }>;
+
+interface Colours {
+  wax: THREE.Color;
+  liquid: THREE.Color;
+  light: THREE.Color;
+}
+
+const coloursOf = (index: number): Colours => {
+  const set = COLOUR_SETS[index];
+  return { wax: new THREE.Color(set.wax), liquid: new THREE.Color(set.liquid), light: new THREE.Color(set.light) };
+};
+
+const luminance = (c: THREE.Color) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+const smoother = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 
 export class LavaLamp {
-  mood: Mood = 'rose';
+  index = 0;
+  private from = coloursOf(0);
+  private to = coloursOf(0);
+  private blend = 1;
   private readonly material: THREE.ShaderMaterial;
   private readonly blobs = BLOBS.map(() => new THREE.Vector4());
-  private readonly wall: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> | null = null;
   private readonly halo: THREE.Sprite;
   private readonly haloMap = haloTexture();
-  private readonly colours = { wax: new THREE.Color(), liquid: new THREE.Color(), light: new THREE.Color() };
-  private power = 1;
-  private strength = 0;
+  private readonly colours: Colours = coloursOf(0);
+  private readonly patched: THREE.Material[] = [];
 
   constructor(
     glass: THREE.Mesh,
     light: THREE.Vector3,
     private readonly lamp: LampUniforms,
     scene: THREE.Scene,
-    wallX: number | null,
+    room: THREE.Object3D,
   ) {
     const box = new THREE.Box3().setFromObject(glass);
     const size = box.getSize(new THREE.Vector3());
     const radius = Math.max(size.x, size.z) / 2;
-    this.setColours(this.mood, 1);
     this.material = new THREE.ShaderMaterial({
       vertexShader: lavaVert,
       fragmentShader: lavaFrag,
@@ -71,45 +93,39 @@ export class LavaLamp {
     });
     glass.material = this.material;
     lamp.uLampPos.value.copy(light);
+    lamp.uLampRange.value = REACH_M * WORLD_SCALE;
 
-    this.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.haloMap, color: this.colours.light, opacity: 0.35, ...ADD_LIGHT }));
+    this.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.haloMap, color: this.colours.light, opacity: 0.3, ...ADD_LIGHT }));
     this.halo.position.copy(box.getCenter(new THREE.Vector3()));
     this.halo.scale.setScalar(0.3 * WORLD_SCALE);
     this.halo.renderOrder = 4;
     scene.add(this.halo);
 
-    if (wallX !== null) {
-      // The glow on the wall rises from the lamp: centred above it, wider than tall.
-      const geometry = new THREE.PlaneGeometry(1.6 * WORLD_SCALE, 1.3 * WORLD_SCALE);
-      geometry.rotateY(Math.PI / 2);
-      this.wall = new THREE.Mesh(
-        geometry,
-        new THREE.ShaderMaterial({
-          vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-          fragmentShader: `uniform vec3 uColor; varying vec2 vUv;
-            void main() { vec2 d = (vUv - vec2(0.5, 0.3)) * vec2(1.0, 1.25); float g = exp(-dot(d, d) * 9.0);
-              gl_FragColor = vec4(uColor * g, 1.0); }`,
-          uniforms: { uColor: { value: new THREE.Color() } },
-          ...ADD_LIGHT,
-        }),
-      );
-      this.wall.position.set(wallX + 0.003 * WORLD_SCALE, light.y + 0.35 * WORLD_SCALE, light.z);
-      this.wall.renderOrder = 3;
-      scene.add(this.wall);
-    }
+    this.patchRoom(room);
   }
 
-  nextMood() {
-    this.mood = MOODS[(MOODS.indexOf(this.mood) + 1) % MOODS.length];
+  get name(): ColourSetName {
+    return COLOUR_SETS[this.index].name;
   }
 
-  /** `clock` drives the wax (frozen while paused); `dt` eases a mood change. */
-  update(clock: number, dt: number, camera: THREE.Camera) {
-    const palette = PALETTES[this.mood];
-    const k = Math.min(1, dt / MOOD_FADE_S);
-    this.setColours(this.mood, k);
-    this.power += (palette.power - this.power) * k;
-    this.strength += (palette.strength - this.strength) * k;
+  /** The next colour set; under reduced motion it changes at once. */
+  next(instantly: boolean) {
+    this.from = { wax: this.colours.wax.clone(), liquid: this.colours.liquid.clone(), light: this.colours.light.clone() };
+    this.index = (this.index + 1) % COLOUR_SETS.length;
+    this.to = coloursOf(this.index);
+    this.blend = instantly ? 1 : 0;
+  }
+
+  /** The colours are still blending. */
+  get changing() {
+    return this.blend < 1;
+  }
+
+  /** `clock` drives the wax (frozen while paused or under reduced motion); `realDt` the blend the visitor started. */
+  update(clock: number, realDt: number, camera: THREE.Camera) {
+    this.blend = Math.min(1, this.blend + realDt / BLEND_S);
+    const k = smoother(this.blend);
+    for (const key of ['wax', 'liquid', 'light'] as const) this.colours[key].lerpColors(this.from[key], this.to[key], k);
 
     BLOBS.forEach((b, i) => {
       const rise = 0.5 - 0.5 * Math.cos((clock / b.period) * Math.PI * 2 + b.phase);
@@ -121,31 +137,68 @@ export class LavaLamp {
     // Across the glass as the camera sees it.
     const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
     (this.material.uniforms.uAcross.value as THREE.Vector2).set(right.x, right.z).normalize();
-    this.material.uniforms.uPower.value = this.power;
 
     // The light breathes a little as wax passes the bulb.
-    const flicker = 0.92 + 0.08 * Math.sin(clock * 0.7) * Math.sin(clock * 0.23 + 1);
-    const light = this.lamp.uLampColor.value.copy(this.colours.light).multiplyScalar(this.strength * flicker);
+    const flicker = 1 + 0.05 * Math.sin(clock * 0.7) * Math.sin(clock * 0.23 + 1);
     this.halo.material.color.copy(this.colours.light);
-    this.halo.material.opacity = 0.9 * this.strength * flicker;
-    if (this.wall) this.wall.material.uniforms.uColor.value.copy(light).multiplyScalar(0.55);
+    this.halo.material.opacity = 0.3 * flicker;
+
+    // The lamp's hue against the baked one, at equal brightness.
+    const hue = this.colours.light.clone().multiplyScalar(luminance(BAKED_LIGHT) / Math.max(1e-4, luminance(this.colours.light)));
+    const clamp = (v: number) => THREE.MathUtils.clamp(v, TINT_MIN, TINT_MAX);
+    const ratio = new THREE.Color(clamp(hue.r / BAKED_LIGHT.r), clamp(hue.g / BAKED_LIGHT.g), clamp(hue.b / BAKED_LIGHT.b));
+    this.lamp.uLampTint.value.copy(ratio).multiplyScalar(flicker);
+    const share = ratio.clone().multiplyScalar(1 / Math.max(1e-4, luminance(ratio)));
+    this.lamp.uRoomTint.value.setRGB(1, 1, 1).lerp(share, ROOM_SHARE);
   }
 
   setHalos(visible: boolean) {
     this.halo.visible = visible;
   }
 
+  /** The room's light as the probe reports it: the set, how far its blend has got, and the tint near the lamp. */
+  probe() {
+    const t = this.lamp.uLampTint.value;
+    return { index: this.index, name: this.name, blend: Number(this.blend.toFixed(2)), tint: [t.r, t.g, t.b].map((v) => Number(v.toFixed(2))) };
+  }
+
   dispose() {
     this.material.dispose();
     this.haloMap.dispose();
     this.halo.material.dispose();
-    this.wall?.geometry.dispose();
-    this.wall?.material.dispose();
+    for (const material of this.patched) {
+      material.onBeforeCompile = () => {};
+      material.needsUpdate = true;
+    }
   }
 
-  private setColours(mood: Mood, k: number) {
-    this.colours.wax.lerp(COLOURS[mood].wax, k);
-    this.colours.liquid.lerp(COLOURS[mood].liquid, k);
-    this.colours.light.lerp(COLOURS[mood].light, k);
+  /**
+   * The room's baked materials (`room_*` atlases) take the lamp's light: each fragment's baked colour is multiplied by
+   * the tint, full near the lamp and falling off with distance, times the faint whole-room tint.
+   */
+  private patchRoom(room: THREE.Object3D) {
+    const seen = new Set<THREE.Material>();
+    room.traverse((node) => {
+      if (!(node instanceof THREE.Mesh)) return;
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+        if (seen.has(material) || !(material instanceof THREE.MeshBasicMaterial) || !material.map || !material.name.startsWith('room_')) continue;
+        seen.add(material);
+        this.patched.push(material);
+        material.onBeforeCompile = (shader) => {
+          Object.assign(shader.uniforms, this.lamp);
+          shader.vertexShader = shader.vertexShader
+            .replace('void main() {', 'varying vec3 vLampWorld;\nvoid main() {')
+            .replace('#include <project_vertex>', '#include <project_vertex>\n  vLampWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+          shader.fragmentShader = shader.fragmentShader
+            .replace('void main() {', 'uniform vec3 uLampTint;\nuniform vec3 uRoomTint;\nuniform vec3 uLampPos;\nuniform float uLampRange;\nvarying vec3 vLampWorld;\nvoid main() {')
+            .replace(
+              '#include <map_fragment>',
+              '#include <map_fragment>\n  float lampD = distance(vLampWorld, uLampPos) / uLampRange;\n  diffuseColor.rgb *= mix(vec3(1.0), uLampTint, 1.0 / (1.0 + 6.0 * lampD * lampD)) * uRoomTint;',
+            );
+        };
+        material.customProgramCacheKey = () => 'room-lamp';
+        material.needsUpdate = true;
+      }
+    });
   }
 }

@@ -10,10 +10,12 @@ import { WORLD_SCALE } from './RoomModel';
 const PROJECTOR = new THREE.Color('#9db4c0');
 const TUNGSTEN = new THREE.Color('#ffcf8a');
 const MAX_MOTES = 600;
-// An 8 mm projector throws an image about a third as wide as the distance to the screen; film frames are 4:3.
+// An 8 mm projector throws an image about a third as wide as the distance to the screen; film frames are 4:3. The
+// room's projector fits its beam to the picture on the wall instead (fitBeam).
 const THROW_RATIO = 3;
 const FRAME_ASPECT = 4 / 3;
 const LENS_HALF_WIDTH = 0.018;
+const BEAM_STRENGTH = 0.11;
 
 /** A soft radial glow, warm-fringed like film halation around a bright source. */
 export function haloTexture() {
@@ -49,6 +51,22 @@ export const ADD_LIGHT = {
   blendDstAlpha: THREE.OneFactor,
 } as const;
 
+/** The beam's frustum from the lens (`halfStart`) to the picture (`halfEnd`), `length` long down local -y. */
+function beamGeometry(halfStart: THREE.Vector2, halfEnd: THREE.Vector2, length: number) {
+  // A four-sided open cylinder turned 45 degrees is a square frustum; scaling its sections gives the frame's shape.
+  const geometry = new THREE.CylinderGeometry(Math.SQRT2, Math.SQRT2, 1, 4, 1, true);
+  geometry.rotateY(Math.PI / 4);
+  geometry.translate(0, -0.5, 0);
+  const positions = geometry.attributes.position;
+  for (let i = 0; i < positions.count; i++) {
+    const t = -positions.getY(i);
+    const half = halfStart.clone().lerp(halfEnd, t);
+    positions.setXYZ(i, positions.getX(i) * half.x, -t * length, positions.getZ(i) * half.y);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 /** Cheap deterministic hash in [0, 1). */
 const hash = (n: number) => {
   const x = Math.sin(n * 127.1) * 43758.5453;
@@ -61,6 +79,11 @@ export class Effects {
   private readonly leds: { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial; halo: THREE.Sprite | null }[] = [];
   private beam: THREE.Mesh<THREE.CylinderGeometry, THREE.ShaderMaterial> | null = null;
   private motes: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial> | null = null;
+  private beamLength = 0;
+  private readonly halfStart = new THREE.Vector2(LENS_HALF_WIDTH * WORLD_SCALE, (LENS_HALF_WIDTH * WORLD_SCALE) / FRAME_ASPECT);
+  /** How much of the lamp's light is in the beam (0 off, 1 full), and whether the shutter is turning (film running). */
+  private beamLevel = 0.75;
+  private shutterTurning = false;
   private readonly lampMaterial: THREE.MeshBasicMaterial | null = null;
   private readonly haloMap = haloTexture();
   /** The projector's shutter, felt faintly in the whole frame. */
@@ -95,28 +118,40 @@ export class Effects {
     for (const halo of this.halos) halo.visible = tier.halos;
   }
 
-  /** The ceiling fan's pull on the dust in the beam: `strength` 0–1, `phase` how far the blades have turned (radians). */
-  setWind(strength: number, phase: number) {
-    if (!this.motes) return;
-    this.motes.material.uniforms.uWind.value = strength;
-    this.motes.material.uniforms.uWindPhase.value = phase;
+  /** The projector's lamp (`level` 0–1 of its light in the beam and the dust) and whether its shutter turns. */
+  setProjector(level: number, shutter: boolean) {
+    this.beamLevel = level;
+    this.shutterTurning = shutter;
+  }
+
+  /** Shapes the beam's far end to the picture it throws (half width and half height, world units). */
+  fitBeam(halfWidth: number, halfHeight: number) {
+    if (!this.beam || !this.motes) return;
+    const halfEnd = new THREE.Vector2(halfWidth, halfHeight);
+    this.beam.geometry.dispose();
+    this.beam.geometry = beamGeometry(this.halfStart, halfEnd, this.beamLength);
+    (this.motes.material.uniforms.uHalfEnd.value as THREE.Vector2).copy(halfEnd);
   }
 
   /** `clock` is the ambient time in seconds; it stops while motion is paused. */
   update(clock: number, pixelRatio: number) {
     // 18 frames a second through a two-blade shutter: a faint flutter, felt more than seen.
-    const shutter = Math.sin(clock * Math.PI * 2 * 18) > 0.6 ? 1 : 0;
+    const shutter = this.shutterTurning && Math.sin(clock * Math.PI * 2 * 18) > 0.6 ? this.beamLevel : 0;
     this.flicker = 1 - shutter * 0.012;
 
     if (this.beam) {
       const u = this.beam.material.uniforms;
       u.uTime.value = clock;
       u.uFlicker.value = 1 - shutter * 0.06;
+      u.uStrength.value = BEAM_STRENGTH * this.beamLevel;
+      this.beam.visible = this.beamLevel > 0.001;
     }
     if (this.motes) {
       const u = this.motes.material.uniforms;
       u.uTime.value = clock;
       u.uSize.value = 1.6 * WORLD_SCALE * pixelRatio;
+      u.uLevel.value = this.beamLevel;
+      this.motes.visible = this.beamLevel > 0.001;
     }
 
     // Disk activity comes in bursts; the power light holds steady.
@@ -154,19 +189,9 @@ export class Effects {
     const right = dir.clone().cross(THREE.Object3D.DEFAULT_UP).normalize();
     const up = right.clone().cross(dir).normalize();
     const halfEnd = new THREE.Vector2(length / THROW_RATIO / 2, length / THROW_RATIO / 2 / FRAME_ASPECT);
-    const halfStart = new THREE.Vector2(LENS_HALF_WIDTH * WORLD_SCALE, (LENS_HALF_WIDTH * WORLD_SCALE) / FRAME_ASPECT);
-
-    // A four-sided open cylinder turned 45 degrees is a square frustum; scaling its sections makes it 4:3.
-    const geometry = new THREE.CylinderGeometry(Math.SQRT2, Math.SQRT2, 1, 4, 1, true);
-    geometry.rotateY(Math.PI / 4);
-    geometry.translate(0, -0.5, 0);
-    const positions = geometry.attributes.position;
-    for (let i = 0; i < positions.count; i++) {
-      const t = -positions.getY(i);
-      const half = halfStart.clone().lerp(halfEnd, t);
-      positions.setXYZ(i, positions.getX(i) * half.x, -t * length, positions.getZ(i) * half.y);
-    }
-    geometry.computeVertexNormals();
+    const halfStart = this.halfStart;
+    this.beamLength = length;
+    const geometry = beamGeometry(halfStart, halfEnd, length);
 
     const material = new THREE.ShaderMaterial({
       vertexShader: beamVert,
@@ -202,8 +227,7 @@ export class Effects {
         uniforms: {
           uTime: { value: 0 },
           uSize: { value: 1 },
-          uWind: { value: 0 },
-          uWindPhase: { value: 0 },
+          uLevel: { value: 1 },
           uColor: { value: PROJECTOR.clone().multiplyScalar(0.55) },
           uLens: { value: lens.clone() },
           uDir: { value: dir },

@@ -2,8 +2,6 @@
 import BootScreen from '../components/BootScreen.astro';
 import MonitorFrame from '../components/MonitorFrame.astro';
 import RoomTour from '../components/RoomTour.astro';
-import { filmsData } from '../lib/films';
-import { latestFilms } from '../lib/films/latest';
 import Base from './Base.astro';
 
 interface Props {
@@ -64,7 +62,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
   <main id="content" class="room-stage" tabindex="-1" aria-label="The room" data-room data-open={open}>
     <h1 class="visually-hidden">{title}</h1>
     <RoomTour />
-    <div class="room-world" data-room-world data-room-films={JSON.stringify(latestFilms(filmsData))}></div>
+    <div class="room-world" data-room-world></div>
     <BootScreen />
     <MonitorFrame />
     <div class="room-controls">
@@ -277,12 +275,10 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 
     try {
       const { startRoom } = await import('../scene/main');
-      const films = JSON.parse(world.dataset.roomFilms ?? '[]');
       room = await startRoom(world, {
         osUrl: '/os?embed=1',
         onProgress: ui.progress,
         reducedMotion: reduced,
-        films,
         light,
         onMonitor: showPhoneOs,
         onLost: () => fallBack('the GL context was lost'),

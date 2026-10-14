@@ -3,7 +3,6 @@ import { RoomAudio, type AudioHandle, type OfflineOptions } from '../audio/RoomA
 import { Navigation } from '../Camera/Navigation';
 import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
 import type { Hotspot } from '../hotspots';
-import type { ProgramState, ReelFilm } from '../World/Projector';
 import { deferWindowPictures } from '../World/textures';
 import { World } from '../World/World';
 import { Effects } from './Effects';
@@ -21,8 +20,6 @@ export interface RoomOptions {
   onProgress: ProgressReporter;
   /** Cut between framings instead of gliding (prefers-reduced-motion). */
   reducedMotion?: boolean;
-  /** The newest diary entries in the build, for the reel's cards until the live diary answers. */
-  films: ReelFilm[];
   /**
    * Phones and small windows: the light tier (one pixel per CSS pixel, fewer effects, half-size textures) and no live
    * screen in the 3D monitor. Reaching the monitor hands over to `onMonitor`, which shows SaahilOS full screen.
@@ -117,10 +114,7 @@ export interface RoomProbe {
   /** The proxy under a client point, or null for empty space. */
   hit(x: number, y: number): string | null;
   goto(station: StationName): void;
-  readonly reel: { state: ProgramState; time: number; inView: boolean } | null;
-  /** Plays the reel whenever the room runs, in view or not (worst-case frame rate). */
-  forceReel(on: boolean): void;
-  /** The living room (PLAN 11.1, 12.1): the window, lamp, fan, steam, posters, prints, projector and album. */
+  /** The living room: the window, lava lamp, espresso, oven, projector, posters, Instax board, sticky notes, album. */
   readonly world: ReturnType<World['probe']>;
   /** performance.now() when the intro ended and the room became interactive; null before. */
   readonly interactiveAt: number | null;
@@ -133,7 +127,7 @@ export interface RoomProbe {
   readonly landedAt: number | null;
   /** The last frame's draw calls and triangles, and what the GPU holds. */
   readonly gpu: { calls: number; triangles: number; textures: number; geometries: number; programs: number };
-  /** Everything that moves at once: fan at top speed, steam brewing, the projector playing in view or not. */
+  /** Everything that moves at once: the lava lamp cycling, steam, an espresso pour and the projector running in view or not. */
   forceEverything(on: boolean): void;
   /** Renders the room's sound offline as heard from a framing; see RoomAudio.renderOffline. */
   renderSound(seconds: number, options: OfflineOptions & { view: string }): Promise<Float32Array[]>;
@@ -237,11 +231,12 @@ export class Application implements RoomHandle {
       root,
     );
     // Before the hover reactions: the world names and adds proxies (posters by slot, one per print, the dial's).
-    this.world = new World(this.nodes, this.scene, this.container, this.ktx2, this.effects, this.options.films, {
+    this.world = new World(this.nodes, this.scene, this.container, this.ktx2, this.effects, {
       fly: (station) => this.fly(station),
       station: () => this.camera.destination,
       openWindow: (target) => this.openWindow(target),
       sfx: (name, at) => this.audio.sfx(name, at),
+      setProjectorRunning: (running) => this.audio.setProjectorRunning(running),
       setMonitorBlocked: (blocked) => {
         if (this.monitor.iframe) this.monitor.iframe.style.pointerEvents = blocked ? 'none' : '';
       },
@@ -642,12 +637,6 @@ export class Application implements RoomHandle {
       },
       goto(station) {
         app.fly(station);
-      },
-      get reel() {
-        return app.world.projector?.reel ?? null;
-      },
-      forceReel(on) {
-        app.world.projector?.force(on);
       },
       get world() {
         return app.world.probe();
