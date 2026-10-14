@@ -297,6 +297,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
         say('Back at the desk.');
         stopPlaying(false);
       },
+      plan,
     );
     if (gliding) return;
     // Reduced motion (or a paused room): one stop at a time, a pause at each.

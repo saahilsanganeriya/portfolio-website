@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoomAudio, type AudioHandle, type OfflineOptions } from '../audio/RoomAudio';
 import { Navigation } from '../Camera/Navigation';
+import type { RoomPlan } from '../Camera/glide';
 import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
 import type { Hotspot } from '../hotspots';
 import { deferWindowPictures } from '../World/textures';
@@ -74,9 +75,10 @@ export interface RoomHandle {
   visit(station: StationName, onDone?: () => void, distance?: number): boolean;
   /**
    * The played tour: one continuous glide through the stops and back to the desk, `seconds` long; any input brakes it
-   * where it is. False under reduced motion (the map then visits the stops one by one) or with no stop to frame.
+   * where it is. `room` (the floor plan) lets it keep the view on the room's walls. False under reduced motion (the map
+   * then visits the stops one by one) or with no stop to frame.
    */
-  glideTour(stops: readonly { station: StationName; distance: number }[], seconds: number, onDone?: () => void): boolean;
+  glideTour(stops: readonly { station: StationName; distance: number }[], seconds: number, onDone?: () => void, room?: RoomPlan): boolean;
   /** Brakes the glide to rest where it is; false when none is cruising. */
   stopGlide(): boolean;
   /** Whether the room has this framing (a map stop names its camera node, `cam_tour_3` → `tour_3`). */
@@ -380,13 +382,13 @@ export class Application implements RoomHandle {
     return this.camera.has(station as StationName);
   }
 
-  glideTour(stops: readonly { station: StationName; distance: number }[], seconds: number, onDone?: () => void) {
+  glideTour(stops: readonly { station: StationName; distance: number }[], seconds: number, onDone?: () => void, room?: RoomPlan) {
     if (this.options.reducedMotion || this.paused) return false;
     this.takeOver();
     this.intro = false;
     this.handedOver = false;
     this.dirty = true;
-    return this.camera.glide(stops, 'desk', seconds, onDone);
+    return this.camera.glide(stops, 'desk', seconds, onDone, room);
   }
 
   stopGlide() {

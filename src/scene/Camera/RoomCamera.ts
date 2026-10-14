@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Framing, RoomNodes, StationName } from '../Application/RoomModel';
 import { WORLD_SCALE } from '../Application/RoomModel';
-import { brakedTime, fromGlidePose, glidePose, glideRate, glideTime, planGlide, toGlidePose, type GlidePlan } from './glide';
+import { brakedTime, fromGlidePose, glidePose, glideRate, glideTime, planGlide, toGlidePose, type GlidePlan, type RoomPlan } from './glide';
 import { Spring, springFor, type SpringSettings } from './spring';
 
 export type CameraPhase = 'loading' | StationName;
@@ -206,9 +206,10 @@ export class RoomCamera {
   /**
    * One continuous glide from wherever the camera is through `stops` (each framing stood `distance` times its own
    * distance back) to `end`, `seconds` long by the clock: slow out, an even pace past every stop with no pause at any, a
-   * gentle landing. A later `fly` re-aims from it with its speed; `brake` slows it to rest where it is.
+   * gentle landing. With the room's plan, the head times each turn to keep the view on the room. A later `fly` re-aims
+   * from it with its speed; `brake` slows it to rest where it is.
    */
-  glide(stops: readonly { station: StationName; distance: number }[], end: StationName, seconds: number, onDone?: () => void) {
+  glide(stops: readonly { station: StationName; distance: number }[], end: StationName, seconds: number, onDone?: () => void, room?: RoomPlan) {
     const framed = stops.filter((s) => s.station !== 'monitor' && this.has(s.station));
     if (!this.has(end) || !framed.length) return false;
     this.drag.yaw = this.drag.pitch = 0;
@@ -222,7 +223,8 @@ export class RoomCamera {
       pose(end === 'monitor' ? this.monitorPose() : this.fromFraming(this.framings[end] ?? this.framings.idle, fit)),
     ];
     const now = performance.now();
-    const glide: Glide = { plan: planGlide(poses, seconds), stations: framed.map((s) => s.station), began: now, last: now, time: 0, brake: null };
+    const plan = planGlide(poses, seconds, room, WORLD_SCALE);
+    const glide: Glide = { plan, stations: framed.map((s) => s.station), began: now, last: now, time: 0, brake: null };
     this.flight = { to: end, spring: MOTIONS.travel, onDone, distance: 1, glide };
     return true;
   }

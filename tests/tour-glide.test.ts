@@ -6,7 +6,7 @@ import { brakedTime, fromGlidePose, glidePose, glideTime, planGlide, toGlidePose
 // the scene's top level, in metres) and the stops from src/scene/tour.json, as the room plays them at 1440 × 900.
 const glb = readFileSync(new URL('../public/room/room.glb', import.meta.url));
 const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString()) as { nodes: { name: string; translation?: number[]; extras?: { fov_deg?: number } }[] };
-const floorplan = JSON.parse(readFileSync(new URL('../public/room/floorplan.json', import.meta.url), 'utf8')) as { walls: [number, number][][] };
+const floorplan = JSON.parse(readFileSync(new URL('../public/room/floorplan.json', import.meta.url), 'utf8')) as { outline: [number, number][]; walls: [number, number][][] };
 const tour = JSON.parse(readFileSync(new URL('../src/scene/tour.json', import.meta.url), 'utf8')) as { stops: { camera: string; distance?: number }[] };
 const WALL_HEIGHT_M = 2.85;
 const SECONDS = 60;
@@ -23,7 +23,7 @@ function framing(camera: string, distance = 1) {
   return toGlidePose(away, target, node(camera).extras!.fov_deg!);
 }
 const poses = [framing('cam_monitor'), ...tour.stops.map((s) => framing(s.camera, s.distance)), framing('cam_desk')];
-const glide = planGlide(poses, SECONDS);
+const glide = planGlide(poses, SECONDS, floorplan);
 
 /** Whether the line of sight from `eye` along `dir` meets a wall of the plan or the floor (not the dark outside the set). */
 function landsInRoom(eye: number[], dir: number[]) {
@@ -36,7 +36,12 @@ function landsInRoom(eye: number[], dir: number[]) {
     const y = eye[1] + t * dir[1];
     if (t > 0 && s >= 0 && s <= 1 && y >= 0 && y <= WALL_HEIGHT_M) return true;
   }
-  return dir[1] < 0;
+  if (dir[1] >= 0) return false;
+  const t = -eye[1] / dir[1];
+  const [x, z] = [eye[0] + t * dir[0], eye[2] + t * dir[2]];
+  const xs = floorplan.outline.map(([px]) => px);
+  const zs = floorplan.outline.map(([, pz]) => pz);
+  return x >= Math.min(...xs) && x <= Math.max(...xs) && z >= Math.min(...zs) && z <= Math.max(...zs);
 }
 
 describe('the played tour glides through the room', () => {
@@ -55,17 +60,28 @@ describe('the played tour glides through the room', () => {
     expect(glideTime(glide, SECONDS)).toBe(glide.duration);
   });
 
-  // Catches the view swinging past the end of the right wall into the dark outside the set, or dropping to the floor
-  // under the eye, while it turns from one stop to the next.
-  it('keeps the middle of the view on the room’s walls or floor all the way round', () => {
-    const outside: string[] = [];
-    for (let time = 0; time <= glide.duration; time += 0.1) {
-      const { eye, target } = fromGlidePose(glidePose(glide, time));
+  // Catches the view swinging past the end of the right wall into the dark outside the set (2.7 s of it when the head
+  // turned on a plain spline, 3.8 s when it did not lead), or dropping to the floor under the eye (its look-at point
+  // sliding across). A glance along the wall's end beside the armchair stop, whose own framing grazes it, is shorter.
+  it('keeps the middle of the view on the room’s walls or floor all the way round, never steeper than a stop', () => {
+    const steepest = Math.min(...poses.map((p) => p[4]));
+    const runs: string[] = [];
+    const steep: string[] = [];
+    let run: number[] = [];
+    for (let time = 0; time <= glide.duration + 1e-9; time += 0.1) {
+      const pose = glidePose(glide, time);
+      const { eye, target } = fromGlidePose(pose);
       const dir = target.map((v, c) => v - eye[c]);
       const length = Math.hypot(...dir);
-      if (!landsInRoom(eye, dir.map((v) => v / length))) outside.push(time.toFixed(1));
+      if (!landsInRoom(eye, dir.map((v) => v / length))) run.push(time);
+      else if (run.length) {
+        if (run.length > 10) runs.push(`${run[0].toFixed(1)}–${run.at(-1)!.toFixed(1)} s`);
+        run = [];
+      }
+      if (pose[4] < steepest - 0.05) steep.push(time.toFixed(1));
     }
-    expect(outside, 'path seconds looking out of the set').toEqual([]);
+    expect(runs, 'stretches longer than a second looking out of the set').toEqual([]);
+    expect(steep, 'path seconds looking down more steeply than any stop').toEqual([]);
   });
 
   // Catches a brake that jerks to a halt, runs backward, or never settles.
