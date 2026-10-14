@@ -92,7 +92,7 @@ export async function osImage(src: ImageMetadata, alt: string): Promise<OsImage>
 
 // Mercor's work has no public pictures; its row in Projects names the problem in type instead.
 const PROJECT_CARDS: Record<string, OsProjectCard> = {
-  'entity-resolution-and-anonymization': { figure: 'Who is who', caption: 'one fake identity per person' },
+  'entity-resolution-and-anonymization': { figure: 'Who is who', caption: 'one person, one fake' },
 };
 
 export const projectCard = (slug: string): OsProjectCard | undefined => PROJECT_CARDS[slug];

@@ -334,7 +334,7 @@ test.describe('desktop', () => {
     const list = page.getByRole('dialog', { name: 'Projects' });
     const first = list.locator('.os-row').first();
     await expect(first).toHaveAttribute('href', '#projects/entity-resolution-and-anonymization');
-    await expect(first.locator('.os-thumb-card')).toHaveText('Who is who one fake identity per person');
+    await expect(first.locator('.os-thumb-card')).toHaveText('Who is who one person, one fake');
     await expect(list.getByText('No public pictures')).toHaveCount(0);
   });
 
