@@ -81,6 +81,9 @@ export const HOTSPOTS: readonly Hotspot[] = [
   { proxies: ['hit_croissant'], prop: 'The croissant in the oven', label: 'Kitchen', target: 'recipes', href: '/#recipes' },
   { proxies: ['hit_lava_lamp'], prop: 'The lava lamp', label: 'Lava lamp', target: null, action: 'lava', href: '/' },
   { proxies: ['hit_projector'], prop: 'The projector', label: 'Projector', target: null, fly: 'projector', action: 'projector', href: '/' },
+  // The picture on the wall: from the projector's framing the projector is behind the camera, so a click here starts
+  // and stops the film too; its label names the program on the wall (World).
+  { proxies: ['hit_projection'], prop: 'The picture on the wall', label: 'His story', target: null, fly: 'projector', action: 'projector', href: '/' },
   // The dial turns between his story and his photographs; its label names the next program (World).
   { proxies: ['hit_projector_dial'], prop: 'The projector’s program dial', label: 'Next program', target: null, fly: 'projector', action: 'dial', href: '/' },
   ...posters,
