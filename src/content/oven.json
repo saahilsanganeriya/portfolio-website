@@ -1,12 +1,13 @@
 {
   "items": [
     {
-      "title": "This room",
-      "note": "It is getting a window: San Francisco on the left, Delhi on the right, each half lit by its own local time. Also a slow ceiling fan, a lava lamp and an espresso machine that steams."
+      "title": "swe-sim: a task from a fresh repository",
+      "note": "Its hosted pipeline has run one task end to end, and that task came from an existing benchmark. Next it screens a task built from a fresh repository, with at least three trials in every cell, so a pass@3 can finally be reported.",
+      "link": "/projects/swe-sim"
     },
     {
       "title": "saahil-brain: better pointers",
-      "note": "On every prompt my agents get up to three pointers into the brain. On the eval closest to real use, the right file was among them only 15.9% of the time. A daily agent works on that number and keeps a change only if it goes up.",
+      "note": "On every prompt my agents get up to three pointers into the brain. On the eval closest to real use, the right file was among them for 11 of 69 prompts (15.9%) in the run of 13 October. A daily agent works on that number and keeps a change only if it goes up.",
       "link": "/projects/saahil-brain"
     },
     {
@@ -25,5 +26,5 @@
       "link": "/projects/travel-agent-gym"
     }
   ],
-  "updated": "2026-10-12"
+  "updated": "2026-10-14"
 }
