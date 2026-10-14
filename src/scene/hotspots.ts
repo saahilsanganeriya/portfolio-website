@@ -68,7 +68,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
   { proxies: ['hit_pennant_gatech'], prop: 'The Georgia Tech pennant', label: 'Georgia Tech', target: null, labelOnly: true, href: '/about' },
   { proxies: ['hit_espresso'], prop: 'The espresso machine', label: 'Espresso machine', target: null, fly: 'espresso', action: 'espresso', href: '/' },
   { proxies: ['hit_oven'], prop: 'The countertop oven', label: 'Oven', target: 'recipes', fly: 'oven', action: 'oven', href: '/#recipes' },
-  { proxies: ['hit_croissant'], prop: 'The croissant in the oven', label: 'Recipes', target: 'recipes', href: '/#recipes' },
+  { proxies: ['hit_croissant'], prop: 'The croissant in the oven', label: 'Kitchen', target: 'recipes', href: '/#recipes' },
   { proxies: ['hit_lava_lamp'], prop: 'The lava lamp', label: 'Lava lamp', target: null, action: 'lava', href: '/' },
   { proxies: ['hit_projector'], prop: 'The projector', label: 'Projector', target: null, fly: 'projector', action: 'projector', href: '/' },
   ...posters,
