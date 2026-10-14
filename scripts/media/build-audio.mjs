@@ -9,7 +9,7 @@
 // crossfade so they repeat without a seam; each sound ships as Opus in WebM plus an AAC copy (.m4a) for browsers that
 // cannot decode Opus.
 //
-//   node scripts/media/build-audio.mjs
+//   node scripts/media/build-audio.mjs [--only sfx/espresso-pour,sfx/oven-open]   (--only rebuilds just those files)
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { download, ffmpeg } from '../lib/media.mjs';
 
@@ -64,6 +64,10 @@ const SFX = [
       { url: `${FREESOUND}149/149506_274531-hq.mp3`, start: 1.95, length: 5.4, at: 1.9, fadeOut: 1.5 },
     ],
   },
+  // The pour the espresso machine plays as it pulls a shot: the vibratory pump coming on, then the shot running.
+  { name: 'espresso-pour', url: `${FREESOUND}628/628845_13885154-hq.mp3`, start: 1.25, length: 9, fadeIn: 0.05, fadeOut: 2 },
+  { name: 'oven-open', url: `${FREESOUND}372/372541_3294528-hq.mp3`, start: 0, length: 0.95, fadeOut: 0.2 },
+  { name: 'oven-close', url: `${FREESOUND}372/372542_3294528-hq.mp3`, start: 0, length: 0.8, fadeOut: 0.15 },
   { name: 'lava', url: `${FREESOUND}251/251454_4082287-hq.mp3`, start: 27.8, length: 0.8, fadeOut: 0.2 },
   { name: 'crt', url: `${FREESOUND}693/693860_9395330-hq.mp3`, start: 6.9, length: 1.5, fadeOut: 0.6 },
   { name: 'whoosh', url: `${FREESOUND}391/391448_7280678-hq.mp3`, start: 6.65, length: 0.95, fadeIn: 0.05, fadeOut: 0.3 },
@@ -235,8 +239,11 @@ await mkdir(OUT, { recursive: true });
 const rows = [];
 const manifest = { padSeconds: LOOP_PAD_S, loops: {}, music: {} };
 const row = (dir, name, seconds, note, sizes) => rows.push({ name: `${dir}/${name}`, seconds, note, ...sizes });
+const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].split(',') : null;
+const skip = (dir, name) => only !== null && !only.includes(`${dir}/${name}`);
 
 for (const loop of ROOM_LOOPS) {
+  if (skip('room', loop.name)) continue;
   const path = await cached(loop.url);
   const span = loop.length + SEARCH_S + loop.crossfade + MATCH_WINDOW_S;
   const x = decode(path, loop.start, span, `${CLEAN},${loudnorm(path, loop.start, span)}`);
@@ -246,7 +253,7 @@ for (const loop of ROOM_LOOPS) {
   row('room', loop.name, length / RATE, `loop, tail-to-head correlation ${correlation.toFixed(2)}`, await encode('room', loop.name, padded(seamless), { opus: '32k', aac: '48k' }));
 }
 
-{
+if (!skip('room', STARTUP.name)) {
   const path = await cached(STARTUP.url);
   const fade = `afade=t=out:st=${STARTUP.length - STARTUP.fadeOut}:d=${STARTUP.fadeOut}`;
   const samples = decode(path, 0, STARTUP.length, `${CLEAN},${loudnorm(path, 0, STARTUP.length)},${fade}`);
@@ -256,11 +263,12 @@ for (const loop of ROOM_LOOPS) {
 // Clicks keep their recorded levels; only the silence around them (and the MP3 encoder's lead-in) is trimmed.
 const TRIM = 'silenceremove=start_periods=1:start_threshold=-60dB,areverse,silenceremove=start_periods=1:start_threshold=-60dB,afade=t=in:d=0.005,areverse';
 for (const click of CLICKS) {
+  if (skip('room', click.name)) continue;
   const samples = decode(await cached(click.url), 0, 1, `${CLEAN},${TRIM}`);
   row('room', click.name, samples.length / RATE, 'click', await encode('room', click.name, samples, { opus: '48k', aac: '64k' }));
 }
 
-{
+if (!['keys', 'melody', 'beat'].every((stem) => skip('music', stem))) {
   const keys = decode(await cached(KEYS.url), 0, null, CLEAN);
   const length = keys.length;
   const melody = decode(await cached(MELODY.url), 0, null, CLEAN).slice(0, length);
@@ -285,12 +293,14 @@ for (const click of CLICKS) {
 }
 
 for (const sound of SFX) {
+  if (skip('sfx', sound.name)) continue;
   const x = await excerpt(sound);
   const samples = scale(x, 10 ** ((SFX_PEAK_DB - peakDb(x)) / 20));
   row('sfx', sound.name, samples.length / RATE, 'one-shot', await encode('sfx', sound.name, samples, { opus: '40k', aac: '64k' }));
 }
 
 for (const bed of BEDS) {
+  if (skip(bed.dir, bed.name)) continue;
   const span = bed.length + SEARCH_S + bed.crossfade + MATCH_WINDOW_S;
   let mixed = null;
   for (const part of bed.parts) {
@@ -306,12 +316,14 @@ for (const bed of BEDS) {
 }
 
 for (const event of EVENTS) {
+  if (skip('city', event.name)) continue;
   const x = await excerpt(event);
   const samples = scale(x, 10 ** ((SFX_PEAK_DB - peakDb(x)) / 20));
   row('city', event.name, samples.length / RATE, 'event', await encode('city', event.name, samples, { opus: '32k', aac: '48k' }));
 }
 
-await writeFile(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
+// A partial build leaves the loop lengths as they are.
+if (!only) await writeFile(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
 console.log('name                 seconds  webm (Opus)  m4a (AAC)  note');
 for (const r of rows) {
   console.log(`${r.name.padEnd(19)} ${r.seconds.toFixed(3).padStart(8)}  ${String(r.webm).padStart(11)}  ${String(r.m4a).padStart(9)}  ${r.note}`);
