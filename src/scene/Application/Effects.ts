@@ -207,6 +207,8 @@ export class Effects {
       ...ADD_LIGHT,
     });
     this.beam = new THREE.Mesh(geometry, material);
+    // The finishing pass blooms it by this name (src/scene/post/FinishingPass.ts PRACTICALS).
+    this.beam.name = 'projector_beam';
     // Local axes: x = frame width, -y = along the beam, z = frame height.
     const basis = new THREE.Matrix4().makeBasis(right, dir.clone().negate(), right.clone().cross(dir.clone().negate()));
     this.beam.quaternion.setFromRotationMatrix(basis);

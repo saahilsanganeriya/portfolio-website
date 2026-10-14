@@ -44,6 +44,7 @@ const PRACTICALS: Practical[] = [
   { names: ['props_lantern', 'props_kitchen_pendant', 'env_hall_sconce'], gain: 0.8, knee: [0.6, 0.95] },
   { names: ['env_photo_light', 'env_picture_light', 'env_shelf_light'], gain: 0.7, knee: [0.7, 0.98] },
   { names: ['projection_surface'], gain: 0.45, knee: [0.45, 0.9] },
+  { names: ['projector_beam'], gain: 0.5, knee: [0, 0.2] },
   { names: ['nas_led_0', 'nas_led_1', 'nas_led_2', 'nas_led_3'], gain: 1, knee: [0.2, 0.6] },
   { names: ['window_view_sf'], gain: 0.9, knee: [0.4, 0.8], city: 'sf' },
   { names: ['window_view_delhi'], gain: 0.9, knee: [0.4, 0.8], city: 'delhi' },
