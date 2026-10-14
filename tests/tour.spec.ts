@@ -93,7 +93,9 @@ test('the map opens, a stop flies the camera there, the tour plays every stop wi
   await expect(map(page).getByRole('button', { name: 'Play the tour' })).toBeVisible();
   await expect(map(page).getByRole('list', { name: 'Stops' })).toBeVisible();
   const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
-  expect(seen).toEqual([station(second), ...STOPS.map(station), 'desk'].filter((s, i, all) => s !== all[i - 1]));
+  // No film plays, so the projector's stop is passed.
+  const played = STOPS.filter((s) => s.when !== 'film');
+  expect(seen).toEqual([station(second), ...played.map(station), 'desk'].filter((s, i, all) => s !== all[i - 1]));
 
   await page.keyboard.press('Escape');
   await expect(map(page)).toBeHidden();

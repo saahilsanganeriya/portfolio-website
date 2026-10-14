@@ -20,6 +20,13 @@
       "caption": "The Voyager Golden Record and the Pale Blue Dot. Each one opens the story behind it."
     },
     {
+      "id": "armchair",
+      "label": "Armchair and books",
+      "camera": "cam_tour_9",
+      "distance": 1.1,
+      "caption": "The reading corner. The shelf holds my favourite books: Murakami, Yoshimoto, Vuong and Greene."
+    },
+    {
       "id": "kitchen",
       "label": "Kitchen nook",
       "camera": "cam_tour_4",
@@ -27,18 +34,18 @@
       "caption": "Coffee and baking. Open the oven for the recipes I keep coming back to."
     },
     {
+      "id": "projector",
+      "label": "Projector",
+      "camera": "cam_tour_6",
+      "when": "film",
+      "caption": "The projector is playing my story, a short silent film from Delhi to here."
+    },
+    {
       "id": "posters",
       "label": "Posters and lava lamp",
       "camera": "cam_tour_5",
       "distance": 1.15,
       "caption": "My four favourite films on Letterboxd, lit by the lava lamp under them."
-    },
-    {
-      "id": "armchair",
-      "label": "Armchair and books",
-      "camera": "cam_tour_9",
-      "distance": 1.1,
-      "caption": "The reading corner. The shelf holds my favourite books: Murakami, Yoshimoto, Vuong and Greene."
     }
   ]
 }

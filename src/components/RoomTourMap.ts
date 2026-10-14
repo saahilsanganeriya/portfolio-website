@@ -27,9 +27,18 @@ export interface TourStop {
   caption: string;
   /** Stands the camera this many times further back than its node, for a framing authored too close. */
   distance?: number;
+  /** 'film': the played tour visits it only while the projector runs his film (at rest the wall shows nothing to see). */
+  when?: string;
 }
 
 export const TOUR_STOPS: readonly TourStop[] = tour.stops;
+
+/** The stop the played tour visits after `from` (-1 to begin), passing a film stop while no film plays; the list's length ends it. */
+export function nextStopIndex(stops: readonly Pick<TourStop, 'when'>[], from: number, filmPlaying: boolean): number {
+  let next = from + 1;
+  while (next < stops.length && stops[next].when === 'film' && !filmPlaying) next++;
+  return next;
+}
 export const FLOORPLAN_URL = '/room/floorplan.json';
 // The played tour rests this long at each stop once the camera has landed, long enough to read its caption.
 const HOLD_MS = 4500;
@@ -59,6 +68,7 @@ export async function loadFloorPlan(): Promise<FloorPlan | null> {
 interface Stop {
   label: string;
   caption: string;
+  when?: string;
   station: StationName;
   distance: number;
   position: [number, number];
@@ -165,7 +175,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     marker.style.top = `${((spots[i][1] - minZ) / height) * 100}%`;
     markers.append(marker);
     const distance = stop.distance ?? 1;
-    stops.push({ label: stop.label, caption: stop.caption, station, distance, position: stop.position, item, marker });
+    stops.push({ label: stop.label, caption: stop.caption, when: stop.when, station, distance, position: stop.position, item, marker });
     const go = () => {
       stopPlaying();
       room.visit(station, undefined, distance);
@@ -200,7 +210,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
       () => {
         if (!playing || playing.expected !== at) return;
         if (index >= stops.length) return stopPlaying(false);
-        playing.timer = window.setTimeout(() => visitStop(index + 1), HOLD_MS);
+        playing.timer = window.setTimeout(() => visitStop(nextStopIndex(stops, index, room.filmPlaying())), HOLD_MS);
       },
       stop?.distance,
     );
@@ -217,10 +227,11 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
 
   play.addEventListener('click', () => {
     if (playing) return stopPlaying();
-    playing = { expected: stops[0]?.station ?? 'desk', timer: 0 };
+    const first = nextStopIndex(stops, -1, room.filmPlaying());
+    playing = { expected: stops[first]?.station ?? 'desk', timer: 0 };
     panel.setAttribute('data-playing', '');
     play.textContent = 'Stop the tour';
-    visitStop(0);
+    visitStop(first);
   });
 
   // ---- opening, closing and the keyboard ----

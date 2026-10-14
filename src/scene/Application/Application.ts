@@ -77,6 +77,8 @@ export interface RoomHandle {
   skipIntro(): void;
   /** The visitor took over (the map opened, a stop chosen): nothing moves the camera by itself any more. */
   takeOver(): void;
+  /** Whether the projector is running his story film on the wall now. */
+  filmPlaying(): boolean;
   /** The room's sound: unlock() on the first gesture, mute, volume, setState(state), sfx(name, position?). */
   readonly audio: AudioHandle;
   setPaused(paused: boolean): void;
@@ -360,6 +362,11 @@ export class Application implements RoomHandle {
 
   takeOver() {
     clearTimeout(this.stepIn);
+  }
+
+  filmPlaying() {
+    const projector = this.world.projector;
+    return projector !== null && projector.running && projector.state.program === 'story';
   }
 
   /** Stops every motion that runs by itself (sway, dust, LEDs, grain); the camera still answers clicks. */
