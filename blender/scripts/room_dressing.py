@@ -46,9 +46,8 @@ PLAQUE_TEXT = "Four favourites — from Letterboxd"
 PHOTO_SLOTS = [((-1.22, 1.92), (0.26, 0.26)), ((-0.82, 2.00), (0.24, 0.18)), ((-0.86, 1.58), (0.30, 0.169)),
                ((-1.62, 2.00), (0.21, 0.14)), ((-1.58, 1.60), (0.16, 0.20))]
 PHOTO_MAT, PHOTO_FRAME = 0.034, 0.016
-# Stills only: prints from the photography collection (src/assets/photography), never "sweat-and-toil" (owner,
-# round 7: removed everywhere).
-STILL_PHOTOS = ["visual-depiction-paresthesia", "cansupport", "amer-fort", "circles", "voice"]
+# Stills only: the prints come from the photographs the collection marks for the wall (still_photo_slugs).
+SITE_SRC = Path(__file__).resolve().parents[2] / "src"
 
 # The right return wall (faces -X): the bookcase, and above it the space wall.
 BOOKCASE = (X_RIGHT - 0.32, X_RIGHT, -1.24, -0.28)  # x0, x1, y0, y1
@@ -432,10 +431,41 @@ def build_projection_surface():
     return obj
 
 
-def still_photo(slug: str) -> bpy.types.Image | None:
-    """A print from src/assets/photography (largest file), converted once to PNG for Cycles; stills only."""
-    folder = Path(__file__).resolve().parents[2] / "src" / "assets" / "photography" / slug
+def largest_photo(slug: str) -> Path | None:
+    folder = SITE_SRC / "assets" / "photography" / slug
     files = sorted(folder.glob("*.webp"), key=lambda f: int(f.stem) if f.stem.isdigit() else 0)
+    return files[-1] if files else None
+
+
+def still_photo_slugs() -> list[str | None]:
+    """The photograph each print slot shows in the stills: from those src/content/photography marks onWall, the unused
+    one closest to the slot's aspect, CanSupport placed first (the owner keeps it) and sweat-and-toil never (owner,
+    round 7: removed everywhere). The site picks its own at runtime; this only keeps the stills honest."""
+    candidates = {}
+    for meta in sorted((SITE_SRC / "content" / "photography").glob("*.yaml")):
+        photo = largest_photo(meta.stem)
+        if "onWall: true" not in meta.read_text() or meta.stem == "sweat-and-toil" or photo is None:
+            continue
+        image = bpy.data.images.load(str(photo), check_existing=True)
+        candidates[meta.stem] = image.size[0] / max(image.size[1], 1)
+    aspects = [pw / ph for _, (pw, ph) in PHOTO_SLOTS]
+    chosen: list[str | None] = [None] * len(PHOTO_SLOTS)
+    order = (["cansupport"] if "cansupport" in candidates else []) + [s for s in candidates if s != "cansupport"]
+    for slug in order:
+        free = [i for i, c in enumerate(chosen) if c is None]
+        if not free:
+            break
+        best = min(free, key=lambda i: abs(aspects[i] - candidates[slug]))
+        if slug == "cansupport" or abs(aspects[best] - candidates[slug]) < 0.12:
+            chosen[best] = slug
+    leftovers = [s for s in order if s not in chosen]
+    return [c if c is not None else (leftovers.pop(0) if leftovers else None) for c in chosen]
+
+
+def still_photo(slug: str | None) -> bpy.types.Image | None:
+    """A print from src/assets/photography (largest file), converted once to PNG for Cycles; stills only."""
+    photo = largest_photo(slug) if slug else None
+    files = [photo] if photo else []
     if not files:
         return None
     png = CACHE / "photos" / f"{slug}.png"
@@ -451,7 +481,7 @@ def photo_material(i):
     (light_probe = 1) while bake.py bakes the light that falls on it; the site draws the photograph at runtime."""
     mat, k = pl.new_material(f"photo_print_{i}")
     uv = k.node("ShaderNodeUVMap", uv_map="UVMap").outputs["UV"]
-    image = still_photo(STILL_PHOTOS[i])
+    image = still_photo(still_photo_slugs()[i])
     if image is not None:
         (_, _), (pw, ph) = PHOTO_SLOTS[i]
         slot_aspect, img_aspect = pw / ph, image.size[0] / max(image.size[1], 1)
