@@ -30,7 +30,8 @@ export interface Hotspot {
 }
 
 export const POSTER_SLOTS = 4;
-export const PRINT_SLOTS = 5;
+/** The Instax board's prints (instax_slot_0..19), or the framed prints of a room without the board. */
+export const PRINT_SLOTS = 20;
 
 /** The posters hang in profile order: slot 0 is the first of the four favourites on Letterboxd. */
 const posters: Hotspot[] = favorites.films.slice(0, POSTER_SLOTS).map((film, slot) => ({
@@ -41,10 +42,10 @@ const posters: Hotspot[] = favorites.films.slice(0, POSTER_SLOTS).map((film, slo
   href: `/films#${film.slug}`,
 }));
 
-/** The wall's prints; World swaps in each photograph's title and window once it knows which hangs where. */
+/** The board's prints; World swaps in each photograph's caption and window once it knows which hangs where. */
 const prints: Hotspot[] = Array.from({ length: PRINT_SLOTS }, (_, slot) => ({
   proxies: [`hit_photo_print_${slot}`],
-  prop: 'A framed print',
+  prop: 'An Instax print',
   label: 'Photographs',
   target: 'photography',
   fly: 'photos',
