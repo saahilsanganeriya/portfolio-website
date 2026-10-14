@@ -154,10 +154,6 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 
 | Asset | Used for | Source URL | Author | Licence | Changes |
 |---|---|---|---|---|---|
-| The Arrival of a Train (L’Arrivée d’un train en gare de La Ciotat), 1895 | 12 s of the projector's reel (`public/room/reel.mp4`) | https://commons.wikimedia.org/wiki/File:Arrival_of_a_Train_at_La_Ciotat_%28The_Lumi%C3%A8re_Brothers%2C_1895%29.webm | Auguste and Louis Lumière | public domain: published 1895, so public domain in the US; the authors died in 1948 and 1954 (Commons: PD-old-70-expired) | 0:04–0:16, cropped to 4:3, 256 × 192, 18 fps, grey, denoised, levels normalised, silent; H.264 (scripts/media/build-reel.mjs) |
-| Workers Leaving the Lumière Factory (La Sortie de l’usine Lumière à Lyon, first version), 1895 | 10 s of the projector's reel | https://commons.wikimedia.org/wiki/File:La_Sortie_de_l%27Usine_Lumi%C3%A8re_%C3%A0_Lyon_I_1895.webm | Louis Lumière | public domain: published 1895 (Commons: PD-1923, US) and the author died in 1948 (Commons: PD-France) | from Commons' 480p transcode, 0:01–0:11, then as above |
-| A Trip to the Moon (Le Voyage dans la Lune), 1902 | 13 s of the projector's reel: the rocket lands in the Moon's eye | https://commons.wikimedia.org/wiki/File:Le_Voyage_dans_la_Lune_%281902%29.webm | Georges Méliès | public domain: published 1902, so public domain in the US; the author died in 1938 (Commons: PD-old-auto-expired) | from Commons' 480p transcode, 6:04–6:17, then as above |
-| Intertitle cards (now showing, clip titles, also lately) | the reel's cards between the clips; two show the newest films in the owner's Letterboxd diary | none (drawn at runtime by src/scene/Application/Reel.ts) | Saahil Sanganeriya (made for this site) | own work | — |
 
 ## Code
 
