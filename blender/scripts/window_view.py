@@ -934,8 +934,7 @@ def transamerica(b, mats, base):
     z = sf_height(x, y) - 0.004
     w, h = 0.044, 0.27
     b.box((w * 1.3, w * 1.3, 0.008), loc=(x, y, z + 0.004), mat=mats["concrete"])
-    faces = b.frustum((w, w), (0.002, 0.002), h, loc=(x, y, z + 0.008), mat=mats["tower_white"])
-    del faces
+    b.frustum((w, w), (0.002, 0.002), h, loc=(x, y, z + 0.008), mat=mats["tower_white"])
     for side in (-1, 1):
         b.frustum((0.012, 0.014), (0.006, 0.010), h * 0.42, loc=(x + side * w * 0.42, y, z + h * 0.30),
                   mat=mats["tower_white"])
@@ -1026,7 +1025,7 @@ def jama_masjid(b, mats, base):
         b.lathe([(0.0065, 0.0), (0.006, 0.004), (0.0, 0.010)], segments=8, loc=(mx, y - 0.01, z + 0.10), mat=mats["marble"])
 
 
-def red_fort(b, mats, rng):
+def red_fort(b, mats):
     """The Red Fort's wall across the back of Delhi: a long crenellated red sandstone curtain wall with the Lahori
     Gate's two octagonal towers and their small white pavilions."""
     y = RED_FORT_Y
@@ -1199,7 +1198,7 @@ def build_window_view(framings):
     qutub_minar(monuments, mats, QUTUB)
     humayun_tomb(monuments, mats, HUMAYUN)
     jama_masjid(monuments, mats, JAMA_MASJID)
-    red_fort(monuments, mats, rng)
+    red_fort(monuments, mats)
     parts.add("monuments", monuments, texel=2.6, side="delhi")
 
     objs = parts.build()

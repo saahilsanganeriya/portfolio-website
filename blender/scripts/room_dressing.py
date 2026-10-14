@@ -18,9 +18,8 @@ import bpy
 from mathutils import Matrix, Vector
 
 import props_lib as pl
-from import_henry import CACHE, REPO, fetch_cached
-from room_lib import (DOOR_Y0, RETURN_Y, X_LEFT, X_RIGHT, Y_BACK, Y_FRONT, add_box, add_cylinder, collection,
-                      new_object, smooth_by_angle)
+from import_henry import CACHE, fetch_cached
+from room_lib import X_LEFT, X_RIGHT, Y_BACK, add_box, add_cylinder, collection, new_object, smooth_by_angle
 
 SEED = 20261012
 ART = CACHE / "art"
@@ -88,7 +87,7 @@ def build_dressing(mats, placed):
     found = {}
     found["credenza"] = build_credenza(mats)
     found["plaque"] = build_plaque(mats)
-    found.update(build_kitchen_nook(mats, rng))
+    found.update(build_kitchen_nook(mats))
     found.update(build_photo_wall(mats))
     found["projection"] = build_projection_surface()
     found["album"] = build_album()
@@ -197,7 +196,7 @@ def build_credenza(mats):
     return obj
 
 
-def build_kitchen_nook(mats, rng):
+def build_kitchen_nook(mats):
     """A short counter at the left wall's front end: walnut base cabinets with a cream stone top, a panel of glazed
     green tiles behind it, an open walnut shelf with jars and cups on brass brackets, and an enamel pendant over it.
     The espresso machine and the oven stand on the counter (build_room places them)."""
@@ -442,7 +441,6 @@ def still_photo(slug: str) -> bpy.types.Image | None:
     png = CACHE / "photos" / f"{slug}.png"
     if not png.exists():
         png.parent.mkdir(parents=True, exist_ok=True)
-        import subprocess
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(files[-1]), str(png)],
                        check=True)
     return bpy.data.images.load(str(png), check_existing=True)
