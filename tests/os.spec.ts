@@ -1,24 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { devices, expect, test, type Page } from '@playwright/test';
 
 // Opened on its own, /os becomes the room; ?embed=1 is the document the monitor frames (desktop layout), and
 // ?embed=0 the same document unframed, for the phone layout here (linked nowhere).
 
-const APPS = [
-  'About',
-  'Projects',
-  'In the oven',
-  'Writing',
-  'A Narrative in a Frame',
-  'Films',
-  'Books',
-  'Recipes',
-  'Voyager Golden Record',
-  'Terminal',
-  'Résumé',
-  'Credits',
-];
+// The desktop holds the work and the machine; the Personal folder holds the rest (the room opens those directly too).
+const DESKTOP = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'In the oven', 'Personal', 'Terminal', 'Credits'];
+const PERSONAL = ['Films', 'A Narrative in a Frame', 'Books', 'Recipes', 'Voyager Golden Record'];
+const REMOVED = ['Welcome', 'The Thread', 'Daily word'];
 /** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
 const firstH2 = (collection: string, slug: string): string =>
   readFileSync(new URL(`../src/content/${collection}/${slug}.mdx`, import.meta.url), 'utf8').match(/^## (.+)$/m)![1].trim();
@@ -28,11 +18,52 @@ const ABOUT = (() => {
   const firstParagraph = mdx.split(/\n{2,}/).map((block) => block.trim()).find((block) => /^[A-Z]/.test(block))!;
   return { firstWords: firstParagraph.split(/[,.]/)[0], photos: (mdx.match(/<MePhoto\b/g) ?? []).length };
 })();
+// The first featured photograph in the collection, read from its YAML so a new photo set moves the tests with it.
+const PHOTO = (() => {
+  const dir = new URL('../src/content/photography/', import.meta.url);
+  const entries = readdirSync(dir)
+    .filter((file) => /^[^_].*\.ya?ml$/.test(file))
+    .map((file) => {
+      const yaml = readFileSync(new URL(file, dir), 'utf8');
+      const field = (key: string) => yaml.match(new RegExp(`^${key}:\\s*"?(.*?)"?\\s*$`, 'm'))?.[1] ?? '';
+      return {
+        slug: file.replace(/\.ya?ml$/, ''),
+        title: field('title'),
+        caption: field('caption'),
+        igCaption: field('igCaption'),
+        featured: field('featured') === 'true',
+        order: Number(field('order') || 1e9),
+      };
+    })
+    .filter((photo) => photo.featured)
+    .sort((a, b) => a.order - b.order);
+  return entries[0];
+})();
 const PROJECT = {
   slug: 'real-time-streaming',
   title: 'A real-time streaming pipeline (Amazon internship)',
   repo: 'https://github.com/saahilsanganeriya/real_time_streaming',
 };
+
+// The Code window's fixture: a small repository in the committed snapshot, its README's title and a root file. File
+// bodies come from raw.githubusercontent.com, which tests stand in for, so they never depend on the network.
+const NAPARI = (() => {
+  const snapshot = JSON.parse(
+    readFileSync(new URL('../src/os/apps/code/snapshot/repos/saahilsanganeriya--samcell-napari.json', import.meta.url), 'utf8'),
+  ) as { readme: { html: string }; tree: { entries: [string, string, number][] } };
+  return {
+    slug: 'saahilsanganeriya/samcell-napari',
+    title: snapshot.readme.html.match(/<h1[^>]*>([^<]+)<\/h1>/)![1],
+    file: snapshot.tree.entries.find(([path, type]) => type === 'b' && path === 'pyproject.toml')![0],
+  };
+})();
+async function serveGithubFiles(page: Page, body: string | null) {
+  await page.route('https://raw.githubusercontent.com/**', (route) =>
+    body === null ? route.fulfill({ status: 500, body: '' }) : route.fulfill({ body, contentType: 'text/plain' }),
+  );
+  await page.route('https://camo.githubusercontent.com/**', (route) => route.abort());
+  await page.route('https://media.githubusercontent.com/**', (route) => route.abort());
+}
 
 // Books, Recipes and Voyager read build-time JSON; these stand in for it, empty and with synthetic entries.
 const shelf = (name: string) =>
@@ -59,13 +90,165 @@ async function seriousAxeViolations(page: Page): Promise<string[]> {
 }
 
 test.describe('desktop', () => {
-  /** Catches an app missing from the desktop or a window that never mounts for it. */
-  test('every app opens from its desktop icon', async ({ page }) => {
+  /** Catches an app missing from the desktop or the Personal folder, or a window that never mounts for it. */
+  test('every app opens from its desktop icon or the Personal folder', async ({ page }) => {
     await page.goto('/os?embed=1');
-    for (const app of APPS) {
-      await page.getByRole('button', { name: app, exact: true }).dblclick();
+    const icons = page.getByRole('navigation', { name: 'Apps' });
+    await expect(icons.getByRole('button')).toHaveText(DESKTOP);
+    for (const app of DESKTOP) {
+      await icons.getByRole('button', { name: app, exact: true }).dblclick();
       await expect(page.getByRole('dialog', { name: app })).toBeVisible();
     }
+    const folder = page.getByRole('dialog', { name: 'Personal' });
+    for (const app of PERSONAL) {
+      // Each window opens on top; opening the folder again brings it back to the front.
+      await icons.getByRole('button', { name: 'Personal' }).dblclick();
+      await folder.getByRole('link', { name: app }).click();
+      await expect(page.getByRole('dialog', { name: app })).toBeVisible();
+    }
+  });
+
+  /** Catches the deleted Welcome, The Thread or Daily word coming back on the desktop, in Start, or by their old hashes. */
+  test('the removed apps are gone', async ({ page }) => {
+    await page.goto('/os?embed=1#story');
+    // An unknown window name opens About, the window the OS opens when nothing is named.
+    await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
+    await page.getByRole('button', { name: 'Start' }).click();
+    const menu = page.getByRole('navigation', { name: 'Start menu' });
+    await expect(menu.getByRole('button', { name: 'Code' })).toBeVisible();
+    for (const name of REMOVED) {
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+      await expect(page.getByRole('dialog', { name })).toHaveCount(0);
+    }
+    for (const hash of ['game', 'welcome']) {
+      await page.goto(`/os?embed=1#${hash}`);
+      await page.reload();
+      await expect(page.getByRole('dialog')).toHaveCount(1);
+      await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
+    }
+  });
+
+  /** Catches an About action that opens the wrong window or none, or a résumé button that navigates instead of downloading. */
+  test('About’s four ways on: Projects, Writing, Code and the résumé PDF', async ({ page }) => {
+    const ways = page.getByRole('dialog', { name: 'About' }).getByRole('navigation', { name: 'Start here' });
+    for (const [label, window] of [
+      ['Projects', 'Projects'],
+      ['Writing', 'Writing'],
+      ['Code', 'Code'],
+    ]) {
+      // A fresh boot each time, since the window an action opens covers About.
+      await page.goto('/os?embed=1');
+      await ways.getByRole('link', { name: new RegExp(`^${label}`) }).click();
+      await expect(page.getByRole('dialog', { name: window })).toBeVisible();
+    }
+    await page.goto('/os?embed=1');
+    const download = page.waitForEvent('download');
+    await ways.getByRole('link', { name: /^Résumé/ }).click();
+    expect((await download).suggestedFilename()).toBe('Saahil-Sanganeriya-resume.pdf');
+    await expect(page).toHaveURL(/\/os\?embed=1#about$/);
+  });
+
+  /** Catches a Code window that cannot show a repository's README, its file tree or a file from GitHub. */
+  test('the code viewer shows a README, the file tree and a file', async ({ page }) => {
+    await serveGithubFiles(page, '[build-system]\nrequires = ["setuptools>=42"]  # the build backend\n');
+    await page.goto('/os?embed=1#code');
+    const list = page.getByRole('dialog', { name: 'Code' });
+    await list.getByRole('link', { name: /^samcell-napari/ }).click();
+    const repo = page.getByRole('dialog', { name: 'samcell-napari' });
+    await expect(repo.getByRole('heading', { level: 1, name: NAPARI.title })).toBeVisible();
+    await expect(repo.getByRole('link', { name: 'Open on GitHub ↗' }).first()).toHaveAttribute('href', `https://github.com/${NAPARI.slug}`);
+
+    await repo.getByRole('link', { name: 'Files' }).click();
+    await expect(repo.getByRole('link', { name: 'Files' })).toHaveAttribute('aria-current', 'page');
+    const files = repo.getByRole('table');
+    await expect(files.getByRole('link', { name: 'samcell_napari' })).toBeVisible();
+    await files.getByRole('link', { name: NAPARI.file, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`#code/${NAPARI.slug}/blob/HEAD/${NAPARI.file}$`));
+    const code = repo.getByRole('region', { name: `Contents of ${NAPARI.file}` });
+    await expect(code.locator('.l')).toHaveCount(2);
+    await expect(code.locator('.tk-c')).toHaveText('# the build backend');
+    await expect(code.locator('.tk-s').first()).toHaveText('"setuptools>=42"');
+
+    // GitHub not answering is said in words, with the way to the same file on GitHub.
+    await page.unroute('https://raw.githubusercontent.com/**');
+    await page.route('https://raw.githubusercontent.com/**', (route) => route.fulfill({ status: 500, body: '' }));
+    await page.reload();
+    const failed = page.getByRole('dialog', { name: 'samcell-napari' }).getByRole('alert');
+    await expect(failed).toContainText('this file did not load: GitHub answered HTTP 500');
+    await expect(failed.getByRole('link', { name: 'Open it on GitHub ↗' })).toHaveAttribute(
+      'href',
+      `https://github.com/${NAPARI.slug}/blob/HEAD/${NAPARI.file}`,
+    );
+  });
+
+  /** Catches a link inside SaahilOS that would take the visitor out of the room: View source, a README's GitHub link, other sites. */
+  test('links stay inside SaahilOS', async ({ page }) => {
+    await serveGithubFiles(page, '');
+    await page.route('https://polyhaven.com/**', (route) =>
+      route.fulfill({ body: '<!doctype html><title>Poly Haven</title><p>A stand-in page.</p>', contentType: 'text/html' }),
+    );
+    // View source opens the project's repository in the Code window, not a tab.
+    await page.goto(`/os?embed=1#projects/${PROJECT.slug}`);
+    const source = page.getByRole('dialog', { name: PROJECT.title }).getByRole('link', { name: 'View source' });
+    await expect(source).toHaveAttribute('href', PROJECT.repo);
+    await expect(source).not.toHaveAttribute('target', /.+/);
+    await source.click();
+    await expect(page.getByRole('dialog', { name: 'real_time_streaming' })).toBeVisible();
+    await expect(page).toHaveURL(/\/os\?embed=1#code\/saahilsanganeriya\/real_time_streaming$/);
+
+    // A README's link to another of his repositories opens that one; a link to a site that refuses framing gets a tab.
+    await page.goto(`/os?embed=1#code/${NAPARI.slug}`);
+    const readme = page.getByRole('dialog', { name: 'samcell-napari' });
+    await expect(readme.getByRole('link', { name: 'PyPI' }).first()).toHaveAttribute('target', '_blank');
+    await readme.locator('.os-readme a[href="https://github.com/saahilsanganeriya/SAMCell"]').first().click();
+    await expect(page.getByRole('dialog', { name: 'SAMCell', exact: true })).toBeVisible();
+
+    // A site that allows framing opens in SaahilOS's browser, which may not navigate the room.
+    await page.goto('/os?embed=1#credits');
+    await page.getByRole('dialog', { name: 'Credits' }).locator('a[href^="https://polyhaven.com/"]').first().click();
+    const browser = page.getByRole('dialog', { name: 'polyhaven.com' });
+    const frame = browser.locator('iframe');
+    await expect(frame).toHaveAttribute('src', /^https:\/\/polyhaven\.com\//);
+    expect(await frame.getAttribute('sandbox')).not.toContain('allow-top-navigation');
+    await expect(page.frameLocator('.os-browser-frame').getByText('A stand-in page.')).toBeVisible();
+
+    // No link anywhere targets the whole tab, and the OS is still the page that was opened.
+    for (const hash of ['about', `projects/${PROJECT.slug}`, 'credits', `code/${NAPARI.slug}`]) {
+      await page.goto(`/os?embed=1#${hash}`);
+      await page.reload();
+      await expect(page.getByRole('dialog').first()).toBeVisible();
+      await expect(page.locator('a[target="_top"]'), hash).toHaveCount(0);
+    }
+    expect(new URL(page.url()).pathname).toBe('/os');
+  });
+
+  /** Catches a keyboard visitor who cannot reach About's ways on or walk the Code window's tabs and files. */
+  test('a keyboard walks About’s ways on and the code viewer', async ({ page }) => {
+    await serveGithubFiles(page, 'line one\n');
+    await page.goto('/os?embed=1');
+    const about = page.getByRole('dialog', { name: 'About' });
+    await expect(about.getByRole('heading', { level: 2 })).toBeVisible();
+    await about.focus();
+    const code = about.getByRole('link', { name: /^Code/ });
+    for (let i = 0; i < 12 && !(await code.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+    await expect(code).toBeFocused();
+    await page.keyboard.press('Enter');
+    const list = page.getByRole('dialog', { name: 'Code' });
+    await expect(list).toBeVisible();
+    const row = list.getByRole('link', { name: /^samcell-napari/ });
+    for (let i = 0; i < 40 && !(await row.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+    await expect(row).toBeFocused();
+    await page.keyboard.press('Enter');
+    const repo = page.getByRole('dialog', { name: 'samcell-napari' });
+    const filesTab = repo.getByRole('link', { name: 'Files' });
+    for (let i = 0; i < 12 && !(await filesTab.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+    await expect(filesTab).toBeFocused();
+    await page.keyboard.press('Enter');
+    const file = repo.getByRole('link', { name: NAPARI.file, exact: true });
+    for (let i = 0; i < 30 && !(await file.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+    await expect(file).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(repo.getByRole('region', { name: `Contents of ${NAPARI.file}` })).toContainText('line one');
   });
 
   /** Catches deep links (`#projects/<slug>`, the room's `#films/<id>`) that open the wrong window or none. */
@@ -99,7 +282,6 @@ test.describe('desktop', () => {
     const source = reader.getByRole('link', { name: 'View source' });
     await expect(source).toBeVisible();
     await expect(source).toHaveAttribute('href', PROJECT.repo);
-    await expect(source).toHaveAttribute('target', '_blank');
     // Polled, because the window opens on a spring from 94% scale.
     await expect.poll(async () => (await source.boundingBox())?.height).toBeGreaterThanOrEqual(30);
     expect((await source.boundingBox())!.width).toBeGreaterThanOrEqual(100);
@@ -188,16 +370,20 @@ test.describe('desktop', () => {
       );
     expect(await exhibit.locator('.os-print picture').evaluateAll(widestOffered)).toBeLessThanOrEqual(960);
 
-    await page.goto('/os?embed=1#photography/colorful-tshirts');
+    await page.goto(`/os?embed=1#photography/${PHOTO.slug}`);
     const photo = page.getByRole('dialog', { name: 'A Narrative in a Frame' });
-    await expect(photo.getByRole('heading', { level: 2, name: 'colorful tshirts on monochrome afternoons' })).toBeVisible();
+    await expect(photo.getByRole('heading', { level: 2, name: PHOTO.title, exact: true })).toBeVisible();
     const full = photo.locator('.os-photo-figure img');
-    await expect(full).toHaveAttribute('alt', /A man in a pink shirt/);
+    await expect(full).toHaveAttribute('alt', PHOTO.caption);
+    // His Instagram caption shows with the photograph when the entry has one, and nothing stands in when it does not.
+    const instagram = photo.locator('.os-photo-ig');
+    if (PHOTO.igCaption) await expect(instagram).toContainText(PHOTO.igCaption.split('\\n')[0]);
+    else await expect(instagram).toHaveCount(0);
     await expect.poll(() => full.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     expect(await photo.locator('.os-photo-figure picture').evaluateAll(widestOffered)).toBeGreaterThan(960);
     await photo.getByRole('link', { name: 'Next ›' }).click();
     await expect(page).toHaveURL(/#photography\/[a-z0-9-]+$/);
-    await expect(photo.getByRole('heading', { level: 2, name: 'colorful tshirts on monochrome afternoons' })).toBeHidden();
+    await expect(photo.getByRole('heading', { level: 2, name: PHOTO.title, exact: true })).toBeHidden();
   });
 
   /** Catches a shelf window that errors or reads as broken while its content is not written yet (zero entries). */
@@ -262,15 +448,18 @@ test.describe('desktop', () => {
     }
   });
 
-  /** Catches the wallpaper going missing, which leaves the flat walnut colour the owner ruled out. */
-  test('the desktop shows its wallpaper', async ({ page }) => {
+  /** Catches the wallpaper going missing, or showing without the credit line its CC BY licence requires. */
+  test('the desktop shows its wallpaper with its credit', async ({ page }) => {
     await page.goto('/os?embed=1');
     const wallpaper = page.locator('.os-wallpaper img');
     await expect.poll(() => wallpaper.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThanOrEqual(960);
+    const credit = page.locator('.os-wallpaper-credit');
+    await expect(credit).toContainText('NASA, ESA, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan (STScI).');
+    await expect(credit.getByRole('link')).toHaveAttribute('href', 'https://esawebb.org/images/weic2216a/');
   });
 
-  /** Catches links inside the monitor that would load a page into the iframe instead of a tab or a window. */
-  test('links: other sites in a new tab, site pages in a window, Copy link copies the window address', async ({
+  /** Catches a site link inside a window loading a page instead of a window, or Copy link copying a bare path. */
+  test('site links open their window, and Copy link copies the window address', async ({
     page,
     context,
     baseURL,
@@ -278,9 +467,6 @@ test.describe('desktop', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto(`/os?embed=1#projects/${PROJECT.slug}`);
     const reader = page.getByRole('dialog', { name: PROJECT.title });
-    const source = reader.getByRole('link', { name: 'View source' });
-    await expect(source).toHaveAttribute('target', '_blank');
-    await expect(source).toHaveAttribute('rel', 'noopener');
     // The site has no plain pages: the window's address (which opens the room and this window) goes to the clipboard.
     await reader.getByRole('button', { name: 'Copy link' }).click();
     await expect(reader.getByRole('button', { name: 'Link copied' })).toBeVisible();
@@ -337,23 +523,33 @@ test.describe('desktop', () => {
 
   /** Catches contrast, naming and ARIA failures in the chrome and in a reader window. */
   test('axe finds no serious violations', async ({ page }) => {
+    await serveGithubFiles(page, 'import napari  # the viewer\n');
     await page.goto(`/os?embed=1#projects/${PROJECT.slug}`);
     await expect(page.getByRole('heading', { level: 2, name: firstH2('projects', PROJECT.slug) })).toBeVisible();
     await page.getByRole('button', { name: 'Start' }).click();
     expect(await seriousAxeViolations(page)).toEqual([]);
 
-    // The windows with their own colours: Films on walnut, the oven list, and the project pictures.
-    for (const [hash, name] of [
-      ['films', 'Films'],
-      ['oven', 'In the oven'],
-      ['projects', 'Projects'],
-      ['about', 'About'],
-      ['photography', 'A Narrative in a Frame'],
-      ['photography/colorful-tshirts', 'A Narrative in a Frame'],
+    // Every window with its own colours or layout, each alone in a fresh load (stacked windows overlap their controls).
+    for (const [hash, name, ready] of [
+      ['films', 'Films', '#film-favourites'],
+      ['oven', 'In the oven', 'h3'],
+      ['projects', 'Projects', '.os-row'],
+      ['about', 'About', '.os-prose p'],
+      ['personal', 'Personal', '.os-folder-item'],
+      ['code', 'Code', '.os-row'],
+      [`code/${NAPARI.slug}`, 'samcell-napari', '.os-readme h1'],
+      [`code/${NAPARI.slug}/tree`, 'samcell-napari', '.os-code-files td'],
+      [`code/${NAPARI.slug}/blob/main/samcell_napari/__init__.py`, 'samcell-napari', '.os-code-text .l'],
+      [`code/${NAPARI.slug}/commits`, 'samcell-napari', '.os-code-commits li'],
+      ['photography', 'A Narrative in a Frame', '.os-print'],
+      [`photography/${PHOTO.slug}`, 'A Narrative in a Frame', '.os-photo-figure'],
     ]) {
       await page.goto(`/os?embed=1#${hash}`);
+      await page.reload();
+      const win = page.getByRole('dialog', { name });
+      await expect(win.locator(ready).first(), hash).toBeVisible();
       // Measured once the open spring has settled; mid-fade, every colour reads lighter than it is.
-      await expect(page.getByRole('dialog', { name })).toHaveCSS('opacity', '1');
+      await expect(win).toHaveCSS('opacity', '1');
       expect(await seriousAxeViolations(page), hash).toEqual([]);
     }
   });
@@ -380,19 +576,30 @@ test.describe('iPhone 13', () => {
     expect(await seriousAxeViolations(page)).toEqual([]);
     await app.getByRole('button', { name: '‹ Back' }).tap();
     await expect(app).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Films', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Code', exact: true })).toBeVisible();
   });
 
-  /** Catches About or the photographs failing axe, or spilling sideways, on a phone. */
-  test('About and the photographs fit a phone and pass axe', async ({ page }) => {
+  /** Catches the new and changed windows failing axe, or spilling sideways, on a phone. */
+  test('About, Code, the shelves, the folder and the photographs fit a phone and pass axe', async ({ page }) => {
+    await serveShelves(page, 'sample');
+    await serveGithubFiles(page, '[build-system]\nrequires = ["setuptools>=42"]\n');
     for (const [hash, name] of [
       ['about', 'About'],
+      ['code', 'Code'],
+      [`code/${NAPARI.slug}`, 'samcell-napari'],
+      [`code/${NAPARI.slug}/tree`, 'samcell-napari'],
+      [`code/${NAPARI.slug}/blob/main/${NAPARI.file}`, 'samcell-napari'],
+      ['books', 'Books'],
+      ['recipes/sample-loaf', 'Recipes'],
+      ['voyager', 'Voyager Golden Record'],
+      ['personal', 'Personal'],
       ['photography', 'A Narrative in a Frame'],
       ['photography/cansupport', 'A Narrative in a Frame'],
     ]) {
       await page.goto(`/os?embed=0#${hash}`);
+      await page.reload();
       const app = page.getByRole('dialog', { name });
-      await expect.poll(() => app.boundingBox()).toEqual({ x: 0, y: 0, ...iPhone13.viewport });
+      await expect.poll(() => app.boundingBox(), hash).toEqual({ x: 0, y: 0, ...iPhone13.viewport });
       const body = app.locator('.os-phone-body');
       expect(await body.evaluate((el) => el.scrollWidth - el.clientWidth), hash).toBeLessThanOrEqual(0);
       expect(await seriousAxeViolations(page), hash).toEqual([]);

@@ -64,6 +64,8 @@ function Rendered({ html, className = '' }: { html: string; className?: string }
     const root = ref.current;
     if (!root) return;
     decorateLinks(root);
+    // Code blocks and wide tables scroll sideways on a narrow window; a keyboard has to be able to reach them.
+    for (const block of root.querySelectorAll<HTMLElement>('pre, table')) block.tabIndex = 0;
     // A picture stored with Git LFS is a pointer file on raw.githubusercontent.com; GitHub serves the bytes elsewhere.
     const onError = (event: Event) => {
       const img = event.target;
@@ -236,7 +238,7 @@ function CodeBlock({ text, path }: { text: string; path: string }) {
     };
   }, [text, path]);
   return (
-    <pre className="os-code-text" tabIndex={0} aria-label={`Contents of ${path}`}>
+    <pre className="os-code-text" role="region" tabIndex={0} aria-label={`Contents of ${path}`}>
       {html === null ? <code>{text}</code> : <code dangerouslySetInnerHTML={{ __html: html }} />}
     </pre>
   );
