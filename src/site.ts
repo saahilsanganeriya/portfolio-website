@@ -7,7 +7,8 @@ export const SITE = {
   linkedin: 'https://www.linkedin.com/in/saahil-sanganeriya/',
   letterboxd: 'https://letterboxd.com/saahilsan/',
   ogImage: '/og/default.png',
-  ogImageAlt: 'Saahil Sanganeriya, in cream serif type on a dark background, above a thin red thread.',
+  ogImageAlt:
+    'A pixel drawing of a cream vintage computer with a glowing amber screen, beside the name Saahil Sanganeriya and the line Software Engineer, Applied AI at Mercor.',
 } as const;
 
 export const NAV = [
