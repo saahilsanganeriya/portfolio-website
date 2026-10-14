@@ -1,5 +1,5 @@
-// The owner's photography (src/content/photography, written by `npm run photos:ingest`) for the room's prints,
-// album and projector. This module is its own chunk, imported only once the room is interactive; the pictures
+// The owner's photography (src/content/photography, written by `npm run photos:ingest`) for the room's Instax board,
+// album and projector, all in the collection's own order (its `order`: the board's prints first). This module is its own chunk, imported only once the room is interactive; the pictures
 // themselves load later still, a few at a time.
 import type { ImageMetadata } from 'astro';
 
@@ -19,6 +19,9 @@ export interface Photograph {
   featured: boolean;
   onWall: boolean;
   order: number;
+  /** His marker caption for the Instax print, when he has one; the date he posted it (YYYY-MM-DD). */
+  sharpie?: string;
+  date?: string;
   /** 480 px on the long edge: prints on the wall. */
   small: Picture;
   /** 960 px: album pages and the projector. */
@@ -68,21 +71,19 @@ export const PHOTOGRAPHS: Photograph[] = Object.entries(entries)
         featured: data.featured === true,
         onWall: data.onWall === true,
         order: Number(data.order ?? Number.MAX_SAFE_INTEGER),
+        sharpie: typeof data.sharpie === 'string' ? data.sharpie : undefined,
+        date: typeof data.date === 'string' ? data.date : undefined,
         small,
         medium,
       },
     ];
   })
-  .sort((a, b) => Number(b.featured) - Number(a.featured) || a.series.localeCompare(b.series) || a.order - b.order);
+  .sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug));
 
+/** The album's sections, in the board's order: his favourites, then the rest of the collection. */
 export function sections(photos: Photograph[] = PHOTOGRAPHS): PhotoSection[] {
-  const result: PhotoSection[] = [];
   const favourites = photos.filter((p) => p.featured);
-  if (favourites.length) result.push({ title: 'Favourites', photos: favourites });
-  for (const photo of photos.filter((p) => !p.featured)) {
-    const section = result.find((s, i) => (i > 0 || !favourites.length) && s.title === photo.series);
-    if (section) section.photos.push(photo);
-    else result.push({ title: photo.series, photos: [photo] });
-  }
-  return result;
+  const rest = photos.filter((p) => !p.featured);
+  if (!favourites.length) return rest.length ? [{ title: 'Photographs', photos: rest }] : [];
+  return rest.length ? [{ title: 'Favourites', photos: favourites }, { title: 'More photographs', photos: rest }] : [{ title: 'Favourites', photos: favourites }];
 }
