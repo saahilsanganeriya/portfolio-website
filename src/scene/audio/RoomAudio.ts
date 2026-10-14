@@ -52,15 +52,15 @@ const EFFECTS = {
 } as const satisfies Record<string, Effect>;
 export type SfxName = keyof typeof EFFECTS;
 
-/** The sound a click on each prop makes (by its proxy in room.glb). */
+/**
+ * The sound a click on each prop makes (by its proxy in room.glb). The espresso machine, the oven and the projector are
+ * not here: the room plays their recordings when they act, once the camera has flown to them (src/scene/World/).
+ */
 const HOTSPOT_SFX: Record<string, SfxName> = {
   hit_fujifilm_a: 'shutter',
   hit_fujifilm_b: 'shutter',
   hit_fujifilm_c: 'shutter',
   hit_super8: 'super8',
-  hit_projector: 'projector-clack',
-  hit_espresso: 'espresso',
-  hit_oven: 'oven',
   hit_lava_lamp: 'lava',
 };
 
