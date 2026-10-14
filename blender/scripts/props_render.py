@@ -23,7 +23,6 @@ import props_lib as pl  # noqa: E402
 HERO_VIEW = {
     "default": (32, 18),
     "poster_frame": (24, 8),
-    "projector_screen": (28, 10),
     "nas_4bay": (36, 20),
     "books_stack": (30, 28),
     "film_canister": (28, 26),
