@@ -10,23 +10,25 @@ On 5 October a `docker restart` went to Jellyfin, one of the two apps that strea
 
 Nothing about that is unusual. A process can stop between any two steps: a crash, a deploy, an update to the server's operating system. I built [projectionist](/projects/projectionist), the service that runs my home server's chores, around one rule for that moment. Every stage must be safe to run again.
 
-## What "again" has to survive
+## The contract every stage signs
 
 projectionist is one Go service on a small Synology NAS. It has 15 stages, and some of them work for hours: an encode can run for six. The rename stage alone has made 13,085 moves, every one written down in its undo log.
 
 The contract every stage signs is one sentence in the code. A rerun after a crash finishes the work and never repeats a side effect. For a rename, a move that already happened is not made again, and a move that never happened is not forgotten, leaving a show split across two folders.
 
-## Check, then act
+## The old scripts checked, then acted
 
 The scripts I had before did the obvious thing. Check whether the destination exists, and if it does not, rename. Between the check and the rename, another process can create that file, and the rename then quietly replaces it.
 
-They also made every step durable on its own. The old mover synced its log to disk after every single move, and ran a separate permissions tool for every new folder. It managed about 18 operations a second. The Docker restart shows a third habit: trusting that a command which returned also did what it said.
+They also made every step durable on its own. The old mover synced its log to disk after every single move and ran a separate permissions tool for every new folder. Those two habits are what made it slow. The Docker restart shows a third habit: trusting that a command which returned also did what it said.
 
 ## Three habits instead
 
 **Ask the disk, not your memory.** The rename executor decides each move against the disk as it is now. If the source is gone and the destination is there, the move is done. A unit, one film or one show, that stops halfway stays half done, and the next run plans again from the disk and finishes it. The scheduler works the same way. It reads each stage's last start time from SQLite, so a restart never runs a stage early.
 
-**Write down what you are about to do, then do it.** Before a unit moves anything, its whole list of intended moves goes into the undo log, and the log is synced once. Then the moves run, each folder they touched is synced once, and a "unit-done" line closes the entry. The health stage writes a container restart into SQLite, with its own time, before it sends the stop. If the process dies between stop and start, the next run sees a container that stopped after a recorded restart, and starts it.
+**Write down what you are about to do, then do it.** This is the idea behind a database's write-ahead log, at the size of one film or one show. Before a unit moves anything, its whole list of intended moves goes into the undo log, and the log is synced once. Then the moves run, each folder they touched is synced once, and a "unit-done" line closes the entry.
+
+The health stage writes a container restart into SQLite, with its own time, before it sends the stop. If the process dies between stop and start, the next run sees a container that stopped after a recorded restart, and starts it.
 
 <figure class="os-figure">
 
@@ -50,17 +52,19 @@ They also made every step durable on its own. The old mover synced its log to di
 
 **Use operations that refuse to happen twice.** Every library move is one system call, `renameat2` with `RENAME_NOREPLACE`, which fails if anything already holds the new name. A subtitle file is created with `O_EXCL`, so it is never written over. Where refusing would mean skipping the same item on every run forever, the code converges instead. An archive whose name an older archive already holds becomes "(2)", then "(3)".
 
+Undo counts too. A file that undo put back stays put until I rename it myself, so a rerun never quietly redoes it.
+
 The same thinking reaches the parts that are not files. A run that a shutdown cuts off is recorded as interrupted, and that is not an outcome, so a restart alone neither raises nor clears an alert. A cut-off run that had already raised an alert is recorded as one, because some alerts are sent only once. And when a call to a paid model loses its answer, the stage counts it against its budget at the worst case, because it may still have been billed.
 
-## What this costs
+## A half-done show, and a slower restart
 
 A half-done unit is visible. Until the next run, a show can sit in two folders, and anyone browsing the library sees that.
 
 Syncing once per unit instead of once per move means a crash can undo more than one move's durability. The next run redoes what the disk shows is missing, so nothing is lost, but the work is.
 
-Distrust is slow. A container restart is now three steps: stop with a grace period, start, then poll the app's own health check every five seconds, for up to five minutes. Restarts are also off unless I list a container as restartable. Counting a lost answer at its worst case overstates spend against the posters stage's $12 budget. And undo is honoured: a file that undo put back stays put until I rename it myself.
+Distrust is slow. A container restart is now three steps: stop with a grace period, start, then poll the app's own health check every five seconds, for up to five minutes. Restarts are also off unless I list a container as restartable. Counting a lost answer at its worst case overstates spend against the posters stage's $12 budget.
 
-## What the tests show, and do not
+## The test runs it twice, then undoes it
 
 The rename stage's main test runs the stage twice over a small library. The second run must leave the undo log byte for byte the same, finish no units and raise no alerts. Then it undoes everything and checks that the tree is exactly as it was, and that a second undo writes nothing. On the NAS, in a sandbox of 20 real folders, the same steps held.
 
@@ -68,6 +72,6 @@ A separate test starts from a unit whose video had already moved before the run 
 
 No rename test kills the process in the middle of a unit. Each crash is a state the test builds by hand, from a picture of where a crash can land.
 
-## What's next
+## A test that kills it mid-unit
 
-Two chores still run as old scripts: backing up Plex's database and taking in new arrivals. Each will meet the same contract before its script is deleted, a second run that changes nothing. The code is in the [projectionist repository](/os#code/saahilsanganeriya/projectionist), and the [first post about it](/blog/projectionist-home-lab) has the stories behind the rules.
+The first gap to close is the one above: a test that kills the process at each of the five steps of a rename unit, then checks that the next run finishes the unit and moves nothing twice. After that, two chores still run as old scripts: backing up Plex's database and taking in new arrivals. Each will meet the same contract before its script is deleted, a second run that changes nothing. The code is in the [projectionist repository](/os#code/saahilsanganeriya/projectionist), and the [first post about it](/blog/projectionist-home-lab) has the stories behind the rules.
