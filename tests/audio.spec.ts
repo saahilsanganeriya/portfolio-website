@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
 // Headless Chromium only has WebGL through SwiftShader; the room needs it. Every test here runs under the autoplay
@@ -81,6 +81,24 @@ test('a first click inside SaahilOS on the monitor starts the sound', async ({ p
   expect((await graph(page)).context).toBe('none');
   await about.click();
   await expect.poll(async () => (await graph(page)).context, { timeout: 15_000 }).toBe('running');
+});
+
+test.describe('on a phone', () => {
+  const { defaultBrowserType: _browser, ...iPhone13 } = devices['iPhone 13'];
+  test.use(iPhone13);
+
+  /** Catches a phone deep link whose first tap lands inside SaahilOS (the drawn monitor's own document) and starts nothing. */
+  test('a first tap inside SaahilOS on a phone starts the sound', async ({ page }) => {
+    await page.goto('/about');
+    await page.waitForFunction(() => /room-os|room-2d/.test(document.documentElement.className), null, { timeout: 120_000 });
+    // Too slow here for the light room: the drawn monitor took over, and it has no room (or room sound) behind it.
+    test.skip((await page.locator('html.room-2d').count()) > 0, 'the light room fell back to the drawn monitor on this machine');
+    const about = page.frameLocator('[data-monitor-glass] iframe').getByRole('dialog', { name: 'About' });
+    await expect(about).toBeVisible();
+    expect((await graph(page)).context).toBe('none');
+    await about.tap();
+    await expect.poll(async () => (await graph(page)).context, { timeout: 15_000 }).toBe('running');
+  });
 });
 
 /** Catches a volume or mute that resets on the next visit, and a remembered mute that the first input overrides. */
