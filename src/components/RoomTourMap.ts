@@ -1,9 +1,14 @@
 import type { RoomHandle, StationName } from '../scene/main';
 
+type Segment = [[number, number], [number, number]];
+
 /** public/room/floorplan.json, written from the blend file: plan coordinates are the room's x and z in metres. */
 export interface FloorPlan {
+  /** The floor; its sides without a wall are the room's open front. */
   outline: [number, number][];
-  doors?: [[number, number], [number, number]][];
+  walls?: Segment[];
+  windows?: Segment[];
+  doors?: Segment[];
   furniture?: { label?: string; polygon: [number, number][] }[];
   /** In tour order: the work first, then the rest. */
   stops: { id: string; label: string; camera: string; position: [number, number] }[];
@@ -61,7 +66,22 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   q<HTMLElement>('[data-tour-plan]').style.aspectRatio = `${width} / ${height}`;
 
   const polygonPoints = (polygon: [number, number][]) => polygon.map(([x, z]) => `${x},${z}`).join(' ');
-  q<SVGPolygonElement>('[data-tour-outline]').setAttribute('points', polygonPoints(plan.outline));
+  const floor = q<SVGPolygonElement>('[data-tour-outline]');
+  floor.setAttribute('points', polygonPoints(plan.outline));
+  // With walls of its own, the outline is only the floor's edge; without, it stands for the walls.
+  if (plan.walls) floor.classList.add('room-tour-floor');
+  const segments = (group: SVGGElement, list: Segment[] | undefined, className: string) => {
+    for (const [[x1, z1], [x2, z2]] of list ?? []) {
+      const line = document.createElementNS(SVG_NS, 'line');
+      line.setAttribute('class', className);
+      Object.entries({ x1, y1: z1, x2, y2: z2 }).forEach(([k, v]) => line.setAttribute(k, String(v)));
+      group.append(line);
+    }
+  };
+  const walls = q<SVGGElement>('[data-tour-walls]');
+  segments(walls, plan.walls, 'room-tour-wall');
+  segments(walls, plan.windows, 'room-tour-window-gap');
+  segments(walls, plan.windows, 'room-tour-window');
   const furniture = q<SVGGElement>('[data-tour-furniture]');
   for (const piece of plan.furniture ?? []) {
     const shape = document.createElementNS(SVG_NS, 'polygon');
