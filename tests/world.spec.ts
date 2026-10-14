@@ -65,6 +65,24 @@ test('each half of the window shows its own cityâ€™s day or night, by that cityâ
   expect(night.delhi).toMatchObject({ local: '1:30 pm', night: 0 });
 });
 
+/**
+ * Catches the first load growing with the clock: both cities can be mid-twilight at once (2026-11-10T01:07Z: San
+ * Francisco's dusk, Delhi's dawn), and all four window pictures loaded before the room was interactive, which put the
+ * initial payload over 6 MB. One picture per city loads with the room; each city's second follows after it.
+ */
+test('at an hour when both cities blend, the room loads one window picture per city first and the rest after', async ({ page }) => {
+  const started: { url: string; at: number }[] = [];
+  page.on('request', (request) => /\/room\/window_[a-z]+_(day|night)\.ktx2$/.test(request.url()) && started.push({ url: request.url(), at: Date.now() }));
+  await page.clock.setFixedTime('2026-11-10T01:07:00Z');
+  await inRoom(page);
+  const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
+  const first = started.filter(({ at }) => at < interactive).map(({ url }) => url.replace(/.*\/room\//, ''));
+  expect(first).toHaveLength(2);
+  expect(new Set(first.map((f) => f.split('_')[1]))).toEqual(new Set(['sf', 'delhi']));
+  await page.waitForFunction(() => Object.values(window.__room!.world.window!).every((city) => city.loaded.length === 2), null, { timeout: 30_000 });
+  expect(started).toHaveLength(4);
+});
+
 /** Catches an album that does not open from the desk, does not page in both directions, or traps the visitor. */
 test('the photo album opens from the desk, pages both ways, and closes with Escape or a click beside it', async ({ page }) => {
   await inRoom(page);

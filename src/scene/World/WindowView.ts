@@ -7,7 +7,7 @@ import type { WindowViewNode } from './nodes';
 import type { TextureStore } from './textures';
 
 // The window looks out on San Francisco (left) and Delhi (right); each half shows day or night by that city's own
-// sun. Only the pictures needed now load with the room; the other set loads once it will be needed within the hour,
+// sun. One picture per city loads with the room; the other loads once it will be needed within the hour,
 // or when the camera comes to the window, where the two skies blend across the seam (from further away the seam
 // sits behind the window's central bar).
 
@@ -92,10 +92,14 @@ export class WindowView {
         : 0;
   }
 
-  /** Sets each half for the current time and loads the pictures that needs, before the room is shown. */
+  /**
+   * Sets each half for the current time and loads one picture per city before the room is shown: the one its sky is
+   * nearer now. A city at dusk or dawn gets its other picture once the room is interactive (allowOnDemand) and then
+   * blends, so the first load is the same size at every hour (both cities can be mid-twilight at once).
+   */
   async load() {
     this.check(true);
-    await Promise.all(this.views.flatMap((view) => (['day', 'night'] as const).filter((p) => this.needs(view, p, 0)).map((p) => this.fetch(view, p))));
+    await Promise.all(this.views.map((view) => this.fetch(view, view.target >= 0.5 ? 'night' : 'day')));
     this.apply();
   }
 
