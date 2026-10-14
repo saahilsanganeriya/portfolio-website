@@ -10,11 +10,6 @@
     "use": "about"
   },
   {
-    "file": "convertible-sky",
-    "alt": "Me in tortoiseshell sunglasses and a grey sweater, smiling in an open car under a blue sky crossed by contrails.",
-    "use": "about"
-  },
-  {
     "file": "childhood-home",
     "alt": "Me as a boy in a red and white T-shirt, grinning at the camera, a desk and a curtained window behind me.",
     "use": "thread"
@@ -33,6 +28,11 @@
     "file": "convertible-camera",
     "alt": "Me in sunglasses in an open car, a film camera on a strap around my neck, against a blue sky.",
     "use": "opening"
+  },
+  {
+    "file": "graduation",
+    "alt": "Me in a black graduation gown and a gold tie, cap in hand, on the steps below Tech Tower at Georgia Tech, autumn trees on either side.",
+    "use": "about"
   },
   {
     "file": "prague",
