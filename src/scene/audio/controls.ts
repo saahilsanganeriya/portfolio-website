@@ -16,7 +16,9 @@ const storage = () => {
 
 /**
  * The Sound toggle (pressed = sound on) and the volume slider, both remembered across visits. A remembered mute holds:
- * the visitor's first click or key no longer starts the sound, only the toggle does.
+ * the visitor's first click or key no longer starts the sound, only the toggle does. Until the sound first starts, the
+ * toggle is marked `data-hint` (it glows gently) so a visitor knows the room has sound; one who turned it off is not
+ * nagged.
  */
 export function mountSoundControls(toggle: HTMLButtonElement, slider: HTMLInputElement, store: Storage | null = storage()): SoundControls {
   const settings: SoundSettings = readSettings(store);
@@ -25,6 +27,7 @@ export function mountSoundControls(toggle: HTMLButtonElement, slider: HTMLInputE
 
   const show = () => {
     toggle.setAttribute('aria-pressed', String(Boolean(audio?.unlocked) && !settings.muted));
+    toggle.toggleAttribute('data-hint', !audio?.unlocked && !settings.muted);
     slider.setAttribute('aria-valuetext', `${slider.value} percent`);
   };
 
