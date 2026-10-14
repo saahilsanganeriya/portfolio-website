@@ -80,3 +80,37 @@ export function decorateLinks(root: HTMLElement): void {
     if (rel) anchor.rel = rel;
   }
 }
+
+// Native lazy loading measures distance to the frame's viewport, so every picture in a window's scroll area loads at
+// once. Window HTML keeps its pictures' addresses aside (data-src, data-srcset) until they come near the window's view.
+export function deferPictures(html: string): string {
+  return html.replace(/<(?:img|source)\b[^>]*>/g, (tag) => tag.replace(/\s(src|srcset)=/g, ' data-$1='));
+}
+
+/** Loads each deferred picture under `root` as it nears the visible part of its window; returns a cleanup. */
+export function revealPicturesNearView(root: HTMLElement): () => void {
+  const reveal = (img: HTMLImageElement) => {
+    for (const source of img.parentElement?.matches('picture') ? img.parentElement.querySelectorAll('source') : []) {
+      if (source.dataset.srcset) source.srcset = source.dataset.srcset;
+    }
+    if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+    if (img.dataset.src) img.src = img.dataset.src;
+  };
+  const pending = [...root.querySelectorAll<HTMLImageElement>('img[data-src], img[data-srcset]')];
+  if (typeof IntersectionObserver === 'undefined') {
+    pending.forEach(reveal);
+    return () => {};
+  }
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        reveal(entry.target as HTMLImageElement);
+        observer.unobserve(entry.target);
+      }
+    },
+    { root: root.closest('.os-well, .os-phone-body'), rootMargin: '400px 0px' },
+  );
+  pending.forEach((img) => observer.observe(img));
+  return () => observer.disconnect();
+}

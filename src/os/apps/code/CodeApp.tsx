@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type Rea
 import { PixelIcon } from '../../assets/PixelIcon';
 import { formatDay } from '../../format';
 import { useWindowStatus } from '../../wm/Window';
-import { decorateLinks } from '../content';
+import { decorateLinks, deferPictures, revealPicturesNearView } from '../content';
 import { DetailsList } from '../Lists';
 import { ThreadLoader } from '../Reader';
 import { CodeError, loadRepo, loadText, rawUrl, type Commit, type Entry, type Repo } from './data';
@@ -75,7 +75,11 @@ function Rendered({ html, className = '' }: { html: string; className?: string }
       img.src = img.src.replace('https://raw.githubusercontent.com/', 'https://media.githubusercontent.com/media/');
     };
     root.addEventListener('error', onError, true);
-    return () => root.removeEventListener('error', onError, true);
+    const stopRevealing = revealPicturesNearView(root);
+    return () => {
+      root.removeEventListener('error', onError, true);
+      stopRevealing();
+    };
   }, [html]);
   // In-page links (`#installation`) scroll to their heading instead of changing the OS's window address.
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -89,7 +93,12 @@ function Rendered({ html, className = '' }: { html: string; className?: string }
   };
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
-    <div ref={ref} className={`os-prose os-readme ${className}`} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
+    <div
+      ref={ref}
+      className={`os-prose os-readme ${className}`}
+      onClick={onClick}
+      dangerouslySetInnerHTML={{ __html: deferPictures(html) }}
+    />
   );
 }
 

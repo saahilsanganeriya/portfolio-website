@@ -352,6 +352,19 @@ test.describe('desktop', () => {
     await expect(about.locator('.os-prose img')).toHaveCount(ABOUT.photos);
   });
 
+  /** Catches every picture in a window loading at once, which put all of About's photos into the room's first load. */
+  test('pictures far down a window load only when scrolled near', async ({ page }) => {
+    await page.goto('/os?embed=1');
+    const about = page.getByRole('dialog', { name: 'About' });
+    const photos = about.locator('.os-prose img');
+    await expect(photos).toHaveCount(ABOUT.photos);
+    await expect.poll(() => photos.first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+    const last = photos.last();
+    await expect(last).not.toHaveAttribute('src', /.+/);
+    await about.locator('.os-well').evaluate((well) => well.scrollTo(0, well.scrollHeight));
+    await expect.poll(() => last.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  });
+
   /** Catches a photograph's deep link opening the wrong one, and full-size files loading before a photograph is opened. */
   test('A Narrative in a Frame: thumbnails first, the full photograph on open', async ({ page }) => {
     await page.goto('/os?embed=1#photography');

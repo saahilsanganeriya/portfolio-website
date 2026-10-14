@@ -2,14 +2,16 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { formatDay } from '../format';
 import type { OsApi, OsFigure, OsImage, OsPost, OsProject } from '../types';
 import { useWindowStatus } from '../wm/Window';
-import { decorateLinks, linkAttributes, useContent, type ContentState } from './content';
+import { decorateLinks, deferPictures, linkAttributes, revealPicturesNearView, useContent, type ContentState } from './content';
 
 function Prose({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    if (ref.current) decorateLinks(ref.current);
+    if (!ref.current) return;
+    decorateLinks(ref.current);
+    return revealPicturesNearView(ref.current);
   }, [html]);
-  return <div ref={ref} className="os-prose" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={ref} className="os-prose" dangerouslySetInnerHTML={{ __html: deferPictures(html) }} />;
 }
 
 /** The thread drawing across the window while a page loads. */
