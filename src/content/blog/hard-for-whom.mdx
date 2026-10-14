@@ -6,21 +6,23 @@ tags: ["engineering", "evaluation", "swe-sim", "essays"]
 draft: false
 ---
 
-At 20:02 UTC on 13 September, [swe-sim](/projects/swe-sim) put a label on the first task it ran on its hosted pipeline. The label was "broken". Under the rule I had written, a broken task stayed off the leaderboard.
+Zero out of one was all it took. On 13 September [swe-sim](/projects/swe-sim) labelled the first task on its hosted pipeline "broken", because its screen model had failed the full brief on its only try. Under the rule I had written, a broken task stayed off the leaderboard.
 
-By 20:28 the comparison run was in. Four models had tried the same task under three briefs. Two of them solved every trial they got, 7 of 7 and 6 of 6.
+Less than half an hour later the comparison run was in. Four models had tried the same task under three briefs, two tries each. Two of them solved all six of their trials.
 
 A task cannot be broken for some models and trivial for others. The label had measured something real, just not the task.
 
-## What a label is for
+## A cheap screen with an expensive verdict
 
 swe-sim turns real GitHub issues into tasks for coding agents. Each task runs under three briefs: the full brief holds every fact the issue's discussion settled, the hidden brief holds only the issue as written, and the interactive brief is the hidden one plus someone the agent can ask.
 
-Before a task counts, a cheap screen sorts it. One fixed model runs the hidden brief twice and the full brief once. That is three trials. All 29 trials on that first task cost $3.01, so the screen itself is cheap. What it decides is not.
+Before a task counts, a cheap screen sorts it. One fixed model runs the hidden brief twice and the full brief once. That is three trials.
+
+All 29 trials on that first task cost $3.01: one demonstration trial, the three screen trials, the 24 of the comparison, and one more full-brief trial by a comparison model that the record does not tie to a run. So the screen itself is cheap. What it decides is not.
 
 A wrong label is expensive in both directions. Call a good task broken and it is thrown away. Call an easy task informative and it inflates every model's score.
 
-## The rule I wrote
+## One failure on the full brief meant broken
 
 The rule fits in one line of code. If the full brief fails, the task is broken. If the hidden brief passes twice, it is saturated. Anything else is informative.
 
@@ -39,20 +41,25 @@ The screen model failed the full brief once and passed the hidden brief once in 
  comparison run
  screen model     0/2     2/2      2/2
  model 2          0/2     1/2      2/2
- model 3          3/3     2/2      2/2
+ model 3          2/2     2/2      2/2
  model 4          2/2     2/2      2/2
+
+ run not recorded
+ model 3          1/1      --       --
 ```
 
-<figcaption>The screen's three trials, then the comparison run on the same task: the screen model and one other failed the full brief, and two models solved every brief.</figcaption>
+<figcaption>The screen's three trials, the comparison run on the same task, and model 3's extra full-brief trial in a row of its own: the screen model and one other failed the full brief, and two models solved every brief.</figcaption>
 </figure>
 
-One failure at a single try from one model cannot tell "the task is broken" apart from "this model cannot do it". Here both were partly true. The full brief did carry a defect: one fact claimed more than the tests required, and one failed attempt traces straight to it (the [project page](/projects/swe-sim) tells that story). Two other models solved the full brief anyway, 3 of 3 and 2 of 2.
+One failure at a single try from one model cannot tell "the task is broken" apart from "this model cannot do it". Here both were partly true. The full brief did carry a defect: one fact claimed more than the tests required, and one failed attempt traces straight to it (the [project page](/projects/swe-sim) tells that story). Two other models solved the full brief anyway, 2 of 2 each in the comparison.
 
 So the label described a pair, the task and the screen model. The repository's run notes from that afternoon say so in nearly those words, and add that a single full-brief try is a noisy screen.
 
 ## Difficulty as a gradient
 
 The ruling I made that day was that difficulty depends on the model. The screen's label stays on the task as a record of what that one run saw, and as a filter I can choose to apply. It no longer gates the leaderboard. A task joins once it is valid and an audit finds it coherent with fair tests.
+
+The idea is old. Item response theory, which is used to design and score tests, makes the chance of a right answer depend on both the item and the ability of whoever answers it. swe-sim fits no such model, but it reached the same idea from one mislabelled task.
 
 Difficulty is now read across models. swe-sim sorts solvers into five tiers, from older open models at A to frontier models at E, and shows each task's accuracy by tier, for each brief, with the number of trials beside every cell. A chip summarises each row.
 
@@ -76,20 +83,20 @@ Difficulty is now read across models. swe-sim sorts solvers into five tiers, fro
 
 The table tests one expectation: frontier models should score high, and last-generation models should not match them. "Suspicious" marks the row that breaks it hardest, an older model beating the frontier by more than one trial can explain. The chip sits on the task, because that is the first suspect.
 
-Trials are also kept apart by purpose. Screen, comparison, demonstration and calibration trials never pool. That is why the table above shows the screen model's comparison trials apart from its screen trials. Pass@k stays empty until a cell has at least k attempts, and k is never quietly lowered to fit. No single-purpose cell on this task had three, so it has no pass@3.
+Trials are also kept apart by purpose. Screen, comparison, demonstration and calibration trials never pool. That is why the table above shows the screen model's comparison trials apart from its screen trials, and model 3's third full-brief trial apart from its comparison. Pass@k stays empty until a cell has at least k attempts, and k is never quietly lowered to fit. No single-purpose cell on this task had three, so it has no pass@3.
 
-## What this costs
+## Giving up the gate
 
 I gave up a gate. Without one, an easy task inflates every model's score until the chips catch it. That is a real cost, and the chips are coarse at these sizes: with two trials a cell, one trial's worth is 50 points.
 
 Reading a gradient also needs many models on every task. The comparison alone took 24 trials: four models, three briefs, two tries each. That was cheap here. It multiplies with every model and every task.
 
-## What the numbers say, and do not
+## Three trials said broken, twenty-four did not
 
 The screen spent three trials on one model and said "broken". The comparison spent 24 on four models and found the task saturated for two of them and informative for the other two. Cost says nothing about difficulty either. Two models both went 2 for 2 on the interactive brief, one at about a quarter of a cent a trial and the other at about 23 cents.
 
-This is one task with two to five trials a cell. None of the four models came from the two frontier tiers, so this task's gradient has no top end yet. It shows that one screen model can mislabel a task. It does not show how often.
+This is one task, with two trials in each comparison cell. None of the four models came from the two frontier tiers, so this task's gradient has no top end yet. It shows that one screen model can mislabel a task. It does not show how often.
 
-## What's next
+## A fresh repository and the top two tiers
 
 The screen has not yet run on a task built from a fresh repository, and on the hosted pipeline no model from the top two tiers has run at all. Both are next, with at least three trials in every cell, because that is what a pass@3 needs. The code is in the [swe-sim repository](/os#code/saahilsanganeriya/swe-sim). The grading record, with every number and caveat, is its `docs/grading.md`.
