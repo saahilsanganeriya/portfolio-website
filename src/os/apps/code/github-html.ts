@@ -35,6 +35,8 @@ export function cleanGithubHtml(html: string): string {
       .replace(/<img\b(?![^>]*\sloading=)/g, '<img loading="lazy" decoding="async"')
       .replace(/\sdata-snippet-clipboard-copy-content="[^"]*"/g, '')
       .replace(/\sdir="auto"/g, '')
+      // A fenced block's language (`<pre lang="mermaid">`) is not a human language; as `lang` it fails WCAG 3.1.2.
+      .replace(/(<pre\b[^>]*?)\slang="([^"]*)"/g, '$1 data-lang="$2"')
       .trim()
   );
 }
