@@ -8,7 +8,7 @@ interface DesktopIconsProps {
   phone: boolean;
   selected: AppId | null;
   onSelect: (id: AppId | null) => void;
-  onOpen: (id: AppId) => void;
+  onOpen: (id: AppId, from: Element) => void;
 }
 
 /** Win98 rules on a desktop (click selects, double-click or Enter opens); one tap opens on a phone. */
@@ -25,10 +25,10 @@ export function DesktopIcons({ phone, selected, onSelect, onOpen }: DesktopIcons
               style={{ '--icon-mask': iconMaskUrl(APPS[id].icon) } as CSSProperties}
               onClick={(event) => {
                 // detail 0 is a keyboard activation (Enter or Space).
-                if (phone || event.detail === 0) onOpen(id);
+                if (phone || event.detail === 0) onOpen(id, event.currentTarget);
                 else onSelect(id);
               }}
-              onDoubleClick={() => onOpen(id)}
+              onDoubleClick={(event) => onOpen(id, event.currentTarget)}
             >
               <span className="os-icon-art">
                 <PixelIcon name={APPS[id].icon} size={32} />

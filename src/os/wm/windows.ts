@@ -17,6 +17,13 @@ export interface WindowState {
   frame: Frame;
   /** Bumped each time a person opens the window, so keyboard focus moves into it; 0 for windows the OS opened. */
   focusRequest: number;
+  /** Where on the desktop it was opened from (the icon or link), so it can grow out of that point. */
+  origin: Point | null;
+}
+
+export interface Point {
+  x: number;
+  y: number;
 }
 
 export interface WindowsState {
@@ -26,7 +33,14 @@ export interface WindowsState {
 }
 
 export type WindowsAction =
-  | { type: 'open'; id: string; route: Route; desktop: { width: number; height: number }; focus: boolean }
+  | {
+      type: 'open';
+      id: string;
+      route: Route;
+      desktop: { width: number; height: number };
+      focus: boolean;
+      origin?: Point | null;
+    }
   | { type: 'focus'; id: string }
   | { type: 'close'; id: string }
   | { type: 'minimize'; id: string }
@@ -69,6 +83,7 @@ export function windowsReducer(state: WindowsState, action: WindowsAction): Wind
         maximized: false,
         frame: frameFor(action.route, state.cascade, action.desktop),
         focusRequest: action.focus ? 1 : 0,
+        origin: action.origin ?? null,
       };
       return { windows: [...state.windows, opened], nextZ: state.nextZ + 1, cascade: state.cascade + 1 };
     }
@@ -102,23 +117,28 @@ export interface AppWindowSize {
   height: number;
 }
 
+// Three sizes so windows feel of a set: lists, readers and wide windows; About (the first view) and the folder are their own.
+const LIST: AppWindowSize = { width: 640, height: 520 };
+const READER: AppWindowSize = { width: 720, height: 600 };
+const WIDE: AppWindowSize = { width: 880, height: 640 };
+
 const SIZES: Record<AppId | 'reader', AppWindowSize> = {
-  photography: { width: 860, height: 640 },
-  projects: { width: 640, height: 500 },
-  code: { width: 900, height: 640 },
-  browser: { width: 900, height: 640 },
-  oven: { width: 560, height: 620 },
-  blog: { width: 600, height: 440 },
-  reader: { width: 720, height: 580 },
-  films: { width: 780, height: 580 },
-  books: { width: 640, height: 560 },
-  personal: { width: 520, height: 300 },
-  recipes: { width: 720, height: 600 },
-  voyager: { width: 720, height: 600 },
-  terminal: { width: 760, height: 440 },
   about: { width: 780, height: 700 },
-  resume: { width: 660, height: 580 },
-  credits: { width: 600, height: 540 },
+  projects: LIST,
+  blog: LIST,
+  oven: LIST,
+  books: LIST,
+  credits: LIST,
+  reader: READER,
+  resume: READER,
+  recipes: READER,
+  voyager: READER,
+  code: WIDE,
+  browser: WIDE,
+  films: WIDE,
+  photography: WIDE,
+  terminal: { width: 760, height: 460 },
+  personal: { width: 520, height: 300 },
 };
 
 // Must match the icon grid in os.css: rows of 88 px from 12 px down, columns 88 px wide with 4 px between.

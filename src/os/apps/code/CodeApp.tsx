@@ -106,14 +106,14 @@ function RepoList() {
       <header className="os-code-intro">
         <h2>Code</h2>
         <p>
-          My public repositories, readable here.{' '}
+          My public repositories.{' '}
           <a href={`https://github.com/${index.owner}`} target="_blank" rel="noopener">
-            My profile on GitHub ↗
+            Profile on GitHub ↗
           </a>
         </p>
       </header>
       <DetailsList
-        heading="Repositories, most recently changed first"
+        heading="Most recently changed first"
         metaLabel="Changed"
         rows={index.repos.map((repo) => ({
           href: codeHref({ owner: repo.owner, repo: repo.name, view: 'readme', path: '' }),
@@ -260,7 +260,7 @@ function Notebook({ text, path }: { text: string; path: string }) {
   const source = (cell: NotebookCell) => (Array.isArray(cell.source) ? cell.source.join('') : cell.source);
   return (
     <div className="os-notebook">
-      <p className="os-code-aside">A notebook: its cells are below; the outputs (plots, tables) are on GitHub.</p>
+      <p className="os-code-aside">A notebook: its cells, without their outputs (those are on GitHub).</p>
       {cells.map((cell, i) =>
         cell.cell_type === 'code' ? (
           <CodeBlock key={i} text={source(cell)} path={`cell-${i + 1}.py`} />
@@ -396,8 +396,8 @@ function RepoWindow({ route }: { route: CodeRoute }) {
   const r = repo.value;
   const active = route.view === 'blob' ? 'tree' : route.view === 'other' ? 'readme' : route.view;
   const snapshotLine = r.fetchedAt
-    ? `Read from a snapshot of ${r.defaultBranch} at ${r.rawRef.slice(0, 7)}, ${formatDay(r.fetchedAt.slice(0, 10))}`
-    : `Read live from GitHub at ${r.ref.length === 40 ? r.ref.slice(0, 7) : r.ref}`;
+    ? `snapshot of ${r.defaultBranch} at ${r.rawRef.slice(0, 7)}, ${formatDay(r.fetchedAt.slice(0, 10), 'short')}`
+    : `live from GitHub at ${r.ref.length === 40 ? r.ref.slice(0, 7) : r.ref}`;
   return (
     <article className="os-code">
       <header className="os-code-head">

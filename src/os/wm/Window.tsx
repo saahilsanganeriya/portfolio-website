@@ -137,6 +137,8 @@ export function Window({
   const width = useMotionValue(win.frame.width);
   const height = useMotionValue(win.frame.height);
   const restoreFrame = useRef(win.frame);
+  // A window opened from an icon or a link grows out of it, as Win98's windows zoomed out of their buttons.
+  const growOrigin = win.origin ? `${win.origin.x - win.frame.x}px ${win.origin.y - win.frame.y}px` : '50% 50%';
   const wasMaximized = useRef(false);
 
   useEffect(() => {
@@ -208,8 +210,8 @@ export function Window({
       aria-labelledby={titleId}
       tabIndex={-1}
       inert={win.minimized}
-      style={{ x, y, width, height, zIndex: win.z }}
-      initial={{ opacity: 0, scale: 0.94 }}
+      style={{ x, y, width, height, zIndex: win.z, transformOrigin: growOrigin }}
+      initial={{ opacity: 0, scale: win.origin ? 0.3 : 0.94 }}
       animate={
         win.minimized
           ? { opacity: 0, scale: 0.86, transitionEnd: { visibility: 'hidden' } }

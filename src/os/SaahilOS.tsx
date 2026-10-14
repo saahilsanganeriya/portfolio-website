@@ -58,15 +58,23 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
   const powerRef = useRef(power);
   powerRef.current = power;
 
-  const open = useCallback((target: string, focus = true) => {
+  const open = useCallback((target: string, focus = true, from?: Element | null) => {
     const route = parseTarget(target);
     if (!route) return;
     const desktop = desktopRef.current;
+    // The centre of the icon or link that was clicked, in desktop coordinates: the window grows out of it.
+    let origin: { x: number; y: number } | null = null;
+    if (from && desktop) {
+      const box = from.getBoundingClientRect();
+      const base = desktop.getBoundingClientRect();
+      origin = { x: box.left + box.width / 2 - base.left, y: box.top + box.height / 2 - base.top };
+    }
     dispatch({
       type: 'open',
       id: windowIdFor(route),
       route,
       focus,
+      origin,
       desktop: {
         width: desktop?.clientWidth ?? window.innerWidth,
         height: desktop?.clientHeight ?? window.innerHeight,
@@ -142,7 +150,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
     const link = classifyLink(anchor.getAttribute('href')!, window.location.origin);
     if (link.kind !== 'window') return;
     event.preventDefault();
-    open(formatRoute(link.route));
+    open(formatRoute(link.route), true, anchor);
   };
 
   const close = (id: string) => {
@@ -191,7 +199,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
                   phone={phone}
                   selected={selectedIcon}
                   onSelect={setSelectedIcon}
-                  onOpen={(id) => open(id)}
+                  onOpen={(id, from) => open(id, true, from)}
                 />
                 <div className="os-desktop-foot">
                   <p className="os-desktop-hint">
