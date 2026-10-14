@@ -112,6 +112,7 @@ permission), heavily edited. Ideas from Alana Goyal's site (MIT). See NOTICE.
 | IBM Plex Mono SemiBold | the expiry stamp on the Chungking Express poster | https://github.com/IBM/plex | IBM Corp. | SIL OFL 1.1 | outlined to SVG paths in the poster file (@fontsource/ibm-plex-mono 5.3.0) |
 | Newsreader (variable TTF) | the engraved words on the poster plaque ("Four favourites — from Letterboxd") | https://github.com/google/fonts/tree/991ce1de6075188e6b8977a5aa9fcd3610a4e946/ofl/newsreader | The Newsreader Project Authors (Production Type) | SIL OFL 1.1 | default instance, converted to mesh lettering in Blender; baked into the room atlas |
 | Pixel Operator (Regular, Bold) | SaahilOS window chrome, icons and menus | https://www.dafont.com/pixel-operator.font | Jayvee Enaguas (HarvettFox96) | CC0 1.0 | subset to Latin and Latin-1, converted to WOFF2 (version 2018.10.04) |
+| Gochi Hand | his handwriting in the room: the phrases on the sticky notes and the marker captions on the Instax prints, each glyph turned, lifted and sized a little at random so nothing reads as typed | https://github.com/huertatipografica/gochi-hand | Huerta Tipográfica (HT Fonts) | SIL OFL 1.1 | none; the Latin WOFF2 subset from Fontsource (@fontsource/gochi-hand 5.3.0), loaded with the room |
 
 ## Audio
 
