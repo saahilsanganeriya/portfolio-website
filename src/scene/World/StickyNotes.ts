@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WORLD_SCALE } from '../Application/RoomModel';
 import { ArtSurface, type LampUniforms } from './art';
 import { handFont, loadHand, seeded, seedOf, writeHand } from './handwriting';
 import type { StickyNode } from './nodes';
@@ -21,6 +22,7 @@ const NOTE_EDGE_M = 0.076;
 // it stands off the bezel (metres).
 const SLIDE_SHARE = 0.25;
 const STAND_OFF_M = 0.004;
+const PROXY_REACH_M = 0.004;
 const SERIF_FAMILY = '"Newsreader Variable"';
 const SERIF = `${SERIF_FAMILY}, Georgia, "Times New Roman", serif`;
 // Stuck on by hand: each note turns a few degrees about its face.
@@ -103,10 +105,24 @@ function growNote(node: StickyNode, proxy: THREE.Object3D | undefined, monitor: 
   const shift = along.multiplyScalar(side * grown * SLIDE_SHARE).addScaledVector(front, (STAND_OFF_M * grown) / (NOTE_EDGE_M - width));
   node.mesh.scale.multiplyScalar(scale);
   moveBy(node.mesh, shift);
-  if (!proxy) return;
-  // The hover box grows with the face; its depth in front of the note stays.
-  proxy.scale.multiply(new THREE.Vector3(faceAlongX ? scale : 1, scale, faceAlongX ? 1 : scale));
-  moveBy(proxy, shift);
+  if (proxy instanceof THREE.Mesh) fitProxy(proxy, node.mesh, faceAlongX ? 'z' : 'x', front);
+}
+
+/**
+ * The hover box covers the whole note, front to back, and reaches a few millimetres in front of it: a bezel note is
+ * tilted with the bezel, and the room's thin box in front of its middle neither covered it nor let the hover lift claim it.
+ */
+function fitProxy(proxy: THREE.Mesh, note: THREE.Mesh, depthAxis: 'x' | 'z', front: THREE.Vector3) {
+  const box = new THREE.Box3().setFromObject(note);
+  if (front[depthAxis] >= 0) box.max[depthAxis] += PROXY_REACH_M * WORLD_SCALE;
+  else box.min[depthAxis] -= PROXY_REACH_M * WORLD_SCALE;
+  const parent = proxy.parent!;
+  const size = box.getSize(new THREE.Vector3()).divide(parent.getWorldScale(new THREE.Vector3()));
+  proxy.geometry.dispose();
+  proxy.geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+  proxy.scale.set(1, 1, 1);
+  proxy.position.copy(parent.worldToLocal(box.getCenter(new THREE.Vector3())));
+  proxy.updateMatrixWorld(true);
 }
 
 /** Moves an object by a world-space offset, whatever its parent's transform. */
