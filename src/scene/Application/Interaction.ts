@@ -88,7 +88,9 @@ export class Interaction {
 
   /** Events the OS forwards from inside the iframe. */
   fromMonitor(event: MonitorEvent) {
-    if (event.type === 'pointer') {
+    if (event.type === 'escape') {
+      this.handlers.leaveMonitor();
+    } else if (event.type === 'pointer') {
       this.movePointer(event.x, event.y);
       if (!this.overMonitor) this.onMonitorPointer(true);
     } else if (event.type === 'press') {

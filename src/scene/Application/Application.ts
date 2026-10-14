@@ -28,14 +28,15 @@ export interface RoomOptions {
   onMonitor?(target: string | null): void;
   /** The browser took the GL context away (memory pressure): the page should show the drawn monitor instead. */
   onLost?(): void;
-  /** The camera has come to rest where the room starts (the desk): the visitor's ways on begin here. */
+  /** The camera has come to rest where the room starts (the desk; the monitor on a window address): the ways on begin here. */
   onLanded?(): void;
 }
 
 export interface StartOptions {
   /**
-   * A window address: land at the desk at once with this SaahilOS window open (`projects/swe-sim`); '' opens none.
-   * Without it, the arrival glides past the room to the desk, where SaahilOS shows its first window (About).
+   * A window address: land at the monitor at once with this SaahilOS window open (`projects/swe-sim`); '' opens none.
+   * Without it, the arrival glides past the room to the desk, holds there, then goes into the monitor, where SaahilOS
+   * shows its first window (About).
    */
   open?: string;
   /** Cut to the end framing (the visitor's input skipped the intro). */
@@ -57,7 +58,7 @@ export interface RoomView {
 }
 
 export interface RoomHandle {
-  /** Leaves the boot framing: the arrival glide to the desk, or with `open` the desk at once with that window. */
+  /** Leaves the boot framing: the arrival glide to the desk and on into the monitor, or with `open` the monitor at once. */
   start(options?: StartOptions): void;
   /** Glides to the monitor and opens that SaahilOS window; `fast` shortens the glide. */
   openWindow(target: string, options?: { fast?: boolean }): void;
@@ -69,8 +70,10 @@ export interface RoomHandle {
   has(station: string): station is StationName;
   /** The camera in plan coordinates, read every frame by the map's you-are-here mark. */
   view(): RoomView;
-  /** Lands the intro glide now; later glides are left alone. */
+  /** Lands the intro glide now; the step into the monitor that follows it still comes. */
   skipIntro(): void;
+  /** The visitor took over (the map opened, a stop chosen): nothing moves the camera by itself any more. */
+  takeOver(): void;
   /** The room's sound: unlock() on the first gesture, mute, volume, setState(state), sfx(name, position?). */
   readonly audio: AudioHandle;
   setPaused(paused: boolean): void;
@@ -86,8 +89,9 @@ const ARRIVAL_SECONDS = 4.8;
 // On a phone the arrival hands over to SaahilOS with this window; on the desktop the OS opens it by itself (its default),
 // so the room never moves the visitor's keyboard focus into the monitor while it glides.
 const ARRIVAL_WINDOW = 'about';
-// On a phone the desk holds this long after the arrival, then the camera goes into the monitor by itself.
-const PHONE_HOLD_MS = 1200;
+// The desk holds this long after the arrival, then the camera goes into the monitor by itself: at the desk the OS draws
+// at about 5 px, in front of the monitor at about 12 px, where a first-time visitor can read About.
+const DESK_HOLD_MS = 1000;
 // A click this soon after the press that skipped the arrival belongs to that press.
 const SKIP_CLICK_MS = 600;
 
@@ -171,8 +175,10 @@ export class Application implements RoomHandle {
   /** Light tier: SaahilOS is open full screen over the room, which stops drawing until the camera leaves. */
   private handedOver = false;
   private pendingWindow: string | null = null;
-  private phoneZoom = 0;
+  /** The arrival's step from the desk into the monitor, pending until the hold ends or the visitor takes over. */
+  private stepIn = 0;
   private skippedAt = -Infinity;
+  private leftMonitorAt = -Infinity;
   private frameSink: ((frameMs: number) => void) | null = null;
   private clock = 0;
   private last = 0;
@@ -295,8 +301,8 @@ export class Application implements RoomHandle {
     if (open === undefined) this.arrive(fast, endIntro);
     else if (this.light) this.toMonitor('fast', open || null, endIntro, true);
     else {
-      // A window address lands ready: the camera at the desk at once, the window already open on the monitor.
-      this.glide('desk', 'fast', endIntro, true);
+      // A window address lands ready: the camera in front of the monitor at once, the window already open on it.
+      this.glide('monitor', 'fast', endIntro, true);
       if (open) this.monitor.open(open);
     }
     // The intro runs as long as its flight does; a cut has already landed it.
@@ -344,11 +350,13 @@ export class Application implements RoomHandle {
   }
 
   skipIntro() {
-    if (this.intro) {
-      this.camera.finish();
-      this.skippedAt = performance.now();
-    }
-    this.takeOver();
+    if (!this.intro) return;
+    this.camera.finish();
+    this.skippedAt = performance.now();
+  }
+
+  takeOver() {
+    clearTimeout(this.stepIn);
   }
 
   /** Stops every motion that runs by itself (sway, dust, LEDs, grain); the camera still answers clicks. */
@@ -372,7 +380,7 @@ export class Application implements RoomHandle {
 
   dispose() {
     cancelAnimationFrame(this.raf);
-    clearTimeout(this.phoneZoom);
+    clearTimeout(this.stepIn);
     for (const observer of this.observers) observer.disconnect();
     this.navigation?.dispose();
     this.interaction?.dispose();
@@ -388,8 +396,8 @@ export class Application implements RoomHandle {
   }
 
   /**
-   * The arrival on `/`: a timed glide from the boot framing through the room's arrival waypoints to the desk, where
-   * the monitor shows SaahilOS's first window (About). Reduced motion, or input that skipped the boot, cuts to the desk.
+   * The arrival on `/`: a timed glide from the wide view through the room's arrival waypoints to the desk, where the
+   * monitor shows SaahilOS's first window (About). Reduced motion, or input that skipped the boot, cuts to the desk.
    */
   private arrive(fast: boolean, onDone: () => void) {
     this.intro = false;
@@ -403,16 +411,15 @@ export class Application implements RoomHandle {
     else this.camera.flyPath(this.nodes.arrival, 'desk', ARRIVAL_SECONDS, landed);
   }
 
-  /** On a phone, which has no live screen in the 3D monitor, the desk hands over to SaahilOS full screen with About. */
+  /**
+   * The desk holds a moment, then the camera goes into the monitor, where the first window reads (a phone then hands
+   * over to SaahilOS full screen with About). Reduced motion cuts in at once; a visitor who paused motion stays.
+   */
   private afterArrival() {
-    if (!this.light) return;
-    if (this.options.reducedMotion) this.toMonitor('monitor', ARRIVAL_WINDOW, undefined, true);
-    else if (!this.paused) this.phoneZoom = window.setTimeout(() => this.toMonitor('monitor', ARRIVAL_WINDOW), PHONE_HOLD_MS);
-  }
-
-  /** The visitor took over: nothing moves the camera by itself any more. */
-  private takeOver() {
-    clearTimeout(this.phoneZoom);
+    const opening = this.light ? ARRIVAL_WINDOW : null;
+    if (this.options.reducedMotion) this.toMonitor('monitor', opening, undefined, true);
+    // Any other move of the camera meanwhile cancels the step (see glide): the visitor leads now.
+    else if (!this.paused) this.stepIn = window.setTimeout(() => this.toMonitor('monitor', opening), DESK_HOLD_MS);
   }
 
   private onHotspot(hotspot: Hotspot, proxy: THREE.Object3D) {
@@ -430,14 +437,21 @@ export class Application implements RoomHandle {
   }
 
   private leaveMonitor() {
-    if (this.camera.destination === 'monitor') this.flyTo('desk', 'step');
+    if (this.camera.destination !== 'monitor') return;
+    this.leftMonitorAt = performance.now();
+    this.flyTo('desk', 'step');
   }
 
-  /** A click on empty space: in to the desk from the wide view, back out to the wide view from anywhere else. */
+  /**
+   * A click on empty space: in to the desk from the wide view, back to the desk from the monitor, out to the wide view
+   * from anywhere else.
+   */
   private toggle() {
-    // The click that skipped the arrival only skips it.
-    if (!this.started || performance.now() - this.skippedAt < SKIP_CLICK_MS) return;
-    this.flyTo(this.camera.destination === 'idle' ? 'desk' : 'idle', 'step');
+    const now = performance.now();
+    // The click that skipped the arrival only skips it; the press that took focus off the glass has already stepped out.
+    if (!this.started || now - this.skippedAt < SKIP_CLICK_MS || now - this.leftMonitorAt < SKIP_CLICK_MS) return;
+    const here = this.camera.destination;
+    this.flyTo(here === 'idle' || here === 'monitor' ? 'desk' : 'idle', 'step');
   }
 
   private flyTo(station: StationName, motion: Motion, onDone?: () => void) {
@@ -474,6 +488,7 @@ export class Application implements RoomHandle {
   }
 
   private glide(station: StationName, motion: Motion, onDone?: () => void, cut = false) {
+    this.takeOver();
     this.intro = false;
     if (station !== 'monitor') this.handedOver = false;
     this.dirty = true;

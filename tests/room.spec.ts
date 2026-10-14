@@ -17,6 +17,11 @@ async function settled(page: Page, phase: 'idle' | 'desk' | 'monitor' | 'project
   await page.waitForFunction((p) => window.__room?.phase === p && !window.__room.moving, phase, { timeout });
 }
 
+/** The arrival has landed at the desk (the camera may already be on its way into the monitor). */
+async function arrived(page: Page) {
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
+}
+
 async function screenPoint(page: Page, name: string) {
   const point = await page.evaluate((n) => window.__room!.point(n), name);
   expect(point, `${name} is on screen`).not.toBeNull();
@@ -43,7 +48,7 @@ test('the boot screen hands over to the room by itself; the first click starts t
   });
   const audioContexts = () => page.evaluate(() => (window as unknown as { audioContexts: number }).audioContexts);
   await page.goto('/');
-  await settled(page, 'desk');
+  await settled(page, 'monitor');
   await expect(page.locator('[data-boot]')).toBeHidden();
   expect(await audioContexts()).toBe(0);
   await expect(page.getByRole('button', { name: 'Sound' })).toHaveAttribute('aria-pressed', 'false');
@@ -59,7 +64,7 @@ test('the boot screen hands over to the room by itself; the first click starts t
 /** Catches a scroll-down site, a link list or any other page content around the room on `/`. */
 test('/ is the room alone: nothing to scroll to and no links beside it', async ({ page }) => {
   await page.goto('/');
-  await settled(page, 'desk');
+  await settled(page, 'monitor');
   const size = await page.evaluate(() => ({
     height: document.documentElement.scrollHeight,
     width: document.documentElement.scrollWidth,
@@ -74,46 +79,71 @@ test('/ is the room alone: nothing to scroll to and no links beside it', async (
   await expect(page.getByRole('navigation')).toHaveCount(0);
 });
 
-/** Catches a shared project link loading a page instead of the room, gliding in, or not opening that window. */
-test('a project address lands at the desk at once with that project open', async ({ page }) => {
+/**
+ * Catches a shared project link loading a page instead of the room, gliding in, stopping at the desk where the page
+ * draws at about 5 px (T52 fix 1), or not opening that window.
+ */
+test('a project address lands in front of the monitor at once with that project open', async ({ page }) => {
   await page.goto(`/projects/${PROJECT.slug}`);
   await expect(page).toHaveTitle(new RegExp(`^${PROJECT.title}`));
-  await settled(page, 'desk', 60_000);
+  await settled(page, 'monitor', 60_000);
   expect(await page.evaluate(() => window.__room!.landedAt! - window.__room!.startedAt!)).toBeLessThan(50);
   await expect(os(page).getByRole('dialog', { name: PROJECT.title })).toBeVisible();
-  // The window focused itself inside SaahilOS; that is not the visitor moving, so the camera stays at the desk.
+  // The window focused itself inside SaahilOS; that is not the visitor moving, so the camera stays where it landed.
   await page.waitForTimeout(1000);
-  expect(await page.evaluate(() => window.__room!.destination)).toBe('desk');
+  expect(await page.evaluate(() => window.__room!.destination)).toBe('monitor');
   await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT.slug}$`));
   expect(await seriousAxeViolations(page)).toEqual([]);
 });
 
-/** Catches a bare /os playing the arrival instead of landing at the desk with SaahilOS's desktop. */
-test('a bare /os lands at the desk with SaahilOS', async ({ page }) => {
+/** Catches a bare /os playing the arrival instead of landing at the monitor with SaahilOS's desktop. */
+test('a bare /os lands at the monitor with SaahilOS', async ({ page }) => {
   await page.goto('/os');
   await expect(page).toHaveURL(/\/#os$/);
-  await settled(page, 'desk', 60_000);
+  await settled(page, 'monitor', 60_000);
   expect(await page.evaluate(() => window.__room!.landedAt! - window.__room!.startedAt!)).toBeLessThan(50);
   await expect(os(page).locator('.os-desktop')).toBeVisible();
 });
 
 /**
- * Catches an arrival that is cut short or drags on (brief §1: a 4–6 s glide), that lands anywhere but the desk, or
- * that something moves on from afterwards (the old first drift).
+ * Catches an arrival that is cut short or drags on (brief §1: a 4–6 s glide), that lands anywhere but the desk, that
+ * leaves the desk before its hold of about a second, or that never goes on into the monitor, where About reads
+ * (T52 fix 1); and anything that moves the camera on from there by itself (the old first drift).
  */
-test('the arrival on / glides to the desk in 4 to 6 seconds and stays there', async ({ page }) => {
+test('the arrival on / glides to the desk in 4 to 6 seconds, holds, then goes into the monitor and stays', async ({ page }) => {
+  // When the camera first set off from the desk, and first rested at the monitor, by the page's clock.
+  await page.addInitScript(() => {
+    const marks = {} as { leftDeskAt?: number; atMonitorAt?: number };
+    (window as unknown as { marks: typeof marks }).marks = marks;
+    const watch = () => {
+      const room = window.__room;
+      if (room?.landedAt != null) {
+        if (marks.leftDeskAt === undefined && room.destination !== 'desk') marks.leftDeskAt = performance.now();
+        if (marks.atMonitorAt === undefined && room.phase === 'monitor' && !room.moving) marks.atMonitorAt = performance.now();
+      }
+      if (marks.atMonitorAt === undefined) requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  });
   await page.goto('/');
   await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
-  const { startedAt, landedAt, phase, moving } = await page.evaluate(() => ({ startedAt: window.__room!.startedAt!, landedAt: window.__room!.landedAt!, phase: window.__room!.phase, moving: window.__room!.moving }));
+  const { startedAt, landedAt, phase } = await page.evaluate(() => ({ startedAt: window.__room!.startedAt!, landedAt: window.__room!.landedAt!, phase: window.__room!.phase }));
   const seconds = (landedAt - startedAt) / 1000;
   test.info().annotations.push({ type: 'arrival seconds', description: seconds.toFixed(3) });
   expect(seconds).toBeGreaterThanOrEqual(4);
   expect(seconds).toBeLessThanOrEqual(6);
-  expect({ phase, moving }).toEqual({ phase: 'desk', moving: false });
+  expect(phase).toBe('desk');
   await expect(page.locator('[data-boot]')).toBeHidden();
-  await expect(os(page).getByRole('dialog').first()).toBeVisible();
+
+  await settled(page, 'monitor', 30_000);
+  const marks = await page.evaluate(() => (window as unknown as { marks: { leftDeskAt: number; atMonitorAt: number } }).marks);
+  const hold = (marks.leftDeskAt - landedAt) / 1000;
+  test.info().annotations.push({ type: 'desk hold seconds', description: hold.toFixed(3) });
+  expect(hold).toBeGreaterThanOrEqual(0.9);
+  expect(hold).toBeLessThan(2);
+  await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
   await page.waitForTimeout(3000);
-  expect(await page.evaluate(() => ({ phase: window.__room!.phase, moving: window.__room!.moving }))).toEqual({ phase: 'desk', moving: false });
+  expect(await page.evaluate(() => ({ phase: window.__room!.phase, moving: window.__room!.moving }))).toEqual({ phase: 'monitor', moving: false });
 });
 
 /** The cam_arrival_<n> empties in room.glb (top-level nodes, metres), read from the file the page loads. */
@@ -159,8 +189,11 @@ test('the arrival passes through each of the room’s arrival waypoints', async 
   }
 });
 
-/** Catches an arrival the visitor has to sit through: any key lands the glide at the desk at once. */
-test('a key press during the arrival lands it at the desk', async ({ page }) => {
+/**
+ * Catches an arrival the visitor has to sit through (any key lands the glide at the desk at once), and a skip that
+ * strands the visitor at the desk instead of going on to the readable monitor.
+ */
+test('a key press during the arrival lands it at the desk, and the landing goes on into the monitor', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.__room?.moving, null, { timeout: 120_000 });
   await page.keyboard.press('k');
@@ -168,36 +201,37 @@ test('a key press during the arrival lands it at the desk', async ({ page }) => 
     phase: 'desk',
     moving: false,
   });
+  await settled(page, 'monitor', 30_000);
 });
 
-/** Catches the arrival gliding for a visitor who asked for reduced motion: the camera is at the desk the moment the room starts. */
-test('with reduced motion / goes straight to the desk', async ({ page }) => {
+/** Catches the arrival gliding for a visitor who asked for reduced motion: the camera is at the monitor the moment the room starts. */
+test('with reduced motion / goes straight to the monitor', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await page.waitForFunction(() => window.__room?.startedAt != null, null, { timeout: 120_000 });
   const start = await page.evaluate(() => ({ startedAt: window.__room!.startedAt!, landedAt: window.__room!.landedAt, phase: window.__room!.phase, moving: window.__room!.moving }));
-  expect(start).toMatchObject({ phase: 'desk', moving: false });
+  expect(start).toMatchObject({ phase: 'monitor', moving: false });
   expect(start.landedAt! - start.startedAt).toBeLessThan(50);
 });
 
 /**
- * Catches any content address that glides, lands anywhere but the desk, takes over a second to get there once the room
- * starts (the boot screen leaves and input reaches the room), or opens the wrong window (brief §1: deep links land
- * ready). Every address in the sitemap is visited. Also records when the first frame at the desk was drawn, which
- * waits on the machine as well as on the room.
+ * Catches any content address that glides, lands anywhere but in front of the monitor (T52 fix 1), takes over a second
+ * to get there once the room starts (the boot screen leaves and input reaches the room), or opens the wrong window
+ * (brief §1: deep links land ready). Every address in the sitemap is visited. Also records when the first frame at the
+ * monitor was drawn, which waits on the machine as well as on the room.
  */
-test('every content address lands at the desk within a second of the room starting, with its window open', async ({ page, context }) => {
+test('every content address lands at the monitor within a second of the room starting, with its window open', async ({ page, context }) => {
   test.setTimeout(900_000);
   const sitemap = await (await page.request.get('/sitemap-0.xml')).text();
   const paths = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)]
     .map(([, loc]) => new URL(loc).pathname)
     .filter((path) => !['/', '/os/', '/story/'].includes(path));
   expect(paths.length).toBeGreaterThan(30);
-  // Notes, in the page, the first frame drawn with the camera at rest at the desk once the room has started.
+  // Notes, in the page, the first frame drawn with the camera at rest at the monitor once the room has started.
   await context.addInitScript(() => {
     const watch = () => {
       const room = window.__room;
-      if (room?.startedAt != null && room.phase === 'desk' && !room.moving) (window as unknown as { deskAt: number }).deskAt = performance.now();
+      if (room?.startedAt != null && room.phase === 'monitor' && !room.moving) (window as unknown as { landedAt: number }).landedAt = performance.now();
       else requestAnimationFrame(watch);
     };
     requestAnimationFrame(watch);
@@ -211,8 +245,8 @@ test('every content address lands at the desk within a second of the room starti
       await tab.waitForFunction(() => window.__room?.startedAt != null, null, { timeout: 120_000 });
       const firstFrameMs = await (
         await tab.waitForFunction(() => {
-          const deskAt = (window as unknown as { deskAt?: number }).deskAt;
-          return deskAt === undefined ? null : deskAt - window.__room!.startedAt!;
+          const landedAt = (window as unknown as { landedAt?: number }).landedAt;
+          return landedAt === undefined ? null : landedAt - window.__room!.startedAt!;
         }, null, { timeout: 10_000 })
       ).jsonValue();
       const ms = await tab.evaluate(() => (window.__room!.landedAt ?? Infinity) - window.__room!.startedAt!);
@@ -230,15 +264,15 @@ test('every content address lands at the desk within a second of the room starti
   expect(results.map((r) => r.path).sort()).toEqual([...paths].sort());
   for (const r of results) {
     expect(r.open, `${r.path} names a window`).not.toBe('');
-    expect(r.phase, `${r.path} stays at the desk once its window is open`).toBe('desk');
-    expect(r.ms, `${r.path} reached the desk ${r.ms.toFixed(0)} ms after the room started`).toBeLessThanOrEqual(1000);
+    expect(r.phase, `${r.path} stays at the monitor once its window is open`).toBe('monitor');
+    expect(r.ms, `${r.path} reached the monitor ${r.ms.toFixed(0)} ms after the room started`).toBeLessThanOrEqual(1000);
   }
 });
 
 /** Catches a prop proxy that is not hit-tested, or a hotspot that zooms in without telling the OS what to open. */
 test('hovering the mango plant labels it, and clicking it opens About in SaahilOS', async ({ page }) => {
   await page.goto('/');
-  await settled(page, 'desk');
+  await arrived(page);
   await page.evaluate(() => window.__room!.goto('idle'));
   await settled(page, 'idle');
   const mango = await screenPoint(page, 'hit_mango');
@@ -256,7 +290,7 @@ test('hovering the mango plant labels it, and clicking it opens About in SaahilO
 test('the new props open their windows, and the Georgia Tech pennant only labels itself', async ({ page }) => {
   test.setTimeout(300_000);
   await page.goto('/');
-  await settled(page, 'desk');
+  await arrived(page);
   const fromWideView = async () => {
     await page.evaluate(() => window.__room!.goto('idle'));
     await settled(page, 'idle');
@@ -298,7 +332,7 @@ test('the new props open their windows, and the Georgia Tech pennant only labels
 /** Catches the projector opening a window straight away instead of flying to its framing first (owner 07:56Z). */
 test('clicking the projector glides to it and opens nothing', async ({ page }) => {
   await page.goto('/');
-  await settled(page, 'desk');
+  await arrived(page);
   await page.evaluate(() => window.__room!.goto('idle'));
   await settled(page, 'idle');
   const projector = await screenPoint(page, 'hit_projector');
@@ -312,7 +346,7 @@ test('clicking the projector glides to it and opens nothing', async ({ page }) =
 /** Catches a keyboard or screen-reader visitor with no way into SaahilOS (Review Focus 3), or motion that cannot be paused. */
 test('"Open SaahilOS" is the first tab stop and opens it on the monitor; motion can be paused', async ({ page }) => {
   await page.goto('/');
-  await settled(page, 'desk');
+  await arrived(page);
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Open SaahilOS' })).toBeFocused();
   await page.keyboard.press('Enter');
@@ -330,7 +364,7 @@ test('"Open SaahilOS" is the first tab stop and opens it on the monitor; motion 
  */
 test('tabbing out of SaahilOS backs out to the desk, and tabbing back in and out again follows', async ({ page }) => {
   await page.goto('/');
-  await settled(page, 'desk');
+  await arrived(page);
   await page.keyboard.press('Tab');
   await page.keyboard.press('Enter');
   await settled(page, 'monitor', 15_000);
@@ -357,15 +391,15 @@ test('the room has no axe violations, while booting and in the room', async ({ p
     expect(violations.map((v) => `${when}: ${v.id} (${v.nodes.length})`)).toEqual([]);
   };
   await check('boot');
-  await settled(page, 'desk');
+  await settled(page, 'monitor');
   await check('room');
 });
 
 /** Catches the reduced-motion visitor getting camera glides or running effects. */
-test('with reduced motion the room starts paused and lands at the desk with the window', async ({ page }) => {
+test('with reduced motion the room starts paused and lands at the monitor with the window', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/about');
-  await page.waitForFunction(() => window.__room?.phase === 'desk', null, { timeout: 120_000 });
+  await page.waitForFunction(() => window.__room?.phase === 'monitor', null, { timeout: 120_000 });
   expect(await page.evaluate(() => window.__room!.moving)).toBe(false);
   await expect(page.getByRole('button', { name: 'Pause motion' })).toHaveAttribute('aria-pressed', 'true');
   await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();

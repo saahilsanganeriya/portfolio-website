@@ -49,6 +49,8 @@ export function Taskbar({ windows, activeId, index, clock, onTab, onOpen, onShut
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // Used here: the room must not also step back from the screen.
+      event.preventDefault();
       setMenuOpen(false);
       startRef.current?.focus();
     };

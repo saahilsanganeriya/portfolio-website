@@ -128,9 +128,18 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
       if (powerRef.current !== 'on') setPower('on');
       open(data.target);
     };
+    // An Escape no menu used asks the room to step back from the screen; checked after every listener has run.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setTimeout(() => !event.defaultPrevented && window.parent.postMessage({ type: 'escape' }, window.location.origin));
+    };
     window.addEventListener('message', onMessage);
+    window.addEventListener('keydown', onKeyDown);
     window.parent.postMessage({ type: 'os-ready' }, window.location.origin);
-    return () => window.removeEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [open]);
 
   // Links to anything with a window open that window, never a page in the monitor. A link with its own target

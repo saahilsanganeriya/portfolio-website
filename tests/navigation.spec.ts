@@ -17,32 +17,93 @@ async function settledAt(page: Page, station: string, timeout = 30_000) {
   await page.waitForFunction((s) => window.__room?.phase === s && !window.__room.moving, station, { timeout });
 }
 
+const os = (page: Page) => page.frameLocator('.room-monitor iframe');
+
 /** The room after its arrival at the desk, stepped back to the wide view. */
 async function inRoom(page: Page) {
   await page.goto('/');
-  await settledAt(page, 'desk', 120_000);
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
   await page.evaluate(() => window.__room!.goto('idle'));
   await settledAt(page, 'idle');
 }
 
-/** Catches a click during the arrival that also sends the camera on from the desk (to the wide view), instead of only landing it. */
-test('a click on empty space during the arrival lands it at the desk and does nothing else', async ({ page }) => {
+/** Records every station the camera heads for from now on, in order. */
+async function watchDestinations(page: Page) {
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { seen: string[] }).seen = seen;
+    const watch = () => {
+      const at = window.__room!.destination;
+      if (seen.at(-1) !== at) seen.push(at);
+      requestAnimationFrame(watch);
+    };
+    watch();
+  });
+}
+const destinations = (page: Page) => page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+
+/**
+ * Catches a click during the arrival that also sends the camera on from the desk (to the wide view) instead of only
+ * landing it, and a skip that strands the visitor at the desk instead of going on into the monitor (T52 fix 1).
+ */
+test('a click on empty space during the arrival lands it at the desk, and the landing goes on into the monitor', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.__room?.moving && window.__room.startedAt != null, null, { timeout: 120_000 });
   await page.mouse.click(5, 5);
   expect(await room(page)).toMatchObject({ phase: 'desk', destination: 'desk', moving: false });
-  await page.waitForTimeout(1500);
-  expect(await room(page)).toMatchObject({ phase: 'desk', destination: 'desk', moving: false });
+  await watchDestinations(page);
+  await settledAt(page, 'monitor');
+  expect(await destinations(page)).toEqual(['desk', 'monitor']);
 });
 
-/** Catches Escape at the desk not letting the visitor out into the room (brief §0: click out of the monitor to explore). */
-test('Escape at the desk steps out to the wide view, and from the monitor back to the desk', async ({ page }) => {
+/**
+ * Catches Escape not stepping back from the monitor where a visit lands (T52 fix 1), or not letting the visitor out
+ * from the desk into the room (brief §0: click out of the monitor to explore).
+ */
+test('Escape steps back from the monitor to the desk, and from the desk out to the wide view', async ({ page }) => {
   await page.goto('/');
-  await settledAt(page, 'desk', 120_000);
+  await settledAt(page, 'monitor', 120_000);
+  await page.keyboard.press('Escape');
+  await settledAt(page, 'desk');
   await page.keyboard.press('Escape');
   await settledAt(page, 'idle');
+});
+
+/**
+ * Catches a click beside the screen that sends the camera all the way out to the wide view, or nowhere: with the
+ * keyboard inside SaahilOS (a window address focuses its window) the press moves focus off the glass first, and that
+ * press must step back once, not twice.
+ */
+test('a click beside the screen steps back from the monitor to the desk, with or without focus in SaahilOS', async ({ page }) => {
+  await page.goto('/projects/swe-sim');
+  await settledAt(page, 'monitor', 120_000);
+  await expect.poll(() => page.evaluate(() => document.activeElement?.matches('.room-monitor iframe') ?? false)).toBe(true);
+  await watchDestinations(page);
+  await page.mouse.click(40, 450);
+  await settledAt(page, 'desk');
+  await page.waitForTimeout(800);
+  expect(await destinations(page)).toEqual(['monitor', 'desk']);
+
   await page.evaluate(() => window.__room!.goto('monitor'));
   await settledAt(page, 'monitor');
+  await page.mouse.click(40, 450);
+  await settledAt(page, 'desk');
+});
+
+/**
+ * Catches Escape doing nothing while the keyboard is inside SaahilOS (where a window address puts it), and an Escape
+ * that only closes SaahilOS's Start menu also stepping the camera back.
+ */
+test('Escape inside SaahilOS steps back to the desk, unless it closed the Start menu', async ({ page }) => {
+  await page.goto('/projects/swe-sim');
+  await settledAt(page, 'monitor', 120_000);
+  await os(page).getByRole('button', { name: 'Start', exact: true }).click();
+  const menu = os(page).getByRole('navigation', { name: 'Start menu' });
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await page.waitForTimeout(800);
+  expect(await room(page)).toMatchObject({ destination: 'monitor' });
   await page.keyboard.press('Escape');
   await settledAt(page, 'desk');
 });
@@ -109,10 +170,10 @@ test('a drag turns the view within limits, clicks nothing, and the next step loo
 test('with reduced motion an arrow key cuts to the next framing', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.phase === 'desk', null, { timeout: 120_000 });
+  await page.waitForFunction(() => window.__room?.phase === 'monitor', null, { timeout: 120_000 });
   const { stations } = await room(page);
   await page.keyboard.press('ArrowRight');
-  expect(await room(page)).toMatchObject({ phase: stations[stations.indexOf('desk') + 1], moving: false });
+  expect(await room(page)).toMatchObject({ phase: stations[stations.indexOf('monitor') + 1], moving: false });
 });
 
 test.describe('on a phone', () => {

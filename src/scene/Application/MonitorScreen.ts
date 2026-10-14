@@ -13,7 +13,9 @@ const PROJECTOR = new THREE.Color('#9db4c0');
 export type MonitorEvent =
   | { type: 'pointer'; x: number; y: number }
   | { type: 'press'; down: boolean }
-  | { type: 'key'; key: string; down: boolean };
+  | { type: 'key'; key: string; down: boolean }
+  /** Escape that the OS itself did not use (no menu open): the visitor wants out of the screen. */
+  | { type: 'escape' };
 
 /**
  * The monitor as Henry built it: a CSS3D iframe placed at the glass, an invisible GL plane that writes alpha 0 so the
@@ -153,6 +155,9 @@ export class MonitorScreen {
           this.queued = null;
           this.open(target);
         }
+        break;
+      case 'escape':
+        this.onEvent({ type: 'escape' });
         break;
       case 'mousemove': {
         // The OS reports its own coordinates; map them back onto the page so the desk parallax keeps following.

@@ -21,6 +21,7 @@ export async function startRoom(container: HTMLElement, opts: RoomOptions): Prom
     has: (station): station is StationName => app.has(station),
     view: () => app.view(),
     skipIntro: () => app.skipIntro(),
+    takeOver: () => app.takeOver(),
     audio: app.audio,
     setPaused: (paused) => app.setPaused(paused),
     measureFps: (ms) => app.measureFps(ms),
