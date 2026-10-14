@@ -3,14 +3,14 @@
 // arrival glide on / (no input), then for 10 s in each phase: every framing the room has (the desk, the monitor and the
 // tour's stops among them), a hovered prop, across camera moves, the tour's map open while the camera flies to a stop
 // (when the room has a floor plan), and the photo album open with a page turning every 1.2 s; passes when every
-// phase's median is at least 50 fps. By default everything moves at once after the arrival
-// (PLAN 11.3, 12.3): the fan at its top speed, the espresso machine brewing and the projector playing in view or not;
-// --calm leaves the room as a visitor finds it. --phone measures the light tier on an emulated iPhone 13 instead: the
-// arrival, the glide into the monitor until SaahilOS takes over, the wide view, the desk and moves. The reel column is the share of frames in which the projector was playing;
-// --reel-always plays only the reel in every phase; --no-reel blocks it (the screen keeps its baked still), as a
-// baseline. The light tier has no reel.
+// phase's median is at least 50 fps. By default everything moves at once after the arrival (PLAN 11.3, 12.3,
+// PLAN-ROUND-7 §4): the lava lamp changing colour, an espresso shot pouring again and again with its steam, and the
+// projector running in view or not; --calm leaves the room as a visitor finds it. --phone measures the light tier on an
+// emulated iPhone 13 instead: the arrival, the glide into the monitor until SaahilOS takes over, the wide view, the
+// desk and moves. The film column is the share of frames in which the projector was playing. The light tier has no
+// projector film.
 //
-//   node scripts/measure-fps.mjs [--no-build] [--url https://…] [--seconds 10] [--phone] [--calm | --reel-always | --no-reel]
+//   node scripts/measure-fps.mjs [--no-build] [--url https://…] [--seconds 10] [--phone] [--calm]
 import { cpus, loadavg } from 'node:os';
 import { chromium, devices } from 'playwright';
 import { serveBuild } from './lib/serve-build.mjs';
@@ -28,7 +28,6 @@ let failed = false;
 try {
   const { defaultBrowserType: _browser, ...iPhone13 } = devices['iPhone 13'];
   const page = await browser.newPage(phone ? iPhone13 : { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
-  if (flag('--no-reel')) await page.route('**/room/reel.mp4', (route) => route.abort());
   await page.goto(new URL('/', server.url).href);
   const gpu = await page.evaluate(() => {
     const gl = document.createElement('canvas').getContext('webgl');
@@ -39,7 +38,7 @@ try {
     page.waitForFunction((s) => window.__room && !window.__room.moving && (!s || window.__room.phase === s), station, { timeout: 60_000 });
   await page.waitForFunction(() => window.__room?.startedAt != null && window.__room.moving, null, { timeout: 180_000 });
 
-  const everything = !phone && !flag('--calm') && !flag('--reel-always') && !flag('--no-reel');
+  const everything = !phone && !flag('--calm');
 
   /** Frame times for `ms`; 'move' keeps the camera gliding between the desk and the wide view, 'album' turns pages. */
   const count = (ms, mode = 'still') =>
@@ -47,7 +46,7 @@ try {
       ([ms, mode]) =>
         new Promise((resolve) => {
           const times = [];
-          let reelFrames = 0;
+          let filmFrames = 0;
           const start = performance.now();
           let next = 'desk';
           let lastTurn = start;
@@ -55,8 +54,8 @@ try {
           const frame = (t) => {
             times.push(t);
             const projector = window.__room.world?.projector;
-            if (projector ? projector.state === 'playing' : window.__room.reel?.state === 'playing') reelFrames++;
-            if (mode === 'arrival' && !window.__room.moving) return resolve({ times, tier: window.__room.tier, reel: reelFrames / times.length });
+            if (projector?.state === 'playing') filmFrames++;
+            if (mode === 'arrival' && !window.__room.moving) return resolve({ times, tier: window.__room.tier, film: filmFrames / times.length });
             if (mode === 'move' && !window.__room.moving) {
               window.__room.goto(next);
               next = next === 'desk' ? 'idle' : 'desk';
@@ -70,7 +69,7 @@ try {
               lastTurn = t;
             }
             if (t - start < ms) requestAnimationFrame(frame);
-            else resolve({ times, tier: window.__room.tier, reel: reelFrames / times.length });
+            else resolve({ times, tier: window.__room.tier, film: filmFrames / times.length });
           };
           requestAnimationFrame(frame);
         }),
@@ -78,7 +77,7 @@ try {
     );
 
   const rows = [];
-  const record = (phase, { times, tier, reel }) => {
+  const record = (phase, { times, tier, film }) => {
     const fps = times
       .slice(1)
       .map((t, i) => 1000 / (t - times[i]))
@@ -91,7 +90,7 @@ try {
       median: pick(0.5).toFixed(1),
       p5: pick(0.05).toFixed(1),
       tier,
-      reel: `${Math.round(reel * 100)}%`,
+      film: `${Math.round(film * 100)}%`,
       pass: pick(0.5) >= MIN_FPS,
     };
     rows.push(row);
@@ -123,12 +122,13 @@ try {
       record(phase, await count(seconds * 1000, phase === 'move' ? 'move' : 'still'));
     }
   } else {
-    // The reel loads once the room is interactive; it plays while its screen is in the wide view.
     await page.evaluate(() => window.__room.goto('idle'));
     await settle('idle');
-    await page.waitForFunction(() => !window.__room.reel || (window.__room.reel.state !== 'loading' && window.__room.reel.state !== 'waiting'), null, { timeout: 60_000 });
-    if (flag('--reel-always')) await page.evaluate(() => window.__room.forceReel(true));
-    if (everything) await page.evaluate(() => window.__room.forceEverything(true));
+    if (everything) {
+      await page.evaluate(() => window.__room.forceEverything(true));
+      // The film loads on its first run: measure once it plays.
+      await page.waitForFunction(() => !window.__room.world.projector || window.__room.world.projector.state === 'playing', null, { timeout: 60_000 });
+    }
     const stations = await page.evaluate(() => window.__room.stations);
     for (const station of ['idle', ...stations.filter((s) => s !== 'idle')]) {
       await page.evaluate((s) => window.__room.goto(s), station);
@@ -173,12 +173,12 @@ try {
   console.log(
     phone
       ? `iPhone 13 (390x664 @3x), light tier, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps`
-      : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${everything ? ', everything moving after the arrival (fan top speed, steam, projector forced on)' : ''}${flag('--reel-always') ? ', reel forced on' : ''}${flag('--no-reel') ? ', reel blocked' : ''}`,
+      : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${everything ? ', everything moving after the arrival (lava lamp changing, espresso pouring with its steam, projector forced on)' : ''}`,
   );
-  console.log('phase      frames  mean   median  p5     tier  reel  pass');
+  console.log('phase      frames  mean   median  p5     tier  film  pass');
   for (const r of rows) {
     console.log(
-      `${r.phase.padEnd(10)} ${String(r.frames).padStart(6)}  ${r.mean.padStart(5)}  ${r.median.padStart(6)}  ${r.p5.padStart(5)}  ${String(r.tier).padStart(4)}  ${r.reel.padStart(4)}  ${r.pass}`,
+      `${r.phase.padEnd(10)} ${String(r.frames).padStart(6)}  ${r.mean.padStart(5)}  ${r.median.padStart(6)}  ${r.p5.padStart(5)}  ${String(r.tier).padStart(4)}  ${r.film.padStart(4)}  ${r.pass}`,
     );
   }
   console.log(failed ? 'fps: FAIL' : 'fps: pass');

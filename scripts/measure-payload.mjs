@@ -2,11 +2,12 @@
 // paint, on the production build, split in two.
 //   initial:   everything requested before the room became interactive (the intro glide ended, no input yet):
 //              models, textures, posters, decoders, scene code, the monitor's OS. Budget 6,000,000 B.
-//   on demand: everything a visit then pulls in: the live diary, the print wall's pictures, the photography chunk,
-//              the room's sound and music (first input; here a press of the Sound button), the album (opened, three
-//              pages turned) and a look out of the window close up (the other day/night pictures its cities need
-//              there). Caps: reel 1,500,000 B (none since room v3 has no screen), music 1,200,000 B (PLAN 11.3); photos
-//              have no byte cap but must stay lazy and low-res (480 px on the wall, 960 px in the album; PLAN 12.3). Each
+//   on demand: everything a visit then pulls in: the Instax board's pictures and the photography chunk, the room's
+//              sound and music (first input; here a press of the Sound button), the album (opened, three pages turned),
+//              the projector's film (run from its framing) and a look out of the window close up (the other day/night
+//              pictures its cities need there). Caps: film 1,500,000 B (the old reel's), music 1,200,000 B (PLAN 11.3),
+//              the board's prints 1,500,000 B (PLAN-ROUND-7 §7), each sound effect 150,000 B; photos must stay lazy and
+//              low-res (480 px on the board, 960 px in the album and on the projector; PLAN 12.3). Each
 //              on-demand request is put in a kind by its path, and pictures by the step of the visit that asked for
 //              them. Window pictures this visit never asked for are listed with their file sizes.
 // Also checks "text before 3D": first contentful paint happens before the first .glb/.ktx2 response ends (PLAN 3.9),
@@ -21,8 +22,10 @@ import { serveBuild } from './lib/serve-build.mjs';
 const args = process.argv.slice(2);
 const option = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const BUDGET = 6_000_000;
-const REEL_CAP = 1_500_000;
+const FILM_CAP = 1_500_000;
 const MUSIC_CAP = 1_200_000;
+const BOARD_CAP = 1_500_000;
+const SFX_CAP = 150_000;
 
 const server = option('--url') ? { url: option('--url'), close: async () => {} } : await serveBuild({ build: !args.includes('--no-build') });
 // SwiftShader so headless Chromium has WebGL and loads the room, as a desktop visitor's browser would.
@@ -50,11 +53,13 @@ try {
   const interactiveEpoch = origin + interactiveAt;
   steps.push({ name: 'by itself', at: interactiveEpoch });
 
-  // What the room pulls in by itself once interactive, seen from the wide view: the prints.
+  // A visit: the Instax board, sound, the album opened and paged, the projector run, the window close up.
+  await step('board');
+  await page.evaluate(() => window.__room.goto('photos'));
+  await settle();
+  await room(() => !window.__room.world.instax || window.__room.world.instax.prints.every((p) => p.shown > 0));
   await page.evaluate(() => window.__room.goto('idle'));
   await settle();
-  await room(() => window.__room.world.prints.length === 0 || window.__room.world.prints.every((p) => p.shown > 0));
-  // A visit: sound, the album opened and paged, the window close up.
   await step('sound');
   await page.locator('[data-room-sound]').click();
   // The sound the first input loads: the room's twelve recordings and the music's three stems.
@@ -71,6 +76,11 @@ try {
   }
   await page.keyboard.press('Escape');
   await room(() => window.__room.world.album?.state === 'closed');
+  await step('projector');
+  await page.evaluate(() => window.__room.goto('idle'));
+  await settle();
+  await click('hit_projector');
+  await room(() => !window.__room.world.projector || window.__room.world.projector.state === 'playing');
   // Close up at the window, each city also shows the picture the other city's time of day needs near the seam.
   await step('window');
   await page.evaluate(() => window.__room.goto('window'));
@@ -104,7 +114,9 @@ try {
   const sum = (list) => list.reduce((total, r) => total + r.bytes, 0);
   const initial = rows.filter((r) => r.initial);
   const onDemand = rows.filter((r) => !r.initial);
-  const reel = sum(rows.filter((r) => r.pathname === '/room/reel.mp4'));
+  const film = sum(rows.filter((r) => /^\/room\/story-film\./.test(r.pathname)));
+  const board = sum(rows.filter((r) => !r.initial && r.step === 'board' && /\.(webp|avif|jpe?g|png)$/.test(r.pathname)));
+  const biggestSfx = Math.max(0, ...rows.filter((r) => r.pathname.startsWith('/audio/sfx/')).map((r) => r.bytes));
   const music = sum(rows.filter((r) => r.pathname.startsWith('/audio/music/')));
   const textFirst = fcpEpoch < firstModelEnd;
   const textBeforeFirstByte = fcpEpoch < first3dByte.at;
@@ -127,19 +139,20 @@ try {
 
   const kindOf = (r) => {
     const p = r.pathname;
-    if (p === '/room/reel.mp4') return 'reel';
+    if (/^\/room\/story-film\./.test(p)) return 'film';
     if (p.startsWith('/audio/music/')) return 'music';
     if (p.startsWith('/audio/city/')) return 'city sound';
+    if (p.startsWith('/audio/sfx/')) return 'sound effects';
     if (p.startsWith('/audio/')) return 'room sound';
     if (/^\/room\/window_.*\.ktx2$/.test(p)) return 'window, other pictures';
     if (p === '/api/films.json') return 'live diary';
     if (r.type === 'font') return 'fonts';
     if (/\.(webp|avif|jpe?g|png)$/.test(p) || /\/photographs\.[^/]*\.js$/.test(p)) {
-      return { album: 'album' }[r.step] ?? 'photos on the wall';
+      return { album: 'album', board: 'Instax board', projector: 'projector' }[r.step] ?? 'photos, other';
     }
     return 'other';
   };
-  const caps = { reel: REEL_CAP, music: MUSIC_CAP };
+  const caps = { film: FILM_CAP, music: MUSIC_CAP, 'Instax board': BOARD_CAP };
   const kinds = new Map();
   for (const r of rows.filter((x) => !x.initial)) {
     const k = kindOf(r);
@@ -157,13 +170,13 @@ try {
 
   console.log(`requests: ${rows.length} (${initial.length} initial, ${onDemand.length} on demand)`);
   console.log(`initial bytes (until the room is interactive, no input): ${sum(initial)} (budget ${BUDGET})`);
-  console.log(`on-demand bytes (this visit): ${sum(onDemand)}; of which reel ${reel} (cap ${REEL_CAP}), music ${music} (cap ${MUSIC_CAP})`);
+  console.log(`on-demand bytes (this visit): ${sum(onDemand)}; of which film ${film} (cap ${FILM_CAP}), music ${music} (cap ${MUSIC_CAP}), board ${board} (cap ${BOARD_CAP}), largest sound effect ${biggestSfx} (cap ${SFX_CAP})`);
   console.log(`total bytes: ${sum(rows)}`);
   console.log(`first contentful paint: ${fcp.toFixed(0)} ms; room interactive: ${interactiveAt.toFixed(0)} ms`);
   console.log(`first .glb/.ktx2 response end: ${Number.isFinite(firstModelEnd) ? (firstModelEnd - origin).toFixed(0) + ' ms' : 'none'}`);
   console.log(`first 3D byte: ${Number.isFinite(first3dByte.at) ? `${(first3dByte.at - origin).toFixed(0)} ms (${first3dByte.pathname})` : 'none'}`);
   console.log(`text-before-3D: ${textFirst}; text before the first 3D byte: ${textBeforeFirstByte}`);
-  ok = sum(initial) <= BUDGET && reel <= REEL_CAP && music <= MUSIC_CAP && textFirst && textBeforeFirstByte;
+  ok = sum(initial) <= BUDGET && film <= FILM_CAP && music <= MUSIC_CAP && board <= BOARD_CAP && biggestSfx <= SFX_CAP && textFirst && textBeforeFirstByte;
   console.log(ok ? 'payload: pass' : 'payload: FAIL');
 } finally {
   await browser.close();
