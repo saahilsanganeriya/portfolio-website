@@ -1,26 +1,26 @@
 ---
 title: "My eval knew the future"
 date: 2026-10-14
-summary: "The first eval of my agents' memory could see files the past had not written yet. What closing those leaks did to the number, and why I trust the smallest one."
+summary: "The first eval of my agents' memory could see files the past had not written yet. What closing those leaks did to the number, why one good number was tuned, and why I trust the smallest eval."
 tags: ["engineering", "evaluation", "saahil-brain", "essays"]
 draft: false
 ---
 
-At 11:13 UTC on 8 October I committed a change that made my eval worse. On its tuning half the score fell from 61.2% to 49.1%. On its test half it fell from 64.8% to 57.9%.
+The commit message gave its verdict in two words: "Honest drop". On 8 October I committed a change that made my eval worse on purpose. On its tuning half the score fell from 61.2% to 49.1%. On its test half it fell from 64.8% to 57.9%.
 
-The commit message called it an honest drop. Of the 74 hits on the tuning half, 21 had found nothing but the session's own brief, the text the session had been handed at the start.
+Of the 74 hits on the tuning half, 21 had found nothing but the session's own brief, the text the session had been handed at the start.
 
 It was not the first leak I closed that morning, or the last. Most of them had one thing in common: they let a past session see something that did not exist yet.
 
-## What the eval measures
+## Three pointers, and the file a session needed
 
 [saahil-brain](/projects/saahil-brain) is the memory my coding agents share. On every prompt it hands the agent at most three pointers, each one line, or nothing. The question that matters is whether those pointers lead to the file the session actually needed.
 
 The navigation eval answers it from history. Take a past session from 20 September on, replay its first prompt, and look at the files it went on to use. A hit is a target in the top three pointers, or reachable within three tool calls.
 
-Sessions are split by a hash into a tuning half of 110 and a test half of 107. I tune on one half and judge on the other once. The marks I set are 70% for the top three and 80% within three calls.
+Sessions are split by a hash into a tuning half of 110 and a test half of 107. The rule is to tune on one half and read the other once. The marks I set are 70% for the top three and 80% within three calls.
 
-## The obvious eval, and its leaks
+## Five ways the first eval flattered itself
 
 The first version ranked each old prompt against the brain as it stood that day, and counted every file the session used as a target. It looked fair. It had five ways to flatter itself, and three of them ran time backwards.
 
@@ -57,38 +57,40 @@ Dating a file took more fixes than anything else. Birth time alone made old file
 
 Not every fix lowered a score. Counting what the memory index already hands a session before its first call took the test half within three calls from 77.6% to 80.4%. Every new hit was a feedback memory linked from that index.
 
-## What this costs
-
 Replaying the past is a guess about the past. When a file is missing from its path, it is dated by when the index last saw it changed. Excluding the brief also throws away credit for pointers that may well have helped.
+
+## Sixty-nine prompts I typed
 
 The eval I trust most is also the smallest. It takes prompts I typed myself, six words or more, since 1 September, and a model picks the files that answered each one from what the next ten tool calls read. The target is that model's call, not mine.
 
-On one machine the set held 26 prompts. Splitting it by session put 25 in the tuning half, because two long sessions held 20 of them. Splitting by the answer file gives 13 and 13.
+On one machine the set held 26 prompts. Splitting it by session put 25 in the tuning half, because two long sessions held 20 of them. Splitting by the answer file gives 13 and 13. With my laptop's 43 prompts added, the set holds 69.
 
-## Two numbers that disagree
+## 72.0% is a tuned number
+
+The rule says the test half is read once. That morning the commit messages print test-half numbers from at least four runs: 64.8% before the brief fix, 57.9% after it, 72.0% after a pointer change, and 80.4% within three calls after the last fix. Each change was designed on the tuning half, but each was made with the last test number in view. So the 72.0% that cleared my mark is a tuned reading, not a held-out one.
 
 <figure class="os-figure">
 
 ```text
  top-3 hit rate
 
- navigation eval, test half
-   before the brief fix  64.8%  #############
-   after it              57.9%  ############
-   20 minutes later      72.0%  ##############
-   my mark               70%    ##############
- prompts I typed         15.9%  ###
+ navigation eval, test half (n = 107)
+   before the brief fix     64.8%  #############
+   after it                 57.9%  ############
+   after a pointer change   72.0%  ##############
+   my mark                  70%    ##############
+ prompts I typed (n = 69)   15.9%  ###
 
  # = 5 points
 ```
 
-<figcaption>The navigation eval against its mark, and the eval built from prompts I typed, which scores far lower.</figcaption>
+<figcaption>The navigation eval's test half at three of that morning's readings, against its mark, and the eval built from 69 prompts I typed, which scores far lower.</figcaption>
 </figure>
 
-Twenty minutes after the brief fix, with pointer changes and one more leak closed, the navigation eval read 72.0% on its test half, over the mark. The eval built from my own prompts reads 15.9% for the top three and 50.7% within three calls.
+The eval built from my own prompts tells a different story. In the run of 9 October the right file was in the top three for 11 of its 69 prompts (15.9%), and within three calls for 35 (50.7%). Those counts cover both halves of the set.
 
-The two are not measuring the same targets. The navigation eval counts every file a session used, and the human one counts only what a judge picked as the answer. So the gap does not prove the navigation eval still leaks. It does say which number describes real use, and the repository's own lesson says it plainly: the early numbers looked better than real use felt.
+The two evals do not measure the same targets. The navigation eval counts every file a session used, and the human one counts only what a judge picked as the answer. So the gap does not prove the navigation eval still leaks. It does say which number describes real use, and the repository's own lesson says it plainly: the early numbers looked better than real use felt.
 
-## What's next
+## The smallest number goes first
 
-A daily agent now works on the smallest number first. It tunes a change on one half, measures it once on the other, and keeps it only if, among other bars, the human eval's test half does not drop and the navigation eval stays above its marks. The rule it follows is the one I needed that morning: never edit an eval set, a target or a mark to pass. The code and its lessons are in the [saahil-brain repository](/os#code/saahilsanganeriya/saahil-brain).
+A daily agent now works on the human eval first. It tunes a change on one half, reads the other once, and keeps the change only if, among other bars, the human eval's test half does not drop and the navigation eval stays above its marks. Reading the test half once is the rule I did not keep that morning, and the agent may never edit an eval set, a target or a mark to pass. The code and its lessons are in the [saahil-brain repository](/os#code/saahilsanganeriya/saahil-brain).
