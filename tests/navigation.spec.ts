@@ -52,7 +52,9 @@ test('arrow keys and the scroll wheel step between framings, one per press or ge
   await inRoom(page);
   const { stations } = await room(page);
   const at = stations.indexOf('idle');
-  expect(stations).toEqual(expect.arrayContaining(['idle', 'desk', 'monitor', 'projector', 'shelf']));
+  expect(stations).toEqual(expect.arrayContaining(['idle', 'desk', 'monitor']));
+  // The room's tour stops are stepped through too (a stop at the same spot as the desk counts once).
+  expect(stations.filter((s) => s.startsWith('tour_')).length).toBeGreaterThanOrEqual(5);
   expect(stations.indexOf('monitor')).toBe(stations.indexOf('desk') + 1);
 
   await page.keyboard.press('ArrowRight');

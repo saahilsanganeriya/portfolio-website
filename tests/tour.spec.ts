@@ -1,24 +1,22 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
 import type {} from '../src/scene/Application/Application';
 import type { FloorPlan } from '../src/components/RoomTourMap';
 
-// "Take the tour" and its map of the room (brief §0, §1). Until room v3 ships its own public/room/floorplan.json, the
-// room's current framings stand in through a fixture.
+// "Take the tour" and its map of the room (brief §0, §1), drawn from the room's own public/room/floorplan.json.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
 test.describe.configure({ timeout: 240_000 });
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
-const FIXTURE = readFileSync(new URL('./fixtures/floorplan-current-room.json', import.meta.url), 'utf8');
-const PLAN = JSON.parse(FIXTURE) as FloorPlan;
 const station = (stop: FloorPlan['stops'][number]) => stop.camera.replace(/^cam_/, '');
 
-async function arrived(page: Page) {
-  await page.route('**/room/floorplan.json', (route) => route.fulfill({ body: FIXTURE, contentType: 'application/json' }));
+/** The arrival has landed at the desk and the tour's button has appeared; returns the room's floor plan. */
+async function arrived(page: Page): Promise<FloorPlan> {
   await page.goto('/');
   await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 120_000 });
+  await expect(page.getByRole('button', { name: 'Take the tour' })).toBeVisible({ timeout: 15_000 });
+  return (await (await page.request.get('/room/floorplan.json')).json()) as FloorPlan;
 }
 
 const settledAt = (page: Page, at: string, timeout = 30_000) =>
@@ -32,7 +30,8 @@ const stopButtons = (page: Page) => map(page).getByRole('list', { name: 'Stops' 
  * played tour that skips a stop or never returns to the desk, and an Escape that leaves the map open.
  */
 test('the map opens, a stop flies the camera there, the tour plays every stop and returns, Escape closes it', async ({ page }) => {
-  await arrived(page);
+  test.setTimeout(360_000);
+  const PLAN = await arrived(page);
   const open = page.getByRole('button', { name: 'Take the tour' });
   await expect(open).toBeVisible();
   await expect(open).toHaveAttribute('aria-expanded', 'false');
@@ -70,7 +69,7 @@ test('the map opens, a stop flies the camera there, the tour plays every stop an
   await map(page).getByRole('button', { name: 'Play the tour' }).click();
   await expect(map(page).getByRole('button', { name: 'Stop the tour' })).toBeVisible();
   await expect(page.locator('[data-tour-caption]')).toHaveText(`1 of ${PLAN.stops.length} · ${PLAN.stops[0].label}`);
-  await expect(page.locator('[data-tour-caption]')).toHaveText('Back at the desk.', { timeout: 120_000 });
+  await expect(page.locator('[data-tour-caption]')).toHaveText('Back at the desk.', { timeout: 240_000 });
   await settledAt(page, 'desk');
   await expect(map(page).getByRole('button', { name: 'Play the tour' })).toBeVisible();
   const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
@@ -86,7 +85,7 @@ test('the map opens, a stop flies the camera there, the tour plays every stop an
 
 /** Catches a played tour that keeps pulling the camera after the visitor has taken it somewhere else. */
 test('anything the visitor does with the camera ends the played tour', async ({ page }) => {
-  await arrived(page);
+  const PLAN = await arrived(page);
   await page.getByRole('button', { name: 'Take the tour' }).click();
   await map(page).getByRole('button', { name: 'Play the tour' }).click();
   await page.waitForFunction((s) => window.__room!.destination === s, station(PLAN.stops[1]), { timeout: 30_000 });
@@ -109,7 +108,7 @@ test('the map has no serious axe violations', async ({ page }) => {
 
 /** Catches a tour the keyboard cannot reach or drive: Tab to the button, Enter, arrows and Tab through stops, Enter, Escape. */
 test('the keyboard reaches the tour, walks its stops, flies to one and closes the map', async ({ page }) => {
-  await arrived(page);
+  const PLAN = await arrived(page);
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Open SaahilOS' })).toBeFocused();
   await page.keyboard.press('Tab');

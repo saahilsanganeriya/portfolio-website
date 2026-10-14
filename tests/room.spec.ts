@@ -116,6 +116,49 @@ test('the arrival on / glides to the desk in 4 to 6 seconds and stays there', as
   expect(await page.evaluate(() => ({ phase: window.__room!.phase, moving: window.__room!.moving }))).toEqual({ phase: 'desk', moving: false });
 });
 
+/** The cam_arrival_<n> empties in room.glb (top-level nodes, metres), read from the file the page loads. */
+async function arrivalWaypoints(page: Page) {
+  const glb = Buffer.from(await (await page.request.get('/room/room.glb')).body());
+  const json = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8')) as { nodes: { name?: string; translation?: number[] }[] };
+  return json.nodes
+    .filter((n) => /^cam_arrival_\d+$/.test(n.name ?? ''))
+    .sort((a, b) => a.name!.localeCompare(b.name!, undefined, { numeric: true }))
+    .map((n) => ({ name: n.name!, x: n.translation![0], z: n.translation![2] }));
+}
+
+/**
+ * Catches an arrival that flies straight to the desk instead of past the window and the mango plant: in room v3 a
+ * straight glide misses the first two waypoints by more than 1.3 m. (tests/arrival-path.test.ts proves the exact pass.)
+ */
+test('the arrival passes through each of the room’s arrival waypoints', async ({ page }) => {
+  await page.addInitScript(() => {
+    const seen: { x: number; z: number }[] = [];
+    (window as unknown as { seen: typeof seen }).seen = seen;
+    const watch = () => {
+      const room = window.__room;
+      if (room?.startedAt != null && room.landedAt == null) seen.push({ x: room.view.x, z: room.view.z });
+      if (room?.landedAt == null) requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  });
+  await page.goto('/');
+  const waypoints = await arrivalWaypoints(page);
+  expect(waypoints.length).toBeGreaterThanOrEqual(2);
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
+  const seen = await page.evaluate(() => (window as unknown as { seen: { x: number; z: number }[] }).seen);
+  // Frames come far apart on a loaded machine (the first ones at the top quality tier): measure to the straight line
+  // between each two frames, not to the frames, and allow for the curve bending between them.
+  const toSegment = (w: { x: number; z: number }, a: { x: number; z: number }, b: { x: number; z: number }) => {
+    const [dx, dz] = [b.x - a.x, b.z - a.z];
+    const t = Math.max(0, Math.min(1, ((w.x - a.x) * dx + (w.z - a.z) * dz) / (dx * dx + dz * dz || 1)));
+    return Math.hypot(a.x + t * dx - w.x, a.z + t * dz - w.z);
+  };
+  for (const w of waypoints) {
+    const nearest = Math.min(...seen.slice(1).map((b, i) => toSegment(w, seen[i], b)));
+    expect(nearest, `closest pass to ${w.name} (m)`).toBeLessThan(0.75);
+  }
+});
+
 /** Catches an arrival the visitor has to sit through: any key lands the glide at the desk at once. */
 test('a key press during the arrival lands it at the desk', async ({ page }) => {
   await page.goto('/');
