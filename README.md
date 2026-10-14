@@ -1,8 +1,9 @@
 # portfolio-website
 
-Saahil Sanganeriya's personal site. On a desktop, it opens on a vintage room built in Blender; the CRT on the desk runs
-SaahilOS, a small retro desktop. Every post, project and app has its own address, and opening one loads the room and
-opens that window on the monitor; there are no plain pages. Phones get the room at a lighter tier; a browser without
+Saahil Sanganeriya's personal site, at https://saahilsanganeriya.com. On a desktop, it opens on a vintage room built in
+Blender: the camera glides to the desk and into the CRT, which runs SaahilOS, a small retro desktop, with About open.
+"Take the tour" shows a map of the room and visits its stops. Every post, project and app has its own address, and
+opening one loads the room straight at the monitor with that window open; there are no plain pages. Phones get the room at a lighter tier; a browser without
 WebGL gets SaahilOS on a drawn monitor. The site is built with Astro, MDX content collections, React (SaahilOS) and
 three.js (the room), and deploys to Vercel.
 
@@ -97,7 +98,7 @@ place: "Atlanta"          # optional
 series: "2022"            # default: --series, else the year; name a series by year, place or what the photos share
 caption: "The Varsity's glass doors at dusk, the red sign lit from inside."   # one line; it is also the alt text, so say what is in it
 featured: false           # the favourites
-onWall: true              # hung in the room first, by order, until its prints run out
+onWall: true              # pinned to the room's Instax board, by order, until its prints run out
 order: 9                  # optional; lower comes first
 sharpie: "the varsity, atlanta"   # optional; written on the print in marker, at most 28 characters to fit the margin
 date: "2022-02-05"        # optional; the day it was posted
@@ -111,9 +112,8 @@ npm run photos:ingest -- ~/photos/me --me
 ```
 
 which writes the sizes into `src/assets/me/<name>/` and adds `{ "file": "<name>", "alt": "", "use": "about" }` to
-`src/content/me.json`. Write the alt text and set `use` (`opening`, `about`, `thread` or `resume`) before building:
-an empty alt fails the build. A photo of me appears only where it is placed beside text: in an `.mdx` page with
-`<MePhoto file="<name>" side="right" />`, or in a story chapter with `photo: "<name>"`.
+`src/content/me.json`. Write the alt text before building: an empty alt fails the build. A photo of me appears only
+where it is placed beside text, in an `.mdx` page with `<MePhoto file="<name>" side="right" />` (About has four).
 
 ## Update the favourite films (the posters) in one step
 
@@ -139,6 +139,18 @@ outlines, so an `<img>` or a texture shows it without web fonts). To add hand-dr
 `npm run posters:runtime -- <slug>` and `npm run favorites -- <export folder>`. The art for films that are no longer
 favourites stays in `blender/posters/`.
 
+## Add a book or a recipe
+
+Books are one list, `src/content/books.json`, in shelf order: add `{ "title", "author", "year", "line" }` (the line is
+one sentence in my voice). A recipe is one file, `src/content/recipes/<slug>.mdx`; copy `src/content/recipes/_template.mdx`
+(fields in the table below) and commit. The bookshelf opens Books; the croissant in the oven opens the Kitchen.
+
+## Refresh the Code window
+
+SaahilOS's Code window reads a snapshot of the public repositories committed in `src/os/apps/code/snapshot/`, so it
+shows what was pushed when the snapshot was taken. After pushing to any of them, run the `npm run repos` line in the
+Scripts table below, scan the result as for any commit, and commit it.
+
 ## Content
 
 | Collection | Files | Addresses (each opens its window on the monitor) |
@@ -154,7 +166,9 @@ favourites stays in `blender/posters/`.
 The schemas are in `src/content.config.ts`. Books, recipes and the Voyager page may be absent or empty; the build
 passes and the window says so. Every entry is also served as static JSON at `/content/<collection>/<slug>.json`
 (`{ data, html }`), which SaahilOS reader windows load; `/content/books.json`, `/content/recipes.json` and
-`/content/credits.json` (from `blender/ASSETS.md`) hold the lists. `src/content/story/` is no longer a collection: nothing builds or serves it.
+`/content/credits.json` (from `blender/ASSETS.md`) hold the lists. The room's sticky notes are `src/content/sticky-notes.json`
+(his own phrases, at most six), and the projector's film is `public/room/story-film.*` with its manifest in
+`src/scene/reel.json`.
 
 SaahilOS's Code window reads the owner's public GitHub repositories from a snapshot committed in
 `src/os/apps/code/snapshot/` (README and Markdown files as GitHub renders them, the file tree, the last 30 commits),
@@ -186,6 +200,7 @@ review that names one of those people.
 | `npm run favorites -- <export folder>` | Writes `src/content/favorites.json` from a Letterboxd export's `profile.csv`. |
 | `GH_TOKEN=$(gh auth token --user saahilsanganeriya) REPOS_WITHHOLD='<pattern>' npm run repos [-- <repo> ...]` | Refreshes the Code window's snapshot of the public repositories (local only: it needs a token, and refuses to run on Vercel). Email addresses are removed; any file, doc or commit line matching `REPOS_WITHHOLD` (the trace-scan pattern and anything kept off the site, held outside this repo) is left out and counted. Commit the result. |
 | `node scripts/posters/glyphs.mjs` | Writes `src/lib/poster-glyphs.ts`, the glyph outlines `renderPoster` uses. Run it again only when the fonts or the character sets change. |
+| `node scripts/media/build-audio.mjs`, `node scripts/media/build-records.mjs` | Rebuild the room's sounds and the record crate from their recorded sources (listed in `blender/ASSETS.md`). |
 | `npm run measure:payload`, `npm run measure:fps` | Measure the room's payload (the initial load until the room is interactive, and what a visit loads on demand) and its frame rate in each framing. |
 
 ## Deploy
@@ -195,7 +210,8 @@ Vercel, through `@astrojs/vercel`. Every page is prerendered. A route that must 
 
 The Vercel project (`portfolio-website`) is not connected to the GitHub repository, so a push does not deploy. From a
 checkout, `npx vercel link --yes --project portfolio-website` once, then `npx vercel deploy --prod --yes`; Vercel runs
-`npm run build` itself.
+`npm run build` itself. Production answers on saahilsanganeriya.com, www.saahilsanganeriya.com and
+portfolio-website-sandy-five-70.vercel.app.
 
 ## Design
 
