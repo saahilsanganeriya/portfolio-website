@@ -227,6 +227,11 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       room.start({ open: open ?? undefined, fast: skipped });
       status.textContent = 'The room is ready. Sound starts with your first click or key press; the Sound button turns it off.';
       if (osRequested) monitor()?.focus({ preventScroll: true });
+    };
+
+    // Landed at the desk: the second way on, the tour, appears (its floor plan loads only now, after the arrival).
+    const onLanded = () => {
+      root.classList.add('room-landed');
       const tourButton = stage.querySelector<HTMLButtonElement>('[data-tour-open]')!;
       const tourPanel = stage.querySelector<HTMLElement>('[data-tour]')!;
       void loadFloorPlan().then((plan) => plan && room && mountTour(tourButton, tourPanel, room, plan));
@@ -281,6 +286,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
         light,
         onMonitor: showPhoneOs,
         onLost: () => fallBack('the GL context was lost'),
+        onLanded,
       });
       if (light) {
         // Load the phone's SaahilOS behind the boot screen, so it is ready when the camera reaches the glass.

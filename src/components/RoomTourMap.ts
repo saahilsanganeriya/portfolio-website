@@ -21,6 +21,8 @@ const HOLD_MS = 2600;
 const PLAN_MARGIN_M = 0.35;
 // The you-are-here wedge's length, as a share of the plan's width.
 const HERE_SCALE = 0.1;
+// Numbered markers closer than this (a share of the plan's width, about one marker) are pushed apart to stay readable.
+const MARKER_GAP = 0.075;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** The floor plan, or null when the room has none (the tour then stays hidden). */
@@ -102,6 +104,11 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     doors.append(gap, swing);
   }
 
+  const spots = spread(
+    plan.stops.map((s) => s.position),
+    width * MARKER_GAP,
+    [minX, minZ, minX + width, minZ + height],
+  );
   const stops: Stop[] = [];
   plan.stops.forEach((stop, i) => {
     const station = stop.camera.replace(/^cam_/, '');
@@ -121,8 +128,8 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     list.append(li);
     const marker = document.createElement('span');
     marker.textContent = number;
-    marker.style.left = `${((stop.position[0] - minX) / width) * 100}%`;
-    marker.style.top = `${((stop.position[1] - minZ) / height) * 100}%`;
+    marker.style.left = `${((spots[i][0] - minX) / width) * 100}%`;
+    marker.style.top = `${((spots[i][1] - minZ) / height) * 100}%`;
     markers.append(marker);
     const entry = { label: stop.label, station, item, marker };
     stops.push(entry);
@@ -226,4 +233,29 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   );
 
   open.hidden = stops.length === 0;
+}
+
+/** Pushes points closer than `gap` apart (a few rounds, each pair half each way), kept inside `bounds`. */
+function spread(points: readonly [number, number][], gap: number, [x0, z0, x1, z1]: [number, number, number, number]) {
+  const spots = points.map(([x, z]) => [x, z] as [number, number]);
+  for (let round = 0; round < 12; round++) {
+    for (let i = 0; i < spots.length; i++) {
+      for (let j = i + 1; j < spots.length; j++) {
+        const dx = spots[j][0] - spots[i][0];
+        const dz = spots[j][1] - spots[i][1];
+        const d = Math.hypot(dx, dz);
+        if (d >= gap) continue;
+        // Two stops on the same spot part sideways, the later one to the right.
+        const [ux, uz] = d > 1e-6 ? [dx / d, dz / d] : [1, 0];
+        const push = (gap - d) / 2;
+        spots[i] = [spots[i][0] - ux * push, spots[i][1] - uz * push];
+        spots[j] = [spots[j][0] + ux * push, spots[j][1] + uz * push];
+      }
+    }
+    for (const spot of spots) {
+      spot[0] = Math.min(x1, Math.max(x0, spot[0]));
+      spot[1] = Math.min(z1, Math.max(z0, spot[1]));
+    }
+  }
+  return spots;
 }

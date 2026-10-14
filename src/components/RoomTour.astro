@@ -44,7 +44,7 @@
     color: var(--paper);
   }
 
-  /* Shown once the room has started and the floor plan has loaded; never over SaahilOS on a phone. */
+  /* Shown once the camera has landed at the desk and the floor plan has loaded; never over SaahilOS on a phone. */
   .room-tour-open {
     bottom: var(--space-3);
     display: none;
@@ -55,7 +55,7 @@
     cursor: pointer;
   }
 
-  :global(html.room.room-started:not(.room-os)) .room-tour-open:not([hidden]) {
+  :global(html.room.room-landed:not(.room-os)) .room-tour-open:not([hidden]) {
     display: block;
   }
 

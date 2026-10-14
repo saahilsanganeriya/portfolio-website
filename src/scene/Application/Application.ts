@@ -31,6 +31,8 @@ export interface RoomOptions {
   onMonitor?(target: string | null): void;
   /** The browser took the GL context away (memory pressure): the page should show the drawn monitor instead. */
   onLost?(): void;
+  /** The camera has come to rest where the room starts (the desk): the visitor's ways on begin here. */
+  onLanded?(): void;
 }
 
 export interface StartOptions {
@@ -285,6 +287,7 @@ export class Application implements RoomHandle {
     const endIntro = () => {
       this.intro = false;
       this.landedAt ??= performance.now();
+      this.options.onLanded?.();
       // The visitor can act now: what was left for later may start loading.
       this.interactiveAt ??= performance.now();
       this.world.becomeInteractive();
