@@ -22,7 +22,7 @@ async function openRoom(browser: Browser, reducedMotion: 'reduce' | 'no-preferen
   shaderErrors.set(page, errors);
   page.on('console', (message) => /Shader Error|VALIDATE_STATUS false/.test(message.text()) && errors.push(message.text().slice(0, 300)));
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 200_000 });
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 200_000 });
   await page.waitForFunction(() => window.__room!.world.interactive, null, { timeout: 10_000 });
   await page.evaluate(() => {
     const audio = window.__room!.audio as unknown as { sfx(name: string, at?: unknown): void };

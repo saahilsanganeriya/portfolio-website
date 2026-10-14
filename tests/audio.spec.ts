@@ -15,9 +15,11 @@ const musicLoaded = (page: Page) =>
     timeout: 60_000,
   });
 
-/** The arrival has landed at the desk. */
+/** The arrival has landed, and the camera stays at the desk (going there cancels the landing's step into the monitor). */
 async function arrived(page: Page) {
-  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 120_000 });
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
+  await page.evaluate(() => window.__room!.goto('desk'));
+  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 30_000 });
 }
 
 /** Catches any sound file (music, props, city) fetched before the visitor's first input, and music that never starts. */

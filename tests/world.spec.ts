@@ -13,7 +13,7 @@ const world = (page: Page) => page.evaluate(() => window.__room!.world);
 /** The room after the arrival, stepped back from the desk to the wide view, where every prop is in sight. */
 async function inRoom(page: Page, path = '/') {
   await page.goto(path);
-  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 150_000 });
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 150_000 });
   await page.waitForFunction(() => window.__room!.world.interactive, null, { timeout: 10_000 });
   await page.evaluate(() => window.__room!.goto('idle'));
   await settledAt(page, 'idle');
@@ -59,7 +59,7 @@ test('each half of the window shows its own cityâ€™s day or night, by that cityâ
 
   await page.clock.setFixedTime('2026-06-22T08:00:00Z');
   await page.reload();
-  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 150_000 });
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 150_000 });
   const night = (await world(page)).window!;
   expect(night.sf).toMatchObject({ local: '1:00 am', night: 1 });
   expect(night.delhi).toMatchObject({ local: '1:30 pm', night: 0 });
