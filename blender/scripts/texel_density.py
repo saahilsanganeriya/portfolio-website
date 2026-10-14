@@ -16,9 +16,9 @@ import bpy
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bake  # noqa: E402
 import export  # noqa: E402
 
-VIEW_SIZE = 1024
 # Surfaces worth naming in the report (whichever exist in this version of the room).
 WATCH = ("env_wall_back", "env_wall_left", "env_wall_right", "env_floor", "env_ceiling", "desk_desk", "desk_crt",
          "desk_computer", "crt_glow", "desk_keyboard", "props_mango_plant", "espresso_machine", "countertop_oven",
@@ -27,7 +27,7 @@ WATCH = ("env_wall_back", "env_wall_left", "env_wall_right", "env_floor", "env_c
 
 def shipped_size(atlas: str) -> int:
     if atlas.startswith("window_"):
-        return getattr(export, "VIEW_SIZES", {}).get(atlas, VIEW_SIZE)
+        return bake.ATLAS_SIZES[atlas]  # the view ships at its bake size
     return export.EXPORT_SIZES[atlas]
 
 
