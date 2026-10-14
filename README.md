@@ -208,10 +208,27 @@ review that names one of those people.
 Vercel, through `@astrojs/vercel`. Every page is prerendered. A route that must run on request sets
 `export const prerender = false`; Vercel then caches it with ISR for at most an hour.
 
-The Vercel project (`portfolio-website`) is not connected to the GitHub repository, so a push does not deploy. From a
+The Vercel project (`portfolio-website`) is connected to this GitHub repository, but a push deploys only when it
+publishes a new résumé: `scripts/vercel-ignore-build.sh` (the `ignoreCommand` in `vercel.json`) builds a push to `main`
+only when its top commit changes `public/resume/`, and skips every other push. Deploy everything else by hand: from a
 checkout, `npx vercel link --yes --project portfolio-website` once, then `npx vercel deploy --prod --yes`; Vercel runs
 `npm run build` itself. Production answers on saahilsanganeriya.com, www.saahilsanganeriya.com and
 portfolio-website-sandy-five-70.vercel.app.
+
+### The résumé
+
+The private repository `resume-builder` holds the résumé, as one YAML file. Do not edit the PDF here. A push to its
+`main` publishes the PDF to this site:
+
+```
+resume-builder main ─► publish-resume workflow ─► commit public/resume/saahil-sanganeriya-resume.pdf to main
+  (YAML changed)        render without the phone,          │
+                        refuse a phone or a 2nd email      ▼
+                                                 Vercel builds (public/resume/ changed) ─► production
+```
+
+`/resume.pdf` (`src/pages/resume.pdf.ts`) is the one link to share: the build copies the published PDF to it. The
+Résumé window and the About window's Résumé button use it too.
 
 ## Design
 
