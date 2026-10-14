@@ -10,7 +10,6 @@ describe('the room sound state', () => {
     expect(stateFor('window', '')).toBe('window');
     expect(stateFor('monitor', 'projects/swe-sim')).toBe('os');
     expect(stateFor('monitor', 'films/la-la-land')).toBe('projector');
-    expect(stateFor('monitor', 'story')).toBe('story');
   });
 
   /** Catches a stored volume that breaks the page (bad JSON, out of range) or is not read back. */

@@ -45,25 +45,8 @@ const MUSIC_BARS = 16;
 
 // ---- sfx: [start, length] excerpts, peak-normalised; the runtime sets each one's level under the music ----
 const SFX = [
-  { name: 'shutter-1', url: `${FREESOUND}815/815501_10675217-hq.mp3`, start: 5.55, length: 0.5, highpass: 150 },
-  { name: 'shutter-2', url: `${FREESOUND}815/815501_10675217-hq.mp3`, start: 7.38, length: 0.5, highpass: 150 },
-  { name: 'super8', url: `${FREESOUND}569/569532_12816528-hq.mp3`, start: 3.6, length: 2.8, fadeIn: 0.15 },
   { name: 'projector-clack', url: `${FREESOUND}613/613832_1130120-hq.mp3`, start: 2.7, length: 3.5, fadeOut: 1.2 },
-  {
-    name: 'espresso',
-    parts: [
-      { url: `${FREESOUND}402/402845_824371-hq.mp3`, start: 3.4, length: 2.4, at: 0, fadeOut: 0.3 },
-      { url: `${FREESOUND}79/79034_1231187-hq.mp3`, start: 4, length: 2.4, at: 2.0, fadeIn: 0.25, fadeOut: 0.6, gain: 0.7 },
-    ],
-  },
   { name: 'espresso-brew', url: `${FREESOUND}402/402845_824371-hq.mp3`, start: 22, length: 7, fadeIn: 1, fadeOut: 1.5 },
-  {
-    name: 'oven',
-    parts: [
-      { url: `${FREESOUND}214/214355_2444153-hq.mp3`, start: 0.2, length: 1.55, at: 0, fadeOut: 0.15 },
-      { url: `${FREESOUND}149/149506_274531-hq.mp3`, start: 1.95, length: 5.4, at: 1.9, fadeOut: 1.5 },
-    ],
-  },
   // The pour the espresso machine plays as it pulls a shot: the vibratory pump coming on, then the shot running.
   { name: 'espresso-pour', url: `${FREESOUND}628/628845_13885154-hq.mp3`, start: 1.25, length: 9, fadeIn: 0.05, fadeOut: 2 },
   { name: 'oven-open', url: `${FREESOUND}372/372541_3294528-hq.mp3`, start: 0, length: 0.95, fadeOut: 0.2 },
@@ -73,9 +56,8 @@ const SFX = [
   { name: 'whoosh', url: `${FREESOUND}391/391448_7280678-hq.mp3`, start: 6.65, length: 0.95, fadeIn: 0.05, fadeOut: 0.3 },
 ];
 
-// ---- beds: loops placed in the room (fan) and at the window (one per city, two for Delhi's day and night) ----
+// ---- beds: loops at the window (one per city, two for Delhi's day and night) ----
 const BEDS = [
-  { name: 'fan', dir: 'sfx', parts: [{ url: `${FREESOUND}345/345230_6140900-hq.mp3`, start: 1 }], length: 12, crossfade: 1.5 },
   { name: 'sf', dir: 'city', parts: [{ url: `${FREESOUND}90/90636_1431924-hq.mp3`, start: 40 }], length: 22, crossfade: 2 },
   {
     name: 'delhi-day',

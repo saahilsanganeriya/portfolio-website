@@ -14,7 +14,7 @@ export const KEYS = ['key-1', 'key-2', 'key-3', 'key-4', 'key-5', 'key-6'] as co
 export const SHOTS = ['startup', ...KEYS, 'mouse-down', 'mouse-up'] as const;
 export type LoopName = (typeof LOOPS)[number];
 export type ClickKind = 'key' | 'mouse-down' | 'mouse-up';
-export type BedName = 'fan' | 'sf' | 'delhi-day' | 'delhi-night';
+export type BedName = 'sf' | 'delhi-day' | 'delhi-night';
 
 // Linear gains on the -23 LUFS files: the ambience sits near -30 dBFS RMS, clicks at their recorded level, and the
 // projector runs only while its film does, heard up close (it falls off with the square of distance) or, while it
@@ -39,8 +39,8 @@ const BED_IN_S = 2.8;
 // The stems stop at 11 kHz, so the room state's open filter is 11 kHz; a record keeps its top end there.
 const recordCutoff = (cutoff: number) => (cutoff >= 11000 ? 20000 : cutoff);
 const STEM_PAN: Record<Stem, number> = { keys: -0.15, melody: 0.2, beat: 0 };
-// Beds on -23 LUFS loops: the fan is a murmur from across the room; each city is faint until the window comes forward.
-const BED_LEVEL: Record<BedName, number> = { fan: 0.35, sf: 0.3, 'delhi-day': 0.3, 'delhi-night': 0.35 };
+// Beds on -23 LUFS loops: each city is faint until the window comes forward.
+const BED_LEVEL: Record<BedName, number> = { sf: 0.3, 'delhi-day': 0.3, 'delhi-night': 0.35 };
 const BED_FADE_S = 4;
 const CUT_M = 1.2;
 

@@ -27,7 +27,7 @@ const REST_S = 0.4;
 const CUT_M = 1.2;
 // Props and the window keep full level within 2.5 m, so a click from the wide view (6–7 m away) is heard under the music.
 const EFFECT_REF_M = 2.5;
-const BED_REF_M: Record<BedName, number> = { fan: 0.8, sf: 1.5, 'delhi-day': 1.5, 'delhi-night': 1.5 };
+const BED_REF_M: Record<BedName, number> = { sf: 1.5, 'delhi-day': 1.5, 'delhi-night': 1.5 };
 
 /** A prop's sound: one of its recordings (picked at random), its level under the music, and where it sits. */
 interface Effect {
@@ -40,13 +40,9 @@ interface Effect {
 }
 
 const EFFECTS = {
-  shutter: { files: ['shutter-1', 'shutter-2'], dir: 'sfx', level: 0.5, anchors: ['hit_fujifilm_a', 'props_fujifilm_xt'] },
-  super8: { files: ['super8'], dir: 'sfx', level: 0.4, anchors: ['hit_super8', 'props_super8_camera'] },
   'projector-clack': { files: ['projector-clack'], dir: 'sfx', level: 0.45, anchors: ['projector_lens', 'hit_projector'] },
-  espresso: { files: ['espresso'], dir: 'sfx', level: 0.35, anchors: ['espresso_machine', 'hit_espresso'] },
   'espresso-brew': { files: ['espresso-brew'], dir: 'sfx', level: 0.22, anchors: ['espresso_machine'] },
   'espresso-pour': { files: ['espresso-pour'], dir: 'sfx', level: 0.4, anchors: ['espresso_cup', 'espresso_machine'] },
-  oven: { files: ['oven'], dir: 'sfx', level: 0.35, anchors: ['countertop_oven', 'hit_oven'] },
   'oven-open': { files: ['oven-open'], dir: 'sfx', level: 0.5, anchors: ['oven_door', 'countertop_oven'] },
   'oven-close': { files: ['oven-close'], dir: 'sfx', level: 0.6, anchors: ['oven_door', 'countertop_oven'] },
   lava: { files: ['lava'], dir: 'sfx', level: 0.3, anchors: ['lava_lamp', 'hit_lava_lamp'], ref: 1 },
@@ -67,10 +63,6 @@ export type SfxName = keyof typeof EFFECTS;
  * not here: the room plays their recordings when they act, once the camera has flown to them (src/scene/World/).
  */
 const HOTSPOT_SFX: Record<string, SfxName> = {
-  hit_fujifilm_a: 'shutter',
-  hit_fujifilm_b: 'shutter',
-  hit_fujifilm_c: 'shutter',
-  hit_super8: 'super8',
   hit_lava_lamp: 'lava',
 };
 
@@ -86,12 +78,11 @@ const AMBIENT: { name: SfxName; everyS: [number, number] }[] = [
 ];
 
 const BED_ANCHORS: Record<BedName, readonly string[]> = {
-  fan: ['ceiling_fan_blades', 'ceiling_fan'],
   sf: ['window_view_sf'],
   'delhi-day': ['window_view_delhi'],
   'delhi-night': ['window_view_delhi'],
 };
-const BED_DIR: Record<BedName, 'sfx' | 'city'> = { fan: 'sfx', sf: 'city', 'delhi-day': 'city', 'delhi-night': 'city' };
+const BED_DIR: Record<BedName, 'sfx' | 'city'> = { sf: 'city', 'delhi-day': 'city', 'delhi-night': 'city' };
 
 /** What the rest of the page holds of the room's sound. */
 export interface AudioHandle {
@@ -387,7 +378,7 @@ export class RoomAudio implements AudioHandle {
       }
     }
     for (const { name, everyS } of AMBIENT) {
-      if (!this.anchorOf(EFFECTS[name].anchors) || this.current === 'os' || this.current === 'story') continue;
+      if (!this.anchorOf(EFFECTS[name].anchors) || this.current === 'os') continue;
       const due = this.nextEvent.get(name);
       if (due === undefined) this.nextEvent.set(name, t + between(everyS));
       else if (t >= due) {
@@ -516,9 +507,8 @@ export class RoomAudio implements AudioHandle {
     if (buffer && at && this.mix === mix) mix.bed(bed, buffer, { position: at, ref: BED_REF_M[bed] }, this.bedLevel(bed));
   }
 
-  /** How far forward a bed is: the fan always murmurs; each city by the state and its local day or night. */
+  /** How far forward a bed is: each city by the state and its local day or night. */
   private bedLevel(bed: BedName, state = this.current, date = new Date()) {
-    if (bed === 'fan') return 1;
     const city = MUSIC_MIX[state].city;
     if (bed === 'sf') return city * (0.75 + 0.25 * cityDay('sf', date));
     const day = cityDay('delhi', date);

@@ -2,11 +2,11 @@
 // music does in each, the two cities' local day and night, the remembered volume, and the shape of every fade.
 
 /** What the visitor is doing, as far as the sound cares. */
-export type AudioState = 'room' | 'projector' | 'os' | 'story' | 'window';
+export type AudioState = 'room' | 'projector' | 'os' | 'window';
 
 /**
  * The state for the framing the camera rests at or flies to, and SaahilOS's front window (the monitor's hash).
- * Films is the projector's music wherever it is watched; The Thread is the calm one; any other window is the OS.
+ * Films is the projector's music wherever it is watched; any other window is the OS.
  */
 export function stateFor(station: string, frontWindow: string): AudioState {
   if (station === 'projector') return 'projector';
@@ -14,7 +14,6 @@ export function stateFor(station: string, frontWindow: string): AudioState {
   if (station !== 'monitor') return 'room';
   const app = frontWindow.split('/')[0];
   if (app === 'films') return 'projector';
-  if (app === 'story') return 'story';
   return 'os';
 }
 
@@ -34,12 +33,11 @@ export interface MusicMix {
 }
 
 // The room plays piano and beat; the projector trades the beat for the melody stem, like an accompanist under a film;
-// the monitor muffles the room's mix; The Thread drops the beat and settles; the window lets the cities in.
+// the monitor muffles the room's mix; the window lets the cities in.
 export const MUSIC_MIX: Record<AudioState, MusicMix> = {
   room: { stems: { keys: 1, melody: 0, beat: 0.8 }, level: 1, cutoff: 11000, city: 0.25 },
   projector: { stems: { keys: 0.75, melody: 0.95, beat: 0 }, level: 0.8, cutoff: 11000, city: 0.15 },
   os: { stems: { keys: 1, melody: 0, beat: 0.7 }, level: 0.85, cutoff: 1400, city: 0.1 },
-  story: { stems: { keys: 0.85, melody: 0, beat: 0 }, level: 0.7, cutoff: 2600, city: 0.1 },
   window: { stems: { keys: 0.8, melody: 0, beat: 0.5 }, level: 0.7, cutoff: 7000, city: 1 },
 };
 
