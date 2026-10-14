@@ -7,11 +7,9 @@ import type { StationName } from './Application/RoomModel';
 
 /**
  * What a prop does in the room itself; World carries these out. An action World does not handle yet falls back to the
- * hotspot's `fly`, then its `target`, so the room and the world can land in either order. `fan` and `dial` stay only
- * while World still switches on them: room v3 has no fan and no programs to dial (the screen is gone), and no hotspot
- * names them.
+ * hotspot's `fly`, then its `target`, so the room and the world can land in either order.
  */
-export type WorldAction = 'album' | 'dial' | 'lava' | 'espresso' | 'oven' | 'projector' | 'print' | 'window' | 'fan';
+export type WorldAction = 'album' | 'dial' | 'lava' | 'espresso' | 'oven' | 'projector' | 'print' | 'window';
 
 export interface Hotspot {
   /** Proxy boxes in room.glb (PLAN 3.6) that open this hotspot; World names the poster and print proxies by slot. */
