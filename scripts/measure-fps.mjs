@@ -1,8 +1,9 @@
 // Frame rate of the room on the "2020 laptop" profile (PLAN 3.9): Playwright Chromium at 1440x900, device scale 2,
 // software WebGL (SwiftShader) standing in for a 2020 integrated GPU. Counts requestAnimationFrame frames during the
 // arrival glide on / (no input), then for 10 s in each phase: every framing the room has (the desk, the monitor and the
-// tour's stops among them), a hovered prop, across camera moves, and the photo album open with a page turning every
-// 1.2 s; passes when every phase's median is at least 50 fps. By default everything moves at once after the arrival
+// tour's stops among them), a hovered prop, across camera moves, the tour's map open while the camera flies to a stop
+// (when the room has a floor plan), and the photo album open with a page turning every 1.2 s; passes when every
+// phase's median is at least 50 fps. By default everything moves at once after the arrival
 // (PLAN 11.3, 12.3): the fan at its top speed, the espresso machine brewing and the projector playing in view or not;
 // --calm leaves the room as a visitor finds it. --phone measures the light tier on an emulated iPhone 13 instead: the
 // arrival, the glide into the monitor until SaahilOS takes over, the wide view, the desk and moves. The reel column is the share of frames in which the projector was playing;
@@ -147,6 +148,15 @@ try {
     record('hover', await hovered);
     await page.mouse.move(0, 0);
     record('move', await count(seconds * 1000, 'move'));
+    // The map open (its you-are-here mark redrawn every frame) while the camera flies to its second stop and rests.
+    const tour = page.locator('[data-tour-open]');
+    if (await tour.isVisible()) {
+      await tour.click();
+      const flying = count(seconds * 1000);
+      await page.locator('[data-tour-stops] button').nth(1).click();
+      record('map', await flying);
+      await page.keyboard.press('Escape');
+    }
     // The album open in front of the desk framing, turning a page every 1.2 s.
     await page.evaluate(() => window.__room.goto('idle'));
     await settle('idle');
