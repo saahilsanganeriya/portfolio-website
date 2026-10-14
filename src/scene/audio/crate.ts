@@ -124,8 +124,8 @@ const SLEEVES: Record<RecordId, () => string> = {
     <text x="8" y="93" ${MONO} font-size="3.8" letter-spacing="0.6" fill="${DUST}">FROM CYLINDERS · 2014</text>`,
   'raga-kiravani': () => `
     <rect width="100" height="100" fill="${MANGO}"/>
-    <path d="M18 100 A32 32 0 0 1 82 100 Z" fill="${PAPER}"/>
-    ${[0, 1, 2, 3, 4, 5, 6].map((i) => `<line x1="${38 + i * 4}" y1="8" x2="${38 + i * 4}" y2="100" stroke="${INK}" stroke-width="${i < 4 ? 0.7 : 0.4}"/>`).join('')}
+    <path d="M42 100 A30 30 0 0 1 102 100 Z" fill="${PAPER}"/>
+    ${[0, 1, 2, 3, 4, 5, 6].map((i) => `<line x1="${60 + i * 4}" y1="8" x2="${60 + i * 4}" y2="100" stroke="${INK}" stroke-width="${i < 4 ? 0.7 : 0.4}"/>`).join('')}
     <text x="8" y="14" ${MONO} font-size="4.6" letter-spacing="0.6" fill="${INK}">VEENA</text>
     <text x="8" y="40" ${SERIF} font-style="italic" font-size="11" fill="${INK}"><tspan x="8">Rāga</tspan><tspan x="8" dy="11">Kīravāṇi</tspan></text>
     <text x="8" y="62" ${MONO} font-size="3.8" letter-spacing="0.5" fill="${WALNUT}">L. RAMAKRISHNAN</text>`,

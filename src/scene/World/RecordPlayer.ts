@@ -340,10 +340,13 @@ export class RecordPlayer {
     const title = document.createElement('span');
     title.className = 'room-records-title';
     title.textContent = record.title;
+    const artist = document.createElement('span');
+    artist.className = 'room-records-meta';
+    artist.textContent = record.artist;
     const meta = document.createElement('span');
     meta.className = 'room-records-meta';
-    meta.textContent = `${record.artist} · ${record.genre} · ${duration(record.seconds)}`;
-    caption.append(title, meta);
+    meta.textContent = `${record.genre} · ${duration(record.seconds)}`;
+    caption.append(title, artist, meta);
     button.append(caption);
     li.append(button);
     return li;
