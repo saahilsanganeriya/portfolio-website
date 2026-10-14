@@ -39,6 +39,9 @@ export const LIGHT: QualityLadder = {
 };
 
 const TARGET_FPS = 50;
+const STALL_MS = 250;
+// This many long frames in a row are the machine's speed, not a stall.
+const SLOW_RUN = 3;
 // Half a second per window: the arrival glides for under five, none of them at a tier the machine cannot hold.
 const WINDOW_MS = 500;
 
@@ -53,6 +56,7 @@ export class Quality {
   private samples: number[] = [];
   private windowStart = 0;
   private warmingUp = true;
+  private longFrames = 0;
   /** Screenshot runs set `window.__roomTier` before the page loads, so every shot is drawn at the same tier. */
   private readonly pinned: boolean;
 
@@ -79,8 +83,9 @@ export class Quality {
   sample(now: number, frameMs: number) {
     if (this.pinned) return;
     if (!this.windowStart) this.reset(now);
-    // A gap this long is a stall (shader compile, tab switch, GC), not the renderer's speed.
-    if (frameMs > 250) return;
+    // A lone gap this long is a stall (shader compile, tab switch, GC), not the renderer's speed.
+    this.longFrames = frameMs > STALL_MS ? this.longFrames + 1 : 0;
+    if (this.longFrames > 0 && this.longFrames < SLOW_RUN) return;
     this.samples.push(frameMs);
     if (now - this.windowStart < WINDOW_MS) return;
 
