@@ -203,16 +203,16 @@ test.describe('desktop', () => {
       );
     expect(await exhibit.locator('.os-print picture').evaluateAll(widestOffered)).toBeLessThanOrEqual(960);
 
-    await page.goto('/os?embed=1#photography/sweat-and-toil');
+    await page.goto('/os?embed=1#photography/colorful-tshirts');
     const photo = page.getByRole('dialog', { name: 'A Narrative in a Frame' });
-    await expect(photo.getByRole('heading', { level: 2, name: 'sweat and toil' })).toBeVisible();
+    await expect(photo.getByRole('heading', { level: 2, name: 'colorful tshirts on monochrome afternoons' })).toBeVisible();
     const full = photo.locator('.os-photo-figure img');
-    await expect(full).toHaveAttribute('alt', /Rainbow light across a face/);
+    await expect(full).toHaveAttribute('alt', /A man in a pink shirt/);
     await expect.poll(() => full.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     expect(await photo.locator('.os-photo-figure picture').evaluateAll(widestOffered)).toBeGreaterThan(960);
     await photo.getByRole('link', { name: 'Next ›' }).click();
     await expect(page).toHaveURL(/#photography\/[a-z0-9-]+$/);
-    await expect(photo.getByRole('heading', { level: 2, name: 'sweat and toil' })).toBeHidden();
+    await expect(photo.getByRole('heading', { level: 2, name: 'colorful tshirts on monochrome afternoons' })).toBeHidden();
   });
 
   /** Catches the wallpaper going missing, which leaves the flat walnut colour the owner ruled out. */
@@ -303,7 +303,7 @@ test.describe('desktop', () => {
       ['welcome', 'Welcome'],
       ['game', 'Daily word'],
       ['photography', 'A Narrative in a Frame'],
-      ['photography/sweat-and-toil', 'A Narrative in a Frame'],
+      ['photography/colorful-tshirts', 'A Narrative in a Frame'],
     ]) {
       await page.goto(`/os?embed=1#${hash}`);
       // Measured once the open spring has settled; mid-fade, every colour reads lighter than it is.
