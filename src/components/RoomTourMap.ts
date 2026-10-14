@@ -259,7 +259,11 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
       at,
       () => {
         if (playing?.mode !== 'steps' || playing.expected !== at) return;
-        if (index >= stops.length) return stopPlaying(false);
+        if (index >= stops.length) {
+          stopPlaying(false);
+          ended = true;
+          return;
+        }
         playing.timer = window.setTimeout(() => visitStop(nextStopIndex(stops, index, room.filmPlaying())), HOLD_MS);
       },
       stop?.distance,
@@ -296,6 +300,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
         glide.arrived = true;
         say('Back at the desk.');
         stopPlaying(false);
+        ended = true;
       },
       plan,
     );
@@ -306,9 +311,14 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     visitStop(first);
   });
 
+  // A wheel anywhere brakes the glide too, also over this inset where the pointer rests after pressing Play.
+  window.addEventListener('wheel', () => playing?.mode === 'glide' && room.stopGlide(), { passive: true });
+
   // ---- opening, closing and the keyboard ----
   let frame = 0;
   let current: Stop | undefined;
+  // A played tour that came home keeps its last line ("Back at the desk.") until the camera moves again.
+  let ended = false;
   const follow = () => {
     frame = requestAnimationFrame(follow);
     const view = room.view();
@@ -328,13 +338,14 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
       if (playing && view.destination !== playing.expected) stopPlaying();
       at = view.moving ? undefined : (stops.find((s) => s.station === view.destination) ?? nearestStop(view.targetX, view.targetZ));
     }
+    if (view.moving) ended = false;
     if (at === current) return;
     current?.item.removeAttribute('aria-current');
     current?.marker.removeAttribute('data-current');
     current = at;
     at?.item.setAttribute('aria-current', 'location');
     at?.marker.setAttribute('data-current', '');
-    if (at && !playing) say(`You are here: ${at.label}.`);
+    if (at && !playing && !ended) say(`You are here: ${at.label}.`);
   };
 
   const nearestStop = (x: number, z: number) => {
