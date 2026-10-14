@@ -48,8 +48,8 @@ night, on 16 threads (the devbox is shared), and saves the bake UVs into `room.b
 (export.py resamples them), so each shipped texel averages several baked ones. The room atlases bake without the view
 (a camera-invisible card behind the window, lit by Poly Haven's dusk HDRI, lights the room); the view bakes alone
 with its own sun, sky and night lights. For a quick look, bake small: `-- --scale 0.25 --samples 32`, one atlas:
-`-- --atlas desk`, or the view only: `-- --atlas window_sf,window_delhi`. The final bake took 71 minutes on 24 threads of
-the shared devbox (env 9, desk 30, props 31, the view 1.5).
+`-- --atlas desk`, or the view only: `-- --atlas window_sf,window_delhi`. The final bake took 89 minutes on 16 threads of
+the shared devbox (env 11, desk 39, props 38, the view 1.5).
 
 ## Re-export
 
@@ -60,7 +60,7 @@ blender -b blender/room.blend -P blender/scripts/export.py
 Renders the stills, writes the view's four KTX2 files (ETC1S with mipmaps, `ktx create`) and
 `pale-blue-dot.ktx2` (NASA/JPL's PIA23645, cropped square, 1024 px), exports the glb, then runs gltf-transform 4.5.1
 (via `npx`): dedup, prune (empties and attributes kept), KTX2 ETC1S atlases, meshopt geometry. The atlases ship
-resampled from their bakes (`EXPORT_SIZES`: env 2560, desk 3584, props 3072; the view's halves
+resampled from their bakes (`EXPORT_SIZES`: env 2304, desk 3328, props 2816; the view's halves
 ship at their 1280 px bake). It then points each view half's material at its day
 texture by URI and writes `public/room/floorplan.json` (floorplan.py). It fails if `room.glb` is over 4.9 MB, the two
 day textures are over 560 KB together, a node from the contract below is missing, or a removed one is back. Needs Node
@@ -155,9 +155,11 @@ night) in `window_lights`, switched on only while its halves bake.
 
 ## Budget
 
-The glb holds about 122k triangles in 145 draw calls (round two: 112k in 108); the renderer culls per
-object, so a close framing submits 13 to 68 calls. Shipped density: desk 798 texels per metre, props 284, env
-118 (the room's surfaces grew from 66 to 175 m² inside the same byte budget). `-- --merge-static` joins the plain
+The glb holds about 138k triangles in 175 draw calls (round two: 112k in 108); the renderer culls per
+object, so a close framing submits far fewer calls than the wide view. Shipped density: desk 741 texels per metre,
+props 258, env 105 (the room's surfaces grew from 66 to 178 m² inside the same byte budget). The initial payload was
+5,513,799 B of 6,000,000 when measured (`scripts/measure-payload.mjs`); it moves with the clock, because the site
+fetches each city's day or night view (or both, at dusk) before the room is interactive. `-- --merge-static` joins the plain
 scenery per atlas (fewer calls, coarser culling); it is off. The props' prop files keep their full detail, and `build_room.py` decimates the densest ones for the
 room only (`DECIMATE`). The view keeps only faces some framing, or a glide the site makes, can see through the window.
 Credits for every downloaded model, texture, HDRI and font are in `ASSETS.md`.

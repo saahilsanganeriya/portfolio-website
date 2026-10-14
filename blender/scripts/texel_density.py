@@ -22,7 +22,9 @@ import export  # noqa: E402
 # Surfaces worth naming in the report (whichever exist in this version of the room).
 WATCH = ("env_wall_back", "env_wall_left", "env_wall_right", "env_floor", "env_ceiling", "desk_desk", "desk_crt",
          "desk_computer", "crt_glow", "desk_keyboard", "props_mango_plant", "espresso_machine", "countertop_oven",
-         "props_bookshelf", "bookshelf")
+         "props_bookshelf", "bookshelf", "photo_board", "roller_screen_housing", "record_player", "platter", "tonearm",
+         "record_crate", "props_bakery_board", "props_cinnamon_rolls", "props_pour_over", "book_spine_kitchen",
+         "voyager_record", "print_japanese_lit", "pennant_gatech")
 
 
 def shipped_size(atlas: str) -> int:
