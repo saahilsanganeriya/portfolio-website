@@ -147,13 +147,12 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   });
 
   // ---- the played tour ----
-  let playing: { index: number; expected: StationName; timer: number } | null = null;
+  let playing: { expected: StationName; timer: number } | null = null;
 
   const visitStop = (index: number) => {
     if (!playing) return;
     const stop = stops[index];
     const at = index < stops.length ? stop.station : 'desk';
-    playing.index = index;
     playing.expected = at;
     caption.textContent = stop ? `${index + 1} of ${stops.length} · ${stop.label}` : 'Back at the desk.';
     room.visit(at, () => {
@@ -173,7 +172,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
 
   play.addEventListener('click', () => {
     if (playing) return stopPlaying();
-    playing = { index: 0, expected: stops[0]?.station ?? 'desk', timer: 0 };
+    playing = { expected: stops[0]?.station ?? 'desk', timer: 0 };
     play.textContent = 'Stop the tour';
     visitStop(0);
   });
