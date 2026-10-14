@@ -18,13 +18,14 @@ export const MOTIONS = {
 } satisfies Record<string, SpringSettings>;
 export type Motion = keyof typeof MOTIONS;
 
-/** A timed glide along a curve through waypoints (the arrival); it lands on its station at `seconds`. */
+/** A timed glide along a curve through waypoints (the arrival); it lands on its station `seconds` after it began. */
 interface Path {
   positions: THREE.CatmullRomCurve3;
   targets: THREE.CatmullRomCurve3;
   fov: [from: number, to: number];
   seconds: number;
-  elapsed: number;
+  /** performance.now() when the glide began: it keeps the clock, so a slow machine sees fewer frames, not a longer glide. */
+  began: number;
 }
 
 interface Flight {
@@ -138,8 +139,8 @@ export class RoomCamera {
   }
 
   /**
-   * Glides through `waypoints` to `station` in exactly `seconds` of frame time, along a centripetal Catmull-Rom curve
-   * from wherever the camera is. A later `fly` re-aims from the curve with its speed; `finish` lands it.
+   * Glides through `waypoints` to `station` in `seconds` by the clock, along a centripetal Catmull-Rom curve from
+   * wherever the camera is. A later `fly` re-aims from the curve with its speed; `finish` lands it.
    */
   flyPath(waypoints: readonly Framing[], station: StationName, seconds: number, onDone?: () => void) {
     if (!this.has(station)) return false;
@@ -159,7 +160,7 @@ export class RoomCamera {
         targets: new THREE.CatmullRomCurve3(targets, false, 'centripetal'),
         fov: [v[6], this.goal[6]],
         seconds,
-        elapsed: 0,
+        began: performance.now(),
       },
     };
     return true;
@@ -222,8 +223,7 @@ export class RoomCamera {
 
   /** One frame along the path; the rig's velocity is kept so a re-aim mid-path curves away instead of stopping. */
   private followPath(path: Path, dt: number) {
-    path.elapsed += dt;
-    const t = Math.min(1, path.elapsed / path.seconds);
+    const t = Math.min(1, (performance.now() - path.began) / 1000 / path.seconds);
     if (t >= 1) {
       this.rig.set(this.goal);
       this.land();
