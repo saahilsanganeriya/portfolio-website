@@ -6,7 +6,7 @@ export const WORLD_SCALE = 1000;
 
 const REQUIRED_FRAMINGS = ['loading', 'idle', 'desk', 'monitor'] as const;
 // Close-ups and stops the room may add (PLAN-ROUND-7 §3); the camera skips any the room lacks.
-const OPTIONAL_FRAMINGS = ['window', 'projector', 'shelf', 'photos', 'espresso', 'oven'] as const;
+const OPTIONAL_FRAMINGS = ['window', 'projector', 'shelf', 'photos', 'espresso', 'oven', 'record_player'] as const;
 const TOUR_FRAMING = /^tour_(\d+)$/;
 const ARRIVAL_FRAMING = /^arrival_(\d+)$/;
 /** A framing the camera can rest at: every framing but the boot one, the tour's stops (`tour_<n>`) included. */

@@ -25,10 +25,19 @@ const PROJECTOR_NEAR = 0.7;
 const PROJECTOR_FILMS = 0.45;
 const STARTUP = 0.45;
 const CLICK = 0.8;
-const LOOP_FADE_S = 1.5;
+// The visitor's first click, tap or key starts everything, and it all comes up together in about a second.
+const LOOP_FADE_S = 1;
 // The music bus on -23 LUFS stems; the room's state (MUSIC_MIX) scales it from here.
 const MUSIC = 0.67;
-const MUSIC_FADE_IN_S = 6;
+const MUSIC_FADE_IN_S = 1;
+// A record on the -18 LUFS files sits at the lo-fi bed's loudness (measured offline, room state); its groove's crackle
+// is a quiet layer under it. The bed and the record trade places over these times.
+const RECORD = 0.72;
+const CRACKLE = 0.06;
+const BED_OUT_S = 1.2;
+const BED_IN_S = 2.8;
+// The stems stop at 11 kHz, so the room state's open filter is 11 kHz; a record keeps its top end there.
+const recordCutoff = (cutoff: number) => (cutoff >= 11000 ? 20000 : cutoff);
 const STEM_PAN: Record<Stem, number> = { keys: -0.15, melody: 0.2, beat: 0 };
 // Beds on -23 LUFS loops: the fan is a murmur from across the room; each city is faint until the window comes forward.
 const BED_LEVEL: Record<BedName, number> = { fan: 0.35, sf: 0.3, 'delhi-day': 0.3, 'delhi-night': 0.35 };
@@ -91,7 +100,21 @@ export class RoomMix {
   private readonly computer: Source;
   private readonly projector: Source | null;
   private readonly desk: Source;
-  private readonly music: { bus: GainNode; filter: BiquadFilterNode; stems: Record<Stem, GainNode>; started: boolean };
+  private readonly music: {
+    bus: GainNode;
+    filter: BiquadFilterNode;
+    stems: Record<Stem, GainNode>;
+    started: boolean;
+    /** The lo-fi stems together: 1 while they are the music, 0 while a record plays. */
+    bed: GainNode;
+    /** Where a record and its crackle enter: their own filter, then the music bus. */
+    record: GainNode;
+    recordFilter: BiquadFilterNode;
+    /** The bus has been brought up (by the stems or by a record). */
+    raised: boolean;
+  };
+  /** The record's needle and groove, on the record input under the record. */
+  readonly crackleInput: GainNode;
   private readonly spatial: GainNode;
   private readonly beds = new Map<BedName, GainNode>();
   private projectorRunning = false;
@@ -126,15 +149,27 @@ export class RoomMix {
     const bus = ctx.createGain();
     bus.gain.value = 0;
     musicFilter.connect(bus).connect(this.output);
+    const bed = ctx.createGain();
+    bed.connect(musicFilter);
     const stems = {} as Record<Stem, GainNode>;
     for (const stem of STEMS) {
       stems[stem] = ctx.createGain();
       stems[stem].gain.value = MUSIC_MIX.room.stems[stem];
       const pan = ctx.createStereoPanner();
       pan.pan.value = STEM_PAN[stem];
-      stems[stem].connect(pan).connect(musicFilter);
+      stems[stem].connect(pan).connect(bed);
     }
-    this.music = { bus, filter: musicFilter, stems, started: false };
+    const recordFilter = ctx.createBiquadFilter();
+    recordFilter.type = 'lowpass';
+    recordFilter.Q.value = -3;
+    recordFilter.frequency.value = recordCutoff(MUSIC_MIX.room.cutoff);
+    const record = ctx.createGain();
+    record.gain.value = 0;
+    record.connect(recordFilter).connect(bus);
+    this.crackleInput = ctx.createGain();
+    this.crackleInput.gain.value = CRACKLE;
+    this.crackleInput.connect(record);
+    this.music = { bus, filter: musicFilter, stems, started: false, bed, record, recordFilter, raised: false };
     this.spatial = ctx.createGain();
     this.spatial.connect(this.output);
   }
@@ -179,12 +214,43 @@ export class RoomMix {
       const buffer = buffers[stem];
       if (buffer) this.looped(buffer, sounds.music.seconds, when).connect(this.music.stems[stem]);
     }
+    // A record put on before the stems arrived has already brought the bus up.
+    if (!this.music.raised) this.raise(state, when, fadeIn);
+  }
+
+  /** Brings the music bus up to `state`'s level, from silence. */
+  private raise(state: AudioState, when = this.ctx.currentTime, fadeIn = MUSIC_FADE_IN_S) {
+    this.music.raised = true;
     const level = MUSIC * MUSIC_MIX[state].level;
     if (fadeIn > 0) {
       this.music.bus.gain.setValueAtTime(0, when);
       this.music.bus.gain.setValueCurveAtTime(powerCurve(0, level), when, fadeIn);
     } else this.music.bus.gain.setValueAtTime(level, when);
     this.heading.set(this.music.bus.gain, { to: level, at: when + fadeIn });
+  }
+
+  /** The node a record plays into (live: its media element; offline: a decoded buffer). */
+  get recordInput(): AudioNode {
+    return this.music.record;
+  }
+
+  /**
+   * Hands the music to a record (the lo-fi stems fade out, the record input opens) or back to the bed. The stems keep
+   * running underneath on their own clock, so the bed returns in time with itself.
+   */
+  setMusicSource(source: 'bed' | 'record', state: AudioState, immediate = false) {
+    const onRecord = source === 'record';
+    if (onRecord && !this.music.raised) this.raise(state, this.ctx.currentTime, immediate ? 0 : MUSIC_FADE_IN_S);
+    this.move(this.music.bed.gain, onRecord ? 0 : 1, immediate ? 0 : onRecord ? BED_OUT_S : BED_IN_S);
+    this.move(this.music.record.gain, onRecord ? RECORD : 0, immediate ? 0 : onRecord ? 0 : BED_OUT_S);
+  }
+
+  /** A decoded record into the record input from `when` (offline renders). */
+  recordBuffer(buffer: AudioBuffer, when = this.ctx.currentTime) {
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.music.record);
+    source.start(when);
   }
 
   get musicStarted() {
@@ -196,7 +262,8 @@ export class RoomMix {
     const target = MUSIC_MIX[state];
     for (const stem of STEMS) this.move(this.music.stems[stem].gain, target.stems[stem], immediate ? 0 : STATE_FADE_S);
     this.move(this.music.filter.frequency, target.cutoff, immediate ? 0 : FILTER_FADE_S, 'log');
-    if (this.music.started) this.move(this.music.bus.gain, MUSIC * target.level, immediate ? 0 : STATE_FADE_S);
+    this.move(this.music.recordFilter.frequency, recordCutoff(target.cutoff), immediate ? 0 : FILTER_FADE_S, 'log');
+    if (this.music.raised) this.move(this.music.bus.gain, MUSIC * target.level, immediate ? 0 : STATE_FADE_S);
     for (const name of this.beds.keys()) this.setBed(name, cityLevel(name), immediate);
   }
 
@@ -307,6 +374,8 @@ export class RoomMix {
       level: read(this.music.bus.gain),
       cutoff: read(this.music.filter.frequency),
       stems: Object.fromEntries(STEMS.map((stem) => [stem, read(this.music.stems[stem].gain)])) as Record<Stem, ReturnType<typeof read>>,
+      bed: read(this.music.bed.gain),
+      record: read(this.music.record.gain),
       beds: Object.fromEntries([...this.beds].map(([name, gain]) => [name, read(gain.gain)])) as Partial<Record<BedName, ReturnType<typeof read>>>,
     };
   }

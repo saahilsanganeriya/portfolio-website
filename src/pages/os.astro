@@ -77,6 +77,12 @@ const index: OsIndex = {
         addEventListener('mouseup', () => post({ type: 'mouseup' }));
         addEventListener('keydown', (e) => post({ type: 'keydown', key: e.key }));
         addEventListener('keyup', (e) => post({ type: 'keyup', key: e.key }));
+      } else if (window.parent !== window) {
+        // In the phone's drawn monitor only presses and keys go up, so the room can start its sound on the first one;
+        // a tap counts at pointerup, when the browser grants the gesture.
+        const post = (message) => window.parent.postMessage(message, location.origin);
+        for (const type of ['pointerdown', 'pointerup']) addEventListener(type, () => post({ type: 'press' }), true);
+        addEventListener('keydown', (e) => post({ type: 'press', key: e.key }), true);
       }
     </script>
   </Fragment>

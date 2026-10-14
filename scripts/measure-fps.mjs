@@ -8,9 +8,10 @@
 // projector running in view or not; --calm leaves the room as a visitor finds it. --phone measures the light tier on an
 // emulated iPhone 13 instead: the arrival, the glide into the monitor until SaahilOS takes over, the wide view, the
 // desk and moves. The film column is the share of frames in which the projector was playing. The light tier has no
-// projector film.
+// projector film. --record <id> puts a record from the crate on after the arrival (a key press first, the gesture sound
+// needs) and keeps it playing through every phase; the rec column says whether it was still playing at the end.
 //
-//   node scripts/measure-fps.mjs [--no-build] [--url https://…] [--seconds 10] [--phone] [--calm]
+//   node scripts/measure-fps.mjs [--no-build] [--url https://…] [--seconds 10] [--phone] [--calm] [--record <id>]
 import { cpus, loadavg } from 'node:os';
 import { chromium, devices } from 'playwright';
 import { serveBuild } from './lib/serve-build.mjs';
@@ -20,6 +21,7 @@ const flag = (name) => args.includes(name);
 const option = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const seconds = Number(option('--seconds', '10'));
 const phone = flag('--phone');
+const recordId = option('--record', null);
 const MIN_FPS = 50;
 
 const server = option('--url') ? { url: option('--url'), close: async () => {} } : await serveBuild({ build: !flag('--no-build') });
@@ -41,7 +43,7 @@ try {
   const everything = !phone && !flag('--calm');
 
   /** Frame times for `ms`; 'move' keeps the camera gliding between the desk and the wide view, 'album' turns pages. */
-  const count = (ms, mode = 'still') =>
+  const countFrames = (ms, mode = 'still') =>
     page.evaluate(
       ([ms, mode]) =>
         new Promise((resolve) => {
@@ -76,8 +78,25 @@ try {
       [ms, mode],
     );
 
+  /** A record on the turntable, chosen through the crate, which is closed again so it does not cover the room. */
+  const putRecordOn = async () => {
+    await page.keyboard.press('KeyA');
+    await page.evaluate(() => window.__room.openRecords());
+    await page.locator(`[data-record="${recordId}"]`).click();
+    await page.waitForFunction(() => window.__room.audio.graph().deck?.playing === true, null, { timeout: 60_000 });
+    await page.keyboard.press('Escape');
+  };
+  const recordPlaying = () => page.evaluate(() => window.__room.audio.graph().deck?.playing === true);
+  /** Frames for a phase; with --record the record is put back on if it has ended, and noted if it played to the end. */
+  const count = async (ms, mode = 'still') => {
+    if (!recordId || mode === 'arrival') return countFrames(ms, mode);
+    if (!(await recordPlaying())) await putRecordOn();
+    const result = await countFrames(ms, mode);
+    return { ...result, onRecord: await recordPlaying() };
+  };
+
   const rows = [];
-  const record = (phase, { times, tier, film }) => {
+  const record = (phase, { times, tier, film, onRecord }) => {
     const fps = times
       .slice(1)
       .map((t, i) => 1000 / (t - times[i]))
@@ -91,6 +110,7 @@ try {
       p5: pick(0.05).toFixed(1),
       tier,
       film: `${Math.round(film * 100)}%`,
+      rec: onRecord === undefined ? '-' : onRecord ? 'yes' : 'no',
       pass: pick(0.5) >= MIN_FPS,
     };
     rows.push(row);
@@ -175,10 +195,11 @@ try {
       ? `iPhone 13 (390x664 @3x), light tier, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps`
       : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${everything ? ', everything moving after the arrival (lava lamp changing, espresso pouring with its steam, projector forced on)' : ''}`,
   );
-  console.log('phase      frames  mean   median  p5     tier  film  pass');
+  if (recordId) console.log(`record: ${recordId} playing from the end of the arrival (rec = still playing as the phase ended)`);
+  console.log('phase      frames  mean   median  p5     tier  film  rec  pass');
   for (const r of rows) {
     console.log(
-      `${r.phase.padEnd(10)} ${String(r.frames).padStart(6)}  ${r.mean.padStart(5)}  ${r.median.padStart(6)}  ${r.p5.padStart(5)}  ${String(r.tier).padStart(4)}  ${r.film.padStart(4)}  ${r.pass}`,
+      `${r.phase.padEnd(10)} ${String(r.frames).padStart(6)}  ${r.mean.padStart(5)}  ${r.median.padStart(6)}  ${r.p5.padStart(5)}  ${String(r.tier).padStart(4)}  ${r.film.padStart(4)}  ${r.rec.padStart(3)}  ${r.pass}`,
     );
   }
   console.log(failed ? 'fps: FAIL' : 'fps: pass');

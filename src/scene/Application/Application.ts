@@ -132,7 +132,9 @@ export interface RoomProbe {
   /** Renders the room's sound offline as heard from a framing; see RoomAudio.renderOffline. */
   renderSound(seconds: number, options: OfflineOptions & { view: string }): Promise<Float32Array[]>;
   /** The sound's graph state (music stems, filter, beds, master) and its controls. */
-  readonly audio: Pick<RoomAudio, 'graph' | 'setState' | 'sfx'>;
+  readonly audio: Pick<RoomAudio, 'graph' | 'setState' | 'sfx' | 'setMusicSource' | 'musicSource'>;
+  /** Opens the record crate wherever the camera is (the room may have no player to click). */
+  openRecords(): void;
 }
 
 declare global {
@@ -237,6 +239,7 @@ export class Application implements RoomHandle {
       openWindow: (target) => this.openWindow(target),
       sfx: (name, at) => this.audio.sfx(name, at),
       setProjectorRunning: (running) => this.audio.setProjectorRunning(running),
+      audio: this.audio,
       setMonitorBlocked: (blocked) => {
         if (this.monitor.iframe) this.monitor.iframe.style.pointerEvents = blocked ? 'none' : '';
       },
@@ -637,6 +640,9 @@ export class Application implements RoomHandle {
       },
       goto(station) {
         app.fly(station);
+      },
+      openRecords() {
+        app.world.openRecords();
       },
       get world() {
         return app.world.probe();

@@ -10,7 +10,7 @@ import type { StationName } from './Application/RoomModel';
  * What a prop does in the room itself; World carries these out. An action World does not handle yet falls back to the
  * hotspot's `fly`, then its `target`, so the room and the world can land in either order.
  */
-export type WorldAction = 'album' | 'dial' | 'lava' | 'espresso' | 'oven' | 'projector' | 'print' | 'window';
+export type WorldAction = 'album' | 'dial' | 'lava' | 'espresso' | 'oven' | 'projector' | 'print' | 'window' | 'records';
 
 export interface Hotspot {
   /** Proxy boxes in room.glb (PLAN 3.6) that open this hotspot; World names the poster and print proxies by slot. */
@@ -81,6 +81,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
   { proxies: ['hit_croissant'], prop: 'The croissant in the oven', label: 'Kitchen', target: 'recipes', href: '/#recipes' },
   { proxies: ['hit_lava_lamp'], prop: 'The lava lamp', label: 'Lava lamp', target: null, action: 'lava', href: '/' },
   { proxies: ['hit_projector'], prop: 'The projector', label: 'Projector', target: null, fly: 'projector', action: 'projector', href: '/' },
+  { proxies: ['hit_record_player'], prop: 'The record player', label: 'Records', target: null, fly: 'record_player', action: 'records', href: '/' },
   // The picture on the wall: from the projector's framing the projector is behind the camera, so a click here starts
   // and stops the film too; its label names the program on the wall (World).
   { proxies: ['hit_projection'], prop: 'The picture on the wall', label: 'His story', target: null, fly: 'projector', action: 'projector', href: '/' },

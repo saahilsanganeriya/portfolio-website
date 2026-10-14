@@ -1,15 +1,22 @@
 import * as THREE from 'three';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import type { Hotspot } from '../hotspots';
+import type { RecordId } from './crate';
 import { KEYS, LOOPS, RoomMix, SHOTS, type BedName, type ClickKind, type Listener, type LoopName, type Placement, type SoundPositions } from './mix';
-import { cityDay, MUSIC_MIX, stateFor, STEMS, volumeGain, type AudioState, type City, type Stem } from './state';
+import type { RecordDeck } from './RecordDeck';
+import { cityDay, MUSIC_MIX, powerCurve, stateFor, STEMS, volumeGain, type AudioState, type City, type Stem } from './state';
 
 export type { ClickKind } from './mix';
+export type { RecordId } from './crate';
 
 const AUDIO_URL = '/audio/';
 const OFFLINE_RATE = 48000;
 const UPDATE_MS = 50;
 const MASTER_FADE_S = 0.25;
+// The first click, tap or key brings the whole room up from silence over this long.
+const FIRST_FADE_S = 1;
+// Without a tonearm to watch (reduced motion, or a room without the player), the needle meets the groove this soon.
+const QUICK_CUE_S = 0.3;
 const SUSPEND_AFTER_MUTE_MS = 400;
 const DAY_CHECK_MS = 60_000;
 // A glide is a move faster than this (m/s) after the camera has rested; a cut (reduced motion) moves further in one
@@ -25,7 +32,7 @@ const BED_REF_M: Record<BedName, number> = { fan: 0.8, sf: 1.5, 'delhi-day': 1.5
 /** A prop's sound: one of its recordings (picked at random), its level under the music, and where it sits. */
 interface Effect {
   files: readonly string[];
-  dir: 'sfx' | 'city';
+  dir: 'sfx' | 'city' | 'records';
   level: number;
   /** Room nodes (first found) it plays from when called without a position. */
   anchors: readonly string[];
@@ -45,6 +52,9 @@ const EFFECTS = {
   lava: { files: ['lava'], dir: 'sfx', level: 0.3, anchors: ['lava_lamp', 'hit_lava_lamp'], ref: 1 },
   crt: { files: ['crt'], dir: 'sfx', level: 0.35, anchors: ['monitor_screen'] },
   whoosh: { files: ['whoosh'], dir: 'sfx', level: 0.1, anchors: [] },
+  // The turntable's own: loaded with the first record chosen, never before.
+  'needle-drop': { files: ['needle-drop'], dir: 'records', level: 0.3, anchors: ['tonearm', 'platter', 'record_player'], ref: 1.5 },
+  'needle-lift': { files: ['needle-lift'], dir: 'records', level: 0.3, anchors: ['tonearm', 'platter', 'record_player'], ref: 1.5 },
   foghorn: { files: ['foghorn'], dir: 'city', level: 0.2, anchors: ['window_view_sf'] },
   gulls: { files: ['gulls'], dir: 'city', level: 0.22, anchors: ['window_view_sf'] },
   'cable-car': { files: ['cable-car'], dir: 'city', level: 0.22, anchors: ['window_view_sf'] },
@@ -96,6 +106,12 @@ export interface AudioHandle {
   sfx(name: SfxName, position?: THREE.Vector3): void;
   /** The projector's running sound plays only while its film runs. */
   setProjectorRunning(running: boolean): void;
+  /**
+   * The room's music: a record from the crate (streamed when chosen; the needle meets the groove `cue` seconds from
+   * now) or null for the adaptive lo-fi bed. A record that ends by itself hands back to the bed (subscribers hear it).
+   */
+  setMusicSource(record: RecordId | null, cue?: number): void;
+  readonly musicSource: RecordId | null;
   readonly unlocked: boolean;
   readonly muted: boolean;
   readonly volume: number;
@@ -117,6 +133,8 @@ export interface OfflineOptions {
   date?: Date;
   /** The projector's film running (its sound on). */
   projector?: boolean;
+  /** A record playing from 0 s instead of the lo-fi bed (decoded from its shipped file). */
+  record?: RecordId;
 }
 
 /** Opus where the browser decodes it, AAC otherwise; a file that fails to decode falls back to the next format. */
@@ -137,6 +155,9 @@ export class RoomAudio implements AudioHandle {
   private derived: AudioState | null = null;
   private isMuted = false;
   private projectorRunning = false;
+  private source: RecordId | null = null;
+  private deck: Promise<RecordDeck | null> | null = null;
+  private deckReady: RecordDeck | null = null;
   private level = 1;
   private lastUpdate = 0;
   private resting = 0;
@@ -165,6 +186,10 @@ export class RoomAudio implements AudioHandle {
     return this.current;
   }
 
+  get musicSource() {
+    return this.source;
+  }
+
   subscribe(listener: () => void) {
     this.listeners.add(listener);
     return () => void this.listeners.delete(listener);
@@ -180,7 +205,8 @@ export class RoomAudio implements AudioHandle {
     this.ctx = ctx;
     void ctx.resume();
     this.master = ctx.createGain();
-    this.master.gain.value = volumeGain(this.level);
+    this.master.gain.setValueAtTime(0, ctx.currentTime);
+    this.master.gain.setValueCurveAtTime(powerCurve(0, volumeGain(this.level)), ctx.currentTime, FIRST_FADE_S);
     this.master.connect(ctx.destination);
     const mix = new RoomMix(ctx, this.positions);
     mix.output.connect(this.master);
@@ -189,6 +215,8 @@ export class RoomAudio implements AudioHandle {
     mix.setState(this.current, (bed) => this.bedLevel(bed), true);
     document.addEventListener('visibilitychange', this.onVisibility);
     this.loaded = this.load(ctx, mix);
+    // A record chosen while the sound was off starts now.
+    if (this.source) this.applySource(QUICK_CUE_S);
     this.notify();
   }
 
@@ -199,6 +227,7 @@ export class RoomAudio implements AudioHandle {
     if (this.ctx && this.master) {
       const ctx = this.ctx;
       if (!muted && document.visibilityState !== 'hidden') void ctx.resume();
+      this.deckReady?.hold(muted || document.visibilityState === 'hidden');
       this.fadeMaster();
       // A muted room stops processing once its fade is done.
       if (muted) this.suspendTimer = window.setTimeout(() => void ctx.suspend(), SUSPEND_AFTER_MUTE_MS);
@@ -223,6 +252,52 @@ export class RoomAudio implements AudioHandle {
 
   sfx(name: SfxName, position?: THREE.Vector3) {
     this.play(name, position, 1);
+  }
+
+  setMusicSource(record: RecordId | null, cue = QUICK_CUE_S) {
+    if (record === this.source) return;
+    this.source = record;
+    this.applySource(cue);
+    this.notify();
+  }
+
+  /** Hands the music to the chosen record (loading the deck the first time) or back to the bed. */
+  private applySource(cue: number) {
+    const ctx = this.ctx;
+    const mix = this.mix;
+    if (!(ctx instanceof AudioContext) || !mix) return;
+    mix.setMusicSource(this.source ? 'record' : 'bed', this.current);
+    void this.recordDeck(ctx, mix).then((deck) => {
+      if (!deck || this.mix !== mix) return;
+      if (this.source) deck.play(this.source, cue);
+      else deck.stop();
+    });
+  }
+
+  private recordDeck(ctx: AudioContext, mix: RoomMix) {
+    this.deck ??= import('./RecordDeck').then(({ RecordDeck }) => {
+      if (this.mix !== mix) return null;
+      const deck = new RecordDeck(ctx, mix.recordInput, mix.crackleInput, {
+        sound: (name) => this.fetch(ctx, 'records', name),
+        shot: (buffer, when) => {
+          const effect: Effect = EFFECTS['needle-drop'];
+          const at = this.anchorOf(effect.anchors);
+          if (this.mix === mix) mix.shot(buffer, effect.level, at ? { position: at, ref: effect.ref } : null, when);
+        },
+        formats,
+        ended: (record) => {
+          if (this.source !== record) return;
+          this.source = null;
+          mix.setMusicSource('bed', this.current);
+          deck.stop();
+          this.notify();
+        },
+      });
+      deck.hold(this.isMuted || document.visibilityState === 'hidden');
+      this.deckReady = deck;
+      return deck;
+    });
+    return this.deck;
   }
 
   setProjectorRunning(running: boolean) {
@@ -330,6 +405,9 @@ export class RoomAudio implements AudioHandle {
       muted: this.isMuted,
       volume: this.level,
       projectorRunning: this.projectorRunning,
+      musicSource: this.source,
+      /** The turntable's stream: which record, the needle, whether the music itself plays, its position. */
+      deck: this.deckReady?.state ?? null,
       master: this.master?.gain.value ?? null,
       loaded: [...this.buffers.keys()].sort(),
       /** Room nodes the sounds play from, in metres. */
@@ -360,6 +438,12 @@ export class RoomAudio implements AudioHandle {
     if (startup && startupBuffer) mix.startup(startupBuffer, 0);
     mix.startMusic(this.stems(), state, 0, fadeIn ? undefined : 0);
     mix.setState(state, bedLevel, true);
+    if (options.record) {
+      const buffer = await this.fetch(ctx, 'records', options.record);
+      if (!buffer) throw new Error(`room audio: could not load the record ${options.record}`);
+      mix.setMusicSource('record', state, true);
+      mix.recordBuffer(buffer, 0);
+    }
     for (const bed of Object.keys(BED_ANCHORS) as BedName[]) {
       const at = this.anchorOf(BED_ANCHORS[bed]);
       if (!at || bedLevel(bed) <= 0) continue;
@@ -383,6 +467,7 @@ export class RoomAudio implements AudioHandle {
 
   dispose() {
     clearTimeout(this.suspendTimer);
+    this.deckReady?.dispose();
     document.removeEventListener('visibilitychange', this.onVisibility);
     void this.ctx?.close();
     this.ctx = null;
@@ -392,7 +477,9 @@ export class RoomAudio implements AudioHandle {
 
   private readonly onVisibility = () => {
     if (!this.ctx) return;
-    if (document.visibilityState === 'hidden') void this.ctx.suspend();
+    const hidden = document.visibilityState === 'hidden';
+    this.deckReady?.hold(hidden || this.isMuted);
+    if (hidden) void this.ctx.suspend();
     else if (!this.isMuted) void this.ctx.resume();
   };
 

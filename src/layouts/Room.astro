@@ -1,6 +1,7 @@
 ---
 import BootScreen from '../components/BootScreen.astro';
 import MonitorFrame from '../components/MonitorFrame.astro';
+import RecordCrate from '../components/RecordCrate.astro';
 import RoomTour from '../components/RoomTour.astro';
 import Base from './Base.astro';
 
@@ -62,11 +63,19 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
   <main id="content" class="room-stage" tabindex="-1" aria-label="The room" data-room data-open={open}>
     <h1 class="visually-hidden">{title}</h1>
     <RoomTour />
+    <RecordCrate />
     <div class="room-world" data-room-world></div>
     <BootScreen />
     <MonitorFrame />
     <div class="room-controls">
-      <button type="button" aria-pressed="false" data-room-sound>Sound</button>
+      <button type="button" class="room-sound" aria-pressed="false" data-room-sound>
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path class="room-sound-speaker" d="M2 6h3l4-3v10l-4-3H2z"></path>
+          <path class="room-sound-on" d="M11 5.6a3.4 3.4 0 0 1 0 4.8M12.9 3.8a6 6 0 0 1 0 8.4"></path>
+          <path class="room-sound-off" d="M11 6l4 4M15 6l-4 4"></path>
+        </svg>
+        Sound
+      </button>
       <label class="room-volume">
         <span class="visually-hidden">Volume</span>
         <input type="range" min="0" max="100" step="5" value="100" data-room-volume />
@@ -223,7 +232,9 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       setTimeout(() => (boot.hidden = true), 400);
       const open = target ?? (osRequested ? DEFAULT_WINDOW : null);
       room.start({ open: open ?? undefined, fast: skipped });
-      status.textContent = 'The room is ready. Sound starts with your first click or key press; the Sound button turns it off.';
+      status.textContent = room.audio.muted
+        ? 'The room is ready. Its sound is off, as you left it; the Sound button turns it on.'
+        : 'The room is ready. Sound starts with your first click, tap or key press; the Sound button turns it off.';
       if (osRequested) monitor()?.focus({ preventScroll: true });
     };
 
@@ -247,12 +258,15 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     const fromPage = (event: Event) =>
       onInput(event instanceof KeyboardEvent ? event.key : null, Boolean((event.target as Element | null)?.closest?.('[data-room-sound]')));
     for (const type of ['pointerdown', 'pointerup', 'keydown']) document.addEventListener(type, fromPage, { capture: true });
-    // Input inside the monitor stays in its frame; SaahilOS forwards presses and keys up to the room.
+    // Input inside the monitor stays in its frame; SaahilOS forwards presses and keys up to the room, from the 3D
+    // monitor and from the phone's drawn one (where a tap counts at pointerup), so a first press there starts the sound.
     window.addEventListener('message', (event) => {
-      if (event.origin !== location.origin || event.source !== monitor()?.contentWindow) return;
+      const from = event.source;
+      if (event.origin !== location.origin || !from || (from !== monitor()?.contentWindow && from !== glass.querySelector('iframe')?.contentWindow)) return;
       const data = event.data as { type?: unknown; key?: unknown } | null;
-      if (data?.type === 'mousedown') onInput(null, false);
-      else if (data?.type === 'keydown' && typeof data.key === 'string') onInput(data.key, false);
+      const key = typeof data?.key === 'string' ? data.key : null;
+      if (data?.type === 'mousedown' || (data?.type === 'press' && key === null)) onInput(null, false);
+      else if ((data?.type === 'keydown' || data?.type === 'press') && key !== null) onInput(key, false);
     });
 
     pause.addEventListener('click', () => {
@@ -470,5 +484,51 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
   .room-controls button[aria-pressed='true'] {
     background: var(--paper);
     color: var(--ink);
+  }
+
+  .room-sound {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .room-sound svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .room-sound[aria-pressed='true'] .room-sound-off,
+  .room-sound[aria-pressed='false'] .room-sound-on {
+    display: none;
+  }
+
+  /* Until the room's sound first starts, the toggle breathes a soft paper-coloured glow (the room's accent red is lost
+     against the desk behind it), so a visitor knows there is sound to hear; it stops once the sound is on, and never
+     shows for a visitor who turned it off. */
+  .room-controls .room-sound[data-hint] {
+    border-color: rgb(237 228 211 / 0.85);
+    animation: sound-hint 2.6s ease-in-out infinite;
+  }
+
+  @keyframes sound-hint {
+    0%,
+    100% {
+      box-shadow: 0 0 4px 0 rgb(237 228 211 / 0.15);
+    }
+    50% {
+      box-shadow: 0 0 14px 2px rgb(237 228 211 / 0.5);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .room-controls .room-sound[data-hint] {
+      animation: none;
+      box-shadow: 0 0 10px 1px rgb(237 228 211 / 0.35);
+    }
   }
 </style>

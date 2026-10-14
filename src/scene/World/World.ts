@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import type { SfxName } from '../audio/RoomAudio';
+import type { AudioHandle, SfxName } from '../audio/RoomAudio';
 import { HOTSPOTS, type Hotspot } from '../hotspots';
 import type { Effects } from '../Application/Effects';
 import type { QualityTier } from '../Application/Quality';
@@ -16,6 +16,7 @@ import { readWorld, type WorldNodes } from './nodes';
 import type { Photograph } from './photographs';
 import { Projector } from './Projector';
 import { Oven, Steam } from './props';
+import type { RecordPlayer } from './RecordPlayer';
 import { StickyNotes } from './StickyNotes';
 import { TextureStore } from './textures';
 import { WindowView } from './WindowView';
@@ -38,6 +39,8 @@ export interface WorldHost {
   sfx(name: SfxName, at?: THREE.Vector3): void;
   /** The projector's running sound (`audio.setProjectorRunning`). */
   setProjectorRunning?(running: boolean): void;
+  /** The room's sound, for the record player: which music plays (the lo-fi bed or a record) and whether sound is off. */
+  readonly audio?: Pick<AudioHandle, 'setMusicSource' | 'musicSource' | 'subscribe' | 'muted'>;
   /** While the album is open the monitor's frame must not take the pointer (it lies behind the book). */
   setMonitorBlocked(blocked: boolean): void;
   readonly reducedMotion: boolean;
@@ -96,6 +99,8 @@ export class World {
   private readonly lastCamera = new THREE.Vector3();
   private collectionPromise: Promise<Photograph[]> | null = null;
   private landing: Landing | null = null;
+  private records: RecordPlayer | null = null;
+  private recordsLoading: Promise<RecordPlayer | null> | null = null;
   private everything = false;
   private interactive = false;
   private printsWanted = false;
@@ -189,6 +194,7 @@ export class World {
         this.oven?.moving ||
         this.lava?.changing ||
         this.projector?.animating ||
+        this.records?.animating ||
         this.landing,
     );
   }
@@ -259,6 +265,12 @@ export class World {
         if (here !== 'window' && this.host.fly('window')) return true;
         this.announce(`Out of the window: ${this.windowView?.label() ?? 'San Francisco and Delhi'}.`);
         return true;
+      case 'records': {
+        const audio = this.host.audio;
+        if (!audio) return false;
+        this.whenLanded('record_player', () => void this.recordPlayer(audio).then((records) => records?.activate()));
+        return true;
+      }
       case 'print':
         // From across the room a print (a few pixels wide there) takes the camera to the board first; at the board it
         // opens its photograph in SaahilOS, the camera gliding to the desk and into the monitor.
@@ -296,6 +308,7 @@ export class World {
     }
     this.steam?.update(clock, Math.max(dt, espresso?.busy ? realDt : 0), pixelRatio, still);
     this.oven?.update(ambient, realDt, still);
+    this.records?.update(realDt, running);
 
     const projector = this.projector;
     if (projector) {
@@ -349,6 +362,7 @@ export class World {
       oven: this.oven?.probe() ?? null,
       projector: this.projector?.state ?? null,
       landing: this.landing?.station ?? null,
+      records: this.records?.probe() ?? null,
       album: this.album?.probe() ?? null,
       labels: Object.fromEntries(HOTSPOTS.map((h) => [h.proxies[0], h.label])),
     };
@@ -366,8 +380,29 @@ export class World {
     this.oven?.dispose();
     this.projector?.dispose();
     this.album?.dispose();
+    this.records?.dispose();
     this.textures.dispose();
     this.status.remove();
+  }
+
+  /** Opens the record crate where the camera is (keyboard and test access when the room has no player to click). */
+  openRecords() {
+    const audio = this.host.audio;
+    if (audio) void this.recordPlayer(audio).then((records) => records?.open());
+  }
+
+  /** The record player and its crate load the first time the visitor reaches them. */
+  private recordPlayer(audio: NonNullable<WorldHost['audio']>) {
+    this.recordsLoading ??= import('./RecordPlayer').then(({ RecordPlayer }) => {
+      this.records = new RecordPlayer(this.room.root, {
+        audio,
+        reducedMotion: this.host.reducedMotion,
+        station: () => this.host.station(),
+        announce: (text) => this.announce(text),
+      });
+      return this.records;
+    });
+    return this.recordsLoading;
   }
 
   /** Runs `run` once the camera has landed at `station`, flying there first if it is elsewhere. */
