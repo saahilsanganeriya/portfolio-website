@@ -79,6 +79,7 @@ export const CRATE: readonly CrateRecord[] = [
 export const recordById = (id: string) => CRATE.find((record) => record.id === id) ?? null;
 
 // ---- the sleeves: 100 × 100 SVG, drawn from the room's palette ----
+// Roman 400 faces only: an italic or a heavier weight would be one more font file (25-105 KB) loaded with the crate.
 
 const INK = '#14110f';
 const WALNUT = '#3b2a1e';
@@ -105,12 +106,12 @@ const SLEEVES: Record<RecordId, () => string> = {
     <circle cx="76" cy="24" r="9" fill="${THREAD}"/>
     ${[0, 1, 2, 3, 4, 5, 6].map((i) => `<path d="${wave(44 + i * 6, 2.4 - i * 0.28, i * 0.9)}" fill="none" stroke="${WALNUT}" stroke-width="${(1.3 - i * 0.12).toFixed(2)}"/>`).join('')}
     <text x="8" y="14" ${MONO} font-size="4.6" letter-spacing="0.6" fill="${WALNUT}">HOLIZNA · LO-FI</text>
-    <text x="8" y="92" ${SERIF} font-style="italic" font-size="13" fill="${INK}">washed up</text>`,
+    <text x="8" y="92" ${SERIF} font-size="13" fill="${INK}">washed up</text>`,
   'night-in-venice': () => `
     <rect width="100" height="100" fill="${INK}"/>
     <circle cx="96" cy="30" r="22" fill="${THREAD}"/>
     <line x1="8" y1="58" x2="92" y2="58" stroke="${PAPER}" stroke-width="0.5"/>
-    <text ${SANS} font-weight="500" fill="${PAPER}" font-size="17" letter-spacing="-0.4">
+    <text ${SANS} fill="${PAPER}" font-size="17" letter-spacing="-0.4">
       <tspan x="7" y="76">NIGHT IN</tspan><tspan x="7" y="92">VENICE</tspan></text>
     <text x="8" y="14" ${MONO} font-size="4.6" letter-spacing="0.6" fill="${DUST}">KEVIN MACLEOD</text>
     <text x="8" y="52" ${MONO} font-size="4.2" letter-spacing="0.6" fill="${DUST}">JAZZ · 114 BPM</text>`,
@@ -127,7 +128,7 @@ const SLEEVES: Record<RecordId, () => string> = {
     <path d="M42 100 A30 30 0 0 1 102 100 Z" fill="${PAPER}"/>
     ${[0, 1, 2, 3, 4, 5, 6].map((i) => `<line x1="${60 + i * 4}" y1="8" x2="${60 + i * 4}" y2="100" stroke="${INK}" stroke-width="${i < 4 ? 0.7 : 0.4}"/>`).join('')}
     <text x="8" y="14" ${MONO} font-size="4.6" letter-spacing="0.6" fill="${INK}">VEENA</text>
-    <text x="8" y="40" ${SERIF} font-style="italic" font-size="11" fill="${INK}"><tspan x="8">Rāga</tspan><tspan x="8" dy="11">Kīravāṇi</tspan></text>
+    <text x="8" y="40" ${SERIF} font-size="11" fill="${INK}"><tspan x="8">Rāga</tspan><tspan x="8" dy="11">Kīravāṇi</tspan></text>
     <text x="8" y="62" ${MONO} font-size="3.8" letter-spacing="0.5" fill="${WALNUT}">L. RAMAKRISHNAN</text>`,
 };
 
