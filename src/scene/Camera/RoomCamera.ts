@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Framing, RoomNodes, StationName } from '../Application/RoomModel';
 import { WORLD_SCALE } from '../Application/RoomModel';
+import { brakedTime, fromGlidePose, glidePose, glideRate, glideTime, planGlide, toGlidePose, type GlidePlan } from './glide';
 import { Spring, springFor, type SpringSettings } from './spring';
 
 export type CameraPhase = 'loading' | StationName;
@@ -28,10 +29,30 @@ interface Path {
   began: number;
 }
 
+/** The played tour's glide (glide.ts), timed by the clock; a brake slows it to rest where it is. */
+interface Glide {
+  plan: GlidePlan;
+  /** The stop each of the plan's inner poses frames. */
+  stations: StationName[];
+  /** performance.now() when it began, and of the last frame. */
+  began: number;
+  last: number;
+  /** Path seconds now. */
+  time: number;
+  brake: { at: number; time: number; rate: number } | null;
+}
+
+/** Where a braked glide came to rest: the stop it was nearest on the way, and the pose it rests in. */
+interface Held {
+  station: StationName;
+  pose: Float64Array;
+}
+
 interface Flight {
   to: StationName;
   spring: SpringSettings;
   path?: Path;
+  glide?: Glide;
   onDone?: () => void;
   /** How far back from its framing the camera stands at `to`, as a multiple of the framing's distance. */
   distance: number;
@@ -93,6 +114,8 @@ export class RoomCamera {
   private aspect = 1;
   /** The distance multiple of the framing the camera rests at (a tour stop may stand further back than its node). */
   private restDistance = 1;
+  /** A pose between framings, where a braked glide came to rest; any flight replaces it. */
+  private held: Held | null = null;
 
   constructor(nodes: RoomNodes, aspect: number) {
     this.framings = nodes.framings;
@@ -134,12 +157,14 @@ export class RoomCamera {
   fly(station: StationName, motion: Motion, onDone?: () => void, cut = false, distance = 1): boolean {
     if (!this.has(station)) return false;
     this.drag.yaw = this.drag.pitch = 0;
+    const wasHeld = this.held !== null;
+    this.held = null;
     if (cut) {
       this.flight = { to: station, spring: MOTIONS[motion], onDone, distance };
       this.finish();
       return true;
     }
-    if (!this.flight && this.phase === station && this.restDistance === distance) {
+    if (!this.flight && !wasHeld && this.phase === station && this.restDistance === distance) {
       onDone?.();
       return true;
     }
@@ -155,6 +180,7 @@ export class RoomCamera {
   flyPath(waypoints: readonly Framing[], station: StationName, seconds: number, onDone?: () => void) {
     if (!this.has(station)) return false;
     this.drag.yaw = this.drag.pitch = 0;
+    this.held = null;
     this.writeGoal(station);
     const v = this.rig.value;
     const fit = this.aspectFit();
@@ -175,6 +201,47 @@ export class RoomCamera {
       },
     };
     return true;
+  }
+
+  /**
+   * One continuous glide from wherever the camera is through `stops` (each framing stood `distance` times its own
+   * distance back) to `end`, `seconds` long by the clock: slow out, an even pace past every stop with no pause at any, a
+   * gentle landing. A later `fly` re-aims from it with its speed; `brake` slows it to rest where it is.
+   */
+  glide(stops: readonly { station: StationName; distance: number }[], end: StationName, seconds: number, onDone?: () => void) {
+    const framed = stops.filter((s) => s.station !== 'monitor' && this.has(s.station));
+    if (!this.has(end) || !framed.length) return false;
+    this.drag.yaw = this.drag.pitch = 0;
+    this.held = null;
+    const fit = this.aspectFit();
+    const pose = ({ position, target, fov }: { position: THREE.Vector3; target: THREE.Vector3; fov: number }) => toGlidePose(position, target, fov);
+    const v = this.rig.value;
+    const poses = [
+      toGlidePose({ x: v[0], y: v[1], z: v[2] }, { x: v[3], y: v[4], z: v[5] }, v[6]),
+      ...framed.map((s) => pose(this.fromFraming(this.framings[s.station]!, fit * s.distance))),
+      pose(end === 'monitor' ? this.monitorPose() : this.fromFraming(this.framings[end] ?? this.framings.idle, fit)),
+    ];
+    const now = performance.now();
+    const glide: Glide = { plan: planGlide(poses, seconds), stations: framed.map((s) => s.station), began: now, last: now, time: 0, brake: null };
+    this.flight = { to: end, spring: MOTIONS.travel, onDone, distance: 1, glide };
+    return true;
+  }
+
+  /** Slows the glide to rest where it is, over about a second; false when no glide is cruising. */
+  brake() {
+    const glide = this.flight?.glide;
+    if (!glide || glide.brake) return false;
+    const now = performance.now();
+    glide.brake = { at: now, time: glide.time, rate: glideRate(glide.plan, (now - glide.began) / 1000) };
+    return true;
+  }
+
+  /** The glide's progress, for the map: path seconds now and at each stop and the end, and whether it is braking. */
+  get glideState() {
+    const glide = this.flight?.glide;
+    if (!glide) return null;
+    const { marks, duration } = glide.plan;
+    return { time: glide.time, stops: marks.slice(1, -1), end: duration, braking: glide.brake !== null };
   }
 
   /** Lands the current flight at its framing now. */
@@ -214,7 +281,9 @@ export class RoomCamera {
     const station = this.destination;
     this.clock = clock;
     this.writeGoal(station);
-    if (this.flight?.path) {
+    if (this.flight?.glide) {
+      this.followGlide(this.flight.glide);
+    } else if (this.flight?.path) {
       this.followPath(this.flight.path, dt);
     } else if (this.flight) {
       this.rig.step(this.goal, dt, this.flight.spring);
@@ -255,6 +324,37 @@ export class RoomCamera {
       if (dt > 0) this.rig.velocity[i] = (next[i] - this.rig.value[i]) / dt;
       this.rig.value[i] = next[i];
     }
+  }
+
+  /** One frame along the glide; the rig's velocity is kept so a re-aim curves away from it instead of stopping. */
+  private followGlide(glide: Glide) {
+    const now = performance.now();
+    const dt = (now - glide.last) / 1000;
+    glide.last = now;
+    const braked = glide.brake && brakedTime(glide.plan, glide.brake.time, glide.brake.rate, (now - glide.brake.at) / 1000);
+    glide.time = braked ? braked.time : glideTime(glide.plan, (now - glide.began) / 1000);
+    const { eye, target, fov } = fromGlidePose(glidePose(glide.plan, glide.time));
+    const next = [...eye, ...target, fov];
+    for (let i = 0; i < next.length; i++) {
+      if (dt > 0) this.rig.velocity[i] = (next[i] - this.rig.value[i]) / dt;
+      this.rig.value[i] = next[i];
+    }
+    if (glide.time >= glide.plan.duration) {
+      this.rig.set(this.goal);
+      this.land();
+    } else if (braked?.done) this.rest(glide);
+  }
+
+  /** A braked glide has stopped: the camera rests where it is, at the stop it was nearest on the way. */
+  private rest(glide: Glide) {
+    const stops = glide.plan.marks.slice(1, -1);
+    const nearest = stops.reduce((best, t, i) => (Math.abs(t - glide.time) < Math.abs(stops[best] - glide.time) ? i : best), 0);
+    const station = glide.stations[nearest];
+    this.rig.velocity.fill(0);
+    this.flight = null;
+    this.phase = station;
+    this.restDistance = 1;
+    this.held = { station, pose: Float64Array.from(this.rig.value) };
   }
 
   private land() {
@@ -299,6 +399,10 @@ export class RoomCamera {
     let position: THREE.Vector3;
     let target: THREE.Vector3;
     let fov: number;
+    if (!this.flight && this.held?.station === phase) {
+      this.goal.set(this.held.pose);
+      return;
+    }
     if (phase === 'monitor') ({ position, target, fov } = this.monitorPose());
     else if (phase === 'loading') {
       // The arrival starts from the wide view, which fills the frame with the room: from the boot framing, 14 m out,

@@ -18,6 +18,8 @@ export async function startRoom(container: HTMLElement, opts: RoomOptions): Prom
     openWindow: (target, options) => app.openWindow(target, options),
     fly: (station) => app.fly(station),
     visit: (station, onDone, distance) => app.visit(station, onDone, distance),
+    glideTour: (stops, seconds, onDone) => app.glideTour(stops, seconds, onDone),
+    stopGlide: () => app.stopGlide(),
     has: (station): station is StationName => app.has(station),
     view: () => app.view(),
     skipIntro: () => app.skipIntro(),

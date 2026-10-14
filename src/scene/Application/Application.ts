@@ -56,6 +56,8 @@ export interface RoomView {
   /** The station the camera is at or flying to. */
   destination: CameraPhase;
   moving: boolean;
+  /** The played tour's glide: path seconds now, at each stop and at its end, and whether it is braking; null when none. */
+  glide: { time: number; stops: number[]; end: number; braking: boolean } | null;
 }
 
 export interface RoomHandle {
@@ -70,6 +72,13 @@ export interface RoomHandle {
    * `distance` stands the camera that many times further back than the stop's framing.
    */
   visit(station: StationName, onDone?: () => void, distance?: number): boolean;
+  /**
+   * The played tour: one continuous glide through the stops and back to the desk, `seconds` long; any input brakes it
+   * where it is. False under reduced motion (the map then visits the stops one by one) or with no stop to frame.
+   */
+  glideTour(stops: readonly { station: StationName; distance: number }[], seconds: number, onDone?: () => void): boolean;
+  /** Brakes the glide to rest where it is; false when none is cruising. */
+  stopGlide(): boolean;
   /** Whether the room has this framing (a map stop names its camera node, `cam_tour_3` → `tour_3`). */
   has(station: string): station is StationName;
   /** The camera in plan coordinates, read every frame by the map's you-are-here mark. */
@@ -288,13 +297,18 @@ export class Application implements RoomHandle {
       fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
       canSteer: () => this.started && !this.handedOver && !this.world.capturing,
       takeOver: () => this.takeOver(),
+      interrupt: () => this.camera.brake(),
     });
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
       hotspot: (hotspot, proxy) => this.onHotspot(hotspot, proxy),
       toggle: () => this.toggle(),
       enterMonitor: () => this.enterMonitor(),
       leaveMonitor: () => this.leaveMonitor(),
-      click: (kind) => this.audio.click(kind),
+      click: (kind) => {
+        // A press inside the monitor while the tour glides past the desk stops the glide too.
+        if (kind === 'mouse-down') this.camera.brake();
+        this.audio.click(kind);
+      },
       canHover: () => this.started && this.camera.destination !== 'monitor' && !this.handedOver && !this.world.capturing,
       endedDrag: () => this.navigation.endedDrag(),
     });
@@ -366,6 +380,19 @@ export class Application implements RoomHandle {
     return this.camera.has(station as StationName);
   }
 
+  glideTour(stops: readonly { station: StationName; distance: number }[], seconds: number, onDone?: () => void) {
+    if (this.options.reducedMotion || this.paused) return false;
+    this.takeOver();
+    this.intro = false;
+    this.handedOver = false;
+    this.dirty = true;
+    return this.camera.glide(stops, 'desk', seconds, onDone);
+  }
+
+  stopGlide() {
+    return this.camera.brake();
+  }
+
   view(): RoomView {
     const camera = this.camera.instance;
     const direction = camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
@@ -379,6 +406,7 @@ export class Application implements RoomHandle {
       targetZ: target.z / WORLD_SCALE,
       destination: this.camera.destination,
       moving: this.camera.moving,
+      glide: this.camera.glideState,
     };
   }
 
@@ -400,7 +428,10 @@ export class Application implements RoomHandle {
   /** Stops every motion that runs by itself (sway, dust, LEDs); the camera still answers clicks. */
   setPaused(paused: boolean) {
     this.paused = paused;
-    if (paused) this.takeOver();
+    if (paused) {
+      this.takeOver();
+      this.camera.brake();
+    }
     this.dirty = true;
   }
 
@@ -463,6 +494,8 @@ export class Application implements RoomHandle {
   }
 
   private onHotspot(hotspot: Hotspot, proxy: THREE.Object3D) {
+    // A click during the tour's glide only stops it, where it is.
+    if (this.camera.brake()) return;
     this.hover.pulse(proxy);
     if (hotspot.labelOnly) return;
     this.audio.hotspot({ proxies: [proxy.name] });
@@ -473,6 +506,8 @@ export class Application implements RoomHandle {
   }
 
   private enterMonitor() {
+    // The glide passes the desk: a pointer resting where the glass goes by is not the visitor asking to go in.
+    if (this.camera.glideState) return;
     if (this.started && this.camera.destination !== 'monitor') this.toMonitor('monitor', null);
   }
 
@@ -490,6 +525,7 @@ export class Application implements RoomHandle {
     const now = performance.now();
     // The click that skipped the arrival only skips it; the press that took focus off the glass has already stepped out.
     if (!this.started || now - this.skippedAt < SKIP_CLICK_MS || now - this.leftMonitorAt < SKIP_CLICK_MS) return;
+    if (this.camera.brake()) return;
     const here = this.camera.destination;
     this.flyTo(here === 'idle' || here === 'monitor' ? 'desk' : 'idle', 'step');
   }

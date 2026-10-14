@@ -39,9 +39,30 @@ export function nextStopIndex(stops: readonly Pick<TourStop, 'when'>[], from: nu
   while (next < stops.length && stops[next].when === 'film' && !filmPlaying) next++;
   return next;
 }
+/**
+ * Which caption the glide shows at path second `time`: the stop whose stretch of the path the camera is in (from halfway
+ * after the stop before to halfway before the next, less a short gap for the cross-fade), `stops.length` for the
+ * stretch home to the desk, or -1 between two.
+ */
+export function captionAt(time: number, stops: readonly number[], end: number): number {
+  const knots = [...stops, end];
+  for (let k = 0; k < knots.length; k++) {
+    const from = k === 0 ? 0 : (knots[k - 1] + knots[k]) / 2;
+    const to = k === knots.length - 1 ? end : (knots[k] + knots[k + 1]) / 2;
+    if (time >= from + CAPTION_GAP_S && time < to - CAPTION_GAP_S) return k;
+  }
+  return -1;
+}
+
 export const FLOORPLAN_URL = '/room/floorplan.json';
-// The played tour rests this long at each stop once the camera has landed, long enough to read its caption.
+// Step by step (reduced motion), the tour rests this long at each stop once the camera has landed, to read its caption.
 const HOLD_MS = 4500;
+// The glide takes this long a leg (start to the first stop, stop to stop, the last stop home), within the bounds.
+const GLIDE_LEG_S = 7.5;
+const GLIDE_BOUNDS_S = [45, 70] as const;
+// Between two stops' captions the old one fades out and the new one in.
+const CAPTION_GAP_S = 0.4;
+const CAPTION_FADE_MS = 500;
 // Around the room's outline, so the walls' strokes and the markers at the edges stay inside the drawing.
 const PLAN_MARGIN_M = 0.35;
 // The you-are-here wedge's length, as a share of the plan's width.
@@ -93,8 +114,9 @@ function placeStops(room: RoomHandle, plan: FloorPlan) {
 
 /**
  * The map: opened by "Take the tour", closed by Close or Escape. A stop (clicked, or Enter on it) flies the camera there;
- * "Play the tour" visits every stop in order and comes back to the desk. Anything the visitor does with the camera
- * meanwhile (a prop, an arrow key, another stop) ends the played tour where it is.
+ * "Play the tour" glides through every stop in order without stopping and comes back to the desk, each stop's caption
+ * fading in as it comes into view (reduced motion: one stop at a time, a pause at each). Any input meanwhile (a click,
+ * a key, the wheel, Escape) brakes it where it is.
  */
 export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: RoomHandle, plan: FloorPlan) {
   const q = <T extends Element>(selector: string) => panel.querySelector<T>(selector)!;
@@ -190,25 +212,53 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   });
 
   // ---- the played tour: the map shrinks to a small you-are-here inset carrying each stop's caption ----
-  let playing: { expected: StationName; timer: number } | null = null;
+  type Playing =
+    | { mode: 'glide'; route: Stop[]; arrived: boolean }
+    | { mode: 'steps'; expected: StationName; timer: number };
+  let playing: Playing | null = null;
 
   const say = (heading: string, line = '') => {
     const strong = document.createElement('strong');
     strong.textContent = heading;
     caption.replaceChildren(strong, ...(line ? [document.createTextNode(` ${line}`)] : []));
   };
+  const sayStop = (stop: Stop) => say(`${stops.indexOf(stop) + 1} of ${stops.length} · ${stop.label}.`, stop.caption);
+
+  // The glide's captions cross-fade: the old one fades out, the text changes, the new one fades in.
+  let wantedCaption = -2;
+  let captionTimer = 0;
+  const showCaption = (route: Stop[], index: number) => {
+    if (index === wantedCaption) return;
+    wantedCaption = index;
+    caption.dataset.fade = 'out';
+    clearTimeout(captionTimer);
+    captionTimer = window.setTimeout(() => {
+      if (index < 0) return;
+      if (index < route.length) sayStop(route[index]);
+      else say('Back at the desk.');
+      caption.dataset.fade = 'in';
+    }, CAPTION_FADE_MS);
+  };
+
+  /** The stops the tour plays, in order: a film stop only while his film shows. */
+  const route = () => {
+    const film = room.filmPlaying();
+    const played: Stop[] = [];
+    for (let i = nextStopIndex(stops, -1, film); i < stops.length; i = nextStopIndex(stops, i, film)) played.push(stops[i]);
+    return played;
+  };
 
   const visitStop = (index: number) => {
-    if (!playing) return;
+    if (playing?.mode !== 'steps') return;
     const stop = stops[index];
     const at = stop ? stop.station : 'desk';
     playing.expected = at;
-    if (stop) say(`${index + 1} of ${stops.length} · ${stop.label}.`, stop.caption);
+    if (stop) sayStop(stop);
     else say('Back at the desk.');
     room.visit(
       at,
       () => {
-        if (!playing || playing.expected !== at) return;
+        if (playing?.mode !== 'steps' || playing.expected !== at) return;
         if (index >= stops.length) return stopPlaying(false);
         playing.timer = window.setTimeout(() => visitStop(nextStopIndex(stops, index, room.filmPlaying())), HOLD_MS);
       },
@@ -218,8 +268,13 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
 
   function stopPlaying(clearCaption = true) {
     if (!playing) return;
-    clearTimeout(playing.timer);
+    if (playing.mode === 'steps') clearTimeout(playing.timer);
+    // The Stop button, or the map closing: the glide slows to rest where it is.
+    else if (!playing.arrived) room.stopGlide();
     playing = null;
+    clearTimeout(captionTimer);
+    wantedCaption = -2;
+    caption.removeAttribute('data-fade');
     panel.removeAttribute('data-playing');
     play.textContent = 'Play the tour';
     if (clearCaption) caption.textContent = '';
@@ -227,10 +282,26 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
 
   play.addEventListener('click', () => {
     if (playing) return stopPlaying();
-    const first = nextStopIndex(stops, -1, room.filmPlaying());
-    playing = { expected: stops[first]?.station ?? 'desk', timer: 0 };
+    const played = route();
     panel.setAttribute('data-playing', '');
     play.textContent = 'Stop the tour';
+    const seconds = Math.min(GLIDE_BOUNDS_S[1], Math.max(GLIDE_BOUNDS_S[0], (played.length + 1) * GLIDE_LEG_S));
+    const glide: Playing = { mode: 'glide', route: played, arrived: false };
+    playing = glide;
+    const gliding = room.glideTour(
+      played.map(({ station, distance }) => ({ station, distance })),
+      seconds,
+      () => {
+        if (playing !== glide) return;
+        glide.arrived = true;
+        say('Back at the desk.');
+        stopPlaying(false);
+      },
+    );
+    if (gliding) return;
+    // Reduced motion (or a paused room): one stop at a time, a pause at each.
+    const first = nextStopIndex(stops, -1, room.filmPlaying());
+    playing = { mode: 'steps', expected: stops[first]?.station ?? 'desk', timer: 0 };
     visitStop(first);
   });
 
@@ -242,9 +313,20 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     const view = room.view();
     const angle = (Math.atan2(view.dirZ, view.dirX) * 180) / Math.PI;
     here.setAttribute('transform', `translate(${view.x} ${view.z}) rotate(${angle}) scale(${width * HERE_SCALE})`);
-    // The visitor moved the camera somewhere the played tour did not ask for: they lead now.
-    if (playing && view.destination !== playing.expected) stopPlaying();
-    const at = view.moving ? undefined : (stops.find((s) => s.station === view.destination) ?? nearestStop(view.targetX, view.targetZ));
+    let at: Stop | undefined;
+    if (playing?.mode === 'glide') {
+      // Braked by the visitor, or the camera sent somewhere else: they lead now.
+      if (!view.glide || view.glide.braking) stopPlaying();
+      else {
+        const index = captionAt(view.glide.time, view.glide.stops, view.glide.end);
+        showCaption(playing.route, index);
+        at = playing.route[index];
+      }
+    } else {
+      // The visitor moved the camera somewhere the played tour did not ask for: they lead now.
+      if (playing && view.destination !== playing.expected) stopPlaying();
+      at = view.moving ? undefined : (stops.find((s) => s.station === view.destination) ?? nearestStop(view.targetX, view.targetZ));
+    }
     if (at === current) return;
     current?.item.removeAttribute('aria-current');
     current?.marker.removeAttribute('data-current');
@@ -285,12 +367,14 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     const at = stops.findIndex((s) => s.item === document.activeElement);
     stops[(at + step + stops.length) % stops.length]?.item.focus();
   });
-  // Escape closes the map wherever focus is, before the room would take it as "back out".
+  // Escape closes the map wherever focus is, before the room would take it as "back out"; while the tour glides, the
+  // first Escape only brakes it where it is.
   window.addEventListener(
     'keydown',
     (event) => {
       if (event.key !== 'Escape' || panel.hidden) return;
       event.preventDefault();
+      if (playing?.mode === 'glide' && room.stopGlide()) return;
       setOpen(false);
     },
     { capture: true },

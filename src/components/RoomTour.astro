@@ -1,11 +1,16 @@
 ---
 // "Take the tour" and the map of the room it opens (brief §0, §1): a floor plan drawn from public/room/floorplan.json,
 // the stops of src/scene/tour.json in order (work first), a you-are-here mark that follows the camera, and "Play the
-// tour", during which the map shrinks to a small inset with each stop's caption. Never the default: the button waits
-// quietly in a corner, away from the monitor. Behaviour is in RoomTourMap.ts.
+// tour", one slow glide through the room during which the map shrinks to a small inset and each stop's caption fades
+// in and out. Never the default: the button waits in the bottom-left corner, away from the monitor, drawn like the
+// Sound control across the room (its glyph is the map's own plan and red you-are-here dot). Behaviour is in RoomTourMap.ts.
 ---
 
 <button type="button" class="room-tour-open" aria-expanded="false" aria-controls="room-tour" data-room-ui data-tour-open hidden>
+  <svg class="room-tour-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+    <path class="room-tour-glyph-plan" d="M2.5 3.5h11v9h-11zM2.5 8.5h3.5M9 3.5v3"></path>
+    <circle class="room-tour-glyph-here" cx="10.6" cy="9.9" r="1.35"></circle>
+  </svg>
   Take the tour
 </button>
 
@@ -45,24 +50,79 @@
     color: var(--paper);
   }
 
-  /* Shown once the camera has landed at the desk and the floor plan has loaded; never over SaahilOS on a phone. */
+  /* Shown once the camera has landed at the desk and the floor plan has loaded; never over SaahilOS on a phone. Its
+     box matches the Sound control's; under the pointer or the keyboard it warms to walnut, and open it inverts, as a
+     pressed room control does. */
   .room-tour-open {
     bottom: var(--space-3);
     display: none;
-    padding: 0.3rem 0.75rem;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.3rem 0.75rem 0.3rem 0.6rem;
     border: 1px solid rgb(168 159 145 / 0.5);
     border-radius: 0;
     background: var(--ink);
+    letter-spacing: 0.01em;
     cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease;
   }
 
   :global(html.room.room-landed:not(.room-os)) .room-tour-open:not([hidden]) {
-    display: block;
+    display: inline-flex;
+  }
+
+  .room-tour-glyph {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    overflow: visible;
+  }
+
+  .room-tour-glyph-plan {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+  }
+
+  .room-tour-glyph-here {
+    fill: var(--thread);
+    stroke: var(--paper);
+    stroke-width: 0.8;
+    transition: transform 0.2s ease;
+    transform-origin: 10.6px 9.9px;
   }
 
   .room-tour-open:hover,
+  .room-tour-open:focus-visible {
+    border-color: var(--paper);
+    background: var(--walnut);
+  }
+
+  .room-tour-open:hover .room-tour-glyph-here,
+  .room-tour-open:focus-visible .room-tour-glyph-here {
+    transform: scale(1.25);
+  }
+
   .room-tour-open[aria-expanded='true'] {
     border-color: var(--paper);
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  .room-tour-open[aria-expanded='true'] .room-tour-glyph-here {
+    stroke: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .room-tour-open,
+    .room-tour-glyph-here {
+      transition: none;
+    }
   }
 
   .room-tour {
@@ -260,6 +320,18 @@
     min-height: 1.5em;
     margin: 0 0 var(--space-2);
     color: var(--dust);
+    transition: opacity 0.5s ease;
+  }
+
+  /* While the tour glides, each stop's caption fades out as the camera moves on and the next fades in. */
+  .room-tour-caption[data-fade='out'] {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .room-tour-caption {
+      transition: none;
+    }
   }
 
   .room-tour-caption :global(strong) {

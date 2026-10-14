@@ -9,6 +9,8 @@ export interface NavigationHandlers {
   canSteer(): boolean;
   /** The visitor took the camera (a drag, a scroll, an arrow key): nothing moves it by itself any more. */
   takeOver(): void;
+  /** Input during the tour's glide brakes it where it is; true when it did (the input then does nothing else). */
+  interrupt(): boolean;
 }
 
 // A drag starts once the pointer has travelled this far; anything shorter is a click or a tap.
@@ -19,6 +21,8 @@ const WHEEL_REST_MS = 220;
 // Two framings this close (eye and look-at point, millimetres) are one stop: a tour stop authored at the desk is the desk.
 const SAME_STOP_MM = 250;
 const STEP_KEYS: Record<string, 1 | -1> = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 };
+// Moving focus is not input to the room (the page's own rule): these keys leave the tour's glide gliding.
+const FOCUS_KEYS = new Set(['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock']);
 
 /**
  * The stations in the order a visitor steps through them: left to right as seen from the wide view, the monitor
@@ -110,6 +114,7 @@ export class Navigation {
       if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_START_PX || !this.handlers.canSteer()) return;
       press.dragging = true;
       this.stage.setPointerCapture?.(event.pointerId);
+      this.handlers.interrupt();
       this.handlers.takeOver();
     }
     this.camera.dragLook(event.clientX - press.lastX, event.clientY - press.lastY, this.stage.clientHeight);
@@ -138,6 +143,11 @@ export class Navigation {
     this.wheelLastAt = now;
     const lines = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? 400 : 1;
     this.wheelTravel += event.deltaY * lines;
+    if (this.handlers.interrupt()) {
+      this.wheelTravel = 0;
+      this.wheelLockedUntil = now + WHEEL_REST_MS;
+      return;
+    }
     if (Math.abs(this.wheelTravel) < WHEEL_STEP_PX) return;
     const direction = this.wheelTravel > 0 ? 1 : -1;
     this.wheelTravel = 0;
@@ -150,6 +160,11 @@ export class Navigation {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest?.('input, textarea, select, [contenteditable]')) return;
+    if (!FOCUS_KEYS.has(event.key) && this.handlers.interrupt()) {
+      // The key only stops the glide; Enter or Space on a focused button still presses it.
+      if (!target?.closest?.('button, a')) event.preventDefault();
+      return;
+    }
     const direction = STEP_KEYS[event.key];
     const home = event.key === 'Home';
     const out = event.key === 'Escape';
