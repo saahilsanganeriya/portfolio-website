@@ -420,7 +420,7 @@ def build_projection_surface():
     if face.normal.x < 0:
         face.normal_flip()
     mat, k = pl.new_material("projection_surface")
-    still = k.node("ShaderNodeEmission", inputs={"Color": (0.62, 0.71, 0.75, 1.0), "Strength": 0.9})
+    still = k.node("ShaderNodeEmission", inputs={"Color": (0.62, 0.71, 0.75, 1.0), "Strength": 0.12})
     white = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.8, 0.8, 0.8, 1.0), "Roughness": 0.9})
     probe = k.node("ShaderNodeValue", name="light_probe", label="light_probe")
     probe.outputs[0].default_value = 0.0

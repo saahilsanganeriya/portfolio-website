@@ -103,9 +103,9 @@ CAMERAS = {
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
     "cam_window": ((1.85, -1.75, 1.55), (1.85, 1.40, 1.50)),
-    "cam_shelf": ((2.02, -0.76, 0.98), (3.10, -0.76, 0.60)),
+    "cam_shelf": ((1.80, -0.68, 0.98), (3.10, -0.62, 0.55)),
     "cam_photos": ((-1.85, -1.22, 1.78), (-3.30, -1.22, 1.78)),
-    "cam_projector": ((-0.45, -2.45, 1.62), (-3.30, -2.45, 1.42)),
+    "cam_projector": ((0.80, -2.05, 1.25), (-3.30, -2.55, 1.05)),
     "cam_espresso": ((-2.22, -3.18, 1.36), (-3.02, -3.30, 1.10)),
     "cam_oven": ((-2.18, -3.62, 1.26), (-3.00, -3.70, 0.98)),
     # Arrival: from the loading framing past the window and the mango plant onto the desk (the site glides
@@ -116,11 +116,11 @@ CAMERAS = {
     # The tour: one framing per stop, the professional stops first (desk, window, books, space wall), then the rest.
     "cam_tour_0": ((0.05, -2.35, 1.62), (-0.10, 0.10, 1.05)),
     "cam_tour_1": ((1.85, -1.75, 1.55), (1.85, 1.40, 1.50)),
-    "cam_tour_2": ((2.02, -0.76, 0.98), (3.10, -0.76, 0.60)),
+    "cam_tour_2": ((1.80, -0.68, 0.98), (3.10, -0.62, 0.55)),
     "cam_tour_3": ((1.78, -0.90, 1.72), (3.10, -0.90, 1.74)),
-    "cam_tour_4": ((-1.55, -2.95, 1.70), (-3.05, -3.50, 1.10)),
+    "cam_tour_4": ((-1.50, -2.90, 1.88), (-3.05, -3.52, 1.30)),
     "cam_tour_5": ((-1.60, -2.00, 1.45), (-2.20, 0.42, 1.18)),
-    "cam_tour_6": ((-0.45, -2.45, 1.62), (-3.30, -2.45, 1.42)),
+    "cam_tour_6": ((0.80, -2.05, 1.25), (-3.30, -2.55, 1.05)),
     "cam_tour_7": ((-1.85, -1.22, 1.78), (-3.30, -1.22, 1.78)),
     "cam_tour_8": ((-2.22, -1.95, 1.62), (-2.22, 0.42, 1.62)),
     "cam_tour_9": ((0.55, -3.35, 1.62), (2.35, -1.35, 0.80)),
@@ -139,7 +139,7 @@ TOUR_STOPS = [
     ("armchair", "Armchair corner", "cam_tour_9", (2.25, -1.80)),
 ]
 CAMERA_FOV_DEG = 35.0
-EXPOSURE = 2.15  # owner round 2: about +0.5 EV over T3's 1.65, same lights and mood
+EXPOSURE = 2.3  # round 7: a little brighter than round two's 2.15 (owner: a bit more professional), same lights
 LAVA_GLOW = 0.45
 
 
@@ -1325,7 +1325,7 @@ def build_practical_lights(dressing):
     add("pendant", "SPOT", pendant, (1.0, 0.56, 0.24), 55.0, size=0.04, rot=down, cone=95, blend=0.7)
     add("pendant_glow", "POINT", pendant + Vector((0, 0, 0.02)), (1.0, 0.56, 0.24), 3.0, size=0.03)
     # Hallway sconce on the far wall, seen through the door: the hall glows warm beyond the room.
-    add("hall_sconce", "POINT", Vector((HALL_X + 0.09, HALL_SCONCE_Y, 1.80)), (1.0, 0.55, 0.22), 14.0, size=0.05)
+    add("hall_sconce", "POINT", Vector((HALL_X + 0.09, HALL_SCONCE_Y, 1.80)), (1.0, 0.55, 0.22), 28.0, size=0.05)
 
 
 def setup_world_and_render():

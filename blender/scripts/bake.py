@@ -1,7 +1,7 @@
 """Bake the room's lighting (Cycles, CPU) into its atlases, and the window view by day and by night; save
 room.blend with the bake UVs.
 
-    blender -b blender/room.blend -P blender/scripts/bake.py                     # final: full size, 512 samples
+    blender -b blender/room.blend -P blender/scripts/bake.py                     # final: full size, 128 samples
     blender -b blender/room.blend -P blender/scripts/bake.py -- --scale 0.25 --samples 32 --atlas desk   # test
     blender -b blender/room.blend -P blender/scripts/bake.py -- --atlas window_sf,window_delhi            # view only
 
@@ -32,10 +32,12 @@ REPO = Path(__file__).resolve().parents[2]
 BAKE_DIR = REPO / "blender" / ".cache" / "bake"
 BLEND = REPO / "blender" / "room.blend"
 
-ATLAS_SIZES = {"env": 4096, "desk": 4096, "props": 4096, "window_sf": 1024, "window_delhi": 1024}
-# Island margin in pixels at the final size: the plan's floor is 8 px; the props atlas needs the floor because its
-# scanned and modelled props bring thousands of islands into it. The view's atlases are small and seen from afar.
-MARGIN_PX = {"env": 16, "desk": 16, "props": 8, "window_sf": 6, "window_delhi": 6}
+# Round 7 bakes the desk and props atlases at 6144 (round two: 4096) and ships them resampled smaller (export.py),
+# so every shipped texel averages several baked ones: sharper type and edges, less noise.
+ATLAS_SIZES = {"env": 4096, "desk": 6144, "props": 6144, "window_sf": 1280, "window_delhi": 1280}
+# Island margin in pixels at the bake size; at least 6 px survive the resampling to the shipped size (the plan's
+# floor is 8 px at the bake). The props atlas holds thousands of islands from its scanned and modelled props.
+MARGIN_PX = {"env": 16, "desk": 20, "props": 12, "window_sf": 6, "window_delhi": 6}
 STATES = ("day", "night")
 # The world seen through the open front of the view while it bakes: a pale sky by day, a dark one by night.
 VIEW_WORLD = {"day": ((0.62, 0.70, 0.82, 1.0), 0.35), "night": ((0.010, 0.012, 0.022, 1.0), 0.35)}
@@ -50,7 +52,7 @@ def parse_args():
     parser.add_argument("--atlas", default=",".join(ATLAS_SIZES), help="comma-separated atlas names")
     parser.add_argument("--states", default=",".join(STATES), help="view states to bake (window atlases)")
     parser.add_argument("--scale", type=float, default=1.0, help="fraction of the final atlas size (tests)")
-    parser.add_argument("--samples", type=int, default=512)
+    parser.add_argument("--samples", type=int, default=128)
     parser.add_argument("--threads", type=int, default=MAX_THREADS)
     parser.add_argument("--no-save", action="store_true", help="do not write room.blend")
     return parser.parse_args(argv)
