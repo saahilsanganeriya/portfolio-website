@@ -94,6 +94,8 @@ export interface AudioHandle {
   setState(state: AudioState): void;
   /** Plays a prop's recording at `position` (world units), or at the prop it belongs to. */
   sfx(name: SfxName, position?: THREE.Vector3): void;
+  /** The projector's running sound plays only while its film runs. */
+  setProjectorRunning(running: boolean): void;
   readonly unlocked: boolean;
   readonly muted: boolean;
   readonly volume: number;
@@ -113,6 +115,8 @@ export interface OfflineOptions {
   effects?: { at: number; name: SfxName }[];
   /** The moment the cities' day and night are read at. */
   date?: Date;
+  /** The projector's film running (its sound on). */
+  projector?: boolean;
 }
 
 /** Opus where the browser decodes it, AAC otherwise; a file that fails to decode falls back to the next format. */
@@ -132,6 +136,7 @@ export class RoomAudio implements AudioHandle {
   private current: AudioState = 'room';
   private derived: AudioState | null = null;
   private isMuted = false;
+  private projectorRunning = false;
   private level = 1;
   private lastUpdate = 0;
   private resting = 0;
@@ -179,6 +184,7 @@ export class RoomAudio implements AudioHandle {
     this.master.connect(ctx.destination);
     const mix = new RoomMix(ctx, this.positions);
     mix.output.connect(this.master);
+    mix.setProjectorRunning(this.projectorRunning);
     this.mix = mix;
     mix.setState(this.current, (bed) => this.bedLevel(bed), true);
     document.addEventListener('visibilitychange', this.onVisibility);
@@ -217,6 +223,13 @@ export class RoomAudio implements AudioHandle {
 
   sfx(name: SfxName, position?: THREE.Vector3) {
     this.play(name, position, 1);
+  }
+
+  setProjectorRunning(running: boolean) {
+    if (running === this.projectorRunning) return;
+    this.projectorRunning = running;
+    this.mix?.setProjectorRunning(running);
+    this.notify();
   }
 
   /** A prop's or city's recording at `gain` times its own level. */
@@ -316,6 +329,7 @@ export class RoomAudio implements AudioHandle {
       state: this.current,
       muted: this.isMuted,
       volume: this.level,
+      projectorRunning: this.projectorRunning,
       master: this.master?.gain.value ?? null,
       loaded: [...this.buffers.keys()].sort(),
       /** Room nodes the sounds play from, in metres. */
@@ -331,10 +345,11 @@ export class RoomAudio implements AudioHandle {
   async renderOffline(seconds: number, listener: Listener, options: OfflineOptions = {}): Promise<Float32Array[]> {
     if (!this.loaded) throw new Error('room audio: no gesture has unlocked sound yet');
     await this.loaded;
-    const { state = 'room', filmsOpen = false, startup = false, fadeIn = false, clicks = [], effects = [], date = new Date() } = options;
+    const { state = 'room', filmsOpen = false, startup = false, fadeIn = false, clicks = [], effects = [], date = new Date(), projector = false } = options;
     const ctx = new OfflineAudioContext(2, Math.round(seconds * OFFLINE_RATE), OFFLINE_RATE);
     const mix = new RoomMix(ctx, this.positions);
     mix.output.connect(ctx.destination);
+    mix.setProjectorRunning(projector);
     mix.update(listener, filmsOpen, true);
     const bedLevel = (bed: BedName) => this.bedLevel(bed, state, date);
     for (const name of LOOPS) {

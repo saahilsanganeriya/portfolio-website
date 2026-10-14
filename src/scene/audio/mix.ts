@@ -17,7 +17,8 @@ export type ClickKind = 'key' | 'mouse-down' | 'mouse-up';
 export type BedName = 'fan' | 'sf' | 'delhi-day' | 'delhi-night';
 
 // Linear gains on the -23 LUFS files: the ambience sits near -30 dBFS RMS, clicks at their recorded level, and the
-// projector is heard only up close (it falls off with the square of distance) or while Films is the front window.
+// projector runs only while its film does, heard up close (it falls off with the square of distance) or, while it
+// runs, with Films as the front window.
 const ROOM_TONE = 0.4;
 const COMPUTER = 0.35;
 const PROJECTOR_NEAR = 0.7;
@@ -93,6 +94,7 @@ export class RoomMix {
   private readonly music: { bus: GainNode; filter: BiquadFilterNode; stems: Record<Stem, GainNode>; started: boolean };
   private readonly spatial: GainNode;
   private readonly beds = new Map<BedName, GainNode>();
+  private projectorRunning = false;
   private readonly local = new THREE.Vector3();
   private readonly lastListener = new THREE.Vector3(NaN, NaN, NaN);
   private readonly forward = new THREE.Vector3();
@@ -135,6 +137,11 @@ export class RoomMix {
     this.music = { bus, filter: musicFilter, stems, started: false };
     this.spatial = ctx.createGain();
     this.spatial.connect(this.output);
+  }
+
+  /** The projector's motor and shutter sound plays only while its film runs; the next update() glides it in or out. */
+  setProjectorRunning(running: boolean) {
+    this.projectorRunning = running;
   }
 
   loop(name: LoopName, buffer: AudioBuffer, when = this.ctx.currentTime) {
@@ -248,6 +255,7 @@ export class RoomMix {
         gain = Math.max(gain, PROJECTOR_FILMS);
         cutoff = Math.max(cutoff, 6000);
       }
+      if (s === this.projector && !this.projectorRunning) gain = 0;
       set(s.filter.frequency, cutoff);
       set(s.gain.gain, gain);
       this.local.copy(s.position).applyMatrix4(listener.matrixWorldInverse);
