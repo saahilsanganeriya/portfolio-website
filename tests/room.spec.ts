@@ -81,6 +81,9 @@ test('a project address lands at the desk at once with that project open', async
   await settled(page, 'desk', 60_000);
   expect(await page.evaluate(() => window.__room!.arrival)).toBeNull();
   await expect(os(page).getByRole('dialog', { name: PROJECT.title })).toBeVisible();
+  // The window focused itself inside SaahilOS; that is not the visitor moving, so the camera stays at the desk.
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => window.__room!.destination)).toBe('desk');
   await expect(page).toHaveURL(new RegExp(`/projects/${PROJECT.slug}$`));
   expect(await seriousAxeViolations(page)).toEqual([]);
 });
@@ -184,6 +187,7 @@ test('every content address lands at the desk within a second of the room starti
   expect(results.map((r) => r.path).sort()).toEqual([...paths].sort());
   for (const r of results) {
     expect(r.open, `${r.path} names a window`).not.toBe('');
+    expect(r.phase, `${r.path} stays at the desk once its window is open`).toBe('desk');
     expect(r.ms, `${r.path} reached the desk ${r.ms.toFixed(0)} ms after the room started`).toBeLessThanOrEqual(1000);
   }
 });
