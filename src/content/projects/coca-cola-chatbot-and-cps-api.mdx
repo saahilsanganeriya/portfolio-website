@@ -18,7 +18,7 @@ The scale was the problem. There were more than 300 global supply-chain datasets
 
 ## The API
 
-People were the interface: every request was handled by hand. I designed Django REST APIs with create, read, update and delete endpoints over the 300+ datasets, so business-intelligence teams could run their own operational queries. The public write-up of the API is linked on this page.
+People were the interface: every request was handled by hand. I designed the [CPS Analytics API](https://confused-locket-f0c.notion.site/CPS-Advanced-Analytics-API-5618147fdf0f4056abac5acb5dce3222), Django REST endpoints to create, read, update and delete records across the 300+ datasets, so business-intelligence teams could run their own operational queries.
 
 ## The chatbot
 
@@ -47,7 +47,3 @@ This design has limits. Keyword search misses a passage that uses different word
 ## The pipelines
 
 I rebuilt a Python data-access library and the monitoring platform around it. Support tickets fell by 63%, and the ETL runtime went from 9 hours to 6.5. I also built Azure Data Factory pipelines that process 300+ datasets daily with PySpark and SQL on Databricks, cut the transformation step’s runtime by 60%, and added CI/CD with automated data validation.
-
-## What I can and cannot show
-
-The chatbot has no number I can publish, so this page gives it none. The systems themselves are internal. The API write-up is the one piece that is public, and everything else here stays at the level of my résumé.
