@@ -1,12 +1,12 @@
 // Draws the room's typographic art as PNGs for the bake: the six book spines and covers, the Japanese-literature
 // print, the Georgia Tech pennant, the Voyager record's engraved cover and its plate, and the sticky notes the stills
-// show. Text is set as outlines (scripts/posters/type.mjs), so no font files are needed to render.
+// show (the phrases from src/content/sticky-notes.json). Text is set as outlines (scripts/posters/type.mjs), so no font files are needed to render.
 //
 //   node blender/scripts/room_art.mjs [out_dir]        (default blender/.cache/art; build_room.py runs it)
 //
 // Every design is original type and simple geometry in the site's palette; no cover art is copied. The Voyager
 // engraving is redrawn from the diagrams on the record's cover (NASA, public domain).
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { capHeight, setLine } from '../../scripts/posters/type.mjs';
@@ -199,18 +199,39 @@ function voyagerPlate() {
   return { name: 'voyager_plate', w, h, body };
 }
 
-/** The two phrases the brief names, for the stills only (the site writes the notes at runtime). */
-function stickyNotes() {
-  return [['You win some,', 'you lose some.'], ['Cost of', 'doing business.']].map((lines, k) => {
+/** Wraps a phrase into lines of at most `max` characters, breaking at spaces. */
+function wrap(phrase, max) {
+  const lines = [];
+  for (const word of phrase.split(' ')) {
+    const last = lines.at(-1);
+    if (last && (last + ' ' + word).length <= max) lines[lines.length - 1] = last + ' ' + word;
+    else lines.push(word);
+  }
+  return lines;
+}
+
+/**
+ * The stills' sticky notes: the phrases in src/content/sticky-notes.json (the site writes the same ones at runtime),
+ * or the two the brief names before that file exists.
+ */
+async function stickyNotes() {
+  let phrases = ['You win some, you lose some.', 'Cost of doing business.'];
+  try {
+    phrases = JSON.parse(await readFile(new URL('../../src/content/sticky-notes.json', import.meta.url), 'utf8'));
+  } catch {}
+  return phrases.slice(0, 6).map((phrase, k) => {
     const s = 800;
+    const lines = wrap(phrase, 14);
+    const size = Math.min(110, ...lines.map((l) => fitSize('serifItalic', l, 110, s * 0.84)));
+    const top = s / 2 - ((lines.length - 1) * size * 1.25) / 2 + size * 0.3;
     const body = [`<rect width="${s}" height="${s}" fill="#fff"/>`,
-      ...lines.map((l, j) => text('serifItalic', l, { x: s / 2, y: 330 + j * 140, size: fitSize('serifItalic', l, 110, s * 0.82), fill: '#1E2A44' }))].join('');
+      ...lines.map((l, j) => text('serifItalic', l, { x: s / 2, y: top + j * size * 1.25, size, fill: '#1E2A44' }))].join('');
     return { name: `sticky_note_${k}`, w: s, h: s, body };
   });
 }
 
 await mkdir(OUT, { recursive: true });
-const jobs = [...BOOKS.map(spine), ...BOOKS.map(cover), printJapaneseLit(), pennant(), voyagerCover(), voyagerPlate(), ...stickyNotes()];
+const jobs = [...BOOKS.map(spine), ...BOOKS.map(cover), printJapaneseLit(), pennant(), voyagerCover(), voyagerPlate(), ...(await stickyNotes())];
 for (const { name, w, h, body } of jobs) {
   const file = path.join(OUT, `${name}.png`);
   await sharp(Buffer.from(svg(Math.round(w), Math.round(h), body))).png({ compressionLevel: 9 }).toFile(file);
