@@ -466,6 +466,29 @@ body.os-moving iframe {
   object-fit: cover;
 }
 
+.os-thumb-card {
+  align-content: center;
+  gap: 3px;
+  padding: 6px;
+  background: var(--walnut);
+  color: var(--paper);
+  text-align: center;
+}
+
+.os-thumb-card strong {
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.os-thumb-card span {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--dust);
+}
+
 .os-thumb-empty {
   padding: 8px;
   background: var(--os-desk);
@@ -2090,6 +2113,19 @@ body.os-moving iframe {
   html:not([data-embedded]) .os-details[data-large] .os-thumb {
     width: 88px;
     height: 55px;
+  }
+
+  html:not([data-embedded]) .os-thumb-card {
+    gap: 2px;
+    padding: 3px;
+  }
+
+  html:not([data-embedded]) .os-thumb-card strong {
+    font-size: 15px;
+  }
+
+  html:not([data-embedded]) .os-thumb-card span {
+    font-size: 9px;
   }
 
   html:not([data-embedded]) .os-desktop-foot {

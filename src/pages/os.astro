@@ -11,6 +11,7 @@ import {
   osWallpaper,
   ovenList,
   photographs,
+  projectCard,
   projectFigures,
 } from '../os/build-data';
 import SaahilOS from '../os/SaahilOS';
@@ -38,6 +39,7 @@ const index: OsIndex = {
       featured: data.featured,
       links: data.links,
       cover: data.cover && (await osImage(data.cover, data.coverAlt ?? '')),
+      card: projectCard(id),
       figures: await projectFigures(id),
     })),
   ),

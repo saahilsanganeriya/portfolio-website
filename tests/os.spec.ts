@@ -306,6 +306,32 @@ test.describe('desktop', () => {
     await expect(caption.getByRole('link')).toHaveAttribute('href', /10\.1371\/journal\.pone\.0319532/);
   });
 
+  /**
+   * Catches a visit's first window opening at its list or reader size, with its opening lines below the fold, and
+   * later windows that stop cascading at their own size (T52 fix 7).
+   */
+  test('the first window of a visit stands nearly the desktop’s height; later ones cascade at their own size', async ({ page }) => {
+    await page.goto(`/os?embed=1#projects/${PROJECT.slug}`);
+    const desktop = (await page.locator('.os-desktop').boundingBox())!;
+    const first = page.getByRole('dialog', { name: PROJECT.title });
+    // Polled, because a window opens on a spring from 94% scale.
+    await expect.poll(async () => (await first.boundingBox())!.height).toBeGreaterThan(desktop.height - 30);
+    await page.getByRole('navigation', { name: 'Apps' }).getByRole('button', { name: 'Writing', exact: true }).dblclick();
+    const later = page.getByRole('dialog', { name: 'Writing' });
+    await expect.poll(async () => (await later.boundingBox())!.height).toBeLessThan(desktop.height - 100);
+    expect((await later.boundingBox())!.y).toBeGreaterThan((await first.boundingBox())!.y);
+  });
+
+  /** Catches the first project a hiring manager sees showing "No public pictures" instead of its one number (T52 fix 7). */
+  test('Projects opens on the Mercor work with its number in place of a picture', async ({ page }) => {
+    await page.goto('/os?embed=1#projects');
+    const list = page.getByRole('dialog', { name: 'Projects' });
+    const first = list.locator('.os-row').first();
+    await expect(first).toHaveAttribute('href', '#projects/entity-resolution-and-anonymization');
+    await expect(first.locator('.os-thumb-card')).toHaveText('88 million mentions resolved in one run');
+    await expect(list.getByText('No public pictures')).toHaveCount(0);
+  });
+
   /** Catches a Films window that stops explaining its list: the label, the stars and when the diary last updated. */
   test('Films labels the diary and shows when it last updated', async ({ page }) => {
     // One more entry than the window shows at first, so the older entries are one button away.

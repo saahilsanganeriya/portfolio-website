@@ -40,6 +40,8 @@ export type WindowsAction =
       desktop: { width: number; height: number };
       focus: boolean;
       origin?: Point | null;
+      /** The window a visit lands on (a window address); the boot's own window is first anyway. */
+      first?: boolean;
     }
   | { type: 'focus'; id: string }
   | { type: 'close'; id: string }
@@ -81,7 +83,7 @@ export function windowsReducer(state: WindowsState, action: WindowsAction): Wind
         z: state.nextZ,
         minimized: false,
         maximized: false,
-        frame: frameFor(action.route, state.cascade, action.desktop),
+        frame: frameFor(action.route, state.cascade, action.desktop, action.first || state.cascade === 0),
         focusRequest: action.focus ? 1 : 0,
         origin: action.origin ?? null,
       };
@@ -146,6 +148,10 @@ const ICON_ROW = 88;
 const ICON_COLUMN = 92;
 const ICONS_TOP = 12;
 const CASCADE_STEP = 28;
+// A visit's first window (About, or the window its address names) stands nearly the desktop's height, so its opening
+// lines are above the fold; later windows cascade at their own sizes.
+const FIRST_WIDTH = 880;
+const FIRST_MARGIN = 12;
 
 // Short desktops wrap the icons into more columns; new windows open to the right of all of them.
 function iconGutter(desktopHeight: number): number {
@@ -154,12 +160,17 @@ function iconGutter(desktopHeight: number): number {
 }
 
 /** Where a new window opens: cascading down-right from the icon column, always inside the desktop. */
-export function frameFor(route: Route, cascade: number, desktop: { width: number; height: number }): Frame {
+export function frameFor(route: Route, cascade: number, desktop: { width: number; height: number }, first = false): Frame {
   const size = route.slug && (route.app === 'projects' || route.app === 'blog') ? SIZES.reader : SIZES[route.app];
+  const clamp = (value: number, max: number) => Math.max(8, Math.min(value, max));
+  // The folder is a handful of icons: it keeps its size even when it opens first.
+  if (first && route.app !== 'personal') {
+    const width = Math.min(Math.max(size.width, FIRST_WIDTH), desktop.width - 16);
+    return { x: clamp(iconGutter(desktop.height), desktop.width - width - 8), y: FIRST_MARGIN, width, height: desktop.height - 2 * FIRST_MARGIN };
+  }
   const width = Math.min(size.width, desktop.width - 16);
   const height = Math.min(size.height, desktop.height - 16);
   const step = (cascade % 8) * CASCADE_STEP;
-  const clamp = (value: number, max: number) => Math.max(8, Math.min(value, max));
   return {
     x: clamp(iconGutter(desktop.height) + step, desktop.width - width - 8),
     y: clamp(16 + step, desktop.height - height - 8),

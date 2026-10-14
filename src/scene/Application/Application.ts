@@ -306,7 +306,7 @@ export class Application implements RoomHandle {
     else {
       // A window address lands ready: the camera in front of the monitor at once, the window already open on it.
       this.glide('monitor', 'fast', endIntro, true);
-      if (open) this.monitor.open(open);
+      if (open) this.monitor.open(open, { first: true });
     }
     // The intro runs as long as its flight does; a cut has already landed it.
     this.intro = this.camera.moving;

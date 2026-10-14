@@ -58,7 +58,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
   const powerRef = useRef(power);
   powerRef.current = power;
 
-  const open = useCallback((target: string, focus = true, from?: Element | null) => {
+  const open = useCallback((target: string, focus = true, from?: Element | null, first = false) => {
     const route = parseTarget(target);
     if (!route) return;
     const desktop = desktopRef.current;
@@ -75,6 +75,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
       route,
       focus,
       origin,
+      first,
       desktop: {
         width: desktop?.clientWidth ?? window.innerWidth,
         height: desktop?.clientHeight ?? window.innerHeight,
@@ -126,7 +127,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
       const data = event.data as { type?: unknown; target?: unknown } | null;
       if (data?.type !== 'open' || typeof data.target !== 'string') return;
       if (powerRef.current !== 'on') setPower('on');
-      open(data.target);
+      open(data.target, true, null, (data as { first?: unknown }).first === true);
     };
     // An Escape no menu used asks the room to step back from the screen; checked after every listener has run.
     const onKeyDown = (event: KeyboardEvent) => {

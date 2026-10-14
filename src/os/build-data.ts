@@ -16,6 +16,7 @@ import type {
   OsImage,
   OsPhotograph,
   OsPicture,
+  OsProjectCard,
   OsWallpaper,
   OvenList,
 } from './types';
@@ -88,6 +89,13 @@ export async function osImage(src: ImageMetadata, alt: string): Promise<OsImage>
   const image = await getImage({ src, widths: COVER_WIDTHS, format: 'webp', quality: 78 });
   return { src: image.src, srcset: image.srcSet.attribute, width: src.width, height: src.height, alt };
 }
+
+// Mercor's work has no public pictures; its row in Projects shows the one number the page and the résumé publish.
+const PROJECT_CARDS: Record<string, OsProjectCard> = {
+  'entity-resolution-and-anonymization': { figure: '88 million', caption: 'mentions resolved in one run' },
+};
+
+export const projectCard = (slug: string): OsProjectCard | undefined => PROJECT_CARDS[slug];
 
 export const projectFigures = (slug: string): Promise<OsFigure[]> =>
   Promise.all(

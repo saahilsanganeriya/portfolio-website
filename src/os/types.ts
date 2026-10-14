@@ -56,8 +56,15 @@ export interface OsProject {
   featured: boolean;
   links: { repo?: string; paper?: string; demo?: string; page?: string; pypi?: string };
   cover?: OsImage;
+  /** In the list, a project with no picture to show shows its one number instead. */
+  card?: OsProjectCard;
   /** Further pictures shown after the write-up, each with its source in the caption. */
   figures: OsFigure[];
+}
+
+export interface OsProjectCard {
+  figure: string;
+  caption: string;
 }
 
 export interface OsPost {

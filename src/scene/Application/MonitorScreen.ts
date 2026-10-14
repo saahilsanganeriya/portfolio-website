@@ -17,6 +17,11 @@ export type MonitorEvent =
   /** Escape that the OS itself did not use (no menu open): the visitor wants out of the screen. */
   | { type: 'escape' };
 
+export interface OpenOptions {
+  /** The window the visit lands on (a window address): SaahilOS opens it at the height of a visit's first window. */
+  first?: boolean;
+}
+
 /**
  * The monitor as Henry built it: a CSS3D iframe placed at the glass, an invisible GL plane that writes alpha 0 so the
  * iframe shows through (and nearer geometry still covers it), and glass layers drawn over the hole.
@@ -29,7 +34,7 @@ export class MonitorScreen {
   private readonly normal: THREE.Vector3;
   private readonly pixelSize: { width: number; height: number };
   private ready = false;
-  private queued: string | null = null;
+  private queued: { target: string; options: OpenOptions } | null = null;
   private readonly onMessage: (event: MessageEvent) => void;
 
   constructor(
@@ -119,10 +124,11 @@ export class MonitorScreen {
   }
 
   /** Opens an app in the OS (PLAN 3.7 target, e.g. "about" or "films/la-la-land"), once the OS says it is ready. */
-  open(target: string) {
+  open(target: string, options: OpenOptions = {}) {
     if (!this.iframe) return;
-    if (this.ready && this.iframe.contentWindow) this.iframe.contentWindow.postMessage({ type: 'open', target }, location.origin);
-    else this.queued = target;
+    if (this.ready && this.iframe.contentWindow) {
+      this.iframe.contentWindow.postMessage({ type: 'open', target, first: Boolean(options.first) }, location.origin);
+    } else this.queued = { target, options };
   }
 
   /** The OS's front window (`films`, `about/…`, or '' for none): SaahilOS names it in its own location hash. */
@@ -151,9 +157,9 @@ export class MonitorScreen {
       case 'os-ready':
         this.ready = true;
         if (this.queued) {
-          const target = this.queued;
+          const { target, options } = this.queued;
           this.queued = null;
-          this.open(target);
+          this.open(target, options);
         }
         break;
       case 'escape':

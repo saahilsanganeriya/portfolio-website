@@ -1,6 +1,6 @@
 import { PixelIcon } from '../assets/PixelIcon';
 import { formatDay } from '../format';
-import type { OsApi, OsImage, OsProject } from '../types';
+import type { OsApi, OsImage, OsProject, OsProjectCard } from '../types';
 
 export interface Row {
   href: string;
@@ -10,10 +10,18 @@ export interface Row {
   metaDateTime?: string;
   /** Present on rows that show a picture: the cover, or null for a project with none. */
   thumb?: OsImage | null;
+  /** In place of a missing picture: the project's one number, set as type. */
+  card?: OsProjectCard;
 }
 
 // The row's link text names the project, so its picture is decorative here (alt="").
-function Thumb({ image, large }: { image: OsImage | null; large: boolean }) {
+function Thumb({ image, card, large }: { image: OsImage | null; card?: OsProjectCard; large: boolean }) {
+  if (!image && card)
+    return (
+      <span className="os-thumb os-thumb-card">
+        <strong>{card.figure}</strong> <span>{card.caption}</span>
+      </span>
+    );
   if (image)
     return (
       <span className="os-thumb">
@@ -61,7 +69,7 @@ export function DetailsList({
         {rows.map((row) => (
           <li key={row.href}>
             <a className="os-row" href={row.href} data-thumb={row.thumb !== undefined || undefined}>
-              {row.thumb !== undefined && <Thumb image={row.thumb} large={large} />}
+              {row.thumb !== undefined && <Thumb image={row.thumb} card={row.card} large={large} />}
               <span className="os-row-name">
                 {row.thumb === undefined && <PixelIcon name="page" size={16} />}
                 <span>{row.title}</span>
@@ -84,6 +92,7 @@ const projectRow = (p: OsProject): Row => ({
   summary: p.summary,
   meta: p.years ?? String(p.year),
   thumb: p.cover ?? null,
+  card: p.card,
 });
 
 export function ProjectsApp({ os }: { os: OsApi }) {
