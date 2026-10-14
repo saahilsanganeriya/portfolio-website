@@ -90,15 +90,18 @@ writes AVIF and WebP copies at 480, 960 and 1600 px and the original size (up to
 Running it again skips photos already in, and never overwrites an entry, so edit the entries freely:
 
 ```yaml
-file: "../../assets/photography/amer-fort/2400.webp"   # written by the script
-title: "amer fort"
-year: 2019                # default: --year, else the photo's own capture year, else this year
-place: "Amer Fort"        # optional
-series: "2019"            # default: --series, else the year; name a series by year, place or what the photos share
-caption: "Amer Fort beyond a wall, in black and white."   # one line; it is also the alt text, so say what is in it
+file: "../../assets/photography/the-varsity/1200.webp"   # written by the script
+title: "the varsity"
+year: 2022                # default: --year, else the photo's own capture year, else this year
+place: "Atlanta"          # optional
+series: "2022"            # default: --series, else the year; name a series by year, place or what the photos share
+caption: "The Varsity's glass doors at dusk, the red sign lit from inside."   # one line; it is also the alt text, so say what is in it
 featured: false           # the favourites
-onWall: false             # framed on the room's print wall; it has five frames, and favourites fill the rest
-order: 20                 # optional; lower comes first
+onWall: true              # hung in the room first, by order, until its prints run out
+order: 9                  # optional; lower comes first
+sharpie: "the varsity, atlanta"   # optional; written on the print in marker, at most 28 characters to fit the margin
+date: "2022-02-05"        # optional; the day it was posted
+igCaption: "-\nKodak gold 200\nCanon A-1, 50mm f/1.4"   # optional; his own Instagram caption, as posted
 ```
 
 `src/content/photography/` is for photography only, never photos of me. Those go through `--me`:

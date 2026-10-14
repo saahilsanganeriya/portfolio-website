@@ -29,7 +29,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'photos-ingest-'));
   folder = join(root, 'incoming', 'photos');
   await mkdir(folder, { recursive: true });
-  await phoneJpeg(join(folder, 'Amer Fort.JPG'), 1200, 600);
+  await phoneJpeg(join(folder, 'Test Photo.JPG'), 1200, 600);
   await phoneJpeg(join(folder, 'tiny.jpg'), 300, 200);
 });
 
@@ -41,12 +41,12 @@ describe('photos:ingest', () => {
   /** Catches a size that keeps EXIF (and its GPS), XMP or ICC, and a photo published sideways because the rotation
    *  tag was stripped without being applied first. */
   test('strips every metadata block from every size, after applying the EXIF rotation', async () => {
-    const input = await sharp(join(folder, 'Amer Fort.JPG')).metadata();
+    const input = await sharp(join(folder, 'Test Photo.JPG')).metadata();
     expect([Boolean(input.exif), Boolean(input.xmp), Boolean(input.icc), input.orientation]).toEqual([true, true, true, 6]);
 
     await ingestFolder({ folder, root });
 
-    const outDir = join(root, 'src/assets/photography/amer-fort');
+    const outDir = join(root, 'src/assets/photography/test-photo');
     const outputs = (await readdir(outDir)).sort();
     expect(outputs).toEqual(['1200.avif', '1200.webp', '480.avif', '480.webp', '960.avif', '960.webp']);
     for (const name of outputs) {
@@ -62,11 +62,11 @@ describe('photos:ingest', () => {
   test('writes one editable entry per photo, pointing at its largest size', async () => {
     await ingestFolder({ folder, root });
 
-    const entry = await readFile(join(root, 'src/content/photography/amer-fort.yaml'), 'utf8');
+    const entry = await readFile(join(root, 'src/content/photography/test-photo.yaml'), 'utf8');
     expect(entry).toBe(
       [
-        'file: "../../assets/photography/amer-fort/1200.webp"',
-        'title: "Amer fort"',
+        'file: "../../assets/photography/test-photo/1200.webp"',
+        'title: "Test photo"',
         'year: 2018',
         'series: "2018"',
         'caption: ""',
@@ -89,10 +89,10 @@ describe('photos:ingest', () => {
   /** Catches a re-run that overwrites the owner's edits or re-encodes photos already ingested. */
   test('is idempotent: a second run keeps edited entries and existing images', async () => {
     await ingestFolder({ folder, root });
-    const entryPath = join(root, 'src/content/photography/amer-fort.yaml');
+    const entryPath = join(root, 'src/content/photography/test-photo.yaml');
     const edited = (await readFile(entryPath, 'utf8')).replace('caption: ""', 'caption: "Edited by hand."');
     await writeFile(entryPath, edited);
-    const imagePath = join(root, 'src/assets/photography/amer-fort/1200.webp');
+    const imagePath = join(root, 'src/assets/photography/test-photo/1200.webp');
     const before = (await stat(imagePath)).mtimeMs;
 
     const { results } = await ingestFolder({ folder, root });
@@ -109,16 +109,16 @@ describe('photos:ingest', () => {
 
     const me = JSON.parse(await readFile(join(root, 'src/content/me.json'), 'utf8'));
     expect(me).toEqual([
-      { file: 'amer-fort', alt: '', use: 'about' },
+      { file: 'test-photo', alt: '', use: 'about' },
       { file: 'tiny', alt: '', use: 'about' },
     ]);
-    expect(await readdir(join(root, 'src/assets/me/amer-fort'))).toContain('960.webp');
+    expect(await readdir(join(root, 'src/assets/me/test-photo'))).toContain('960.webp');
     await expect(stat(join(root, 'src/content/photography'))).rejects.toThrow(/ENOENT/);
   });
 
   /** Catches two source files that would silently share one entry. */
   test('refuses two files that become the same name', async () => {
-    await phoneJpeg(join(folder, 'amer_fort.jpg'), 600, 400);
-    await expect(ingestFolder({ folder, root })).rejects.toThrow(/both become "amer-fort"/);
+    await phoneJpeg(join(folder, 'test_photo.jpg'), 600, 400);
+    await expect(ingestFolder({ folder, root })).rejects.toThrow(/both become "test-photo"/);
   });
 });
