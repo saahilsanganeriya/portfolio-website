@@ -6,7 +6,7 @@ import type { WindowState } from './windows';
 
 // The Start menu: the work, then the personal windows, then the machine.
 const MACHINE: readonly AppId[] = ['terminal', 'credits'];
-const START_GROUPS: AppId[][] = [WORK_APPS.filter((id) => !MACHINE.includes(id)), [...PERSONAL_APPS], [...MACHINE]];
+const START_GROUPS: (readonly AppId[])[] = [WORK_APPS.filter((id) => !MACHINE.includes(id)), PERSONAL_APPS, MACHINE];
 
 const clockFormat = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 
