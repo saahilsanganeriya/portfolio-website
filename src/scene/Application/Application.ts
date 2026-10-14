@@ -99,6 +99,8 @@ const ARRIVAL_WINDOW = 'about';
 const DESK_HOLD_MS = 1000;
 // A click this soon after the press that skipped the arrival belongs to that press.
 const SKIP_CLICK_MS = 600;
+// On tiers this coarse (a machine that composites slowly), the screen seen from the wide view is a still picture.
+const STILL_SCREEN_RESOLUTION = 0.5;
 
 /** Debug and measurement hook: tests click real props by their projected screen position. */
 export interface RoomProbe {
@@ -134,6 +136,8 @@ export interface RoomProbe {
    */
   readonly startedAt: number | null;
   readonly landedAt: number | null;
+  /** Whether the screen shows its still picture instead of the live OS (the wide view on the slowest tiers). */
+  readonly monitorStill: boolean;
   /** The last frame's draw calls and triangles, and what the GPU holds. */
   readonly gpu: { calls: number; triangles: number; textures: number; geometries: number; programs: number };
   /** Everything that moves at once: the lava lamp cycling, steam, an espresso pour and the projector running in view or not. */
@@ -587,6 +591,11 @@ export class Application implements RoomHandle {
     if (this.hover.update(dt, now)) this.dirty = true;
     if (!this.paused) this.effects.update(this.clock, this.renderer.gl.getPixelRatio());
     this.monitor.update(this.clock, this.camera.instance);
+    const still = this.quality.tier.resolution <= STILL_SCREEN_RESOLUTION && this.camera.phase === 'idle' && this.camera.destination === 'idle';
+    if (still !== this.monitor.isStill) {
+      this.monitor.setStill(still);
+      this.dirty = true;
+    }
     this.world.update({
       camera: this.camera.instance,
       clock: this.clock,
@@ -681,6 +690,9 @@ export class Application implements RoomHandle {
       },
       get landedAt() {
         return app.landedAt;
+      },
+      get monitorStill() {
+        return app.monitor.isStill;
       },
       get gpu() {
         const { render, memory, programs } = app.renderer.gl.info;

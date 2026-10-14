@@ -9,6 +9,10 @@ import { WORLD_SCALE } from './RoomModel';
 const SCREEN_WIDTH_PX = 1280;
 const OVERSCAN_PX = 32;
 const PROJECTOR = new THREE.Color('#9db4c0');
+// The still picture that stands in for the live screen from across the room (see setStill), in canvas pixels.
+const STILL_WIDTH_PX = 320;
+const INK = '#14110f';
+const PAPER = '#ede4d3';
 
 export type MonitorEvent =
   | { type: 'pointer'; x: number; y: number }
@@ -36,6 +40,11 @@ export class MonitorScreen {
   private ready = false;
   private queued: { target: string; options: OpenOptions } | null = null;
   private readonly onMessage: (event: MessageEvent) => void;
+  private frame: HTMLElement | null = null;
+  private hole: THREE.Mesh<THREE.PlaneGeometry, THREE.Material> | null = null;
+  private holeMaterial: THREE.Material | null = null;
+  private stillMaterial: THREE.MeshBasicMaterial | null = null;
+  private still = false;
 
   constructor(
     pose: MonitorPose,
@@ -101,6 +110,7 @@ export class MonitorScreen {
     object.quaternion.copy(pose.quaternion);
     object.scale.setScalar(pose.width / SCREEN_WIDTH_PX);
     cssScene.add(object);
+    this.frame = frame;
 
     const hole = new THREE.Mesh(
       new THREE.PlaneGeometry(pose.width, pose.height),
@@ -110,7 +120,88 @@ export class MonitorScreen {
     hole.quaternion.copy(pose.quaternion);
     hole.renderOrder = 1;
     scene.add(hole);
+    this.hole = hole;
+    this.holeMaterial = hole.material;
     return iframe;
+  }
+
+  /**
+   * From across the room the screen is a few dozen pixels wide, and without a GPU compositor the live OS layer over
+   * the redrawing canvas costs a frame interval of its own (the wide view held 30 fps; with the layer transparent, 60).
+   * `still` keeps the OS in place, transparent and still focusable, and draws a picture of it into the screen instead:
+   * its wallpaper, its windows as paper with their title bars, and the taskbar, as they are at that moment.
+   */
+  setStill(still: boolean) {
+    if (!this.frame || !this.hole || still === this.still) return;
+    this.still = still;
+    this.frame.style.opacity = still ? '0' : '';
+    if (still) this.drawStill();
+    this.hole.material = still && this.stillMaterial ? this.stillMaterial : this.holeMaterial!;
+  }
+
+  get isStill() {
+    return this.still;
+  }
+
+  private drawStill() {
+    const doc = this.iframe?.contentDocument;
+    const width = STILL_WIDTH_PX;
+    const height = Math.round((width * this.pixelSize.height) / this.pixelSize.width);
+    const canvas = (this.stillMaterial?.map?.image as HTMLCanvasElement | undefined) ?? document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const g = canvas.getContext('2d')!;
+    g.fillStyle = INK;
+    g.fillRect(0, 0, width, height);
+    if (doc?.documentElement) {
+      // The OS sits inside the overscan, as on the live screen.
+      const inset = (OVERSCAN_PX * width) / SCREEN_WIDTH_PX;
+      // The frame's viewport, not <html>'s box: the OS positions everything, so its <html> has no height.
+      const sx = (width - 2 * inset) / Math.max(1, doc.defaultView?.innerWidth ?? 0);
+      const sy = (height - 2 * inset) / Math.max(1, doc.defaultView?.innerHeight ?? 0);
+      g.save();
+      g.translate(inset, inset);
+      const wallpaper = doc.querySelector<HTMLImageElement>('.os-wallpaper img');
+      if (wallpaper?.complete && wallpaper.naturalWidth > 0) {
+        // Cover the screen, as the OS's own wallpaper does.
+        const innerW = width - 2 * inset;
+        const innerH = height - 2 * inset;
+        const scale = Math.max(innerW / wallpaper.naturalWidth, innerH / wallpaper.naturalHeight);
+        const w = wallpaper.naturalWidth * scale;
+        const h = wallpaper.naturalHeight * scale;
+        g.save();
+        g.beginPath();
+        g.rect(0, 0, innerW, innerH);
+        g.clip();
+        g.drawImage(wallpaper, (innerW - w) / 2, (innerH - h) / 2, w, h);
+        g.restore();
+      }
+      const box = (el: Element, fill: string) => {
+        const r = el.getBoundingClientRect();
+        g.fillStyle = fill;
+        g.fillRect(r.left * sx, r.top * sy, r.width * sx, r.height * sy);
+        return r;
+      };
+      for (const dialog of doc.querySelectorAll('[role="dialog"]')) {
+        const r = box(dialog, PAPER);
+        g.fillStyle = INK;
+        g.fillRect(r.left * sx, r.top * sy, r.width * sx, Math.max(2, 26 * sy));
+        // Its text, as grey lines of uneven length (all a reader could make out of it from across the room).
+        g.fillStyle = '#a99f90';
+        for (let y = r.top + 70, line = 0; y < r.bottom - 24; y += 26, line++) {
+          const share = 0.55 + 0.35 * Math.abs(Math.sin(line * 1.7));
+          g.fillRect((r.left + 24) * sx, y * sy, (r.width - 48) * share * sx, Math.max(1, 7 * sy));
+        }
+      }
+      const taskbar = doc.querySelector('.os-taskbar');
+      if (taskbar) box(taskbar, '#c9bfae');
+      g.restore();
+    }
+    if (!this.stillMaterial) {
+      const map = new THREE.CanvasTexture(canvas);
+      map.colorSpace = THREE.SRGBColorSpace;
+      this.stillMaterial = new THREE.MeshBasicMaterial({ map, toneMapped: false });
+    } else this.stillMaterial.map!.needsUpdate = true;
   }
 
   /** Points the iframe at the OS; resolves when its document has loaded (at once without a live screen). */

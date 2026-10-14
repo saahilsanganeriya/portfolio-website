@@ -343,6 +343,35 @@ test('clicking the projector glides to it and opens nothing', async ({ page }) =
   expect(await page.evaluate(() => window.__room!.destination)).toBe('projector');
 });
 
+/**
+ * Catches the wide view at 30 fps on a machine that composites in software: the live OS layer over the redrawing
+ * canvas cost a frame interval of its own there (idle 30.0 against 59.9 with the layer transparent). On the slowest
+ * tier the wide view shows a still picture of the screen; the OS stays in place for the keyboard, and the live screen
+ * comes back as the camera leaves for the desk.
+ */
+test('on the slowest tier the wide view shows a still screen, and the live OS returns on the way to the desk', async ({ page }) => {
+  await page.addInitScript(() => (window.__roomTier = 4));
+  await page.goto('/');
+  await arrived(page);
+  await page.evaluate(() => window.__room!.goto('idle'));
+  await settled(page, 'idle', 30_000);
+  await expect.poll(() => page.evaluate(() => window.__room!.monitorStill)).toBe(true);
+  await expect(page.locator('.room-monitor')).toHaveCSS('opacity', '0');
+  await page.evaluate(() => window.__room!.goto('desk'));
+  await expect.poll(() => page.evaluate(() => window.__room!.monitorStill)).toBe(false);
+  await expect(page.locator('.room-monitor')).toHaveCSS('opacity', '1');
+  await settled(page, 'desk', 30_000);
+  // Back at the wide view, the keyboard still reaches SaahilOS, and the camera goes in with it.
+  await page.keyboard.press('Escape');
+  await settled(page, 'idle', 30_000);
+  await expect.poll(() => page.evaluate(() => window.__room!.monitorStill)).toBe(true);
+  await page.getByRole('link', { name: 'Open SaahilOS' }).focus();
+  await page.keyboard.press('Enter');
+  await settled(page, 'monitor', 30_000);
+  expect(await page.evaluate(() => window.__room!.monitorStill)).toBe(false);
+  await expect(os(page).getByRole('dialog').first()).toBeVisible();
+});
+
 /** Catches a keyboard or screen-reader visitor with no way into SaahilOS (Review Focus 3), or motion that cannot be paused. */
 test('"Open SaahilOS" is the first tab stop and opens it on the monitor; motion can be paused', async ({ page }) => {
   await page.goto('/');
