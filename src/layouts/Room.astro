@@ -1,6 +1,7 @@
 ---
 import BootScreen from '../components/BootScreen.astro';
 import MonitorFrame from '../components/MonitorFrame.astro';
+import RoomTour from '../components/RoomTour.astro';
 import { filmsData } from '../lib/films';
 import { latestFilms } from '../lib/films/latest';
 import Base from './Base.astro';
@@ -62,6 +63,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 
   <main id="content" class="room-stage" tabindex="-1" aria-label="The room" data-room data-open={open}>
     <h1 class="visually-hidden">{title}</h1>
+    <RoomTour />
     <div class="room-world" data-room-world data-room-films={JSON.stringify(latestFilms(filmsData))}></div>
     <BootScreen />
     <MonitorFrame />
@@ -78,6 +80,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 </Base>
 
 <script>
+  import { loadFloorPlan, mountTour } from '../components/RoomTourMap';
   import { mountSoundControls } from '../scene/audio/controls';
   import type { RoomHandle } from '../scene/main';
 
@@ -224,6 +227,9 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       room.start({ open: open ?? undefined, fast: skipped });
       status.textContent = 'The room is ready. Sound starts with your first click or key press; the Sound button turns it off.';
       if (osRequested) monitor()?.focus({ preventScroll: true });
+      const tourButton = stage.querySelector<HTMLButtonElement>('[data-tour-open]')!;
+      const tourPanel = stage.querySelector<HTMLElement>('[data-tour]')!;
+      void loadFloorPlan().then((plan) => plan && room && mountTour(tourButton, tourPanel, room, plan));
     };
 
     // Any input skips the intro (or the boot screen's last moment) and starts the sound.

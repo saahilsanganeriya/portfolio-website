@@ -1,0 +1,241 @@
+---
+// "Take the tour" and the map of the room it opens (brief §0, §1): a floor plan drawn from public/room/floorplan.json,
+// the stops in tour order (work first), a you-are-here mark that follows the camera, and "Play the tour". Never the
+// default: the button waits quietly in a corner, away from the monitor. Behaviour is in RoomTourMap.ts.
+---
+
+<button type="button" class="room-tour-open" aria-expanded="false" aria-controls="room-tour" data-room-ui data-tour-open hidden>
+  Take the tour
+</button>
+
+<section id="room-tour" class="room-tour" aria-labelledby="room-tour-title" data-room-ui data-tour hidden>
+  <header class="room-tour-head">
+    <h2 id="room-tour-title">Map of the room</h2>
+    <button type="button" class="room-tour-close" data-tour-close>Close</button>
+  </header>
+  <div class="room-tour-plan" data-tour-plan>
+    <svg aria-hidden="true" focusable="false" data-tour-svg>
+      <g data-tour-furniture></g>
+      <polygon class="room-tour-walls" data-tour-outline></polygon>
+      <g data-tour-doors></g>
+      <g class="room-tour-here" data-tour-here>
+        <path class="room-tour-view" d="M0 0 L0.9 -0.42 A1 1 0 0 1 0.9 0.42 Z"></path>
+        <circle class="room-tour-dot" r="0.13"></circle>
+      </g>
+    </svg>
+    <div class="room-tour-markers" aria-hidden="true" data-tour-markers></div>
+  </div>
+  <ol class="room-tour-stops" aria-label="Stops" data-tour-stops></ol>
+  <p class="room-tour-caption" aria-live="polite" data-tour-caption></p>
+  <div class="room-tour-actions">
+    <button type="button" class="room-tour-play" data-tour-play>Play the tour</button>
+  </div>
+</section>
+
+<style>
+  .room-tour-open,
+  .room-tour {
+    position: absolute;
+    left: var(--space-3);
+    z-index: 4;
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    color: var(--paper);
+  }
+
+  /* Shown once the room has started and the floor plan has loaded; never over SaahilOS on a phone. */
+  .room-tour-open {
+    bottom: var(--space-3);
+    display: none;
+    padding: 0.3rem 0.75rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    border-radius: 0;
+    background: var(--ink);
+    cursor: pointer;
+  }
+
+  :global(html.room.room-started:not(.room-os)) .room-tour-open:not([hidden]) {
+    display: block;
+  }
+
+  .room-tour-open:hover,
+  .room-tour-open[aria-expanded='true'] {
+    border-color: var(--paper);
+  }
+
+  .room-tour {
+    bottom: calc(var(--space-3) + 2.4rem);
+    width: min(22rem, calc(100vw - 2 * var(--space-3)));
+    max-height: calc(100% - 5rem);
+    overflow-y: auto;
+    padding: var(--space-3);
+    border: 1px solid rgb(168 159 145 / 0.5);
+    background: var(--ink);
+  }
+
+  :global(html.room-os) .room-tour,
+  :global(html.room-2d) .room-tour {
+    display: none;
+  }
+
+  .room-tour-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+  }
+
+  .room-tour-head h2 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--size-meta);
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dust);
+  }
+
+  .room-tour button {
+    border-radius: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .room-tour-close,
+  .room-tour-play {
+    padding: 0.25rem 0.65rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    background: var(--ink);
+  }
+
+  .room-tour-close:hover,
+  .room-tour-play:hover {
+    border-color: var(--paper);
+  }
+
+  /* The plan: an architect's line drawing, walls in paper, furniture and doors in dust, the visitor in thread. */
+  .room-tour-plan {
+    position: relative;
+    margin: 0 0 var(--space-3);
+  }
+
+  .room-tour-plan svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .room-tour-plan :global(.room-tour-walls) {
+    fill: rgb(237 228 211 / 0.04);
+    stroke: var(--paper);
+    stroke-width: 2px;
+    stroke-linejoin: miter;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .room-tour-plan :global(.room-tour-furniture) {
+    fill: none;
+    stroke: var(--dust);
+    stroke-width: 1px;
+    opacity: 0.7;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .room-tour-plan :global(.room-tour-door) {
+    stroke: var(--ink);
+    stroke-width: 4px;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .room-tour-plan :global(.room-tour-door-swing) {
+    fill: none;
+    stroke: var(--dust);
+    stroke-width: 1px;
+    stroke-dasharray: 3 3;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .room-tour-view {
+    fill: rgb(237 228 211 / 0.16);
+  }
+
+  .room-tour-dot {
+    fill: var(--thread);
+    stroke: var(--paper);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .room-tour-markers {
+    position: absolute;
+    inset: 0;
+  }
+
+  .room-tour-markers :global(span) {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin: -0.675rem 0 0 -0.675rem;
+    border: 1px solid var(--paper);
+    border-radius: 50%;
+    background: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .room-tour-markers :global(span[data-current]),
+  .room-tour-markers :global(span[data-lit]) {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  /* The stops as a numbered list: the plan's numbers, named. Work first, so the first column reads as the CV. */
+  .room-tour-stops {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.15rem var(--space-2);
+    margin: 0 0 var(--space-2);
+    padding: 0;
+    list-style: none;
+  }
+
+  .room-tour-stops :global(button) {
+    display: flex;
+    gap: 0.45rem;
+    align-items: baseline;
+    width: 100%;
+    padding: 0.2rem 0.3rem;
+    border: 1px solid transparent;
+    background: none;
+    text-align: left;
+  }
+
+  .room-tour-stops :global(button:hover),
+  .room-tour-stops :global(button[aria-current='location']) {
+    border-color: rgb(168 159 145 / 0.5);
+  }
+
+  .room-tour-stops :global(.n) {
+    min-width: 1.1rem;
+    font-family: var(--font-mono);
+    color: var(--dust);
+  }
+
+  .room-tour-caption {
+    min-height: 1.5em;
+    margin: 0 0 var(--space-2);
+    color: var(--dust);
+  }
+
+  .room-tour-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+</style>
