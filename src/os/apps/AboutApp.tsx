@@ -4,17 +4,17 @@ import type { OsApi, OsPage } from '../types';
 import { useContent } from './content';
 import { Body } from './Reader';
 
-export const RESUME_PDF = '/resume/saahil-sanganeriya-resume.pdf';
+export const RESUME_PDF = '/resume.pdf';
 
 interface Action {
   href: string;
   label: string;
   hint: string;
   icon: IconName;
-  download?: string;
+  newTab?: boolean;
 }
 
-// The four things a first-time visitor came for, one click each. The résumé downloads; its window stays in Start.
+// The four things a first-time visitor came for, one click each. The résumé opens in a new browser tab; its window stays in Start.
 const ACTIONS: Action[] = [
   { href: '#projects', label: 'Projects', hint: 'What I have built', icon: 'projects' },
   { href: '#blog', label: 'Writing', hint: 'Notes on the work', icon: 'page' },
@@ -22,9 +22,9 @@ const ACTIONS: Action[] = [
   {
     href: RESUME_PDF,
     label: 'Résumé',
-    hint: 'Download the PDF',
+    hint: 'Open the PDF',
     icon: 'resume',
-    download: 'Saahil-Sanganeriya-resume.pdf',
+    newTab: true,
   },
 ];
 
@@ -58,7 +58,7 @@ export function AboutApp({ os }: { os: OsApi }) {
               <a
                 className="os-about-action"
                 href={action.href}
-                {...(action.download ? { download: action.download } : {})}
+                {...(action.newTab ? { target: '_blank', rel: 'noopener' } : {})}
               >
                 <PixelIcon name={action.icon} size={32} />
                 <span className="os-about-action-text">

@@ -130,7 +130,7 @@ test.describe('desktop', () => {
     }
   });
 
-  /** Catches an About action that opens the wrong window or none, or a résumé button that navigates instead of downloading. */
+  /** Catches an About action that opens the wrong window or none, or a résumé button that does not open the PDF in a new tab. */
   test('About’s four ways on: Projects, Writing, Code and the résumé PDF', async ({ page }) => {
     const ways = page.getByRole('dialog', { name: 'About' }).getByRole('navigation', { name: 'Start here' });
     for (const [label, window] of [
@@ -144,9 +144,13 @@ test.describe('desktop', () => {
       await expect(page.getByRole('dialog', { name: window })).toBeVisible();
     }
     await page.goto('/os?embed=1');
-    const download = page.waitForEvent('download');
-    await ways.getByRole('link', { name: /^Résumé/ }).click();
-    expect((await download).suggestedFilename()).toBe('Saahil-Sanganeriya-resume.pdf');
+    const resume = ways.getByRole('link', { name: /^Résumé/ });
+    await expect(resume).toHaveAttribute('href', '/resume.pdf');
+    await expect(resume).toHaveAttribute('target', '_blank');
+    await expect(resume).not.toHaveAttribute('download');
+    const pdf = await page.request.get('/resume.pdf');
+    expect(pdf.headers()['content-type']).toBe('application/pdf');
+    expect(pdf.headers()['content-disposition'] ?? 'inline').toMatch(/^inline/);
     await expect(page).toHaveURL(/\/os\?embed=1#about$/);
   });
 
