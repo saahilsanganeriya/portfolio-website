@@ -85,9 +85,9 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
   const DEFAULT_WINDOW = 'projects';
   // `/#os` (where a bare /os lands): the monitor with SaahilOS's desktop, no window named.
   const DESKTOP = 'os';
-  // The finished boot log stays on screen this long before the room takes over by itself.
-  const BOOT_HOLD_MS = 700;
-  const LOG_LINES = 8;
+  // The finished boot log stays on screen this long before the arrival starts by itself: the loading screen, kept short.
+  const BOOT_HOLD_MS = 400;
+  const LOG_LINES = 6;
   // The light tier measures itself behind the boot screen; below this frame rate the drawn monitor takes over.
   const LIGHT_PROBE_MS = 2000;
   const LIGHT_MIN_FPS = 30;
@@ -103,7 +103,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
   const target = windowTarget(stage.dataset.open ?? '', location.hash);
 
   /**
-   * The window this address opens on the monitor: '' for the desktop alone, null for the room's idle view. The route
+   * The window this address opens on the monitor: '' for the desktop alone, null for the arrival (About). The route
    * names it; on `/` a hash names one (`/#terminal`), on /films a hash names a film card (`/films#la-la-land`).
    */
   function windowTarget(open: string, hash: string): string | null {

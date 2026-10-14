@@ -19,6 +19,8 @@ export interface InteractionHandlers {
 
 // A pointer that only crosses the monitor on its way somewhere should not pull the camera in.
 const MONITOR_DWELL_MS = 140;
+// Focus that reaches the OS this soon after a Tab was moved by the keyboard; any later, a window focused itself.
+const KEYBOARD_FOCUS_MS = 500;
 
 /** Pointer and keyboard handling for the stage: hover labels on props, clicks, and entering or leaving the monitor. */
 export class Interaction {
@@ -35,6 +37,7 @@ export class Interaction {
   private overMonitor = false;
   private focusInMonitor = false;
   private dwell = 0;
+  private tabbedAt = -Infinity;
   private readonly abort = new AbortController();
 
   constructor(
@@ -60,19 +63,22 @@ export class Interaction {
     stage.addEventListener('pointerup', () => this.touch && this.releaseTouch(), { signal });
     stage.addEventListener('pointercancel', () => this.touch && this.releaseTouch(), { signal });
     stage.addEventListener('click', (e) => this.onClick(e), { signal });
+    window.addEventListener('keydown', (e) => e.key === 'Tab' && (this.tabbedAt = performance.now()), { signal, capture: true });
     // Phones have no live screen in the 3D monitor (the OS opens full screen there), so no frame to follow.
     if (!iframe) return;
     iframe.addEventListener('pointerenter', () => !this.overMonitor && this.onMonitorPointer(true), { signal });
     iframe.addEventListener('pointerleave', () => this.overMonitor && this.onMonitorPointer(false), { signal });
     // Tabbing into the OS takes the camera to it; tabbing out goes back to the desk. A Tab between the page and the
     // frame moves focus without focus or blur events on the frame element (Chromium), so the page window's own focus
-    // and blur count too, read against document.activeElement.
+    // and blur count too, read against document.activeElement. Only the keyboard takes the camera in: a window the room
+    // opens on an address focuses itself inside the OS, and the camera stays at the desk for that.
     const onFocusMove = () => {
       const inMonitor = document.activeElement === iframe;
       if (inMonitor === this.focusInMonitor) return;
       this.focusInMonitor = inMonitor;
-      if (inMonitor) handlers.enterMonitor();
-      else if (!this.overMonitor) handlers.leaveMonitor();
+      if (inMonitor) {
+        if (performance.now() - this.tabbedAt < KEYBOARD_FOCUS_MS) handlers.enterMonitor();
+      } else if (!this.overMonitor) handlers.leaveMonitor();
     };
     for (const type of ['focus', 'blur']) {
       iframe.addEventListener(type, onFocusMove, { signal });
@@ -95,6 +101,8 @@ export class Interaction {
       // A held key repeats keydown; a real key clicks once, as in Henry's room.
       this.heldKey = event.key;
       this.handlers.click('key');
+      // Tabbing through the OS while the camera waits at the desk (a window focused itself there): go to the glass.
+      if (event.key === 'Tab' && this.focusInMonitor) this.handlers.enterMonitor();
     }
   }
 

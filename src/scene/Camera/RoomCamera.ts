@@ -7,24 +7,35 @@ export type CameraPhase = 'loading' | StationName;
 
 /** How a move feels: each is a spring tuned to land in about the time named. */
 export const MOTIONS = {
-  /** The boot framing to the wide view. */
-  intro: springFor(2.5),
   /** Arrow keys, scroll, a clicked prop: a little overshoot, then it settles. */
   step: springFor(1.1, 0.78),
   /** Into the glass, where an overshoot would push through the screen. */
   monitor: springFor(2),
-  /** A window address or the skip link: straight in. */
+  /** The skip link: straight in. */
   fast: springFor(1.2),
-  /** The first slow drift around the room; it never lands between corners, it keeps moving to the next. */
-  drift: springFor(6),
+  /** A stop picked on the map, or the played tour: across the room, so slower and without overshoot. */
+  travel: springFor(1.8),
 } satisfies Record<string, SpringSettings>;
 export type Motion = keyof typeof MOTIONS;
+
+/** A timed glide along a curve through waypoints (the arrival); it lands on its station at `seconds`. */
+interface Path {
+  positions: THREE.CatmullRomCurve3;
+  targets: THREE.CatmullRomCurve3;
+  fov: [from: number, to: number];
+  seconds: number;
+  elapsed: number;
+}
 
 interface Flight {
   to: StationName;
   spring: SpringSettings;
+  path?: Path;
   onDone?: () => void;
 }
+
+/** Slow out of the boot framing, an even pace past the room, a gentle landing (zero speed at both ends). */
+const smootherstep = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
 
 // ±8°: the Blender room fills the 16:10 idle framing, so Henry's ±12.6° pushed the posters and the window out of view.
 const IDLE_SWAY_RAD = 0.14;
@@ -126,6 +137,34 @@ export class RoomCamera {
     return true;
   }
 
+  /**
+   * Glides through `waypoints` to `station` in exactly `seconds` of frame time, along a centripetal Catmull-Rom curve
+   * from wherever the camera is. A later `fly` re-aims from the curve with its speed; `finish` lands it.
+   */
+  flyPath(waypoints: readonly Framing[], station: StationName, seconds: number, onDone?: () => void) {
+    if (!this.has(station)) return false;
+    this.drag.yaw = this.drag.pitch = 0;
+    this.writeGoal(station);
+    const v = this.rig.value;
+    const fit = this.aspectFit();
+    const through = waypoints.map((f) => this.fromFraming(f, fit));
+    const positions = [new THREE.Vector3(v[0], v[1], v[2]), ...through.map((f) => f.position), new THREE.Vector3(this.goal[0], this.goal[1], this.goal[2])];
+    const targets = [new THREE.Vector3(v[3], v[4], v[5]), ...through.map((f) => f.target), new THREE.Vector3(this.goal[3], this.goal[4], this.goal[5])];
+    this.flight = {
+      to: station,
+      spring: MOTIONS.step,
+      onDone,
+      path: {
+        positions: new THREE.CatmullRomCurve3(positions, false, 'centripetal'),
+        targets: new THREE.CatmullRomCurve3(targets, false, 'centripetal'),
+        fov: [v[6], this.goal[6]],
+        seconds,
+        elapsed: 0,
+      },
+    };
+    return true;
+  }
+
   /** Lands the current flight at its framing now. */
   finish() {
     const flight = this.flight;
@@ -157,7 +196,9 @@ export class RoomCamera {
     const station = this.destination;
     this.clock = clock;
     this.writeGoal(station);
-    if (this.flight) {
+    if (this.flight?.path) {
+      this.followPath(this.flight.path, dt);
+    } else if (this.flight) {
       this.rig.step(this.goal, dt, this.flight.spring);
       const { offset, speed } = this.rig.distance(this.goal);
       const viewDistance = Math.hypot(this.goal[0] - this.goal[3], this.goal[1] - this.goal[4], this.goal[2] - this.goal[5]);
@@ -177,6 +218,25 @@ export class RoomCamera {
     const swayOn = station === 'idle';
     this.swayWeight.step([swayOn ? 1 : 0], dt, swayOn ? SWAY_IN : SWAY_OUT);
     this.apply();
+  }
+
+  /** One frame along the path; the rig's velocity is kept so a re-aim mid-path curves away instead of stopping. */
+  private followPath(path: Path, dt: number) {
+    path.elapsed += dt;
+    const t = Math.min(1, path.elapsed / path.seconds);
+    if (t >= 1) {
+      this.rig.set(this.goal);
+      this.land();
+      return;
+    }
+    const u = smootherstep(t);
+    const position = path.positions.getPointAt(u, this.position);
+    const target = path.targets.getPointAt(u, this.target);
+    const next = [position.x, position.y, position.z, target.x, target.y, target.z, THREE.MathUtils.lerp(path.fov[0], path.fov[1], u)];
+    for (let i = 0; i < next.length; i++) {
+      if (dt > 0) this.rig.velocity[i] = (next[i] - this.rig.value[i]) / dt;
+      this.rig.value[i] = next[i];
+    }
   }
 
   private land() {
