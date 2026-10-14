@@ -107,7 +107,7 @@ function Photograph({ photo, photos }: { photo: OsPhotograph; photos: OsPhotogra
         {photo.igCaption && (
           <blockquote className="os-photo-ig">
             <p>{photo.igCaption}</p>
-            <footer>His caption on Instagram</footer>
+            <footer>My caption on Instagram</footer>
           </blockquote>
         )}
       </div>
