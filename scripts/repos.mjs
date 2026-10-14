@@ -78,8 +78,8 @@ function withoutEmails(html) {
 }
 
 /** A rendered README or doc as the window shows it, or null when it would carry withheld words. */
-function publishable(html) {
-  const clean = withoutEmails(cleanGithubHtml(html));
+function publishable(html, at) {
+  const clean = withoutEmails(cleanGithubHtml(html, at));
   return WITHHELD.test(clean) ? null : clean;
 }
 
@@ -107,8 +107,10 @@ async function snapshot(meta) {
   const entries = listable.slice(0, TREE_LIMIT);
 
   const readmeHtml = await gh(`/repos/${OWNER}/${name}/readme?ref=${sha}`, HTML);
-  const readmeBody = readmeHtml && publishable(readmeHtml);
-  const readme = readmeBody ? { path: renderedPath(readmeHtml) ?? 'README.md', html: readmeBody } : null;
+  const readmePath = (readmeHtml && renderedPath(readmeHtml)) ?? 'README.md';
+  const at = (path) => ({ owner: OWNER, repo: name, ref: branch, rawRef: sha, path });
+  const readmeBody = readmeHtml && publishable(readmeHtml, at(readmePath));
+  const readme = readmeBody ? { path: readmePath, html: readmeBody } : null;
 
   const commits = (await gh(`/repos/${OWNER}/${name}/commits?sha=${sha}&per_page=${COMMITS}`)).map((c) => {
     const message = commitLine(c.commit.message);
@@ -127,7 +129,7 @@ async function snapshot(meta) {
     .slice(0, DOCS_LIMIT);
   for (const [path] of markdown) {
     const html = await gh(`/repos/${OWNER}/${name}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${sha}`, HTML);
-    const body = html && publishable(html);
+    const body = html && publishable(html, at(path));
     if (body && body.length <= DOC_HTML_MAX_BYTES) docs[path] = body;
   }
 

@@ -1,7 +1,7 @@
 // Where the Code window's data comes from. The owner's repositories at their snapshot (`npm run repos`, committed)
 // need no network but raw.githubusercontent.com for file bodies. Anything else (another person's repository, or one
 // of his at another branch) is read live from GitHub's public API, which allows 60 requests an hour per visitor.
-import { cleanGithubHtml } from './github-html';
+import { cleanGithubHtml, renderedPath } from './github-html';
 
 export interface Snapshot {
   owner: string;
@@ -213,7 +213,8 @@ async function live(owner: string, name: string, ref?: string): Promise<Repo> {
     readme: async () => {
       try {
         const html = await api<string>(`${base}/readme?${at}`, HTML);
-        return { path: 'README.md', html: cleanGithubHtml(html) };
+        const path = renderedPath(html) ?? 'README.md';
+        return { path, html: cleanGithubHtml(html, { owner: meta.owner.login, repo: meta.name, ref: shown, path }) };
       } catch (error) {
         if (error instanceof CodeError && error.reason === 'missing') return null;
         throw error;
@@ -233,7 +234,8 @@ async function live(owner: string, name: string, ref?: string): Promise<Repo> {
     size: () => null,
     doc: async (path) => {
       try {
-        return cleanGithubHtml(await api<string>(`${base}/contents/${path.split('/').map(encodeURIComponent).join('/')}?${at}`, HTML));
+        const html = await api<string>(`${base}/contents/${path.split('/').map(encodeURIComponent).join('/')}?${at}`, HTML);
+        return cleanGithubHtml(html, { owner: meta.owner.login, repo: meta.name, ref: shown, path });
       } catch {
         return null;
       }

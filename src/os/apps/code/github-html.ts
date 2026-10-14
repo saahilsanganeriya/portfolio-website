@@ -1,6 +1,6 @@
 // GitHub's rendered Markdown (the REST API's `application/vnd.github.html+json` media type) → the markup the Code
-// window shows. GitHub has already sanitised it and made relative links absolute (`github.com/<o>/<r>/blob|raw/…`),
-// so this only drops its chrome and points pictures at raw.githubusercontent.com. Used by `npm run repos` at
+// window shows. GitHub has already sanitised it; this drops its chrome, resolves the links and pictures it leaves
+// relative in the file's own repository, and points pictures at raw.githubusercontent.com. Used by `npm run repos` at
 // snapshot time and in the browser for repositories outside the snapshot, so it imports nothing.
 
 const ANCHOR_HEADING =
@@ -11,9 +11,34 @@ export function renderedPath(html: string): string | null {
   return html.match(/<div id="(?:readme|file)" class="[^"]*" data-path="([^"]+)"/)?.[1] ?? null;
 }
 
-export function cleanGithubHtml(html: string): string {
+/** Where a rendered file lives, so its relative links and pictures resolve in its own repository. */
+export interface RenderedAt {
+  owner: string;
+  repo: string;
+  /** The ref links name (the default branch keeps them inside the snapshot). */
+  ref: string;
+  /** The ref pictures load from (the snapshot's commit); `ref` when absent. */
+  rawRef?: string;
+  path: string;
+}
+
+// Anything with a scheme, a protocol-relative URL or an in-page anchor is left as it is.
+const ABSOLUTE = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i;
+
+function resolveRelative(html: string, at: RenderedAt): string {
+  const page = `https://github.com/${at.owner}/${at.repo}/blob/${at.ref}/${at.path}`;
+  const raw = `https://raw.githubusercontent.com/${at.owner}/${at.repo}/${at.rawRef ?? at.ref}/${at.path}`;
+  const resolve = (url: string, base: string) => (ABSOLUTE.test(url) ? url : new URL(url, base).href);
+  return html
+    .replace(/(<a\b[^>]*?\shref=")([^"]*)"/g, (_, head: string, url: string) => `${head}${resolve(url, page)}"`)
+    .replace(/(<img\b[^>]*?\ssrc=")([^"]*)"/g, (_, head: string, url: string) => `${head}${resolve(url, raw)}"`);
+}
+
+export function cleanGithubHtml(html: string, at?: RenderedAt): string {
+  // GitHub's API leaves a file's relative links relative; here they would point at this site.
+  const resolved = at ? resolveRelative(html, at) : html;
   return (
-    html
+    resolved
       // The wrapper GitHub puts around every rendered file.
       .replace(/^\s*<div id="(?:readme|file)"[^>]*>\s*<article[^>]*>/, '')
       .replace(/<\/article>\s*<\/div>\s*$/, '')
