@@ -109,7 +109,8 @@ TOWER_TOP = WATER_Z + 0.40
 LOTUS, INDIA_GATE, QUTUB = (1.56, 0.86), (1.72, 1.04), (1.80, 1.20)
 # Round seven: downtown San Francisco with the Transamerica Pyramid and Salesforce Tower, Coit Tower on Telegraph
 # Hill and Alcatraz in the bay; Humayun's Tomb, Jama Masjid and the Red Fort's wall in Delhi; a far ridge.
-TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (0.60, 1.24), (0.46, 1.36), (0.70, 1.03), (1.17, 1.60)
+TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (1.10, 1.70), (0.99, 1.76), (0.70, 1.03), (1.17, 1.57)
+DOWNTOWN = ((0.90, 1.24), (1.63, 1.86), (1.06, 1.75))  # x range, y range, densest point (behind the bridge)
 HUMAYUN, JAMA_MASJID, RED_FORT_Y = (1.88, 1.42), (1.60, 1.72), 1.96
 HAZE_NEAR, HAZE_FAR, HAZE_MAX = 1.05, 2.35, 0.5
 
@@ -414,7 +415,7 @@ def build_materials():
                                emit_night=(0.85, 0.90, 1.0), emit_strength=5.0)
     m["red_stone"] = view_material("view_red_stone", (0.46, 0.17, 0.09), (0.07, 0.03, 0.02), rough=0.85)
     m["rock"] = view_material("view_rock", (0.36, 0.33, 0.28), (0.03, 0.03, 0.03), rough=0.95)
-    m["ridge"] = view_material("view_ridge", (0.34, 0.37, 0.30), (0.012, 0.014, 0.018), rough=0.95)
+    m["ridge"] = view_material("view_ridge", (0.10, 0.17, 0.07), (0.008, 0.012, 0.008), rough=0.95)
     m["hull"] = view_material("view_hull", (0.30, 0.16, 0.08), (0.03, 0.02, 0.015), rough=0.7)
     return m
 
@@ -888,9 +889,10 @@ def delhi_ground(b, mats, rng):
                         phase=rng.uniform(0, 1))
         bmesh.ops.transform(b.bm, matrix=Matrix.Translation((x, y, delhi_height(x, y) + 0.004)),
                             verts=list({v for f in faces for v in f.verts}))
-    for k in range(60):
+    for k in range(96):
         x, y = (rng.uniform(1.62, 1.98), rng.uniform(1.12, 1.45)) if k < 18 else (rng.uniform(1.30, 1.90),
-                                                                                      rng.uniform(1.62, 2.1))
+                                                                                      rng.uniform(1.62, 2.1)) \
+            if k < 60 else (rng.uniform(1.95, 2.30), rng.uniform(1.40, 2.05))
         if x < delhi_coast(y) + 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.06)), 0.04):
             continue
         w, d, h = rng.uniform(0.016, 0.03), rng.uniform(0.014, 0.024), rng.uniform(0.010, 0.026)
@@ -953,13 +955,14 @@ def salesforce(b, mats, base):
 def downtown(b, mats, rng):
     """A cluster of towers around the two landmarks, tallest in the middle, so the skyline climbs behind the
     Painted Ladies."""
-    for k in range(26):
-        x, y = rng.uniform(0.30, 0.78), rng.uniform(1.12, 1.50)
-        if math.hypot(x - TRANSAMERICA[0], y - TRANSAMERICA[1]) < 0.05 or math.hypot(x - SALESFORCE[0], y - SALESFORCE[1]) < 0.05:
+    (x0, x1), (y0, y1), (cx, cy) = DOWNTOWN
+    for k in range(34):
+        x, y = rng.uniform(x0, x1), rng.uniform(y0, y1)
+        if math.hypot(x - TRANSAMERICA[0], y - TRANSAMERICA[1]) < 0.045 or math.hypot(x - SALESFORCE[0], y - SALESFORCE[1]) < 0.045:
             continue
         if sf_coast(y) - x < 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.2)), 0.04):
             continue
-        centre = math.exp(-((x - 0.54) ** 2 + (y - 1.30) ** 2) / 0.02)
+        centre = math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / 0.012)
         w, d = rng.uniform(0.022, 0.036), rng.uniform(0.022, 0.034)
         h = 0.05 + 0.16 * centre * rng.uniform(0.6, 1.0)
         mat = mats["tower_glass"] if rng.random() < 0.5 else mats["tower_white"]
@@ -1048,17 +1051,18 @@ def red_fort(b, mats, rng):
 
 
 def far_ridge(b, mats):
-    """A low ridge right across the back, just inside the sky, so the eye finds a last layer before the sky."""
+    """The Delhi Ridge: low wooded hills along the back of the Delhi half, just inside the sky, a last layer for the
+    eye before the sky."""
     bm = b.bm
     before = set(bm.faces)
-    n = 40
+    n = 24
     row_lo, row_hi = [], []
     for i in range(n + 1):
-        az = math.radians(180 * i / n)
+        az = math.radians(70 * i / n)
         d = Vector((math.cos(az), math.sin(az), 0.0))
         r = dome_radius(Vector((d.x, d.y, 0.02)).normalized()) * 0.94
         p = DOME_CENTRE + d * r
-        h = 0.05 + 0.06 * (0.5 + 0.5 * math.sin(i * 0.61 + 1.0)) * (0.6 + 0.4 * math.sin(i * 0.23))
+        h = 0.018 + 0.03 * (0.5 + 0.5 * math.sin(i * 0.9 + 1.0)) * (0.6 + 0.4 * math.sin(i * 0.37)) * math.sin(math.pi * i / n) ** 0.5
         row_lo.append(bm.verts.new((p.x, p.y, WATER_Z - 0.01)))
         row_hi.append(bm.verts.new((p.x * 0.995 + DOME_CENTRE.x * 0.005, p.y * 0.995 + DOME_CENTRE.y * 0.005, WATER_Z + h)))
     for i in range(n):
@@ -1166,7 +1170,7 @@ def build_window_view(framings):
 
     ridge = pl.Builder("ridge")
     far_ridge(ridge, mats)
-    parts.add("ridge", ridge, texel=0.25, split=True)
+    parts.add("ridge", ridge, texel=0.25, side="delhi")
 
     fog = pl.Builder("fog")
     fog_bank(fog, mats, rng)
