@@ -1,6 +1,6 @@
 ---
 title: "A real-time streaming pipeline (Amazon internship)"
-summary: "An Apache Flink pipeline that replaced an hourly batch job. Events now land in 600–900 ms, against a 120 s target."
+summary: "An Apache Flink pipeline built to replace an hourly batch job. Events land in 600–900 ms, against a 120 s target."
 year: 2025
 status: "shipped"
 role: "Data Engineer Intern"
@@ -44,6 +44,10 @@ application.
 
 ## The design
 
+The [design document](https://github.com/saahilsanganeriya/real_time_streaming/blob/main/docs/design.md) I wrote
+for the project is in the repo, with the cost of every design I weighed and how each kind of failure gets
+retried or replayed.
+
 A Lambda function bridges SNS into Kinesis. The Flink job in Java reads the stream, reshapes the nested
 JSON and writes to several OpenSearch indexes at once: one holds the current state of each record, one is
 an append-only log of every event. Beside that real-time path, every event also lands in S3 as a backup,
@@ -69,10 +73,10 @@ one. A sink that just writes whatever arrives will move the dashboard backwards.
 <figcaption>Why the sink has to check age: a retried, older update arrives last and would overwrite the newer one.</figcaption>
 </figure>
 
-I wrote 5 custom OpenSearch sinks. Each signs its requests with IAM SigV4, and the guarded ones run a small
-Painless script inside OpenSearch that compares the event's timestamp with the stored document's and
-quietly drops the older one. Delivery can repeat and arrive out of order, and the result still comes out
-exactly once.
+I wrote 5 custom OpenSearch sinks. In production each one signs its requests with IAM SigV4, and the
+guarded ones run a small Painless script inside OpenSearch that compares the event's timestamp with the
+stored document's and quietly drops the older one. Delivery can repeat and arrive out of order, and the
+result still comes out exactly once.
 
 One problem was not mine to solve. The OpenSearch cluster sat inside a private network, so for a while the
 dashboards could not be reached at all. A teammate who knew that networking far better than I did built
