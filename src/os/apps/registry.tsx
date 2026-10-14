@@ -4,17 +4,12 @@ import { formatDay } from '../format';
 import { windowHref } from '../routes';
 import { PERSONAL_APPS, type AppId, type OsApi, type OsIndex, type Route } from '../types';
 import { AboutApp } from './AboutApp';
-import { BrowserApp } from './BrowserApp';
 import { FolderApp } from './FolderApp';
 import { parseCodeSlug } from './code/model';
-import { FilmsApp } from './FilmsApp';
 import { BlogApp, ProjectsApp } from './Lists';
 import { OvenApp } from './OvenApp';
-import { PhotographyApp } from './photography/PhotographyApp';
 import { PostReader, ProjectReader, ThreadLoader } from './Reader';
-import { BooksApp, RecipesApp, VoyagerApp } from './ShelfApps';
-import { CreditsApp, ResumeApp } from './SmallApps';
-import { TerminalApp } from './TerminalApp';
+import { ResumeApp } from './SmallApps';
 
 /** Every window's name and icon; the desktop shows DESKTOP_APPS (types.ts), the Start menu all but the browser. */
 export const APPS: Record<AppId, { label: string; icon: IconName }> = {
@@ -35,8 +30,16 @@ export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   browser: { label: 'Browser', icon: 'browser' },
 };
 
-// The Code window and its highlighter load only when it opens, so the OS's first load does not grow.
+// Windows a visit does not open at boot load when first opened, so the OS's first load holds About and the desktop.
 const CodeApp = lazy(() => import('./code/CodeApp'));
+const FilmsApp = lazy(() => import('./FilmsApp').then((m) => ({ default: m.FilmsApp })));
+const PhotographyApp = lazy(() => import('./photography/PhotographyApp').then((m) => ({ default: m.PhotographyApp })));
+const TerminalApp = lazy(() => import('./TerminalApp').then((m) => ({ default: m.TerminalApp })));
+const BrowserApp = lazy(() => import('./BrowserApp').then((m) => ({ default: m.BrowserApp })));
+const CreditsApp = lazy(() => import('./CreditsApp').then((m) => ({ default: m.CreditsApp })));
+const BooksApp = lazy(() => import('./ShelfApps').then((m) => ({ default: m.BooksApp })));
+const RecipesApp = lazy(() => import('./ShelfApps').then((m) => ({ default: m.RecipesApp })));
+const VoyagerApp = lazy(() => import('./ShelfApps').then((m) => ({ default: m.VoyagerApp })));
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -106,6 +109,14 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
 }
 
 export function AppBody({ route, os }: { route: Route; os: OsApi }): ReactNode {
+  return (
+    <Suspense fallback={<ThreadLoader label={`Loading ${APPS[route.app].label}`} />}>
+      <AppContent route={route} os={os} />
+    </Suspense>
+  );
+}
+
+function AppContent({ route, os }: { route: Route; os: OsApi }): ReactNode {
   switch (route.app) {
     case 'photography':
       return <PhotographyApp slug={route.slug} os={os} />;
@@ -130,13 +141,9 @@ export function AppBody({ route, os }: { route: Route; os: OsApi }): ReactNode {
     case 'resume':
       return <ResumeApp os={os} />;
     case 'credits':
-      return <CreditsApp os={os} />;
+      return <CreditsApp />;
     case 'code':
-      return (
-        <Suspense fallback={<ThreadLoader label="Loading Code" />}>
-          <CodeApp slug={route.slug} />
-        </Suspense>
-      );
+      return <CodeApp slug={route.slug} />;
     case 'browser':
       return <BrowserApp url={route.slug} />;
     case 'personal':

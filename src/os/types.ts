@@ -1,4 +1,3 @@
-import type { AssetSection } from '../lib/assets-register';
 import type { FilmsData } from '../lib/films';
 
 /** A picture made by astro:assets at build time: WebP at several widths, and its intrinsic size. */
@@ -138,7 +137,6 @@ export interface OsIndex {
   films: FilmsData;
   favourites: OsFavourite[];
   oven: OvenList;
-  credits: AssetSection[];
   wallpaper: OsWallpaper;
   /** The About window's portrait (his professional headshot); the photos beside its text come with the page body. */
   me: { portrait: OsImage };

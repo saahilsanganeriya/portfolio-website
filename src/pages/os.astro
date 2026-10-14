@@ -1,7 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
-import { parseAssetsRegister } from '../lib/assets-register';
 import { getPosts, getProjects, isoDay } from '../lib/content';
 import { filmsData } from '../lib/films';
 import { windowDiary } from '../os/apps/films/diary';
@@ -47,7 +46,6 @@ const index: OsIndex = {
   films: windowDiary(filmsData, favourites),
   favourites,
   oven: ovenList(),
-  credits: parseAssetsRegister().filter((section) => section.rows.length > 0),
   wallpaper: await osWallpaper(),
   me: await aboutPortrait(),
   photography: await photographs(),

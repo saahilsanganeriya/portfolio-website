@@ -99,7 +99,7 @@ export const projectFigures = (slug: string): Promise<OsFigure[]> =>
 export async function osWallpaper(): Promise<OsWallpaper> {
   const widths = [960, 1280];
   const [avif, webp] = await Promise.all([
-    getImage({ src: wallpaper, widths, format: 'avif', quality: 40 }),
+    getImage({ src: wallpaper, widths, format: 'avif', quality: 34 }),
     getImage({ src: wallpaper, widths, format: 'webp', quality: 62 }),
   ]);
   return { avif: avif.srcSet.attribute, webp: webp.srcSet.attribute, src: webp.src };
@@ -107,9 +107,9 @@ export async function osWallpaper(): Promise<OsWallpaper> {
 
 // ---- The owner's portrait and his photography (sizes made ahead of time by `npm run photos:ingest`) ----
 
-/** The About window's portrait: the owner's professional headshot, small enough for a 112 px circle at 2x. */
+/** The About window's portrait: the owner's professional headshot, sized for its 112 px circle at 1x and 2x. */
 export async function aboutPortrait(): Promise<{ portrait: OsImage }> {
-  const image = await getImage({ src: headshot, widths: [128, 256], format: 'webp', quality: 78 });
+  const image = await getImage({ src: headshot, widths: [112, 224], format: 'webp', quality: 72 });
   return {
     portrait: {
       src: image.src,
