@@ -34,9 +34,9 @@ OUT_DIR = REPO / "public" / "room"
 RENDERS = REPO / "blender" / "renders"
 
 ATLASES = ("env", "desk", "props")
-# Shipped atlas sizes: baked at 4096, resampled (Lanczos) to fit room.glb in 4.3 MB; the desk keeps the most for the
-# close-up framings. Non-power-of-two sizes are fine for KTX2 on WebGL2.
-EXPORT_SIZES = {"env": 2560, "desk": 3584, "props": 3072}
+# Shipped atlas sizes: resampled (Lanczos) from the larger bakes so the initial payload stays under 6 MB with a margin;
+# the desk keeps the most for the close-up framings. Non-power-of-two sizes are fine for KTX2 on WebGL2.
+EXPORT_SIZES = {"env": 2304, "desk": 3328, "props": 2816}
 VIEW_ATLASES = {"window_sf": "window_view_sf", "window_delhi": "window_view_delhi"}
 RUNTIME_MESHES = {"crt_glow": "crt_glow", "lamp_bulb": "lamp_bulb", "lava_lamp_glass": "lava_lamp_glass",
                   "oven_glow": "oven_glow"}  # mesh name -> material name

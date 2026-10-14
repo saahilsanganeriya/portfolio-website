@@ -110,7 +110,7 @@ CAMERAS = {
     "cam_shelf": ((1.80, -0.68, 0.98), (3.10, -0.62, 0.55)),
     "cam_photos": ((-1.92, -1.13, 1.74), (-3.30, -1.13, 1.74)),
     "cam_projector": ((-0.35, -2.08, 1.62), (-3.30, -2.16, 1.66)),
-    "cam_record_player": ((1.55, -3.45, 1.40), (2.72, -2.55, 0.60)),
+    "cam_record_player": ((2.05, -3.75, 1.45), (2.72, -2.58, 0.62)),
     "cam_espresso": ((-2.22, -3.18, 1.36), (-3.02, -3.30, 1.10)),
     "cam_oven": ((-2.18, -3.62, 1.26), (-3.00, -3.70, 0.98)),
     # Arrival: from the loading framing past the window and the mango plant onto the desk (the site glides
@@ -128,8 +128,8 @@ CAMERAS = {
     "cam_tour_6": ((-0.35, -2.08, 1.62), (-3.30, -2.16, 1.66)),
     "cam_tour_7": ((-1.92, -1.13, 1.74), (-3.30, -1.13, 1.74)),
     "cam_tour_8": ((-2.22, -1.95, 1.62), (-2.22, 0.42, 1.62)),
-    "cam_tour_9": ((0.55, -3.35, 1.62), (2.35, -1.35, 0.80)),
-    "cam_tour_10": ((1.55, -3.45, 1.40), (2.72, -2.55, 0.60)),
+    "cam_tour_9": ((0.85, -4.05, 1.55), (2.40, -2.55, 0.70)),
+    "cam_tour_10": ((2.05, -3.75, 1.45), (2.72, -2.58, 0.62)),
 }
 # The tour's stops in order: (id, label, camera, the plan-view point the map marks).
 TOUR_STOPS = [
@@ -1333,11 +1333,11 @@ def build_practical_lights(dressing):
     # Picture lamp over the Instax board.
     p = dressing["photo_light"]
     aim = Vector((X_LEFT, p.y, p.z - 0.55)) - p
-    add("photo_light", "AREA", p + Vector((0.0, 0.0, -0.022)), (1.0, 0.62, 0.32), 10.0, size=(0.66, 0.03),
+    add("photo_light", "AREA", p + Vector((0.0, 0.0, -0.022)), (1.0, 0.62, 0.32), 7.5, size=(0.66, 0.03),
         rot=aim.normalized().to_track_quat("-Z", "Y"), spread=110)
     # Paper lantern between the armchair and the record cabinet: a warm bulb inside the globe, kept below the desk
     # lamp and the CRT so the eye goes to the desk first.
-    add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 3.5, size=0.12)
+    add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 2.2, size=0.12)
     # The light bar under the kitchen shelf: a warm wash down the tiles onto the counter.
     add("under_shelf", "AREA", dressing["under_shelf"], (1.0, 0.60, 0.30), 9.0, size=(0.016, 0.98), rot=down, spread=140)
     # Kitchen pendant: a warm cone onto the counter, and the bulb's glow inside the shade.

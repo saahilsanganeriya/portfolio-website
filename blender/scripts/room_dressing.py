@@ -554,8 +554,8 @@ def build_photo_board(mats):
     clips (baked as photo_board), and twenty prints, each its own unbaked quad instax_slot_<i> (UVs 0-1 over the whole
     print) whose transforms are the collage; the site draws photo, border and caption on each."""
     rng = random.Random(SEED + 19)
-    cork_maps = pl.ambientcg("Cork001")
-    cork = pl.surface("board_cork", (0.55, 0.40, 0.25), 0.85, color_tex=cork_maps["Color"], tint=(0.74, 0.68, 0.50),
+    cork_maps = pl.ambientcg("Cork002")
+    cork = pl.surface("board_cork", (0.55, 0.40, 0.25), 0.85, color_tex=cork_maps["Color"], tint=(0.80, 0.74, 0.62),
                       rough_tex=cork_maps.get("Roughness"), height_tex=cork_maps.get("Displacement"), height_strength=0.2,
                       tile=0.2, dust=0.3, grime=0.3, color_var=0.06)
     oak = pl.surface("board_oak", (0.55, 0.42, 0.28), 0.5, color_tex=pl.ambientcg("Wood051")["Color"],
@@ -1892,7 +1892,7 @@ def build_reading_corner(mats):
     """The armchair corner: a tall paper lantern on a wooden tripod beyond the record cabinet, glowing warm over the
     turntable, and a mug left on the cabinet beside it."""
     paper = pl.surface("lantern_paper", (0.86, 0.80, 0.68), 0.9, color_tex=pl.ambientcg("Paper001")["Color"],
-                       tint=(1.0, 0.94, 0.82), tile=0.3, translucency=0.45, emission=((1.0, 0.66, 0.36), 0.15),
+                       tint=(1.0, 0.94, 0.82), tile=0.3, translucency=0.35, emission=((1.0, 0.66, 0.36), 0.08),
                        color_var=0.04)
     rib = pl.surface("lantern_rib", (0.52, 0.42, 0.28), 0.7, color_var=0.05)
     oak = pl.surface("lantern_oak", (0.50, 0.36, 0.22), 0.55, color_tex=pl.ambientcg("Wood051")["Color"],
