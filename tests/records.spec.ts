@@ -11,10 +11,12 @@ test.describe.configure({ timeout: 180_000 });
 const graph = (page: Page) => page.evaluate(() => window.__room!.audio!.graph());
 const crate = (page: Page) => page.getByRole('region', { name: 'Records' });
 
-/** Landed at the desk, the sound started by a key press and the lo-fi stems playing. */
+/** Landed at the desk (going there cancels the landing's step into the monitor), the sound started by a key press and the lo-fi stems playing. */
 async function soundOn(page: Page) {
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 120_000 });
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
+  await page.evaluate(() => window.__room!.goto('desk'));
+  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 30_000 });
   await page.keyboard.press('KeyA');
   await page.waitForFunction(() => (window.__room?.audio?.graph().loaded ?? []).filter((k) => k.startsWith('music/')).length === 3, null, {
     timeout: 60_000,
