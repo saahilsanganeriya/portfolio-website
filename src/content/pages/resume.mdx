@@ -57,6 +57,28 @@ Project page: [SAMCell](/projects/samcell)
   OP-CSB against Cellpose on LIVECell, and 0.60 vs 0.32 zero-shot on an unseen microscope.
 - Built two cross-microscope benchmark datasets and the open-source napari plugin.
 
+## Projects
+
+**swe-sim** · graded coding-agent tasks from real GitHub issues · Sep 2026
+
+Project page: [swe-sim](/projects/swe-sim) · [code](https://github.com/saahilsanganeriya/swe-sim)
+
+- Built a pipeline that turns underspecified GitHub issues into coding-agent tasks, with an LLM stakeholder
+  the agent can question.
+- Graded each patch offline, dropping edits to protected tests and paying out only when four records of the
+  hidden-test run agree.
+- Ran it on Temporal, Modal and Cloud Run. The first hosted task (29 trials, $3.01) exposed a defect in the
+  task itself, which a new approval gate now rejects.
+
+**Reinforcement learning skill discovery for Atari games** · Jan – May 2025
+
+Project page: [METRA for discrete actions](/projects/metra-discrete-actions)
+
+- Adapted METRA skill discovery to discrete-action Atari with SAC-Discrete, to learn distinct skills without
+  hand-designed rewards.
+- Diagnosed representation collapse with t-SNE and silhouette analysis, and traced it to a weak pixel
+  encoder by swapping in ResNet-18.
+
 ## Education
 
 **Georgia Institute of Technology**, Atlanta
