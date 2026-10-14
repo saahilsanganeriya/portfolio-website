@@ -176,7 +176,7 @@ export class RecordPlayer {
 
   close() {
     if (!this.panel || this.panel.hidden) return;
-    const hadFocus = this.panel.contains(document.activeElement);
+    const hadFocus = this.panel.contains(document.activeElement) || document.activeElement === document.body;
     this.panel.hidden = true;
     this.openedAt = null;
     if (hadFocus) document.querySelector<HTMLElement>('[data-room]')?.focus({ preventScroll: true });
@@ -304,7 +304,12 @@ export class RecordPlayer {
       const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
       buttons[(at + step + buttons.length) % buttons.length]?.focus();
     }, { signal });
-    q<HTMLButtonElement>('[data-records-stop]').addEventListener('click', () => this.stop(), { signal });
+    // Stop disables itself, so focus moves to the sleeve of the record that was playing rather than falling to the page.
+    q<HTMLButtonElement>('[data-records-stop]').addEventListener('click', () => {
+      const was = this.playing;
+      this.stop();
+      if (was) list.querySelector<HTMLButtonElement>(`[data-record="${was}"]`)?.focus();
+    }, { signal });
     q<HTMLButtonElement>('[data-records-close]').addEventListener('click', () => this.close(), { signal });
     // The crate's own way to turn the sound on is the room's Sound button, so the choice is remembered in one place.
     q<HTMLButtonElement>('[data-records-sound-on]').addEventListener(
