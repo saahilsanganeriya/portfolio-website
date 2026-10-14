@@ -9,6 +9,11 @@ the collection window_lights carry the state they belong to.
 The diorama stays inside an envelope that no framing can see except through the window: a sky dome whose every
 point is hidden behind the wall from each camera (and the idle sway), checked by check_hidden().
 
+The diorama is modelled in its own frame (the round-two window's, seam at x = 1.33) and placed behind the room's
+window by one similarity transform, DIORAMA_TO_ROOM (scale VIEW_SCALE about the seam on the water line): the room's
+window, walls and cameras are carried into the diorama's frame for every visibility test, so the layout tuned for
+the first window keeps its look and reads larger through the bigger one.
+
     blender -b --factory-startup -P blender/scripts/window_view.py -- <out_dir> [day|night] [cam ...]
 
 renders quick previews of the view alone (a bare wall with the window), for work on the diorama.
@@ -26,26 +31,71 @@ from mathutils import Matrix, Vector
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import props_lib as pl  # noqa: E402
-from room_lib import WALL_H, WALL_T, WIN_X0, WIN_X1, WIN_Z0, WIN_Z1, X_LEFT, X_RIGHT, Y_BACK, collection  # noqa: E402
+import room_lib as room  # noqa: E402
+from room_lib import collection  # noqa: E402
 
-SEAM_X = (WIN_X0 + WIN_X1) / 2
-WALL_BACK = Y_BACK + WALL_T
+# ---- the diorama's frame ----
+SEAM_X = 1.33
+WALL_BACK = room.Y_BACK + room.WALL_T
 WATER_Z = 0.95
+VIEW_SCALE = 1.45
+ROOM_SEAM = Vector(((room.WIN_X0 + room.WIN_X1) / 2, WALL_BACK, room.WIN_Z0 + 0.04))
+DIORAMA_SEAM = Vector((SEAM_X, WALL_BACK, WATER_Z))
+DIORAMA_TO_ROOM = (Matrix.Translation(ROOM_SEAM) @ Matrix.Diagonal((VIEW_SCALE,) * 3 + (1.0,))
+                   @ Matrix.Translation(-DIORAMA_SEAM))
+
+
+def to_diorama(p) -> Vector:
+    return DIORAMA_SEAM + (Vector(p) - ROOM_SEAM) / VIEW_SCALE
+
+
+# The room's window and walls, in the diorama's frame.
+WIN_X0, WIN_Z0 = to_diorama((room.WIN_X0, 0, room.WIN_Z0)).xz
+WIN_X1, WIN_Z1 = to_diorama((room.WIN_X1, 0, room.WIN_Z1)).xz
+Y_BACK = WALL_BACK - room.WALL_T / VIEW_SCALE
+WALL_LEFT_END = to_diorama((room.X_LEFT - room.WALL_T, 0, 0)).x
+WALL_RIGHT_END = to_diorama((room.X_RIGHT + room.WALL_T, 0, 0)).x
+WALL_TOP = to_diorama((0, 0, room.WALL_H)).z
 DOME_CENTRE = Vector((SEAM_X, WALL_BACK + 0.06, WATER_Z))
 DOME_AXES = (2.2, 1.75, 1.5, 1.25)  # left, back, up, right reach in metres before the envelope trims it
 ENVELOPE_MARGIN = 0.05
 WINDOW_NIGHT = "window_night"
 SEED = 1937  # the year the Golden Gate opened
 
-# Framings the envelope must hold for: the room's cameras, the idle camera swayed, and points on the glide from
-# the loading framing to the idle one.
-CAMERA_POINTS = {
-    "cam_loading": (6.6, -8.8, 5.2), "cam_idle": (3.75, -4.95, 2.7), "cam_desk": (0.0, -1.59, 1.38),
-    "cam_monitor": (0.0, -0.58, 1.137), "cam_shelf": (-0.36, -1.12, 1.78), "cam_window": (1.33, -0.95, 1.46),
-    "cam_photos": (-1.78, -0.86, 2.17), "cam_projector": (-1.80, -2.19, 1.23),
-}
-IDLE_TARGET = (-0.25, -0.9, 0.98)
+# Framings the envelope must hold for, in the diorama's frame: the room's cameras, the idle camera swayed, and
+# points along the glides the site makes. setup_viewpoints() fills these from the room's framings.
 IDLE_SWAY = 0.16  # radians either way; the site sways cam_idle by 0.14
+CAMERAS: list[Vector] = []
+VIEWPOINTS: list[Vector] = []
+
+
+def glide(points, steps=5):
+    out = []
+    for a, b in zip(points, points[1:]):
+        out += [a.lerp(b, t / steps) for t in range(1, steps)]
+    return out
+
+
+def setup_viewpoints(framings):
+    """framings: {name: (position, target)} in room metres. CAMERAS (for the envelope) holds every framing, the
+    swayed idle camera and the arrival glide; VIEWPOINTS (for culling unseen faces) adds the tour's legs and the
+    moves between every framing and the idle and desk framings."""
+    pos = {name: to_diorama(p) for name, (p, _) in framings.items()}
+    idle, target = pos["cam_idle"], to_diorama(framings["cam_idle"][1])
+    sway = [target + Matrix.Rotation(a, 3, "Z") @ (idle - target) for a in (-IDLE_SWAY, -IDLE_SWAY / 2, IDLE_SWAY / 2,
+                                                                             IDLE_SWAY)]
+    arrival = [pos[n] for n in ("cam_loading", "cam_arrival_0", "cam_arrival_1", "cam_arrival_2", "cam_desk")
+               if n in pos]
+    CAMERAS[:] = list(pos.values()) + sway + glide(arrival, 6) + glide([pos["cam_loading"], idle], 6)
+    tours = [pos[n] for n in sorted(pos) if n.startswith("cam_tour_")]
+    legs = glide(tours + tours[:1], 4)
+    hubs = [p for name, p in pos.items() if name not in ("cam_loading", "cam_idle", "cam_desk")]
+    moves = []
+    for hub in (idle, pos["cam_desk"]):
+        for p in hubs:
+            moves += glide([hub, p], 4)
+    VIEWPOINTS[:] = CAMERAS + legs + moves
+
 
 SF_HILLS = [  # (x, y, height above water, radius)
     (0.80, 1.86, 0.22, 0.20), (1.08, 1.94, 0.13, 0.16), (0.50, 1.84, 0.15, 0.24), (0.70, 1.02, 0.07, 0.16),
@@ -57,6 +107,11 @@ TOWERS_X = (0.96, 1.62)
 DECK_Z = WATER_Z + 0.10
 TOWER_TOP = WATER_Z + 0.40
 LOTUS, INDIA_GATE, QUTUB = (1.56, 0.86), (1.72, 1.04), (1.80, 1.20)
+# Round seven: downtown San Francisco with the Transamerica Pyramid and Salesforce Tower, Coit Tower on Telegraph
+# Hill and Alcatraz in the bay; Humayun's Tomb, Jama Masjid and the Red Fort's wall in Delhi; a far ridge.
+TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (0.60, 1.24), (0.46, 1.36), (0.70, 1.03), (1.17, 1.60)
+HUMAYUN, JAMA_MASJID, RED_FORT_Y = (1.88, 1.42), (1.60, 1.72), 1.96
+HAZE_NEAR, HAZE_FAR, HAZE_MAX = 1.05, 2.35, 0.5
 
 
 def sf_coast(y):
@@ -82,33 +137,6 @@ def smoothstep(a, b, x):
 
 # ---- the envelope ----
 
-def camera_points():
-    pts = [Vector(p) for p in CAMERA_POINTS.values()]
-    idle, target = Vector(CAMERA_POINTS["cam_idle"]), Vector(IDLE_TARGET)
-    for a in (-IDLE_SWAY, -IDLE_SWAY / 2, IDLE_SWAY / 2, IDLE_SWAY):
-        off = idle - target
-        pts.append(target + Matrix.Rotation(a, 3, "Z") @ off)
-    load = Vector(CAMERA_POINTS["cam_loading"])
-    pts += [load.lerp(idle, t / 6) for t in range(1, 6)]
-    return pts
-
-
-CAMERAS = camera_points()
-
-
-def glide_points():
-    """Every framing, the swayed idle camera and points on the straight glides between any two framings: the
-    positions from which the site can look through the window."""
-    pts = [Vector(p) for p in CAMERA_POINTS.values()]
-    room = [Vector(p) for name, p in CAMERA_POINTS.items() if name != "cam_loading"]
-    for i, a in enumerate(room):
-        for b in room[i + 1:]:
-            pts += [a.lerp(b, t / 5) for t in range(1, 5)]
-    # The site only glides from the loading framing to the idle one.
-    return pts + CAMERAS[len(CAMERA_POINTS):]
-
-
-VIEWPOINTS = glide_points()
 SEEN_MARGIN = 0.06
 
 
@@ -149,7 +177,7 @@ def hidden(p: Vector, margin=ENVELOPE_MARGIN) -> bool:
             continue
         t = (WALL_BACK - c.y) / (p.y - c.y)
         x, z = c.x + (p.x - c.x) * t, c.z + (p.z - c.z) * t
-        if x > X_RIGHT - margin or z > WALL_H - margin or x < X_LEFT - WALL_T + margin:
+        if x > WALL_RIGHT_END - margin or z > WALL_TOP - margin or x < WALL_LEFT_END + margin:
             return False
     return True
 
@@ -221,9 +249,16 @@ def view_material(name, day, night=None, rough=0.85, emit_night=None, emit_stren
         color = kit(k, color, n)
         if isinstance(color, tuple):
             color, glow = color
+    # Aerial perspective: the further back (object y, the diorama's depth), the more the colour fades into the haze
+    # on the horizon, pale by day and blue-black by night.
+    depth = k.map_range(k.node("ShaderNodeSeparateXYZ", inputs={"Vector": k.coords("Object")}).outputs["Y"], HAZE_NEAR,
+                        HAZE_FAR, 0.0, HAZE_MAX)
+    haze = k.mix_color(n, (0.66, 0.72, 0.80, 1.0), (0.030, 0.034, 0.055, 1.0))
+    color = k.mix_color(depth, color, haze)
     bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": rough, "Metallic": metal})
     if emit_night is not None:
         strength = k.math("MULTIPLY", n, emit_strength)
+        strength = k.math("MULTIPLY", strength, k.math("SUBTRACT", 1.0, k.math("MULTIPLY", depth, 0.8)))
         if glow is not None:
             strength = k.math("MULTIPLY", strength, glow)
         k.set(bsdf, "Emission Color", emit_night + (1.0,))
@@ -256,7 +291,7 @@ def sky_material(side):
     n = k.node("ShaderNodeGroup", node_tree=night_value()).outputs[0]
     geo = k.node("ShaderNodeNewGeometry")
     rel = k.node("ShaderNodeVectorMath", operation="SUBTRACT", inputs={0: geo.outputs["Position"],
-                                                                        1: tuple(DOME_CENTRE)})
+                                                                        1: tuple(DIORAMA_TO_ROOM @ DOME_CENTRE)})
     d = k.node("ShaderNodeVectorMath", operation="NORMALIZE", inputs={0: rel.outputs[0]})
     sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": d.outputs[0]})
     up = k.math("MAXIMUM", sep.outputs["Z"], 0.0)
@@ -369,6 +404,17 @@ def build_materials():
     m["street_lights"] = view_material("view_street_lights", (0.3, 0.28, 0.25), (0.05, 0.04, 0.03), rough=0.5,
                                        emit_night=(1.0, 0.55, 0.18), emit_strength=7.0)
     m["sail"] = view_material("view_sail", (0.86, 0.84, 0.78), (0.06, 0.06, 0.07), rough=0.8)
+    m["tower_white"] = view_material("view_tower_white", (0.84, 0.83, 0.79), (0.05, 0.05, 0.055), rough=0.7,
+                                     emit_night=(1.0, 0.70, 0.40), emit_strength=1.4,
+                                     kit=lambda k, col, n: lit_windows(k, col, n, scale=(320.0, 320.0, 420.0), share=0.5))
+    m["tower_glass"] = view_material("view_tower_glass", (0.55, 0.62, 0.68), (0.04, 0.045, 0.06), rough=0.35,
+                                     emit_night=(0.95, 0.78, 0.55), emit_strength=1.2,
+                                     kit=lambda k, col, n: lit_windows(k, col, n, scale=(300.0, 300.0, 380.0), share=0.45))
+    m["crown"] = view_material("view_crown", (0.80, 0.82, 0.84), (0.2, 0.2, 0.22), rough=0.4,
+                               emit_night=(0.85, 0.90, 1.0), emit_strength=5.0)
+    m["red_stone"] = view_material("view_red_stone", (0.46, 0.17, 0.09), (0.07, 0.03, 0.02), rough=0.85)
+    m["rock"] = view_material("view_rock", (0.36, 0.33, 0.28), (0.03, 0.03, 0.03), rough=0.95)
+    m["ridge"] = view_material("view_ridge", (0.34, 0.37, 0.30), (0.012, 0.014, 0.018), rough=0.95)
     m["hull"] = view_material("view_hull", (0.30, 0.16, 0.08), (0.03, 0.02, 0.015), rough=0.7)
     return m
 
@@ -878,6 +924,153 @@ def boats(b, mats):
                                 verts=list({v for f in faces for v in f.verts}))
 
 
+# ---- round seven: more landmarks, and a far ridge for depth ----
+
+def transamerica(b, mats, base):
+    """The Transamerica Pyramid: a slender four-sided spire with the two 'wings' of its lift shafts, on a podium."""
+    x, y = base
+    z = sf_height(x, y) - 0.004
+    w, h = 0.044, 0.27
+    b.box((w * 1.3, w * 1.3, 0.008), loc=(x, y, z + 0.004), mat=mats["concrete"])
+    faces = b.frustum((w, w), (0.002, 0.002), h, loc=(x, y, z + 0.008), mat=mats["tower_white"])
+    del faces
+    for side in (-1, 1):
+        b.frustum((0.012, 0.014), (0.006, 0.010), h * 0.42, loc=(x + side * w * 0.42, y, z + h * 0.30),
+                  mat=mats["tower_white"])
+    b.box((0.0016, 0.0016, 0.03), loc=(x, y, z + 0.008 + h + 0.012), mat=mats["crown"])
+
+
+def salesforce(b, mats, base):
+    """Salesforce Tower: a tall obelisk with rounded corners and a domed top whose crown lights up at night."""
+    x, y = base
+    z = sf_height(x, y) - 0.004
+    w, h = 0.040, 0.30
+    b.box((w, w, h), loc=(x, y, z + h / 2), mat=mats["tower_glass"], corner=0.008, corner_seg=3)
+    b.lathe([(w / 2 - 0.001, 0.0), (w / 2 - 0.003, 0.012), (w / 2 - 0.009, 0.022), (0.006, 0.030), (0.0, 0.032)],
+            segments=12, loc=(x, y, z + h), mat=mats["crown"])
+
+
+def downtown(b, mats, rng):
+    """A cluster of towers around the two landmarks, tallest in the middle, so the skyline climbs behind the
+    Painted Ladies."""
+    for k in range(26):
+        x, y = rng.uniform(0.30, 0.78), rng.uniform(1.12, 1.50)
+        if math.hypot(x - TRANSAMERICA[0], y - TRANSAMERICA[1]) < 0.05 or math.hypot(x - SALESFORCE[0], y - SALESFORCE[1]) < 0.05:
+            continue
+        if sf_coast(y) - x < 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.2)), 0.04):
+            continue
+        centre = math.exp(-((x - 0.54) ** 2 + (y - 1.30) ** 2) / 0.02)
+        w, d = rng.uniform(0.022, 0.036), rng.uniform(0.022, 0.034)
+        h = 0.05 + 0.16 * centre * rng.uniform(0.6, 1.0)
+        mat = mats["tower_glass"] if rng.random() < 0.5 else mats["tower_white"]
+        faces = b.box((w, d, h), loc=(x, y, sf_height(x, y) - 0.004 + h / 2), rot=(0, 0, 10 + rng.uniform(-3, 3)), mat=mat)
+        bmesh.ops.delete(b.bm, geom=[f for f in faces if f.normal.z < -0.9], context="FACES")
+    transamerica(b, mats, TRANSAMERICA)
+    salesforce(b, mats, SALESFORCE)
+
+
+def coit_tower(b, mats, base):
+    """Coit Tower on Telegraph Hill: a fluted white column with a crown of arched openings."""
+    x, y = base
+    z = sf_height(x, y) - 0.003
+    b.lathe([(0.014, 0.0), (0.016, 0.006), (0.0, 0.006)], segments=16, loc=(x, y, z), mat=mats["trim"])
+    b.lathe([(0.0098, 0.0), (0.0098, 0.062), (0.0115, 0.066), (0.0108, 0.072), (0.0, 0.074)], segments=16,
+            loc=(x, y, z + 0.006), mat=mats["tower_white"],
+            radial=lambda i, j, r: r * (0.88 if i % 2 and 0 < j < 2 else 1.0))
+
+
+def alcatraz(b, mats, base):
+    """Alcatraz in the bay: a low rocky island, the long cellhouse on top and the lighthouse beside it."""
+    x, y = base
+    b.lathe([(0.0, 0.0), (0.065, 0.0), (0.05, 0.010), (0.03, 0.022), (0.0, 0.026)], segments=14,
+            loc=(x, y, WATER_Z - 0.006), mat=mats["rock"], radial=lambda i, j, r: r * (1.0 + 0.18 * math.sin(i * 1.7)))
+    b.box((0.05, 0.02, 0.012), loc=(x - 0.005, y + 0.004, WATER_Z + 0.022), rot=(0, 0, 12), mat=mats["concrete"])
+    b.cylinder(0.0025, 0.035, segments=6, loc=(x + 0.026, y - 0.004, WATER_Z + 0.036), mat=mats["trim"])
+    b.box((0.004, 0.004, 0.004), loc=(x + 0.026, y - 0.004, WATER_Z + 0.055), mat=mats["deck_lights"])
+
+
+def humayun_tomb(b, mats, base):
+    """Humayun's Tomb: a red sandstone plinth of arches, the octagonal hall trimmed in white marble, its white
+    double dome with a finial, and four small domed pavilions (chhatris) on the roof."""
+    x, y = base
+    z = delhi_height(x, y)
+    b.box((0.13, 0.13, 0.016), loc=(x, y, z + 0.006), mat=mats["red_stone"])
+    b.lathe([(0.048, 0.0), (0.048, 0.040), (0.0, 0.040)], segments=8, loc=(x, y, z + 0.014), mat=mats["red_stone"],
+            phase=math.radians(22.5))
+    b.lathe([(0.0485, 0.0), (0.0485, 0.004), (0.0, 0.004)], segments=8, loc=(x, y, z + 0.054), mat=mats["marble"],
+            phase=math.radians(22.5))
+    b.lathe([(0.020, 0.0), (0.022, 0.010), (0.028, 0.026), (0.024, 0.042), (0.012, 0.052), (0.002, 0.058), (0.0, 0.066)],
+            segments=20, loc=(x, y, z + 0.058), mat=mats["marble"])
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cx, cy = x + sx * 0.034, y + sy * 0.034
+            b.box((0.012, 0.012, 0.010), loc=(cx, cy, z + 0.063), mat=mats["red_stone"])
+            b.lathe([(0.008, 0.0), (0.007, 0.006), (0.0, 0.011)], segments=10, loc=(cx, cy, z + 0.068), mat=mats["marble"])
+
+
+def jama_masjid(b, mats, base):
+    """Jama Masjid: a red sandstone prayer hall under three white domes, the middle one largest, between two tall
+    minarets with their pavilions."""
+    x, y = base
+    z = delhi_height(x, y)
+    b.box((0.12, 0.05, 0.03), loc=(x, y, z + 0.015), mat=mats["red_stone"])
+    for dx, r in ((-0.036, 0.013), (0.0, 0.019), (0.036, 0.013)):
+        b.lathe([(r * 0.8, 0.0), (r, 0.008), (r * 0.85, 0.02), (r * 0.4, 0.03), (0.0, 0.034 * r / 0.019)], segments=16,
+                loc=(x + dx, y, z + 0.030), mat=mats["marble"])
+    for sx in (-1, 1):
+        mx = x + sx * 0.068
+        b.cylinder(0.0045, 0.10, segments=8, loc=(mx, y - 0.01, z + 0.05), mat=mats["red_stone"])
+        b.lathe([(0.0065, 0.0), (0.006, 0.004), (0.0, 0.010)], segments=8, loc=(mx, y - 0.01, z + 0.10), mat=mats["marble"])
+
+
+def red_fort(b, mats, rng):
+    """The Red Fort's wall across the back of Delhi: a long crenellated red sandstone curtain wall with the Lahori
+    Gate's two octagonal towers and their small white pavilions."""
+    y = RED_FORT_Y
+    x0, x1 = 1.40, 2.10
+    x = x0
+    while x < x1:
+        seg = min(0.06, x1 - x)
+        if inside_dome(Vector((x + seg / 2, y, WATER_Z + 0.06)), 0.03):
+            b.box((seg, 0.022, 0.05), loc=(x + seg / 2, y, delhi_height(x, y) + 0.025), mat=mats["red_stone"])
+            for k in range(int(seg / 0.012)):
+                b.box((0.006, 0.022, 0.006), loc=(x + 0.006 + k * 0.012, y, delhi_height(x, y) + 0.053), mat=mats["red_stone"])
+        x += seg
+    gx = 1.74
+    if inside_dome(Vector((gx, y, WATER_Z + 0.08)), 0.03):
+        for sx in (-1, 1):
+            tx = gx + sx * 0.03
+            b.lathe([(0.012, 0.0), (0.012, 0.075), (0.0, 0.075)], segments=8, loc=(tx, y - 0.004, delhi_height(tx, y)),
+                    mat=mats["red_stone"])
+            b.lathe([(0.010, 0.0), (0.009, 0.007), (0.0, 0.014)], segments=10, loc=(tx, y - 0.004, delhi_height(tx, y) + 0.075),
+                    mat=mats["marble"])
+        b.box((0.05, 0.026, 0.065), loc=(gx, y - 0.002, delhi_height(gx, y) + 0.0325), mat=mats["red_stone"])
+
+
+def far_ridge(b, mats):
+    """A low ridge right across the back, just inside the sky, so the eye finds a last layer before the sky."""
+    bm = b.bm
+    before = set(bm.faces)
+    n = 40
+    row_lo, row_hi = [], []
+    for i in range(n + 1):
+        az = math.radians(180 * i / n)
+        d = Vector((math.cos(az), math.sin(az), 0.0))
+        r = dome_radius(Vector((d.x, d.y, 0.02)).normalized()) * 0.94
+        p = DOME_CENTRE + d * r
+        h = 0.05 + 0.06 * (0.5 + 0.5 * math.sin(i * 0.61 + 1.0)) * (0.6 + 0.4 * math.sin(i * 0.23))
+        row_lo.append(bm.verts.new((p.x, p.y, WATER_Z - 0.01)))
+        row_hi.append(bm.verts.new((p.x * 0.995 + DOME_CENTRE.x * 0.005, p.y * 0.995 + DOME_CENTRE.y * 0.005, WATER_Z + h)))
+    for i in range(n):
+        bm.faces.new((row_lo[i], row_lo[i + 1], row_hi[i + 1], row_hi[i]))
+    faces = [f for f in bm.faces if f not in before]
+    for f in faces:
+        f.normal_update()
+        if f.normal.dot(DOME_CENTRE - f.calc_center_median()) < 0:
+            f.normal_flip()
+    return b._wrap(before, None, mats["ridge"])
+
+
 # ---- lights ----
 
 def build_lights():
@@ -914,7 +1107,10 @@ def build_lights():
             ("qutub", QUTUB, (1.0, 0.62, 0.32), 1.6, (-0.08, -0.10, 0.03)),
             ("lotus", LOTUS, (0.80, 0.86, 1.0), 0.9, (0.0, -0.14, 0.05)),
             ("tower_sf", (TOWERS_X[0], BRIDGE_Y), (1.0, 0.55, 0.30), 2.5, (0.05, -0.15, 0.04)),
-            ("tower_delhi", (TOWERS_X[1], BRIDGE_Y), (1.0, 0.55, 0.30), 2.5, (-0.05, -0.15, 0.04))):
+            ("tower_delhi", (TOWERS_X[1], BRIDGE_Y), (1.0, 0.55, 0.30), 2.5, (-0.05, -0.15, 0.04)),
+            ("humayun", HUMAYUN, (1.0, 0.86, 0.66), 1.4, (-0.06, -0.14, 0.05)),
+            ("jama_masjid", JAMA_MASJID, (1.0, 0.80, 0.55), 1.0, (0.05, -0.14, 0.05)),
+            ("transamerica", TRANSAMERICA, (0.95, 0.92, 0.85), 1.2, (0.08, -0.12, 0.06))):
         tx, ty = target
         tz = WATER_Z + 0.08
         add(f"flood_{name}", "SPOT", (tx + offset[0], ty + offset[1], tz + offset[2]), color, energy, "night",
@@ -925,8 +1121,10 @@ def build_lights():
 
 # ---- assembly ----
 
-def build_window_view():
-    """Build both halves of the view and its lights; returns the part objects."""
+def build_window_view(framings):
+    """Build both halves of the view and its lights behind the room's window (framings: the room's cameras,
+    {name: (position, target)}); returns the part objects."""
+    setup_viewpoints(framings)
     rng = random.Random(SEED)
     mats = build_materials()
     parts = Parts()
@@ -957,6 +1155,19 @@ def build_window_view():
     sutro_tower(tower, mats, SUTRO)
     parts.add("sutro", tower, texel=1.2, side="sf")
 
+    sky_line = pl.Builder("skyline")
+    downtown(sky_line, mats, random.Random(SEED + 3))
+    coit_tower(sky_line, mats, COIT)
+    parts.add("skyline", sky_line, texel=2.0, side="sf")
+
+    rock = pl.Builder("alcatraz")
+    alcatraz(rock, mats, ALCATRAZ)
+    parts.add("alcatraz", rock, texel=1.6, side="sf")
+
+    ridge = pl.Builder("ridge")
+    far_ridge(ridge, mats)
+    parts.add("ridge", ridge, texel=0.25, split=True)
+
     fog = pl.Builder("fog")
     fog_bank(fog, mats, rng)
     parts.add("fog", fog, texel=0.35, side="sf", smooth=True)
@@ -982,13 +1193,33 @@ def build_window_view():
     lotus_temple(monuments, mats, LOTUS)
     india_gate(monuments, mats, INDIA_GATE)
     qutub_minar(monuments, mats, QUTUB)
+    humayun_tomb(monuments, mats, HUMAYUN)
+    jama_masjid(monuments, mats, JAMA_MASJID)
+    red_fort(monuments, mats, rng)
     parts.add("monuments", monuments, texel=2.6, side="delhi")
 
     objs = parts.build()
     check_hidden(objs)
     build_lights()
+    place_in_room(objs)
     set_night(0.0)
     return objs
+
+
+def place_in_room(objs):
+    """Carry the diorama (built and checked in its own frame) behind the room's window. Mesh data stays in the
+    diorama's frame, so the materials' object-space patterns keep their scale; point and spot lights get VIEW_SCALE
+    squared more power for the same light at the scaled distances."""
+    for obj in objs:
+        obj.matrix_world = DIORAMA_TO_ROOM @ obj.matrix_world
+    for light in bpy.data.collections["window_lights"].objects:
+        light.matrix_world = DIORAMA_TO_ROOM @ light.matrix_world
+        light.scale = (1.0, 1.0, 1.0)
+        if light.data.type in ("POINT", "SPOT"):
+            light.data.energy *= VIEW_SCALE ** 2
+            light["window_energy"] = light.data.energy
+        if light.data.type != "SUN":
+            light.data.shadow_soft_size *= VIEW_SCALE
 
 
 # ---- previews of the view alone ----
@@ -1014,7 +1245,7 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     import build_room
     preview_scene()
-    objs = build_window_view()
+    objs = build_window_view(build_room.CAMERAS)
     set_night(1.0 if mode == "night" else 0.0)
     for obj in bpy.data.collections["window_lights"].objects:
         obj.hide_render = obj["window_mode"] != mode

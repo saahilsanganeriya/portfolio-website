@@ -1,12 +1,16 @@
-"""The lived-in layer of the room: the kitchen corner, the poster plaque, the photo wall, the album, the projector's
-program dial, books, records, fairy lights, desk clutter and CC0 plants and objects.
+"""The lived-in layer of the room: the credenza and plaque under the posters, the kitchen nook, the photo wall, the
+projection wall, the album, the projector's program dial, the bookcase with the six books, the space wall (Voyager
+record, Pale Blue Dot), the Japanese-literature print, the Georgia Tech pennant, the sticky notes, desk clutter, the
+reading corner and CC0 plants and objects.
 
 build_room.py calls build_dressing() after the props are placed. Everything here is baked into an atlas except the
-photo prints (photo_print_*), which the site textures at runtime like the posters.
+runtime art (photo_print_*, print_pale_blue_dot, projection_surface, sticky_note_*), which the site textures over the
+light baked on it, like the posters.
 """
 
 import math
 import random
+import subprocess
 from pathlib import Path
 
 import bmesh
@@ -14,34 +18,51 @@ import bpy
 from mathutils import Matrix, Vector
 
 import props_lib as pl
-from import_henry import CACHE, fetch_cached
-from room_lib import X_LEFT, Y_BACK, add_box, add_cylinder, collection, new_object, smooth_by_angle
+from import_henry import CACHE, REPO, fetch_cached
+from room_lib import (DOOR_Y0, RETURN_Y, X_LEFT, X_RIGHT, Y_BACK, Y_FRONT, add_box, add_cylinder, collection,
+                      new_object, smooth_by_angle)
 
 SEED = 20261012
+ART = CACHE / "art"
 
 # Newsreader (SIL OFL), the site's heading face, pinned to the Google Fonts commit that added it.
 NEWSREADER = ("https://raw.githubusercontent.com/google/fonts/991ce1de6075188e6b8977a5aa9fcd3610a4e946/ofl/newsreader/"
               "Newsreader%5Bopsz,wght%5D.ttf", "8a08d13f8a6c0d51be379a60af84f945f65369a67e509ee3c3bdcc421254d7c1")
+# Pale Blue Dot Revisited (NASA/JPL-Caltech, 2020, PIA23645; public domain), the print on the space wall.
+PALE_BLUE_DOT = ("https://images-assets.nasa.gov/image/PIA23645/PIA23645~orig.jpg",
+                 "b783a29a134377ba41ffe8f644fd1f066b591b77b316daac3d32b315cc265c34")
 
-# Kitchen corner: a walnut sideboard under the posters, its long side against the left wall.
-SIDEBOARD_X0, SIDEBOARD_X1 = X_LEFT, X_LEFT + 0.40
-SIDEBOARD_Y0, SIDEBOARD_Y1 = -1.86, -0.72
-SIDEBOARD_TOP = 0.76
+# The credenza under the posters on the back wall, and the kitchen nook at the left wall's front end.
+CREDENZA = (-3.10, -1.32, Y_BACK - 0.42, Y_BACK)  # x0, x1, y0, y1
+CREDENZA_TOP = 0.60
+KITCHEN_Y0, KITCHEN_Y1, KITCHEN_DEPTH, KITCHEN_TOP = -3.98, -3.08, 0.62, 0.90
+PENDANT = Vector((X_LEFT + 0.34, (KITCHEN_Y0 + KITCHEN_Y1) / 2, 1.98))
 
-PLAQUE_CENTRE = Vector((X_LEFT + 0.006, -1.67, 1.272))
+PLAQUE_CENTRE = Vector((-2.22, Y_BACK - 0.006, 1.27))
 PLAQUE_TEXT = "Four favourites — from Letterboxd"
 
-# Photo wall on the back wall above the projector screen: (x, z) centre of the picture, picture width and height.
-# Slots 0-2 take the aspect of the three prints the photography marks for the wall (square, 4:3, 16:9); 3 and 4
-# are a 3:2 landscape and a 4:5 portrait for the rest of the collection.
-PHOTO_SLOTS = [((-1.78, 2.30), (0.24, 0.24)), ((-2.22, 2.30), (0.24, 0.18)), ((-1.30, 2.30), (0.28, 0.159)),
-               ((-2.03, 1.965), (0.18, 0.12)), ((-1.56, 1.965), (0.12, 0.15))]
+# Photo wall on the left wall between the doorway and the projection wall: (y, z) centre of the picture, picture
+# width and height. Slots 0-2 take the aspect of the prints the photography marks for the wall (square, 4:3,
+# 16:9); 3 and 4 are a 3:2 landscape and a 4:5 portrait for the rest of the collection.
+PHOTO_SLOTS = [((-1.22, 1.92), (0.26, 0.26)), ((-0.82, 2.00), (0.24, 0.18)), ((-0.86, 1.58), (0.30, 0.169)),
+               ((-1.62, 2.00), (0.21, 0.14)), ((-1.58, 1.60), (0.16, 0.20))]
 PHOTO_MAT, PHOTO_FRAME = 0.034, 0.016
-# Stills only: the prints the photography collection puts on the wall, then two more from the collection.
-STILL_PHOTOS = ["sweat-and-toil", "cansupport", "visual-depiction-paresthesia", "circles", "voice"]
-SAFELIGHT = Vector((-2.475, Y_BACK - 0.035, 2.30))
-READING_CHAIR = (Vector((1.62, -2.12, 0.0)), -143.0)  # facing back into the room, toward the desk
-FLOOR_LAMP = Vector((2.12, -2.50, 0.0))
+# Stills only: prints from the photography collection (src/assets/photography), never "sweat-and-toil" (owner,
+# round 7: removed everywhere).
+STILL_PHOTOS = ["visual-depiction-paresthesia", "cansupport", "amer-fort", "circles", "voice"]
+
+# The right return wall (faces -X): the bookcase, and above it the space wall.
+BOOKCASE = (X_RIGHT - 0.32, X_RIGHT, -1.24, -0.28)  # x0, x1, y0, y1
+BOOKCASE_LEVELS = (0.075, 0.415, 0.755, 1.06)  # shelf tops: bottom, middle, upper, the top
+VOYAGER = Vector((X_RIGHT, -0.60, 1.82))
+PALE_DOT = Vector((X_RIGHT, -1.20, 1.82))
+PALE_DOT_SIZE = 0.30  # the square print; the image is 5230 x 5175
+JP_PRINT = (Vector((X_RIGHT - 0.085, -1.02, 1.06)), (0.30, 0.42), 9.0)  # base on the bookcase top, size, lean
+PENNANT = (Vector((-0.30, Y_BACK - 0.012, 2.50)), 0.78, 0.24)  # hoist top-left corner, length, hoist height
+
+READING_CHAIR = (Vector((2.22, -1.86, 0.0)), -118.0)  # turned toward the desk and the room
+FLOOR_LAMP = Vector((2.86, -2.42, 0.0))
+READING_TABLE = Vector((2.80, -1.40, 0.0))
 
 DESK_TOP = 0.7325
 SHELF_LOW, SHELF_TOP = 1.6475, 2.0075
@@ -50,13 +71,13 @@ ALBUM_SIZE = (0.26, 0.21, 0.052)
 
 CC0 = {
     # name: (Poly Haven id, location, z rotation in degrees, height in metres, triangle budget)
-    "props_syngonium": ("potted_plant_02", (1.86, -0.26, 0.0), 200, 0.62, 2400),
-    "props_haworthia": ("potted_plant_04", (1.64, 0.355, 0.92), 30, 0.17, 4000),
-    "props_vase": ("ceramic_vase_01", (-0.20, 0.30, SHELF_TOP), 0, 0.19, 2600),
-    "props_lota": ("brass_vase_03", (0.252, 0.30, SHELF_LOW), 0, 0.15, 2700),
-    "props_alarm_clock": ("alarm_clock_01", (0.17, 0.30, SHELF_TOP), -25, 0.13, 3500),
-    "props_tea_tin": ("oil_tin", (-2.40, -0.95, SIDEBOARD_TOP + 0.227), 80, 0.11, 2900),
-    "props_pen_cup": ("stationery_supplies", (-0.30, 0.16, DESK_TOP), 0, None, 3000),
+    "props_syngonium": ("potted_plant_02", (-2.98, -0.86 + 0.0, 0.0), 160, 0.66, 2400),
+    "props_haworthia": ("potted_plant_04", (2.34, 0.345, 0.86), 30, 0.17, 3000),
+    "props_vase": ("ceramic_vase_01", (-0.20, 0.30, SHELF_TOP), 0, 0.19, 2000),
+    "props_lota": ("brass_vase_03", (0.252, 0.30, SHELF_LOW), 0, 0.15, 2000),
+    "props_alarm_clock": ("alarm_clock_01", (0.17, 0.30, SHELF_TOP), -25, 0.13, 2500),
+    "props_tea_tin": ("oil_tin", (X_LEFT + 0.12, -3.80, 1.645), 80, 0.11, 2000),
+    "props_pen_cup": ("stationery_supplies", (-0.30, 0.16, DESK_TOP), 0, None, 2500),
     "props_lounge_chair": ("mid_century_lounge_chair", (*READING_CHAIR[0].xy, 0.0), READING_CHAIR[1], 0.92, 2600),
 }
 
@@ -65,20 +86,25 @@ def build_dressing(mats, placed):
     """Add every dressing item; returns the objects the click proxies and markers need."""
     rng = random.Random(SEED)
     found = {}
-    build_sideboard(mats)
+    found["credenza"] = build_credenza(mats)
     found["plaque"] = build_plaque(mats)
+    found.update(build_kitchen_nook(mats, rng))
     found.update(build_photo_wall(mats))
+    found["projection"] = build_projection_surface()
     found["album"] = build_album()
     found["dial"] = build_projector_dial(placed)
     build_books(rng)
-    build_fairy_lights()
     build_records(rng)
-    build_desk_clutter(rng)
+    found["sticky_notes"] = build_desk_clutter(rng)
+    found.update(build_bookcase(mats, rng))
+    found.update(build_space_wall(mats))
+    found["print_japanese_lit"] = build_print_japanese_lit(mats)
+    found["pennant"] = build_pennant()
     found["cc0"] = {name: import_cc0(name, *spec) for name, spec in CC0.items()}
     build_jacket()
     build_pothos()
     build_floor_books(rng)
-    found["floor_lamp"] = build_reading_corner()
+    found["floor_lamp"] = build_reading_corner(mats)
     return found
 
 
@@ -116,30 +142,42 @@ def place(obj, loc, rot_z_deg=0.0, rot=None):
     return obj
 
 
-# ---- kitchen corner ----
+# ---- credenza and kitchen nook ----
 
-def build_sideboard(mats):
-    """A mid-century walnut sideboard: slab top, carcass with two sliding doors and brass pulls, splayed legs."""
-    walnut, brass, section = mats["walnut"], mats["brass"], mats["section"]
-    x0, x1, y0, y1 = SIDEBOARD_X0, SIDEBOARD_X1, SIDEBOARD_Y0, SIDEBOARD_Y1
-    leg_h, top_t = 0.19, 0.03
-    bm = bmesh.new()
-    add_box(bm, (x1 - x0, y1 - y0, top_t), ((x0 + x1) / 2, (y0 + y1) / 2, SIDEBOARD_TOP - top_t / 2), bevel=0.006,
-            segments=3)
-    body_x0, body_x1 = x0 + 0.01, x1 - 0.03
-    add_box(bm, (body_x1 - body_x0, y1 - y0 - 0.04, SIDEBOARD_TOP - top_t - leg_h),
-            ((body_x0 + body_x1) / 2, (y0 + y1) / 2, (leg_h + SIDEBOARD_TOP - top_t) / 2), bevel=0.004)
-    door_h = SIDEBOARD_TOP - top_t - leg_h - 0.03
-    half = (y1 - y0 - 0.06) / 2
-    for k, y in enumerate((y0 + 0.03 + half / 2, y1 - 0.03 - half / 2)):
-        add_box(bm, (0.014, half - 0.004, door_h), (body_x1 + 0.007 + 0.009 * k, y, leg_h + 0.015 + door_h / 2),
-                bevel=0.003)
-        add_box(bm, (0.006, 0.014, 0.11), (body_x1 + 0.017 + 0.009 * k, y + (half / 2 - 0.05) * (1 if k == 0 else -1),
-                                           leg_h + 0.015 + door_h * 0.55), bevel=0.002, mat=1)
-    add_box(bm, (body_x1 - body_x0, y1 - y0 - 0.06, 0.02), ((body_x0 + body_x1) / 2, (y0 + y1) / 2, leg_h + 0.01))
-    for lx in (body_x0 + 0.05, body_x1 - 0.04):
-        for ly in (y0 + 0.07, y1 - 0.07):
-            foot = Vector((lx + (0.025 if lx > x0 + 0.2 else -0.01), ly + (-0.025 if ly < -1.3 else 0.025), 0.0))
+def mid_century_cabinet(bm, x0, x1, y0, y1, top_z, leg_h, front, doors=2):
+    """A walnut cabinet in bm: slab top, carcass, sliding doors with brass pulls on the `front` side (-Y or +X),
+    tapered splayed legs. Material slots: 0 walnut, 1 brass."""
+    top_t = 0.028
+    add_box(bm, (x1 - x0, y1 - y0, top_t), ((x0 + x1) / 2, (y0 + y1) / 2, top_z - top_t / 2), bevel=0.006, segments=3)
+    inset = 0.02
+    bx0, bx1, by0, by1 = x0 + inset, x1 - inset, y0 + inset, y1 - inset
+    body_h = top_z - top_t - leg_h
+    add_box(bm, (bx1 - bx0, by1 - by0, body_h), ((bx0 + bx1) / 2, (by0 + by1) / 2, leg_h + body_h / 2), bevel=0.004)
+    door_h = body_h - 0.03
+    if front == "-Y":
+        span, base = bx1 - bx0 - 0.02, bx0 + 0.01
+        for k in range(doors):
+            w = span / doors
+            cx = base + w * (k + 0.5)
+            add_box(bm, (w - 0.004, 0.014, door_h), (cx, by0 - 0.007 - 0.008 * (k % 2), leg_h + 0.015 + door_h / 2),
+                    bevel=0.003)
+            px = cx + (w / 2 - 0.05) * (1 if k % 2 == 0 else -1)
+            add_box(bm, (0.012, 0.006, 0.10), (px, by0 - 0.018 - 0.008 * (k % 2), leg_h + 0.015 + door_h * 0.55),
+                    bevel=0.002, mat=1)
+    else:
+        span, base = by1 - by0 - 0.02, by0 + 0.01
+        for k in range(doors):
+            w = span / doors
+            cy = base + w * (k + 0.5)
+            add_box(bm, (0.014, w - 0.004, door_h), (bx1 + 0.007 + 0.008 * (k % 2), cy, leg_h + 0.015 + door_h / 2),
+                    bevel=0.003)
+            py = cy + (w / 2 - 0.05) * (1 if k % 2 == 0 else -1)
+            add_box(bm, (0.006, 0.012, 0.10), (bx1 + 0.018 + 0.008 * (k % 2), py, leg_h + 0.015 + door_h * 0.55),
+                    bevel=0.002, mat=1)
+    for lx in (bx0 + 0.05, bx1 - 0.05):
+        for ly in (by0 + 0.05, by1 - 0.05):
+            out = Vector((-0.02 if lx < (x0 + x1) / 2 else 0.02, -0.02 if ly < (y0 + y1) / 2 else 0.02, 0.0))
+            foot = Vector((lx, ly, 0.0)) + out
             head = Vector((lx, ly, leg_h + 0.005))
             leg = bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=0.011, radius2=0.017,
                                         depth=(head - foot).length)
@@ -147,9 +185,120 @@ def build_sideboard(mats):
             for v in leg["verts"]:
                 v.co = rot @ v.co + (head + foot) / 2
             add_cylinder(bm, 0.0115, 0.012, foot + Vector((0, 0, 0.006)), segments=10, mat=1)
-    obj = new_object("env_sideboard", bm, "env", "env", [walnut, brass, section])
+
+
+def build_credenza(mats):
+    """A low mid-century walnut credenza under the posters; the lava lamp stands on it alone."""
+    x0, x1, y0, y1 = CREDENZA
+    bm = bmesh.new()
+    mid_century_cabinet(bm, x0, x1, y0, y1, CREDENZA_TOP, 0.17, "-Y", doors=3)
+    obj = new_object("env_credenza", bm, "env", "env", [mats["walnut"], mats["brass"]])
     smooth_by_angle(obj, 40)
     return obj
+
+
+def build_kitchen_nook(mats, rng):
+    """A short counter at the left wall's front end: walnut base cabinets with a cream stone top, a panel of glazed
+    green tiles behind it, an open walnut shelf with jars and cups on brass brackets, and an enamel pendant over it.
+    The espresso machine and the oven stand on the counter (build_room places them)."""
+    x0, x1 = X_LEFT, X_LEFT + KITCHEN_DEPTH
+    y0, y1 = KITCHEN_Y0, KITCHEN_Y1
+    bm = bmesh.new()
+    mid_century_cabinet(bm, x0, x1, y0, y1, KITCHEN_TOP - 0.03, 0.10, "+X", doors=2)
+    obj = new_object("env_kitchen_counter", bm, "env", "env", [mats["walnut"], mats["brass"]])
+    smooth_by_angle(obj, 40)
+    obj.name = obj.data.name = "kitchen_counter"
+
+    stone = pl.surface("counter_stone", (0.50, 0.46, 0.40), 0.35, micro_bump=(400, 0.05), grime=0.4, smudges=0.2,
+                       color_var=0.08, coat=0.3)
+    b = pl.Builder("env_kitchen_top")
+    b.box((x1 - x0 + 0.02, y1 - y0 + 0.02, 0.03), loc=((x0 + x1) / 2 + 0.01, (y0 + y1) / 2, KITCHEN_TOP - 0.015),
+          mat=stone, bevel=0.004)
+    finish(b, "env_kitchen_top", atlas="env", smooth=30)
+
+    tiles = tile_material()
+    b = pl.Builder("env_kitchen_tiles")
+    b.box((0.008, y1 - y0, 0.52), loc=(X_LEFT + 0.004, (y0 + y1) / 2, KITCHEN_TOP + 0.26), mat=tiles)
+    finish(b, "env_kitchen_tiles", atlas="env", smooth=20)
+
+    walnut = mats["walnut"]
+    brass = mats["brass"]
+    bm = bmesh.new()
+    shelf_z = 1.62
+    add_box(bm, (0.22, y1 - y0 - 0.04, 0.026), (X_LEFT + 0.11, (y0 + y1) / 2, shelf_z + 0.013), bevel=0.004)
+    for y in (y0 + 0.14, y1 - 0.14):
+        add_box(bm, (0.006, 0.018, 0.16), (X_LEFT + 0.003, y, shelf_z - 0.08), mat=1)
+        add_box(bm, (0.18, 0.018, 0.006), (X_LEFT + 0.09, y, shelf_z - 0.003), mat=1)
+    smooth_by_angle(new_object("env_kitchen_shelf", bm, "env", "env", [walnut, brass]), 40)
+
+    glass = pl.surface("jar_glass", (0.62, 0.66, 0.62), 0.08, coat=0.6, color_var=0.0)
+    lids = pl.surface("jar_lid", (0.55, 0.39, 0.17), 0.3, metallic=1.0, grime=0.4, color_var=0.05)
+    fills = [pl.surface(f"jar_fill_{k}", rgb, 0.8, micro_bump=(900, 0.3), color_var=0.12)
+             for k, rgb in enumerate([(0.12, 0.06, 0.03), (0.80, 0.77, 0.70), (0.55, 0.36, 0.14)])]
+    cup = pl.surface("kitchen_cup", (0.80, 0.78, 0.72), 0.15, coat=0.5, grime=0.3, color_var=0.03)
+    b = pl.Builder("props_kitchen_jars")
+    top = shelf_z + 0.026
+    for k, (y, h) in enumerate(((-3.20, 0.16), (-3.32, 0.13), (-3.44, 0.15))):
+        loc = Vector((X_LEFT + 0.11, y, top))
+        b.lathe([(0.0, 0.0), (0.045, 0.0), (0.047, 0.006), (0.047, h - 0.01), (0.040, h), (0.0, h)], segments=20,
+                loc=tuple(loc), mat=glass)
+        b.lathe([(0.0, 0.0), (0.043, 0.0), (0.043, h * 0.72), (0.0, h * 0.72)], segments=16, loc=tuple(loc + Vector((0, 0, 0.004))),
+                mat=fills[k])
+        b.cylinder(0.042, 0.016, segments=20, loc=tuple(loc + Vector((0, 0, h + 0.008))), mat=lids, bevel=0.002)
+    for k, y in enumerate((-3.62, -3.70)):
+        loc = Vector((X_LEFT + 0.10, y, top))
+        b.lathe([(0.0, 0.0), (0.028, 0.0), (0.034, 0.012), (0.038, 0.075), (0.034, 0.075), (0.031, 0.012), (0.0, 0.006)],
+                segments=20, loc=tuple(loc), mat=cup, cap_start=False, cap_end=False)
+        b.torus(0.016, 0.004, segments=12, sides=6, loc=tuple(loc + Vector((0.0, 0.040, 0.042))), rot=(0, 90, 0), mat=cup,
+                arc=math.radians(220))
+    finish(b, "props_kitchen_jars", smooth=40)
+
+    # A walnut chopping board leaning on the tiles beside the oven.
+    wood = pl.ambientcg("Wood051")
+    board = pl.surface("chopping_board", (0.40, 0.26, 0.15), 0.6, color_tex=wood["Color"], tint=(0.85, 0.62, 0.45),
+                       tile=0.3, edge_wear=0.4, grime=0.5, color_var=0.08)
+    b = pl.Builder("props_chopping_board")
+    b.box((0.022, 0.26, 0.38), loc=(0, 0, 0.19), mat=board, corner=0.03, corner_seg=4, corner_axis="X", bevel=0.003)
+    b.cylinder(0.014, 0.03, segments=12, loc=(0, 0, 0.335), rot=(0, 90, 0), mat=board)
+    cb = finish(b, "props_chopping_board", smooth=30)
+    place(cb, Vector((X_LEFT + 0.09, -3.46, KITCHEN_TOP)), 0.0, rot=Matrix.Rotation(math.radians(-10), 4, "Y"))
+
+    # The pendant: a cord from the ceiling band to a cream enamel dome with a brass cap and a bulb inside.
+    enamel = pl.surface("pendant_enamel", (0.74, 0.68, 0.55), 0.3, edge_wear=0.3, edge_color=(0.2, 0.15, 0.1),
+                        grime=0.4, color_var=0.04)
+    cord = pl.surface("pendant_cord", (0.03, 0.025, 0.02), 0.6, color_var=0.0)
+    bulb = pl.surface("pendant_bulb", (0.9, 0.8, 0.6), 0.2, emission=((1.0, 0.62, 0.30), 18.0), color_var=0.0)
+    b = pl.Builder("props_kitchen_pendant")
+    p = PENDANT
+    b.tube([p + Vector((0, 0, 0.20)), p + Vector((0, 0, 0.73))], 0.004, sides=6, mat=cord)
+    b.cylinder(0.022, 0.04, segments=16, loc=tuple(p + Vector((0, 0, 0.20))), mat=lids)
+    b.lathe([(0.025, 0.19), (0.06, 0.17), (0.11, 0.11), (0.135, 0.02), (0.138, 0.0), (0.133, 0.0), (0.13, 0.02),
+             (0.105, 0.105), (0.055, 0.162), (0.02, 0.18)], segments=32, loc=tuple(p), mat=enamel, cap_start=False,
+            cap_end=False)
+    b.lathe([(0.0, 0.07), (0.022, 0.08), (0.03, 0.11), (0.018, 0.14), (0.0, 0.145)], segments=16, loc=tuple(p), mat=bulb)
+    finish(b, "props_kitchen_pendant", smooth=50)
+    return {"kitchen_counter": obj, "pendant": p + Vector((0, 0, 0.10))}
+
+
+def tile_material():
+    """Glazed green zellige-like tiles, 7.5 cm square with cream grout, each tile a slightly different tone."""
+    mat, k = pl.new_material("kitchen_tiles")
+    obj = k.coords("Object")
+    sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": obj})
+    on_wall = k.node("ShaderNodeCombineXYZ", inputs={"X": sep.outputs["Y"], "Y": sep.outputs["Z"]}).outputs[0]
+    brick = k.node("ShaderNodeTexBrick", inputs={"Vector": on_wall, "Scale": 1.0, "Brick Width": 0.075,
+                                                 "Row Height": 0.075, "Mortar Size": 0.0025, "Bias": 0.0,
+                                                 "Color1": (0.12, 0.26, 0.20, 1.0), "Color2": (0.17, 0.34, 0.26, 1.0),
+                                                 "Mortar": (0.70, 0.66, 0.58, 1.0)},
+                   offset=0.0, squash=1.0)
+    var = k.noise(on_wall, 30.0, detail=2.0)
+    color = k.mix_color(k.map_range(var, 0.4, 0.6, 0.0, 0.25), brick.outputs["Color"], (0.08, 0.18, 0.14, 1.0))
+    rough = k.map_range(brick.outputs["Fac"], 0.0, 1.0, 0.12, 0.8)
+    bump = k.node("ShaderNodeBump", inputs={"Strength": 0.4, "Distance": 0.0015, "Height": brick.outputs["Fac"]})
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": rough, "Normal": bump.outputs[0],
+                                                      "Coat Weight": 0.4})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs[0])
+    return mat
 
 
 def build_plaque(mats):
@@ -167,71 +316,121 @@ def build_plaque(mats):
     probe.bm.free()
     plate_w, plate_h = text_w + 0.05, 0.05
     walnut_mat = mats["walnut"]
-    # Built facing -Y (the props convention), then turned to face the room (+X) on the left wall.
+    # Built facing -Y (the props convention), which is the room from the back wall.
     b.box((plate_w + 0.03, 0.012, plate_h + 0.026), loc=(0, 0.006, 0), mat=walnut_mat, bevel=0.003)
     b.box((plate_w, 0.002, plate_h), loc=(0, -0.001, 0), mat=brass, bevel=0.0008, bevel_seg=1)
     for sx in (-1, 1):
         b.cylinder(0.0028, 0.0012, segments=12, loc=(sx * (plate_w / 2 - 0.009), -0.0021, 0), rot=(90, 0, 0), mat=brass)
     b.text(PLAQUE_TEXT, size, loc=(0, -0.00215, -0.002), rot=(90, 0, 0), mat=ink, font=font, resolution=2)
     obj = finish(b, "poster_plaque", smooth=30)
-    place(obj, PLAQUE_CENTRE, 90.0)
+    place(obj, PLAQUE_CENTRE, 0.0)
     return obj
 
 
 # ---- photo wall ----
 
+def left_wall(u, z, depth=0.0):
+    """Wall-local (u along the left wall, positive toward the back; depth out of the wall) to world."""
+    return Vector((X_LEFT + depth, u, z))
+
+
+# Built facing -Y at the origin, a +90 degree turn about Z faces the room from the left wall; u then runs along +Y.
+LEFT_WALL_TURN = Matrix.Rotation(math.pi / 2, 4, "Z")
+
+
 def build_photo_wall(mats):
-    """Five framed prints over the projector screen: thin black frames and mats are baked; each picture is its own
-    unbaked mesh (photo_print_<i>, UVs 0-1 over the picture) that the site textures from the photography."""
+    """Five framed prints on the left wall: thin black frames and mats are baked; each picture is its own unbaked
+    mesh (photo_print_<i>, UVs 0-1 over the picture) that the site textures from the photography."""
     frame_mat = pl.surface("photo_frame_wood", (0.018, 0.014, 0.012), 0.42, edge_wear=0.3,
                            edge_color=(0.10, 0.07, 0.05), dust=0.4, smudges=0.2, color_var=0.04)
     mat_board = pl.surface("photo_mat_board", (0.78, 0.75, 0.68), 0.85, grime=0.3, dust=0.3, color_var=0.03)
     mat_core = pl.surface("photo_mat_bevel", (0.88, 0.85, 0.77), 0.8, color_var=0.0)
     found = {"prints": [], "frames": []}
-    y_wall = Y_BACK
-    for i, ((cx, cz), (pw, ph)) in enumerate(PHOTO_SLOTS):
-        ow, oh = pw + 2 * (PHOTO_MAT + PHOTO_FRAME), ph + 2 * (PHOTO_MAT + PHOTO_FRAME)
-        b = pl.Builder(f"props_photo_frame_{i}")
-        depth = 0.022
-        y = y_wall - depth / 2
-        for (w, h), (x, z) in (((ow, PHOTO_FRAME), (0, oh / 2 - PHOTO_FRAME / 2)),
-                               ((ow, PHOTO_FRAME), (0, -oh / 2 + PHOTO_FRAME / 2)),
-                               ((PHOTO_FRAME, oh - 2 * PHOTO_FRAME), (-ow / 2 + PHOTO_FRAME / 2, 0)),
-                               ((PHOTO_FRAME, oh - 2 * PHOTO_FRAME), (ow / 2 - PHOTO_FRAME / 2, 0))):
-            b.box((w, depth, h), loc=(cx + x, y, cz + z), mat=frame_mat, bevel=0.0015, bevel_seg=2)
-        mw, mh = ow - 2 * PHOTO_FRAME, oh - 2 * PHOTO_FRAME
-        my = y_wall - 0.012
-        for (w, h), (x, z) in (((mw, PHOTO_MAT), (0, mh / 2 - PHOTO_MAT / 2)), ((mw, PHOTO_MAT), (0, -mh / 2 + PHOTO_MAT / 2)),
-                               ((PHOTO_MAT, ph), (-mw / 2 + PHOTO_MAT / 2, 0)), ((PHOTO_MAT, ph), (mw / 2 - PHOTO_MAT / 2, 0))):
-            b.box((w, 0.003, h), loc=(cx + x, my, cz + z), mat=mat_board)
-        for (w, h), (x, z) in (((pw + 0.004, 0.002), (0, ph / 2 + 0.001)), ((pw + 0.004, 0.002), (0, -ph / 2 - 0.001)),
-                               ((0.002, ph), (-pw / 2 - 0.001, 0)), ((0.002, ph), (pw / 2 + 0.001, 0))):
-            b.box((w, 0.0032, h), loc=(cx + x, my + 0.0002, cz + z), mat=mat_core)
-        b.box((mw, 0.002, mh), loc=(cx, y_wall - 0.004, cz), mat=mat_board)
-        frame = finish(b, f"props_photo_frame_{i}", smooth=30, photo_slot=i)
-        found["frames"].append(frame)
-
-        bm = bmesh.new()
-        uv = bm.loops.layers.uv.new("UVMap")
-        yp = my + 0.0005
-        corners = [(cx - pw / 2, cz - ph / 2), (cx + pw / 2, cz - ph / 2), (cx + pw / 2, cz + ph / 2), (cx - pw / 2, cz + ph / 2)]
-        face = bm.faces.new([bm.verts.new((x, yp, z)) for x, z in corners])
-        for loop, coord in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
-            loop[uv].uv = coord
-        bm.normal_update()
-        if face.normal.y > 0:
-            face.normal_flip()
-            for loop, coord in zip(face.loops, ((0, 0), (0, 1), (1, 1), (1, 0))):
-                loop[uv].uv = coord
-        art = new_object(f"photo_print_{i}", bm, "props", "props", [photo_material(i)])
+    for i, ((u, cz), (pw, ph)) in enumerate(PHOTO_SLOTS):
+        frame, art = framed_picture(f"props_photo_frame_{i}", f"photo_print_{i}", (pw, ph), frame_mat, mat_board,
+                                    mat_core, photo_material(i))
+        to_wall = Matrix.Translation(left_wall(u, cz)) @ LEFT_WALL_TURN
+        for obj in (frame, art):
+            obj.matrix_world = to_wall
+        frame["photo_slot"] = i
         art["runtime_art"] = "photo"
         art["photo_slot"] = i
         art["aspect"] = round(pw / ph, 4)
         art["width_m"], art["height_m"] = pw, ph
+        found["frames"].append(frame)
         found["prints"].append(art)
-    found["safelight"] = build_safelight()
     found["photo_light"] = build_photo_light(mats)
     return found
+
+
+def framed_picture(frame_name, art_name, size, frame_mat, mat_board, mat_core, art_material, matte=PHOTO_MAT,
+                   moulding=PHOTO_FRAME, depth=0.022):
+    """A frame (moulding, mat with a bevelled core, backing) around a picture at the origin, facing -Y with its back
+    at y = 0; returns (frame, picture). The picture is a quad with UVs 0-1, 0.5 mm in front of the mat."""
+    pw, ph = size
+    ow, oh = pw + 2 * (matte + moulding), ph + 2 * (matte + moulding)
+    b = pl.Builder(frame_name)
+    y = -depth / 2
+    for (w, h), (x, z) in (((ow, moulding), (0, oh / 2 - moulding / 2)), ((ow, moulding), (0, -oh / 2 + moulding / 2)),
+                           ((moulding, oh - 2 * moulding), (-ow / 2 + moulding / 2, 0)),
+                           ((moulding, oh - 2 * moulding), (ow / 2 - moulding / 2, 0))):
+        b.box((w, depth, h), loc=(x, y, z), mat=frame_mat, bevel=0.0015, bevel_seg=2)
+    mw, mh = ow - 2 * moulding, oh - 2 * moulding
+    my = -0.012
+    if matte > 0:
+        for (w, h), (x, z) in (((mw, matte), (0, mh / 2 - matte / 2)), ((mw, matte), (0, -mh / 2 + matte / 2)),
+                               ((matte, ph), (-mw / 2 + matte / 2, 0)), ((matte, ph), (mw / 2 - matte / 2, 0))):
+            b.box((w, 0.003, h), loc=(x, my, z), mat=mat_board)
+        for (w, h), (x, z) in (((pw + 0.004, 0.002), (0, ph / 2 + 0.001)), ((pw + 0.004, 0.002), (0, -ph / 2 - 0.001)),
+                               ((0.002, ph), (-pw / 2 - 0.001, 0)), ((0.002, ph), (pw / 2 + 0.001, 0))):
+            b.box((w, 0.0032, h), loc=(x, my + 0.0002, z), mat=mat_core)
+    b.box((mw, 0.002, mh), loc=(0, -0.004, 0), mat=mat_board)
+    frame = finish(b, frame_name, smooth=30)
+
+    bm = bmesh.new()
+    uv = bm.loops.layers.uv.new("UVMap")
+    yp = my - 0.0005 - 0.0015
+    corners = [(-pw / 2, -ph / 2), (pw / 2, -ph / 2), (pw / 2, ph / 2), (-pw / 2, ph / 2)]
+    face = bm.faces.new([bm.verts.new((x, yp, z)) for x, z in corners])
+    for loop, coord in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        loop[uv].uv = coord
+    bm.normal_update()
+    if face.normal.y > 0:
+        face.normal_flip()
+        for loop, coord in zip(face.loops, ((0, 0), (0, 1), (1, 1), (1, 0))):
+            loop[uv].uv = coord
+    art = new_object(art_name, bm, "props", "props", [art_material])
+    return frame, art
+
+
+def build_projection_surface():
+    """projection_surface: the clear patch of the left wall the projector throws onto, a 16:9 quad 3 mm proud of
+    the plaster with UVs 0-1 over the picture. Baked as white paper (the light falling on the wall, the projector's
+    cool spill included); the site plays the film on it."""
+    import build_room
+    cy, cz, w, h = build_room.PROJECTION
+    bm = bmesh.new()
+    uv = bm.loops.layers.uv.new("UVMap")
+    x = X_LEFT + 0.003
+    corners = [(cy + w / 2, cz - h / 2), (cy - w / 2, cz - h / 2), (cy - w / 2, cz + h / 2), (cy + w / 2, cz + h / 2)]
+    face = bm.faces.new([bm.verts.new((x, y, z)) for y, z in corners])
+    for loop, coord in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        loop[uv].uv = coord
+    bm.normal_update()
+    if face.normal.x < 0:
+        face.normal_flip()
+    mat, k = pl.new_material("projection_surface")
+    still = k.node("ShaderNodeEmission", inputs={"Color": (0.62, 0.71, 0.75, 1.0), "Strength": 0.9})
+    white = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.8, 0.8, 0.8, 1.0), "Roughness": 0.9})
+    probe = k.node("ShaderNodeValue", name="light_probe", label="light_probe")
+    probe.outputs[0].default_value = 0.0
+    mix = k.node("ShaderNodeMixShader", inputs={"Fac": probe.outputs[0], "Shader": still.outputs[0],
+                                                "Shader_001": white.outputs[0]})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", mix.outputs[0])
+    obj = new_object("projection_surface", bm, "props", "props", [mat])
+    obj["runtime_art"] = "projection"
+    obj["width_m"], obj["height_m"], obj["aspect"] = w, h, round(w / h, 4)
+    return obj
 
 
 def still_photo(slug: str) -> bpy.types.Image | None:
@@ -277,36 +476,17 @@ def photo_material(i):
     return mat
 
 
-def build_safelight():
-    """A darkroom safelight: a dark metal box with a deep-red filter, on a bracket beside the prints."""
-    body = pl.surface("safelight_body", (0.025, 0.022, 0.02), 0.5, metallic=0.6, edge_wear=0.4,
-                      edge_color=(0.18, 0.15, 0.12), dust=0.6, grime=0.5, color_var=0.05)
-    filt = pl.surface("safelight_filter", (0.25, 0.01, 0.005), 0.25, emission=((1.0, 0.04, 0.015), 4.0),
-                      color_var=0.0)
-    b = pl.Builder("props_safelight")
-    s = SAFELIGHT
-    b.box((0.13, 0.065, 0.15), loc=tuple(s), mat=body, bevel=0.004)
-    b.box((0.104, 0.004, 0.122), loc=tuple(s + Vector((0, -0.0335, 0))), mat=filt, bevel=0.001, bevel_seg=1)
-    b.box((0.03, 0.035, 0.012), loc=tuple(s + Vector((0, 0.045, 0.08))), mat=body, bevel=0.002)
-    b.cylinder(0.008, 0.03, segments=12, loc=tuple(s + Vector((0, 0.0, 0.075))), mat=body)
-    cord = [s + Vector((-0.05, 0.02, -0.075))]
-    for k in range(1, 8):
-        t = k / 7
-        cord.append(s + Vector((-0.05 - 0.012 * t, 0.025, -0.075 - 0.42 * t)))
-    b.tube(cord, 0.0025, sides=6, mat=body)
-    return finish(b, "props_safelight", smooth=30)
-
-
 def build_photo_light(mats):
-    """A small brass picture lamp over the featured print."""
-    (cx, cz), (pw, ph) = PHOTO_SLOTS[0]
-    top = cz + ph / 2 + PHOTO_MAT + PHOTO_FRAME
+    """A small brass picture lamp on the left wall over the photo cluster."""
+    us = [u for (u, _), _ in PHOTO_SLOTS]
+    tops = [cz + ph / 2 + PHOTO_MAT + PHOTO_FRAME for (_, cz), (_, ph) in PHOTO_SLOTS]
+    u = (min(us) + max(us)) / 2
+    p = left_wall(u, max(tops) + 0.07, 0.11)
     bm = bmesh.new()
-    p = Vector((cx, Y_BACK - 0.11, top + 0.055))
-    add_cylinder(bm, 0.018, 0.62, p, segments=20, axis="X")
-    for dx in (-0.22, 0.22):
-        add_box(bm, (0.01, 0.11, 0.01), p + Vector((dx, 0.055, 0.02)), bevel=0.002)
-    add_cylinder(bm, 0.024, 0.008, Vector((cx, Y_BACK - 0.004, p.z + 0.02)), segments=20, axis="Y")
+    add_cylinder(bm, 0.018, 0.70, p, segments=20, axis="Y")
+    for du in (-0.25, 0.25):
+        add_box(bm, (0.11, 0.01, 0.01), p + Vector((-0.055, du, 0.02)), bevel=0.002)
+    add_cylinder(bm, 0.024, 0.008, Vector((X_LEFT + 0.004, u, p.z + 0.02)), segments=20, axis="X")
     obj = new_object("env_photo_light", bm, "env", "env", [mats["brass"]])
     smooth_by_angle(obj, 50)
     return p
@@ -343,10 +523,12 @@ def build_album():
 def build_projector_dial(placed):
     """A program dial on the projector's room side: a brass plate with three marks (baked) and a bakelite knob
     (projector_dial, its own node; it turns about its local +Z, glTF +Y)."""
+    import build_room
     projector = next(o for o in placed["projector_8mm"] if o.name == "props_projector_8mm")
     bpy.context.view_layer.update()
-    target = Vector((-1.90, -2.08, 0.69))
-    hit = raycast(projector, target + Vector((0.6, 0.0, 0.0)), (-1, 0, 0))
+    tx, ty, tz = build_room.PROJECTOR_TABLE
+    target = Vector((tx + 0.02, ty, tz + 0.14))
+    hit = raycast(projector, target + Vector((0.0, -0.6, 0.0)), (0, 1, 0))
     if hit is None:
         raise RuntimeError("projector_dial: no projector side face found")
     point, normal = hit
@@ -429,29 +611,6 @@ def build_books(rng):
     finish(b, "props_books_low", smooth=30)
 
 
-def build_fairy_lights():
-    """A string of warm fairy lights along the top shelf's front edge, sagging between three hooks."""
-    wire = pl.surface("fairy_wire", (0.04, 0.035, 0.025), 0.5, color_var=0.0)
-    bulb = pl.surface("fairy_bulb", (0.9, 0.7, 0.4), 0.2, emission=((1.0, 0.62, 0.30), 9.0), color_var=0.0)
-    b = pl.Builder("props_fairy_lights")
-    hooks = [-1.00, -0.57, -0.14, 0.28]
-    edge_y, edge_z = 0.172, 2.004
-    pts = []
-    for h0, h1 in zip(hooks, hooks[1:]):
-        for k in range(12):
-            t = k / 12
-            sag = 0.055 * 4 * t * (1 - t)
-            pts.append(Vector((h0 + (h1 - h0) * t, edge_y - 0.004 * math.sin(t * math.pi), edge_z - sag)))
-    pts.append(Vector((hooks[-1], edge_y, edge_z)))
-    b.tube(pts, 0.0011, sides=4, mat=wire, cap=False)
-    for i, p in enumerate(pts[1:-1:2]):
-        b.lathe([(0.0, -0.0075), (0.0035, -0.0055), (0.0042, -0.002), (0.0028, 0.0), (0.0, 0.0005)], segments=8,
-                loc=tuple(p), mat=bulb)
-    for h in hooks:
-        b.box((0.006, 0.01, 0.006), loc=(h, edge_y + 0.006, edge_z + 0.002), mat=wire)
-    return finish(b, "props_fairy_lights", smooth=50)
-
-
 # ---- records crate ----
 
 SLEEVES = ["#D8CDB5", "#1C1A18", "#7E2F24", "#B9A27A", "#2A3B4C", "#E3DCCB", "#556B4E", "#A5562E", "#3A2E2A",
@@ -492,7 +651,7 @@ def build_records(rng):
         m = Matrix.Translation((0, y, 0.034)) @ pl.xform(rot=(-lean, 0, rng.uniform(-1.5, 1.5)))
         bmesh.ops.transform(b.bm, matrix=m, verts=list({v for f in faces for v in f.verts}))
     obj = finish(b, "props_records", smooth=30)
-    place(obj, Vector((2.06, 0.10, 0.0)), 8.0)
+    place(obj, Vector((2.84, 0.10, 0.0)), -6.0)
     return obj
 
 
@@ -526,34 +685,79 @@ def build_desk_clutter(rng):
     b.box((0.04, 0.0025, 0.0018), loc=(0.0, -0.0275, 0.0205), rot=(0, 0, 18), mat=pen_metal)
     notebook = finish(b, "desk_notebook", atlas="desk", smooth=40)
     place(notebook, Vector((-0.40, -0.30, DESK_TOP + 0.0005)), -9.0)
+    build_headphones()
+    return build_sticky_notes()
 
-    # Sticky notes: two on the CRT bezel's right edge, one by the keyboard.
-    notes = [pl.surface(f"sticky_{c}", rgb, 0.8, color_var=0.04, grime=0.2)
-             for c, rgb in (("yellow", (0.80, 0.62, 0.16)), ("pink", (0.78, 0.36, 0.38)))]
-    scribble = pl.surface("sticky_ink", (0.04, 0.04, 0.08), 0.6, color_var=0.0)
+
+# Where the notes go: three on the CRT bezel (raycast from the front), three on the wall right of the monitor.
+STICKY_BEZEL = [((0.197, 1.215), -6.0), ((0.196, 1.12), 4.0), ((-0.197, 1.19), 3.0)]
+STICKY_WALL = [((0.36, 1.43), -4.0), ((0.47, 1.36), 5.0), ((0.38, 1.27), -2.0)]
+STICKY_SIZE = 0.064
+STICKY_PAPER = ["#E8C547", "#E8C547", "#E3A6A0", "#E8C547", "#B9D3C2", "#E8C547"]
+
+
+def build_sticky_notes():
+    """sticky_note_0..5: square paper notes with a slight curl at the free end, UVs 0-1 over the note, unbaked like
+    the art (the light on them is baked on white paper; the site draws the paper colour and the phrase). Extras give
+    the paper colour the stills use; the stills write the two phrases the brief names on notes 0 and 1."""
     crt = bpy.data.objects.get("desk_crt")
     spots = []
-    if crt is not None:
-        for x, z, tilt in ((0.197, 1.215, -6), (0.196, 1.12, 4), (-0.115, 0.982, 3)):
-            hit = raycast(crt, (x, -1.0, z), (0, 1, 0))
-            if hit:
-                spots.append((hit[0], hit[1], tilt))
-    b = pl.Builder("desk_sticky_notes")
-    for k, (point, normal, tilt) in enumerate(spots):
+    for (x, z), tilt in STICKY_BEZEL:
+        hit = raycast(crt, (x, -1.0, z), (0, 1, 0)) if crt else None
+        point, normal = hit if hit else (Vector((x, -0.16, z)), Vector((0, -1, 0)))
+        spots.append((point, normal, tilt))
+    for (x, z), tilt in STICKY_WALL:
+        spots.append((Vector((x, Y_BACK, z)), Vector((0, -1, 0)), tilt))
+    notes = []
+    for i, (point, normal, tilt) in enumerate(spots):
+        bm = bmesh.new()
+        uv = bm.loops.layers.uv.new("UVMap")
+        n, s_ = 4, STICKY_SIZE
+        grid = [[bm.verts.new(((u / n - 0.5) * s_, (v / n - 0.5) * s_, 0.0012 + 0.006 * max(0.0, 0.5 - v / n) ** 2 * 4))
+                 for v in range(n + 1)] for u in range(n + 1)]
+        for u in range(n):
+            for v in range(n):
+                face = bm.faces.new((grid[u][v], grid[u + 1][v], grid[u + 1][v + 1], grid[u][v + 1]))
+                for loop, (du, dv) in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+                    loop[uv].uv = ((u + du) / n, (v + dv) / n)
         orient = normal.to_track_quat("Z", "Y").to_matrix().to_4x4()
-        m = Matrix.Translation(point + normal * 0.0008) @ orient @ pl.xform(rot=(0, 0, tilt))
-        faces = b.box((0.042, 0.042, 0.0006), mat=notes[k % 2])
-        for v in {v for f in faces for v in f.verts}:
-            v.co.z += 0.004 * max(0.0, -v.co.y / 0.021) ** 2
-        faces += scribble_lines(b, scribble, rng, 0.034, 0.03, 0.0004)
-        bmesh.ops.transform(b.bm, matrix=m, verts=list({v for f in faces for v in f.verts}))
-    faces = b.box((0.065, 0.065, 0.0006), mat=notes[0])
-    faces += scribble_lines(b, scribble, rng, 0.052, 0.042, 0.0004)
-    m = Matrix.Translation((0.27, -0.27, DESK_TOP + 0.0006)) @ pl.xform(rot=(0, 0, 22))
-    bmesh.ops.transform(b.bm, matrix=m, verts=list({v for f in faces for v in f.verts}))
-    finish(b, "desk_sticky_notes", atlas="desk", smooth=40)
+        bm.transform(Matrix.Translation(point) @ orient @ pl.xform(rot=(0, 0, tilt)))
+        bm.normal_update()
+        obj = new_object(f"sticky_note_{i}", bm, "desk", "desk", [sticky_material(i)])
+        obj["runtime_art"] = "sticky"
+        obj["width_m"] = obj["height_m"] = STICKY_SIZE
+        obj["aspect"] = 1.0
+        obj["paper"] = STICKY_PAPER[i]
+        obj["where"] = "monitor bezel" if i < len(STICKY_BEZEL) else "wall beside the monitor"
+        notes.append(obj)
+    return notes
 
-    build_headphones()
+
+def hex_linear(hexc):
+    h = hexc.lstrip("#")
+    return tuple(((int(h[j:j + 2], 16) / 255) ** 2.2) for j in (0, 2, 4))
+
+
+def sticky_material(i):
+    """Paper in the note's colour (the stills write the brief's two phrases on notes 0 and 1), switched to white
+    paper while bake.py bakes the light on it."""
+    mat, k = pl.new_material(f"sticky_note_{i}")
+    paper = hex_linear(STICKY_PAPER[i]) + (1.0,)
+    image = ART / f"sticky_note_{i}.png"
+    if image.exists():
+        tex = k.node("ShaderNodeTexImage", image=pl.load_image(str(image)), interpolation="Linear")
+        k.set(tex, "Vector", k.node("ShaderNodeUVMap", uv_map="UVMap").outputs["UV"])
+        color = k.mix_color(1.0, paper, tex.outputs["Color"], blend="MULTIPLY")
+    else:
+        color = paper
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": 0.8})
+    white = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.8, 0.8, 0.8, 1.0), "Roughness": 0.9})
+    probe = k.node("ShaderNodeValue", name="light_probe", label="light_probe")
+    probe.outputs[0].default_value = 0.0
+    mix = k.node("ShaderNodeMixShader", inputs={"Fac": probe.outputs[0], "Shader": bsdf.outputs[0],
+                                                "Shader_001": white.outputs[0]})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", mix.outputs[0])
+    return mat
 
 
 def scribble_lines(b, mat, rng, w, h, lift):
@@ -625,6 +829,326 @@ def build_headphones():
     b.tube(cable, 0.0022, sides=5, mat=shell)
     obj = finish(b, "desk_headphones", atlas="desk", smooth=40)
     place(obj, Vector((0.37, -0.14, DESK_TOP)), -28.0)
+    return obj
+
+
+# ---- the research corner: bookcase, space wall, Japanese-literature print; the pennant ----
+
+# Built facing -Y at the origin, a -90 degree turn about Z faces the room from the right return wall; local +X then
+# runs along -Y, the viewer's right.
+RIGHT_WALL_TURN = Matrix.Rotation(-math.pi / 2, 4, "Z")
+
+
+def build_bookcase(mats, rng):
+    """A low walnut bookcase against the right return wall: the six books of the brief stand together on the middle
+    shelf (each its own node, book_spine_<slug>, typographic spine and cover baked), other books and a flat stack fill
+    the rest, a brass bookend holds the six."""
+    x0, x1, y0, y1 = BOOKCASE
+    walnut = mats["walnut"]
+    t = 0.022
+    height = BOOKCASE_LEVELS[-1]
+    bm = bmesh.new()
+    for y in (y0 + t / 2, y1 - t / 2):
+        add_box(bm, (x1 - x0, t, height - t), ((x0 + x1) / 2, y, (height - t) / 2), bevel=0.002)
+    add_box(bm, (x1 - x0 + 0.012, y1 - y0 + 0.012, t), ((x0 + x1) / 2 - 0.006, (y0 + y1) / 2, height - t / 2),
+            bevel=0.004)
+    for z in BOOKCASE_LEVELS[:-1]:
+        add_box(bm, (x1 - x0 - 0.012, y1 - y0 - 2 * t, 0.02), ((x0 + x1) / 2 + 0.006, (y0 + y1) / 2, z - 0.01))
+    add_box(bm, (0.018, y1 - y0 - 2 * t, BOOKCASE_LEVELS[0] - 0.02), (x0 + 0.03, (y0 + y1) / 2, (BOOKCASE_LEVELS[0] - 0.02) / 2))
+    add_box(bm, (0.006, y1 - y0 - 2 * t, height - t), (x1 - 0.003, (y0 + y1) / 2, (height - t) / 2))
+    obj = new_object("bookshelf", bm, "props", "props", [walnut])
+    smooth_by_angle(obj, 40)
+
+    featured = build_featured_books(Vector((x0 + 0.006, y1 - t - 0.03, BOOKCASE_LEVELS[1])))
+    # Brass bookend after the six, then filler on the other shelves.
+    brass = pl.surface("bookend_brass", (0.55, 0.39, 0.17), 0.25, metallic=1.0, grime=0.5, edge_wear=0.3,
+                       edge_color=(0.85, 0.66, 0.38), color_var=0.05)
+    end_y = min(o.matrix_world.translation.y for o in featured) - 0.05
+    b = pl.Builder("props_bookend")
+    b.box((0.13, 0.004, 0.15), loc=(0, 0, 0.075), mat=brass, bevel=0.001)
+    b.box((0.13, 0.08, 0.004), loc=(0, 0.04, 0.002), mat=brass, bevel=0.001)
+    bookend = finish(b, "props_bookend", smooth=30)
+    place(bookend, Vector((x0 + 0.09, end_y, BOOKCASE_LEVELS[1])), 0.0)
+
+    mats_cloth = book_materials()
+    pages = pl.surface("bookcase_pages", (0.62, 0.57, 0.46), 0.85, grime=0.5, dust=0.6, color_var=0.06)
+    gilt = bpy.data.materials.get("book_gilt") or pl.surface("book_gilt", (0.62, 0.45, 0.18), 0.3, metallic=1.0,
+                                                               color_var=0.05)
+    b = pl.Builder("props_bookcase_books")
+    # Lower shelf: a full row standing; upper shelf: a shorter row and a flat stack; middle shelf: a flat stack
+    # beyond the bookend.
+    for level, (ya, yb) in ((0, (y1 - t - 0.01, y0 + t + 0.30)), (2, (y1 - t - 0.01, y0 + t + 0.36))):
+        y = ya
+        while y > yb:
+            thick = rng.uniform(0.018, 0.04)
+            add_book_x(b, mats_cloth, pages, gilt, rng, x0 + 0.02, y - thick / 2, BOOKCASE_LEVELS[level], thick,
+                       rng.uniform(0.19, 0.27), rng.uniform(0.15, 0.2))
+            y -= thick + 0.0015
+    for level, yc in ((0, y0 + t + 0.16), (1, end_y - 0.16), (2, y0 + t + 0.17)):
+        z = BOOKCASE_LEVELS[level]
+        for k in range(rng.randint(2, 4)):
+            thick = rng.uniform(0.022, 0.04)
+            add_book_x(b, mats_cloth, pages, gilt, rng, x0 + 0.03, yc, z, thick, rng.uniform(0.2, 0.26),
+                       rng.uniform(0.15, 0.19), flat=True)
+            z += thick
+    finish(b, "props_bookcase_books", smooth=30)
+    return {"bookshelf": obj, "books": featured}
+
+
+def add_book_x(b, mats, pages, gilt, rng, x_front, y, z, thick, height, depth, flat=False):
+    """A filler book in the bookcase, spine facing the room (-X)."""
+    mat = rng.choice(mats)
+    faces = b.box((depth, thick, height), loc=(depth / 2, 0, height / 2), mat=mat, bevel=0.0012, bevel_seg=1)
+    faces += b.box((depth - 0.006, thick - 0.004, 0.003), loc=(depth / 2 + 0.002, 0, height - 0.0005), mat=pages)
+    if rng.random() < 0.4:
+        for zb in (0.16, 0.86):
+            faces += b.box((0.0006, thick + 0.0004, 0.004), loc=(-0.0002, 0, height * zb), mat=gilt)
+    m = Matrix.Translation((x_front, y, z))
+    if flat:
+        m = m @ Matrix.Translation((0, 0, thick / 2)) @ Matrix.Rotation(math.radians(rng.uniform(-5, 5)), 4, "Z") \
+            @ Matrix.Rotation(math.radians(90), 4, "X") @ Matrix.Translation((0, 0, -height / 2))
+    bmesh.ops.transform(b.bm, matrix=m, verts=list({v for f in faces for v in f.verts}))
+
+
+def build_featured_books(start: Vector):
+    """The six books standing side by side from `start` toward -Y, spines out: a case per book with its spine image
+    on the -X face, its front cover on the -Y face and the page block on top, each book its own node."""
+    import json
+    books = json.loads((ART / "books.json").read_text())
+    order = ["the-elegant-universe", "1q84", "kafka-on-the-shore", "the-wind-up-bird-chronicle", "kitchen",
+             "on-earth-were-briefly-gorgeous"]
+    by_slug = {bk["slug"]: bk for bk in books}
+    pages = pl.surface("featured_pages", (0.70, 0.65, 0.54), 0.85, grime=0.4, dust=0.4, color_var=0.04)
+    y = start.y
+    objs = []
+    for k, slug in enumerate(order):
+        bk = by_slug[slug]
+        thick, height = bk["thick_mm"] / 1000, bk["height_mm"] / 1000
+        depth = 0.152 if thick > 0.03 else 0.135
+        lean = 0.0
+        cloth = pl.surface(f"featured_cloth_{slug}", hex_linear(bk["cloth"]), 0.7, color_var=0.03, dust=0.3,
+                           edge_wear=0.4, edge_color=tuple(min(1, c * 1.5 + 0.06) for c in hex_linear(bk["cloth"])))
+        spine = image_material(f"spine_{slug}", ART / f"spine_{slug}.png", 0.6)
+        cover = image_material(f"cover_{slug}", ART / f"cover_{slug}.png", 0.6)
+        bm = bmesh.new()
+        uv = bm.loops.layers.uv.new("UVMap")
+        geom = bmesh.ops.create_cube(bm, size=1.0)
+        bmesh.ops.scale(bm, vec=Vector((depth, thick, height)), verts=geom["verts"])
+        bmesh.ops.translate(bm, vec=Vector((depth / 2, 0, height / 2)), verts=geom["verts"])
+        for f in list(bm.faces):
+            n = f.normal
+            if n.z < -0.9:
+                bm.faces.remove(f)
+                continue
+            for loop in f.loops:
+                c = loop.vert.co
+                if n.x < -0.9:      # spine: u from +y (viewer's left) to -y, v up
+                    loop[uv].uv = (0.5 - c.y / thick, c.z / height)
+                elif n.y < -0.9:    # front cover: spine edge on the left
+                    loop[uv].uv = (c.x / depth, c.z / height)
+                else:
+                    loop[uv].uv = (c.x / depth, c.y / thick + 0.5)
+            f.material_index = 1 if n.x < -0.9 else 2 if n.y < -0.9 else 3 if n.z > 0.9 or n.x > 0.9 else 0
+        obj = new_object(f"book_spine_{slug}", bm, "props", "props", [cloth, spine, cover, pages])
+        bmesh_bevel_object(obj, 0.0012)
+        obj.matrix_world = Matrix.Translation((start.x, y - thick / 2, start.z)) @ pl.xform(rot=(lean, 0, 0))
+        obj["title"], obj["author"], obj["year"] = bk["title"], bk["author"], bk["year"]
+        obj["texel"] = 9.0 if thick > 0.02 else 12.0
+        objs.append(obj)
+        y -= thick + 0.002
+    return objs
+
+
+def bmesh_bevel_object(obj, width):
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    edges = [e for e in bm.edges if e.is_manifold]
+    bmesh.ops.bevel(bm, geom=edges, offset=width, segments=1, profile=0.5, affect="EDGES", clamp_overlap=True)
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+def image_material(name, path: Path, roughness, metallic=0.0, uv_map="UVMap"):
+    """A Principled material showing an image through a UV map (art drawn by room_art.mjs), for the bake."""
+    mat, k = pl.new_material(name)
+    tex = k.node("ShaderNodeTexImage", image=pl.load_image(str(path)), interpolation="Linear")
+    k.set(tex, "Vector", k.node("ShaderNodeUVMap", uv_map=uv_map).outputs["UV"])
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": tex.outputs["Color"], "Roughness": roughness,
+                                                      "Metallic": metallic})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs[0])
+    return mat
+
+
+def build_space_wall(mats):
+    """The Voyager Golden Record in a black shadow box (the gold disc engraved with its cover's diagrams, a plate
+    beneath) and the Pale Blue Dot as a square print, both on the right return wall above the bookcase."""
+    lacquer = pl.surface("shadowbox_black", (0.02, 0.018, 0.017), 0.3, edge_wear=0.25, edge_color=(0.12, 0.1, 0.08),
+                         dust=0.3, color_var=0.03, coat=0.4)
+    velvet = pl.surface("shadowbox_velvet", (0.012, 0.016, 0.03), 0.95, sheen=0.6, color_var=0.04)
+    brass = pl.surface("shadowbox_brass", (0.55, 0.39, 0.17), 0.25, metallic=1.0, grime=0.5, color_var=0.04)
+    size, depth, rim = 0.46, 0.05, 0.022
+    b = pl.Builder("voyager_frame")
+    for (w, h), (x, z) in (((size, rim), (0, size / 2 - rim / 2)), ((size, rim), (0, -size / 2 + rim / 2)),
+                           ((rim, size - 2 * rim), (-size / 2 + rim / 2, 0)), ((rim, size - 2 * rim), (size / 2 - rim / 2, 0))):
+        b.box((w, depth, h), loc=(x, -depth / 2, z), mat=lacquer, bevel=0.002)
+    inner = size - 2 * rim
+    b.box((inner, 0.004, inner), loc=(0, -0.003, 0), mat=velvet)
+    for (w, h), (x, z) in (((inner, 0.004), (0, inner / 2 - 0.002)), ((inner, 0.004), (0, -inner / 2 + 0.002)),
+                           ((0.004, inner), (-inner / 2 + 0.002, 0)), ((0.004, inner), (inner / 2 - 0.002, 0))):
+        b.box((w, 0.006, h), loc=(x, -depth + 0.004, z), mat=brass)
+    frame = finish(b, "voyager_frame", smooth=30)
+
+    gold = engraved_gold("voyager_gold", ART / "voyager_cover.png")
+    plate_mat = engraved_gold("voyager_plate", ART / "voyager_plate.png", rough=0.32)
+    r = 0.152
+    bm = bmesh.new()
+    uv = bm.loops.layers.uv.new("UVMap")
+    disc = bmesh.ops.create_cone(bm, cap_ends=True, segments=96, radius1=r, radius2=r, depth=0.004)
+    rot = Matrix.Rotation(math.pi / 2, 4, "X")
+    bmesh.ops.transform(bm, matrix=Matrix.Translation((0, -0.012, 0.025)) @ rot, verts=disc["verts"])
+    for f in bm.faces:
+        for loop in f.loops:
+            c = loop.vert.co
+            loop[uv].uv = (0.5 + c.x / (2 * r), 0.5 + (c.z - 0.025) / (2 * r))
+    pb = bmesh.ops.create_cube(bm, size=1.0)
+    bmesh.ops.scale(bm, vec=Vector((0.17, 0.003, 0.032)), verts=pb["verts"])
+    bmesh.ops.translate(bm, vec=Vector((0, -0.0075, -0.168)), verts=pb["verts"])
+    plate_faces = {f for v in pb["verts"] for f in v.link_faces}
+    for f in plate_faces:
+        f.material_index = 1
+        for loop in f.loops:
+            c = loop.vert.co
+            loop[uv].uv = (0.5 + c.x / 0.17, 0.5 + (c.z + 0.168) / 0.032)
+    disc_obj = new_object("voyager_disc", bm, "props", "props", [gold, plate_mat])
+    smooth_by_angle(disc_obj, 30)
+    record = pl.join([frame, disc_obj], "voyager_record")
+    record.name = record.data.name = "voyager_record"
+    record.matrix_world = Matrix.Translation(VOYAGER) @ RIGHT_WALL_TURN
+    record["atlas"] = "props"
+    record["texel"] = 5.0
+    record["source"] = "made for this site; engraving redrawn from the record cover (NASA, public domain)"
+
+    black = pl.surface("pale_dot_frame", (0.015, 0.014, 0.013), 0.4, edge_wear=0.2, edge_color=(0.1, 0.09, 0.08),
+                       dust=0.3, color_var=0.03)
+    mat_board = bpy.data.materials["photo_mat_board"]
+    mat_core = bpy.data.materials["photo_mat_bevel"]
+    frame, art = framed_picture("props_frame_pale_blue_dot", "print_pale_blue_dot", (PALE_DOT_SIZE, PALE_DOT_SIZE),
+                                black, mat_board, mat_core, pale_blue_dot_material(), matte=0.05, moulding=0.018)
+    for obj in (frame, art):
+        obj.matrix_world = Matrix.Translation(PALE_DOT) @ RIGHT_WALL_TURN
+    art["runtime_art"] = "pale_blue_dot"
+    art["texture"] = "pale-blue-dot.ktx2"
+    art["width_m"] = art["height_m"] = PALE_DOT_SIZE
+    art["aspect"] = 1.0
+    return {"voyager_record": record, "print_pale_blue_dot": art, "pale_blue_dot_frame": frame}
+
+
+def engraved_gold(name, mask: Path, rough=0.22):
+    """Gold metal whose engraved lines (white in the mask) are darker, rougher and cut in by a bump."""
+    mat, k = pl.new_material(name)
+    tex = k.node("ShaderNodeTexImage", image=pl.load_image(str(mask), non_color=True), interpolation="Linear")
+    k.set(tex, "Vector", k.node("ShaderNodeUVMap", uv_map="UVMap").outputs["UV"])
+    line = tex.outputs["Color"]
+    color = k.mix_color(k.node("ShaderNodeRGBToBW", inputs={"Color": line}).outputs[0], (0.80, 0.58, 0.24, 1.0),
+                        (0.30, 0.19, 0.07, 1.0))
+    wear = k.noise(k.coords("Object"), 40.0, detail=3.0)
+    rough_v = k.math("ADD", k.map_range(wear, 0.3, 0.7, rough - 0.06, rough + 0.06),
+                     k.math("MULTIPLY", k.node("ShaderNodeRGBToBW", inputs={"Color": line}).outputs[0], 0.35))
+    bump = k.node("ShaderNodeBump", inputs={"Strength": 0.5, "Distance": 0.0004, "Height": line}, invert=True)
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Metallic": 1.0, "Roughness": rough_v,
+                                                      "Normal": bump.outputs[0]})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs[0])
+    return mat
+
+
+def pale_blue_dot_material():
+    """NASA/JPL's Pale Blue Dot Revisited for the stills (cropped square), white paper while the light bakes; the
+    site draws public/room/pale-blue-dot.ktx2 over that light."""
+    path = fetch_cached(PALE_BLUE_DOT[0], CACHE / "nasa" / "PIA23645_orig.jpg", PALE_BLUE_DOT[1])
+    mat, k = pl.new_material("print_pale_blue_dot")
+    uvn = k.node("ShaderNodeUVMap", uv_map="UVMap").outputs["UV"]
+    crop = k.node("ShaderNodeMapping", inputs={"Vector": uvn, "Scale": (5175 / 5230, 1.0, 1.0),
+                                               "Location": ((1 - 5175 / 5230) / 2, 0.0, 0.0)})
+    tex = k.node("ShaderNodeTexImage", image=pl.load_image(str(path)), interpolation="Linear")
+    k.set(tex, "Vector", crop.outputs[0])
+    bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": tex.outputs["Color"], "Roughness": 0.4})
+    white = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": (0.8, 0.8, 0.8, 1.0), "Roughness": 0.9})
+    probe = k.node("ShaderNodeValue", name="light_probe", label="light_probe")
+    probe.outputs[0].default_value = 0.0
+    mix = k.node("ShaderNodeMixShader", inputs={"Fac": probe.outputs[0], "Shader": bsdf.outputs[0],
+                                                "Shader_001": white.outputs[0]})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", mix.outputs[0])
+    return mat
+
+
+def build_print_japanese_lit(mats):
+    """The Japanese-literature print in a pale oak frame, leaning on the bookcase top against the wall (baked)."""
+    base, (w, h), lean = JP_PRINT
+    oak = pl.surface("oak_frame", (0.55, 0.42, 0.28), 0.5, color_tex=pl.ambientcg("Wood051")["Color"],
+                     tint=(1.0, 0.86, 0.68), tile=0.25, edge_wear=0.3, color_var=0.06)
+    mat_board = bpy.data.materials["photo_mat_board"]
+    mat_core = bpy.data.materials["photo_mat_bevel"]
+    frame, art = framed_picture("props_frame_japanese_lit", "print_japanese_lit_art", (w - 0.07, h - 0.07), oak,
+                                mat_board, mat_core, image_material("print_japanese_lit", ART / "print_japanese_lit.png", 0.8),
+                                matte=0.0, moulding=0.035, depth=0.025)
+    printed = pl.join([frame, art], "print_japanese_lit")
+    printed.name = printed.data.name = "print_japanese_lit"
+    # Stand it on its bottom edge, then tip it back toward the wall.
+    printed.matrix_world = (Matrix.Translation(base) @ RIGHT_WALL_TURN @ Matrix.Rotation(math.radians(-lean), 4, "X")
+                            @ Matrix.Translation((0, 0, h / 2)))
+    printed["atlas"] = "props"
+    printed["texel"] = 4.0
+    printed["source"] = "made for this site"
+    return printed
+
+
+def build_pennant():
+    """A Georgia Tech felt pennant pinned to the back wall above the desk shelf: a gently sagging triangle (hoist at
+    the left) whose UVs map the texture's triangle, two brass pins at the hoist."""
+    corner, length, hoist = PENNANT
+    bm = bmesh.new()
+    uv = bm.loops.layers.uv.new("UVMap")
+    nu, nv = 12, 4
+    rows = []
+    for i in range(nu + 1):
+        t = i / nu
+        col = []
+        for j in range(nv + 1):
+            v = j / nv
+            vv = 0.5 + (v - 0.5) * (1 - t)  # the triangle narrows to the point at t = 1
+            x = length * t
+            z = -hoist * (1 - vv) - 0.035 * t * t
+            y = -0.004 * math.sin(t * math.pi) - 0.002 * math.sin(t * 9 + v * 2)
+            col.append(bm.verts.new(corner + Vector((x, y, z))))
+        rows.append(col)
+    for i in range(nu):
+        for j in range(nv):
+            face = bm.faces.new((rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]))
+            for loop, (di, dj) in zip(face.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+                ti, vj = (i + di) / nu, (j + dj) / nv
+                loop[uv].uv = (ti, 0.5 + (vj - 0.5) * (1 - ti))
+    bm.normal_update()
+    for f in bm.faces:
+        if f.normal.y > 0:
+            f.normal_flip()
+    felt = image_material("pennant_felt", ART / "pennant_gatech.png", 0.92)
+    pin = pl.surface("pennant_pin", (0.55, 0.39, 0.17), 0.25, metallic=1.0, color_var=0.0)
+    obj = new_object("pennant_gatech", bm, "props", "props", [felt, pin])
+    pins = bmesh.new()
+    for z in (-0.02, -hoist + 0.02):
+        add_cylinder(pins, 0.006, 0.006, corner + Vector((0.03, -0.006, z)), segments=10, axis="Y", mat=1)
+    me = bpy.data.meshes.new("pins")
+    pins.to_mesh(me)
+    pins.free()
+    bm2 = bmesh.new()
+    bm2.from_mesh(obj.data)
+    bm2.from_mesh(me)
+    bm2.to_mesh(obj.data)
+    bm2.free()
+    bpy.data.meshes.remove(me)
+    smooth_by_angle(obj, 50)
+    obj["texel"] = 3.0
+    obj["source"] = "made for this site"
     return obj
 
 
@@ -859,9 +1383,9 @@ def build_floor_books(rng):
     return obj
 
 
-def build_reading_corner():
-    """A paper lantern standing on the floor beside the lounge chair: a ribbed globe on a thin black tripod, glowing
-    warm. It sits low, so from the wide framing it is a light pool in the foreground, not a shade in the middle."""
+def build_reading_corner(mats):
+    """The armchair corner: a paper lantern on a tripod beside the lounge chair, glowing warm, and a small walnut
+    side table with a mug and a book left open on it."""
     paper = pl.surface("lantern_paper", (0.86, 0.80, 0.68), 0.9, color_tex=pl.ambientcg("Paper001")["Color"],
                        tint=(1.0, 0.94, 0.82), tile=0.3, translucency=0.6, emission=((1.0, 0.66, 0.36), 1.6),
                        color_var=0.04)
@@ -876,14 +1400,39 @@ def build_reading_corner():
         prof.append((r * math.sin(math.pi * t) ** 0.8, cz - h / 2 + h * t))
     prof.append((0.0, cz + h / 2))
     b.lathe(prof, segments=24, mat=paper)
-    for k in range(1, 12, 1):
+    for k in range(1, 12):
         t = k / 12
         rr = r * math.sin(math.pi * t) ** 0.8 + 0.0015
         b.torus(rr, 0.0012, segments=28, sides=4, loc=(0, 0, cz - h / 2 + h * t), mat=rib)
     for k in range(3):
-        a = math.radians(90 + 120 * k)
-        foot = Vector((0.15 * math.cos(a), 0.15 * math.sin(a), 0.0))
-        b.tube([foot, Vector((0.05 * math.cos(a), 0.05 * math.sin(a), cz - h / 2 + 0.02))], 0.004, sides=6, mat=steel)
+        a_ = math.radians(90 + 120 * k)
+        foot = Vector((0.15 * math.cos(a_), 0.15 * math.sin(a_), 0.0))
+        b.tube([foot, Vector((0.05 * math.cos(a_), 0.05 * math.sin(a_), cz - h / 2 + 0.02))], 0.004, sides=6, mat=steel)
     obj = finish(b, "props_lantern", smooth=40)
     place(obj, FLOOR_LAMP, 0.0)
+
+    walnut = mats["walnut"]
+    bm = bmesh.new()
+    t = READING_TABLE
+    add_cylinder(bm, 0.20, 0.026, t + Vector((0, 0, 0.507)), segments=40)
+    add_cylinder(bm, 0.022, 0.48, t + Vector((0, 0, 0.255)), segments=16)
+    add_cylinder(bm, 0.16, 0.022, t + Vector((0, 0, 0.011)), segments=32)
+    smooth_by_angle(new_object("env_reading_table", bm, "env", "env", [walnut]), 40)
+    mug = pl.surface("reading_mug", (0.55, 0.30, 0.18), 0.25, coat=0.5, grime=0.3, color_var=0.04)
+    tea = pl.surface("reading_tea", (0.18, 0.08, 0.03), 0.2, color_var=0.05)
+    b = pl.Builder("props_reading_mug")
+    top = t + Vector((0.05, 0.06, 0.52))
+    b.lathe([(0.0, 0.0), (0.036, 0.0), (0.040, 0.006), (0.040, 0.092), (0.036, 0.092), (0.035, 0.008), (0.0, 0.008)],
+            segments=24, loc=tuple(top), mat=mug, cap_start=False, cap_end=False)
+    b.cylinder(0.035, 0.002, segments=24, loc=tuple(top + Vector((0, 0, 0.075))), mat=tea)
+    b.torus(0.022, 0.006, segments=14, sides=6, loc=tuple(top + Vector((0.046, 0, 0.048))), rot=(90, 0, 0), mat=mug,
+            arc=math.radians(220))
+    cloth = bpy.data.materials["book_cloth_1"]
+    pages = bpy.data.materials["book_pages"]
+    for side in (-1, 1):
+        b.box((0.11, 0.16, 0.012), loc=tuple(t + Vector((-0.05 + side * 0.056, -0.04, 0.526))), rot=(0, side * -4, 0),
+              mat=pages)
+        b.box((0.114, 0.164, 0.003), loc=tuple(t + Vector((-0.05 + side * 0.056, -0.04, 0.5215))), rot=(0, side * -4, 0),
+              mat=cloth)
+    finish(b, "props_reading_mug", smooth=40)
     return FLOOR_LAMP + Vector((0, 0, cz))
