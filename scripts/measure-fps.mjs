@@ -37,7 +37,7 @@ try {
   });
   const settle = (station) =>
     page.waitForFunction((s) => window.__room && !window.__room.moving && (!s || window.__room.phase === s), station, { timeout: 60_000 });
-  await page.waitForFunction(() => window.__room?.arrival && window.__room.moving, null, { timeout: 180_000 });
+  await page.waitForFunction(() => window.__room?.startedAt != null && window.__room.moving, null, { timeout: 180_000 });
 
   const everything = !phone && !flag('--calm') && !flag('--reel-always') && !flag('--no-reel');
 

@@ -36,7 +36,7 @@ export interface RoomOptions {
 export interface StartOptions {
   /**
    * A window address: land at the desk at once with this SaahilOS window open (`projects/swe-sim`); '' opens none.
-   * Without it, the arrival glides past the room to the desk and opens About.
+   * Without it, the arrival glides past the room to the desk, where SaahilOS shows its first window (About).
    */
   open?: string;
   /** Cut to the end framing (the visitor's input skipped the intro). */
@@ -56,7 +56,7 @@ export interface RoomView {
 }
 
 export interface RoomHandle {
-  /** Leaves the boot framing: the arrival glide to the desk with About, or with `open` the desk at once with that window. */
+  /** Leaves the boot framing: the arrival glide to the desk, or with `open` the desk at once with that window. */
   start(options?: StartOptions): void;
   /** Glides to the monitor and opens that SaahilOS window; `fast` shortens the glide. */
   openWindow(target: string, options?: { fast?: boolean }): void;
@@ -100,10 +100,6 @@ export interface RoomProbe {
   readonly light: boolean;
   /** The stations arrow keys and the wheel step through, in order. */
   readonly stations: readonly StationName[];
-  /** The room's tour stops (`cam_tour_<n>`), in order. */
-  readonly tour: readonly StationName[];
-  /** performance.now() when the arrival glide left the boot framing and when it landed at the desk; null if none ran. */
-  readonly arrival: { startedAt: number; landedAt: number | null } | null;
   readonly view: RoomView;
   /** How far the free look has turned the view from its framing (radians). */
   readonly look: { yaw: number; pitch: number };
@@ -124,8 +120,11 @@ export interface RoomProbe {
   readonly world: ReturnType<World['probe']>;
   /** performance.now() when the intro ended and the room became interactive; null before. */
   readonly interactiveAt: number | null;
-  /** performance.now() when the room started (the boot screen left and input reached the room), and when the camera first
-   * came to rest where it starts (the desk; the monitor for a phone's address); null before. */
+  /**
+   * performance.now() when the room started (the boot screen left, input reaches the room), and when the camera first
+   * came to rest where it starts (the desk; the monitor for a phone's address); null before. On `/` the two bound the
+   * arrival glide; on a window address they are the same moment.
+   */
   readonly startedAt: number | null;
   readonly landedAt: number | null;
   /** The last frame's draw calls and triangles, and what the GPU holds. */
@@ -174,7 +173,6 @@ export class Application implements RoomHandle {
   private pendingWindow: string | null = null;
   private phoneZoom = 0;
   private skippedAt = -Infinity;
-  private arrival: { startedAt: number; landedAt: number | null } | null = null;
   private frameSink: ((frameMs: number) => void) | null = null;
   private clock = 0;
   private last = 0;
@@ -391,10 +389,7 @@ export class Application implements RoomHandle {
     this.intro = false;
     this.handedOver = false;
     this.dirty = true;
-    const arrival = { startedAt: performance.now(), landedAt: null as number | null };
-    this.arrival = arrival;
     const landed = () => {
-      arrival.landedAt = performance.now();
       onDone();
       this.afterArrival();
     };
@@ -606,10 +601,6 @@ export class Application implements RoomHandle {
       },
       light: this.light,
       stations: this.navigation.tour,
-      tour: this.nodes.tour,
-      get arrival() {
-        return app.arrival;
-      },
       get view() {
         return app.view();
       },

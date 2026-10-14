@@ -79,7 +79,7 @@ test('a project address lands at the desk at once with that project open', async
   await page.goto(`/projects/${PROJECT.slug}`);
   await expect(page).toHaveTitle(new RegExp(`^${PROJECT.title}`));
   await settled(page, 'desk', 60_000);
-  expect(await page.evaluate(() => window.__room!.arrival)).toBeNull();
+  expect(await page.evaluate(() => window.__room!.landedAt! - window.__room!.startedAt!)).toBeLessThan(50);
   await expect(os(page).getByRole('dialog', { name: PROJECT.title })).toBeVisible();
   // The window focused itself inside SaahilOS; that is not the visitor moving, so the camera stays at the desk.
   await page.waitForTimeout(1000);
@@ -93,7 +93,7 @@ test('a bare /os lands at the desk with SaahilOS', async ({ page }) => {
   await page.goto('/os');
   await expect(page).toHaveURL(/\/#os$/);
   await settled(page, 'desk', 60_000);
-  expect(await page.evaluate(() => window.__room!.arrival)).toBeNull();
+  expect(await page.evaluate(() => window.__room!.landedAt! - window.__room!.startedAt!)).toBeLessThan(50);
   await expect(os(page).locator('.os-desktop')).toBeVisible();
 });
 
@@ -103,9 +103,9 @@ test('a bare /os lands at the desk with SaahilOS', async ({ page }) => {
  */
 test('the arrival on / glides to the desk in 4 to 6 seconds and stays there', async ({ page }) => {
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.arrival?.landedAt != null, null, { timeout: 120_000 });
-  const { arrival, phase, moving } = await page.evaluate(() => ({ arrival: window.__room!.arrival!, phase: window.__room!.phase, moving: window.__room!.moving }));
-  const seconds = (arrival.landedAt! - arrival.startedAt) / 1000;
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
+  const { startedAt, landedAt, phase, moving } = await page.evaluate(() => ({ startedAt: window.__room!.startedAt!, landedAt: window.__room!.landedAt!, phase: window.__room!.phase, moving: window.__room!.moving }));
+  const seconds = (landedAt - startedAt) / 1000;
   test.info().annotations.push({ type: 'arrival seconds', description: seconds.toFixed(3) });
   expect(seconds).toBeGreaterThanOrEqual(4);
   expect(seconds).toBeLessThanOrEqual(6);
@@ -131,10 +131,10 @@ test('a key press during the arrival lands it at the desk', async ({ page }) => 
 test('with reduced motion / goes straight to the desk', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.arrival, null, { timeout: 120_000 });
-  const arrival = await page.evaluate(() => ({ ...window.__room!.arrival!, phase: window.__room!.phase, moving: window.__room!.moving }));
-  expect(arrival).toMatchObject({ phase: 'desk', moving: false });
-  expect(arrival.landedAt! - arrival.startedAt).toBeLessThan(50);
+  await page.waitForFunction(() => window.__room?.startedAt != null, null, { timeout: 120_000 });
+  const start = await page.evaluate(() => ({ startedAt: window.__room!.startedAt!, landedAt: window.__room!.landedAt, phase: window.__room!.phase, moving: window.__room!.moving }));
+  expect(start).toMatchObject({ phase: 'desk', moving: false });
+  expect(start.landedAt! - start.startedAt).toBeLessThan(50);
 });
 
 /**

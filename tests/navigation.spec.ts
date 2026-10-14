@@ -28,7 +28,7 @@ async function inRoom(page: Page) {
 /** Catches a click during the arrival that also sends the camera on from the desk (to the wide view), instead of only landing it. */
 test('a click on empty space during the arrival lands it at the desk and does nothing else', async ({ page }) => {
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.moving && window.__room.arrival, null, { timeout: 120_000 });
+  await page.waitForFunction(() => window.__room?.moving && window.__room.startedAt != null, null, { timeout: 120_000 });
   await page.mouse.click(5, 5);
   expect(await room(page)).toMatchObject({ phase: 'desk', destination: 'desk', moving: false });
   await page.waitForTimeout(1500);
