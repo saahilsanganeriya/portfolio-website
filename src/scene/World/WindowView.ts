@@ -91,6 +91,7 @@ export class WindowView {
   private sinceCheck = 0;
   private onDemand = false;
   private time = 0;
+  private appliedKey = '';
 
   constructor(
     nodes: WindowViewNode[],
@@ -334,7 +335,22 @@ export class WindowView {
   }
 
   private apply() {
+    if (this.sky) this.sky.uniforms.uTime.value = this.time;
+    for (const view of this.views) {
+      const { day, night } = view.pictures;
+      const u = view.material.uniforms;
+      u.uDay.value = day ?? night;
+      u.uNight.value = night ?? day;
+      u.uHasDay.value = day ? 1 : 0;
+      u.uHasNight.value = night ? 1 : 0;
+    }
+    // The colours and the bodies' places change only as the suns move.
     const moon = this.sky ? (this.sky.uniforms.uMoonAge.value as number) : 0;
+    const key = [this.shown.sf.elevation, this.shown.sf.hourAngle, this.shown.delhi.elevation, this.shown.delhi.hourAngle, moon]
+      .map((v) => v.toFixed(4))
+      .join(' ');
+    if (key === this.appliedKey) return;
+    this.appliedKey = key;
     const both = oneMoon(lookAt('sf', this.shown.sf.elevation, this.shown.sf.hourAngle), lookAt('delhi', this.shown.delhi.elevation, this.shown.delhi.hourAngle), moon);
     this.looks = { sf: both.sf, delhi: both.delhi };
     CITY_ORDER.forEach((city, side) => {
@@ -355,14 +371,5 @@ export class WindowView {
       sky.uMoonShown.value[side] = look.moon.shown;
       sky.uStars.value[side] = look.stars;
     });
-    if (this.sky) this.sky.uniforms.uTime.value = this.time;
-    for (const view of this.views) {
-      const { day, night } = view.pictures;
-      const u = view.material.uniforms;
-      u.uDay.value = day ?? night;
-      u.uNight.value = night ?? day;
-      u.uHasDay.value = day ? 1 : 0;
-      u.uHasNight.value = night ? 1 : 0;
-    }
   }
 }
