@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { comparePosts } from '../src/lib/post-order.ts';
+import { comparePosts, readingMinutes } from '../src/lib/post-order.ts';
 
 const post = (title: string, date: string, tags: string[]) => ({ title, date: new Date(`${date}T00:00:00Z`), tags });
 
@@ -21,5 +21,14 @@ describe('post order', () => {
       'Babylon',
       'Old essay',
     ]);
+  });
+});
+
+describe('reading time', () => {
+  // Catches a diagram or an MDX import counted as reading: the Writing list would show a short post as a long one.
+  it('counts the prose only, not code blocks or imports', () => {
+    const prose = Array.from({ length: 460 }, () => 'word').join(' ');
+    const diagram = '```text\n' + Array.from({ length: 2000 }, () => 'box').join(' ') + '\n```';
+    expect(readingMinutes(`import Figure from './Figure.astro';\n\n${prose}\n\n${diagram}\n`)).toBe(2);
   });
 });

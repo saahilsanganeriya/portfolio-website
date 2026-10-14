@@ -74,6 +74,8 @@ export interface OsPost {
   date: string;
   summary: string;
   tags: string[];
+  /** Minutes to read it, shown in the Writing list (the date stays inside the post). */
+  minutes: number;
 }
 
 export interface OsPage {

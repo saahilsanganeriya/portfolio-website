@@ -1,5 +1,5 @@
+import { POST_GROUPS, postGroup } from '../../lib/post-order';
 import { PixelIcon } from '../assets/PixelIcon';
-import { formatDay } from '../format';
 import type { OsApi, OsImage, OsProject, OsProjectCard } from '../types';
 
 export interface Row {
@@ -116,19 +116,26 @@ export function ProjectsApp({ os }: { os: OsApi }) {
 
 export function BlogApp({ os }: { os: OsApi }) {
   if (os.index.posts.length === 0) return <p className="os-note">No posts are published yet.</p>;
+  // Engineering first, then essays, then film notes; newest first inside each (the index's own order).
   return (
     <div className="os-list">
-      <DetailsList
-        heading="Posts, newest first"
-        metaLabel="Date"
-        rows={os.index.posts.map((post) => ({
-          href: `#blog/${post.slug}`,
-          title: post.title,
-          summary: post.summary,
-          meta: formatDay(post.date, 'short'),
-          metaDateTime: post.date,
-        }))}
-      />
+      {POST_GROUPS.map(({ id, heading }) => {
+        const posts = os.index.posts.filter((post) => postGroup(post.tags) === id);
+        if (posts.length === 0) return null;
+        return (
+          <DetailsList
+            key={id}
+            heading={heading}
+            metaLabel="Read"
+            rows={posts.map((post) => ({
+              href: `#blog/${post.slug}`,
+              title: post.title,
+              summary: post.summary,
+              meta: `${post.minutes} min`,
+            }))}
+          />
+        );
+      })}
     </div>
   );
 }

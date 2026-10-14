@@ -332,6 +332,22 @@ test.describe('desktop', () => {
     await expect(list.getByText('No public pictures')).toHaveCount(0);
   });
 
+  /**
+   * Catches the Writing list opening on whichever post sorts first, film notes among the engineering posts, and a
+   * date column that shows the same two days on every row (T52 fix 8).
+   */
+  test('Writing lists engineering first, then essays, then film notes, each with its reading time', async ({ page }) => {
+    await page.goto('/os?embed=1#blog');
+    const list = page.getByRole('dialog', { name: 'Writing' });
+    const sections = list.locator('.os-details');
+    await expect(sections.locator('.os-details-heading > span:first-child')).toHaveText(['Engineering', 'Essays', 'Film notes']);
+    await expect(sections.nth(0).locator('a[href="#blog/hard-for-whom"]')).toHaveCount(1);
+    await expect(sections.nth(1).locator('a[href="#blog/pale-blue-dot"]')).toHaveCount(1);
+    await expect(sections.nth(2).locator('a[href="#blog/babylon"]')).toHaveCount(1);
+    for (const meta of await list.locator('.os-row-meta').allTextContents()) expect(meta.trim()).toMatch(/^\d+ min$/);
+    await expect(list.locator('.os-row time')).toHaveCount(0);
+  });
+
   /** Catches a Films window that stops explaining its list: the label, the stars and when the diary last updated. */
   test('Films labels the diary and shows when it last updated', async ({ page }) => {
     // One more entry than the window shows at first, so the older entries are one button away.

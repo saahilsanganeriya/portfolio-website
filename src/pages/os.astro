@@ -2,6 +2,7 @@
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import { getPosts, getProjects, isoDay } from '../lib/content';
+import { readingMinutes } from '../lib/post-order';
 import { filmsData } from '../lib/films';
 import { windowDiary } from '../os/apps/films/diary';
 import {
@@ -43,7 +44,14 @@ const index: OsIndex = {
       figures: await projectFigures(id),
     })),
   ),
-  posts: posts.map(({ id, data }) => ({ slug: id, title: data.title, date: isoDay(data.date), summary: data.summary, tags: data.tags })),
+  posts: posts.map(({ id, data, body }) => ({
+    slug: id,
+    title: data.title,
+    date: isoDay(data.date),
+    summary: data.summary,
+    tags: data.tags,
+    minutes: readingMinutes(body ?? ''),
+  })),
   pages: pages.map(({ id, data }) => ({ slug: id, title: data.title, summary: data.summary })),
   films: windowDiary(filmsData, favourites),
   favourites,
