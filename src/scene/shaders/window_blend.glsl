@@ -8,7 +8,9 @@ float windowBlend(vec3 p) {
   return smoothstep(-uBand, uBand, dot(q - uCentre, uRight));
 }
 
-// Two linear colours mixed as the eye sees them (in display values), so a dark-to-light blend looks centred on w = 0.5.
+// Two linear colours mixed as the eye sees them (in display values, gamma 2 for speed), so a dark-to-light blend looks
+// centred on w = 0.5.
 vec3 blendDisplay(vec3 a, vec3 b, float w) {
-  return pow(mix(pow(a, vec3(1.0 / 2.2)), pow(b, vec3(1.0 / 2.2)), w), vec3(2.2));
+  vec3 c = mix(sqrt(a), sqrt(b), w);
+  return c * c;
 }

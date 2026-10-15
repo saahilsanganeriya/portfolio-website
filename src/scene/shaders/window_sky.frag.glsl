@@ -1,8 +1,6 @@
-// The sky over both cities: one gradient that runs from San Francisco's sky (index 0, left) to Delhi's (index 1,
-// right), each coloured by its own sun, blended across a wide band in the middle of the window (in display values, so
-// the change looks centred on the seam whichever side is darker). The gradient's directions start at the dome's centre
-// on the water line behind the window, so its horizon meets the water. The sun, the moon (with its phase) and stars are
-// measured from the window framing's eye, so they are round from the room; their edges are one pixel wide.
+// The sky over both cities. Its gradient arrives from the vertex shader (window_sky.vert.glsl); here go the parts that
+// must stay crisp: the sun, the moon (with its phase) and stars, measured from the window framing's eye so they are
+// round from the room, with edges one pixel wide.
 uniform vec3 uCentre;
 uniform vec3 uEye;
 uniform vec3 uOut;
@@ -21,6 +19,8 @@ uniform float uMoonAge;
 uniform float uStars[2];
 uniform float uTime;
 varying vec3 vWorld;
+varying vec3 vSky;
+varying float vBlend;
 
 #include <window_blend>
 
@@ -33,21 +33,12 @@ float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
-vec3 skyOf(int side, vec3 d) {
-  float up = clamp(d.y, 0.0, 1.0);
-  vec3 colour = mix(uHorizon[side], uZenith[side], smoothstep(0.0, 1.0, pow(up, 0.55)));
-  // The glow toward the sun hugs the horizon through dusk and dawn, wider than the sun itself.
-  vec2 level = normalize(vec2(dot(d, uRight), dot(d, uOut)) + 1e-5);
-  vec2 sunFlat = normalize(vec2(dot(uSunDir[side], uRight), dot(uSunDir[side], uOut)) + 1e-5);
-  float toward = acos(clamp(dot(level, sunFlat), -1.0, 1.0));
-  float glow = exp(-toward / 0.55) * (1.0 - smoothstep(0.0, 0.45, up));
-  return colour + uGlow[side] * uGlowAmount[side] * glow * 0.55;
-}
-
-// The sun: a crisp disc and a soft glow around it (e: the direction from the eye).
+// The sun: a crisp disc and a soft glow around it (e: the direction from the eye; for small angles the chord
+// between two directions is the angle, and cheaper than acos).
 vec3 sunOf(int side, vec3 e) {
-  float angle = acos(clamp(dot(e, uSunDir[side]), -1.0, 1.0));
+  float angle = length(e - uSunDir[side]);
   float edge = max(fwidth(angle), 1e-5);
+  if (angle > 0.9) return vec3(0.0);
   float disc = 1.0 - smoothstep(SUN_R - edge, SUN_R + edge, angle);
   float halo = exp(-angle / 0.018) * 0.85 + exp(-angle / 0.055) * 0.34 + exp(-angle / 0.17) * 0.12;
   return (vec3(1.0, 0.98, 0.94) * disc * 1.4 + uSunColour[side] * halo) * uSunShown[side];
@@ -57,7 +48,7 @@ vec3 sunOf(int side, vec3 e) {
 // as earthshine does. Returns the light it adds and how much of the sky it dims.
 vec4 moonOf(int side, vec3 e) {
   vec3 m = uMoonDir[side];
-  float angle = acos(clamp(dot(e, m), -1.0, 1.0));
+  float angle = length(e - m);
   float edge = max(fwidth(angle), 1e-5);
   float disc = 1.0 - smoothstep(MOON_R - edge, MOON_R + edge, angle);
   vec3 right = normalize(cross(m, vec3(0.0, 1.0, 0.0)));
@@ -75,15 +66,15 @@ vec4 moonOf(int side, vec3 e) {
 // Stars, laid out by the direction from the eye; they fade out toward the horizon (d, from the dome's centre).
 float starsAt(vec3 e, vec3 d) {
   float az = atan(dot(e, uRight), dot(e, uOut));
-  float el = asin(clamp(e.y, -1.0, 1.0));
-  float altitude = asin(clamp(d.y, -1.0, 1.0));
+  float el = e.y;
+  float altitude = d.y;
   vec2 at = vec2(az, el) / STAR_CELL;
   vec2 cell = floor(at);
   float pick = hash(cell);
   if (pick < 0.965 || altitude < 0.07) return 0.0;
   vec2 centre = cell + 0.2 + 0.6 * vec2(hash(cell + 3.1), hash(cell + 7.7));
   vec2 offset = (at - centre) * STAR_CELL;
-  offset.x *= cos(el);
+  offset.x *= sqrt(max(0.0, 1.0 - el * el));
   float dist = length(offset);
   float size = 0.0005 + 0.0006 * hash(cell + 1.3);
   float edge = max(fwidth(dist), 1e-5);
@@ -95,8 +86,8 @@ float starsAt(vec3 e, vec3 d) {
 void main() {
   vec3 d = normalize(vWorld - uCentre);
   vec3 e = normalize(vWorld - uEye);
-  float w = windowBlend(vWorld);
-  vec3 colour = blendDisplay(skyOf(0, d), skyOf(1, d), w);
+  float w = vBlend;
+  vec3 colour = vSky;
   // Each body is skipped while it is not shown (the same for every pixel, so the branch is cheap).
   if (max(uStars[0], uStars[1]) > 0.0) colour += vec3(0.86, 0.88, 1.0) * starsAt(e, d) * mix(uStars[0], uStars[1], w);
   for (int side = 0; side < 2; side++) {

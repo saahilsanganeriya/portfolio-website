@@ -16,11 +16,12 @@ uniform vec3 uHorizonSide[2];
 uniform vec2 uHaze;
 varying vec2 vUv;
 varying vec3 vWorld;
+varying float vBlend;
 
 #include <window_blend>
 
 void main() {
-  float w = windowBlend(vWorld);
+  float w = vBlend;
   float night = mix(uNightSide[0], uNightSide[1], w);
   float dusk = mix(uDuskSide[0], uDuskSide[1], w);
   vec3 day = texture2D(uDay, vUv).rgb;

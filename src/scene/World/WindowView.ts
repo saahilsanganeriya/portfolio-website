@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import artVert from '../shaders/art.vert.glsl?raw';
 import blendGlsl from '../shaders/window_blend.glsl?raw';
 import landFrag from '../shaders/window.frag.glsl?raw';
+import landVert from '../shaders/window_land.vert.glsl?raw';
 import skyFrag from '../shaders/window_sky.frag.glsl?raw';
 import skyVert from '../shaders/window_sky.vert.glsl?raw';
 import { WORLD_SCALE } from '../Application/RoomModel';
@@ -108,7 +108,7 @@ export class WindowView {
       if (deferred) old.map!.dispose();
       const embeddedDay = deferred ? null : (old.map ?? null);
       const material = new THREE.ShaderMaterial({
-        vertexShader: artVert,
+        vertexShader: withBlend(landVert),
         fragmentShader: withBlend(landFrag),
         uniforms: {
           uDay: { value: null },
@@ -243,7 +243,7 @@ export class WindowView {
 
   private makeSky(node: WindowSkyNode) {
     const material = new THREE.ShaderMaterial({
-      vertexShader: skyVert,
+      vertexShader: withBlend(skyVert),
       fragmentShader: withBlend(skyFrag),
       uniforms: {
         ...this.shared,
