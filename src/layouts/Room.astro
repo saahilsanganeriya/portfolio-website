@@ -2,6 +2,7 @@
 import BootScreen from '../components/BootScreen.astro';
 import MonitorFrame from '../components/MonitorFrame.astro';
 import RecordCrate from '../components/RecordCrate.astro';
+import RoomHud from '../components/RoomHud.astro';
 import RoomTour from '../components/RoomTour.astro';
 import Base from './Base.astro';
 
@@ -62,6 +63,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 
   <main id="content" class="room-stage" tabindex="-1" aria-label="The room" data-room data-open={open}>
     <h1 class="visually-hidden">{title}</h1>
+    <RoomHud />
     <RoomTour />
     <RecordCrate />
     <div class="room-world" data-room-world></div>
@@ -87,6 +89,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 </Base>
 
 <script>
+  import { mountHud } from '../components/RoomHud';
   import { loadFloorPlan, mountTour } from '../components/RoomTourMap';
   import { mountSoundControls } from '../scene/audio/controls';
   import type { RoomHandle } from '../scene/main';
@@ -238,9 +241,10 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       if (osRequested) monitor()?.focus({ preventScroll: true });
     };
 
-    // Landed at the desk: the second way on, the tour, appears (its floor plan loads only now, after the arrival).
+    // Landed at the desk: the corner label and the second way on, the tour, appear (the floor plan loads only now).
     const onLanded = () => {
       root.classList.add('room-landed');
+      if (room) mountHud(stage.querySelector('[data-room-hud]')!, stage.querySelector('[data-room-back]')!, room, stage);
       const tourButton = stage.querySelector<HTMLButtonElement>('[data-tour-open]')!;
       const tourPanel = stage.querySelector<HTMLElement>('[data-tour]')!;
       void loadFloorPlan().then((plan) => plan && room && mountTour(tourButton, tourPanel, room, plan));

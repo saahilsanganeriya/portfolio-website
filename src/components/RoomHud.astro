@@ -1,0 +1,126 @@
+---
+// The room's corner label (brief §6, after Henry's): his name, what he does and the visitor's own time, top left, in
+// the room's type on ink chips like the hover labels. Quiet: it appears once the camera has landed, steps aside while
+// the monitor is being read (or wherever the glass would sit under it), and phones go without it. In its place at the
+// monitor, the way back to the room. Behaviour is in RoomHud.ts.
+---
+
+<div class="room-hud" data-room-hud data-room-ui>
+  <p class="room-hud-name">Saahil Sanganeriya</p>
+  <p class="room-hud-role">Software Engineer</p>
+  <p class="room-hud-time"><time data-room-hud-time></time></p>
+</div>
+
+<button type="button" class="room-back" data-room-back data-room-ui hidden>
+  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M9.5 3.5 5 8l4.5 4.5M5.5 8H13"></path></svg>
+  Back to the room
+  <kbd aria-hidden="true">Esc</kbd>
+</button>
+
+<style>
+  .room-hud,
+  .room-back {
+    position: absolute;
+    top: var(--space-3);
+    left: var(--space-3);
+    z-index: 4;
+    display: none;
+  }
+
+  .room-hud {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.45s ease;
+  }
+
+  :global(html.room.room-landed:not(.room-light):not(.room-os)) .room-hud {
+    display: flex;
+  }
+
+  :global(html.room.room-landed) .room-hud:not([data-hidden]) {
+    opacity: 1;
+  }
+
+  .room-hud p {
+    margin: 0;
+    padding: 0.2rem 0.6rem;
+    background: var(--ink);
+    color: var(--dust);
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+  }
+
+  .room-hud .room-hud-name {
+    padding: 0.2rem 0.6rem 0.25rem;
+    color: var(--paper);
+    font-family: var(--font-serif);
+    font-size: 1.0625rem;
+    letter-spacing: 0;
+  }
+
+  .room-hud .room-hud-time {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* At the monitor: the way back, drawn like the room's other controls. */
+  :global(html.room:not(.room-light)) .room-back:not([hidden]) {
+    display: inline-flex;
+  }
+
+  .room-back {
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.3rem 0.6rem 0.3rem 0.5rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    border-radius: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-sans);
+    font-size: var(--size-meta);
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .room-back svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: square;
+  }
+
+  .room-back kbd {
+    padding: 0 0.3rem;
+    border: 1px solid rgb(168 159 145 / 0.45);
+    color: var(--dust);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+
+  .room-back:hover,
+  .room-back:focus-visible {
+    border-color: var(--paper);
+    background: var(--walnut);
+  }
+
+  .room-back:focus-visible {
+    outline: 2px solid var(--paper);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .room-hud,
+    .room-back {
+      transition: none;
+    }
+  }
+</style>

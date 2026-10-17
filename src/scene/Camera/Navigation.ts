@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { RoomNodes, StationName } from '../Application/RoomModel';
+import type { Orbit } from './orbit';
 import type { Motion, RoomCamera } from './RoomCamera';
 
 export interface NavigationHandlers {
@@ -11,23 +12,37 @@ export interface NavigationHandlers {
   takeOver(): void;
   /** Input during the tour's glide brakes it where it is; true when it did (the input then does nothing else). */
   interrupt(): boolean;
+  /** The visitor turns or zooms the set: the camera leaves its framing (or the monitor) for the orbit. */
+  orbit(): Orbit | null;
 }
 
 // A drag starts once the pointer has travelled this far; anything shorter is a click or a tap.
 const DRAG_START_PX = 6;
-// One scroll gesture is one step: wheel deltas add up to this, then the wheel must rest before the next step.
-const WHEEL_STEP_PX = 40;
-const WHEEL_REST_MS = 220;
+// Arrow keys turn the set this far a press (a held key repeats); + and - move in or out this much.
+const KEY_TURN_RAD = THREE.MathUtils.degToRad(15);
+const KEY_TILT_RAD = THREE.MathUtils.degToRad(8);
+const KEY_ZOOM = 0.85;
+const ORBIT_KEYS: Record<string, [azimuth: number, polar: number]> = {
+  ArrowLeft: [-KEY_TURN_RAD, 0],
+  ArrowRight: [KEY_TURN_RAD, 0],
+  ArrowUp: [0, -KEY_TILT_RAD],
+  ArrowDown: [0, KEY_TILT_RAD],
+};
+const ZOOM_KEYS: Record<string, number> = { '+': KEY_ZOOM, '=': KEY_ZOOM, '-': 1 / KEY_ZOOM, _: 1 / KEY_ZOOM };
+// Page Up and Page Down still step between the framings, in the walk's order.
+const STEP_KEYS: Record<string, 1 | -1> = { PageDown: 1, PageUp: -1 };
 // Two framings this close (eye and look-at point, millimetres) are one stop: a tour stop authored at the desk is the desk.
 const SAME_STOP_MM = 250;
-const STEP_KEYS: Record<string, 1 | -1> = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 };
 // Moving focus is not input to the room (the page's own rule): these keys leave the tour's glide gliding.
 const FOCUS_KEYS = new Set(['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock']);
+// A wheel's line and page modes, in pixels.
+const LINE_PX = 16;
+const PAGE_PX = 400;
 
 /**
- * The stations in the order a visitor steps through them: left to right as seen from the wide view, the monitor
- * straight after the desk it sits on. A room with tour stops steps through those (prop close-ups stay out of the
- * walk); the first room steps through its named framings. Arrow keys and the scroll wheel walk this list.
+ * The stations in the order Page Up and Page Down step through them: left to right as seen from the wide view, the
+ * monitor straight after the desk it sits on. A room with tour stops steps through those (prop close-ups stay out of
+ * the walk); the first room steps through its named framings.
  */
 export function tourOrder(nodes: RoomNodes): StationName[] {
   const idle = nodes.framings.idle;
@@ -37,7 +52,7 @@ export function tourOrder(nodes: RoomNodes): StationName[] {
     const toward = point.clone().sub(idle.position);
     return Math.atan2(toward.dot(right), toward.dot(forward));
   };
-  const stops: StationName[] = nodes.tour.length ? nodes.tour : ['window', 'projector', 'shelf', 'photos'];
+  const stops: StationName[] = nodes.tour.length ? nodes.tour : ['window', 'shelf', 'photos'];
   const kept: StationName[] = [];
   for (const name of ['idle', 'desk', ...stops] as StationName[]) {
     const f = nodes.framings[name];
@@ -56,14 +71,25 @@ export function tourOrder(nodes: RoomNodes): StationName[] {
   return placed;
 }
 
-/** Keys, the scroll wheel, drags and touch steer the camera. */
+interface Press {
+  x: number;
+  y: number;
+  lastX: number;
+  lastY: number;
+}
+
+/**
+ * Drags, the wheel, pinches and keys steer the camera. A drag turns the whole set about its centre (the orbit), the
+ * wheel or a pinch moves in and out, arrow keys turn it, + and - zoom, Escape backs out. At the monitor nothing here
+ * moves the camera except a drag or Escape: the wheel there belongs to the OS window under the pointer.
+ */
 export class Navigation {
   readonly tour: StationName[];
-  private press: { id: number; x: number; y: number; lastX: number; lastY: number; dragging: boolean } | null = null;
+  /** Pointers down on the stage, by id: one turns the set, two pinch. */
+  private readonly presses = new Map<number, Press>();
+  private dragging = false;
+  private pinch = 0;
   private dragEndedAt = -Infinity;
-  private wheelTravel = 0;
-  private wheelLockedUntil = 0;
-  private wheelLastAt = 0;
   private readonly abort = new AbortController();
 
   constructor(
@@ -82,7 +108,7 @@ export class Navigation {
     window.addEventListener('keydown', (e) => this.onKey(e), { signal });
   }
 
-  /** Steps along the tour from where the camera is (or is heading); from a close-up, from the stop nearest it. */
+  /** Steps along the walk from where the camera is (or is heading); from a close-up or the orbit, from the nearest stop. */
   step(direction: 1 | -1) {
     const here = this.camera.destination;
     const index = this.tour.indexOf(here === 'loading' ? 'idle' : this.nearestStop(here));
@@ -90,70 +116,87 @@ export class Navigation {
     if (next !== here) this.handlers.fly(next, 'step');
   }
 
-  private nearestStop(station: StationName): StationName {
-    const at = this.nodes.framings[station]?.target;
-    if (this.tour.includes(station) || !at) return station;
+  private nearestStop(station: StationName | 'orbit'): StationName {
+    const at = station === 'orbit' ? this.camera.lookAt : this.nodes.framings[station]?.target;
+    if ((station !== 'orbit' && this.tour.includes(station)) || !at) return station === 'orbit' ? 'idle' : station;
     const distance = (s: StationName) => at.distanceTo(this.nodes.framings[s]?.target ?? at);
     return this.tour.filter((s) => s !== 'monitor').reduce((best, s) => (distance(s) < distance(best) ? s : best));
   }
 
-  /** True for the click that ends a drag, which must not also click a prop. */
+  /** True for the click that ends a drag or a pinch, which must not also click a prop. */
   endedDrag() {
     return performance.now() - this.dragEndedAt < 250;
   }
 
   private onPointerDown(event: PointerEvent) {
-    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
-    this.press = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, dragging: false };
+    if (!event.isPrimary && event.pointerType !== 'touch') return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    this.presses.set(event.pointerId, { x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY });
+    if (this.presses.size === 2) this.pinch = this.spread();
   }
 
   private onPointerMove(event: PointerEvent) {
-    const press = this.press;
-    if (!press || press.id !== event.pointerId) return;
-    if (!press.dragging) {
+    const press = this.presses.get(event.pointerId);
+    if (!press) return;
+    if (!this.dragging) {
       if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_START_PX || !this.handlers.canSteer()) return;
-      press.dragging = true;
+      this.dragging = true;
       this.stage.setPointerCapture?.(event.pointerId);
-      this.handlers.interrupt();
+      // A drag during the tour's glide only stops it, where it is.
+      if (this.handlers.interrupt()) {
+        this.presses.clear();
+        this.dragging = false;
+        this.dragEndedAt = performance.now();
+        return;
+      }
       this.handlers.takeOver();
+      press.lastX = event.clientX;
+      press.lastY = event.clientY;
     }
-    this.camera.dragLook(event.clientX - press.lastX, event.clientY - press.lastY, this.stage.clientHeight);
+    const orbit = this.handlers.orbit();
+    if (!orbit) return;
+    this.camera.touchOrbit();
+    if (this.presses.size >= 2) {
+      press.lastX = event.clientX;
+      press.lastY = event.clientY;
+      const spread = this.spread();
+      if (this.pinch > 0 && spread > 0) orbit.zoomBy(this.pinch / spread);
+      this.pinch = spread;
+      return;
+    }
+    orbit.drag(event.clientX - press.lastX, event.clientY - press.lastY, this.stage.clientHeight);
     press.lastX = event.clientX;
     press.lastY = event.clientY;
   }
 
   private onPointerUp(event: PointerEvent) {
-    if (!this.press || this.press.id !== event.pointerId) return;
-    if (this.press.dragging) this.dragEndedAt = performance.now();
-    this.press = null;
+    if (!this.presses.delete(event.pointerId)) return;
+    if (this.presses.size === 1) this.pinch = 0;
+    if (this.presses.size || !this.dragging) return;
+    this.dragging = false;
+    this.dragEndedAt = performance.now();
+    this.handlers.orbit()?.release();
+  }
+
+  /** The distance between the two fingers of a pinch, in CSS pixels. */
+  private spread() {
+    const [a, b] = [...this.presses.values()];
+    return a && b ? Math.hypot(a.lastX - b.lastX, a.lastY - b.lastY) : 0;
   }
 
   private onWheel(event: WheelEvent) {
-    // A pinch on a trackpad arrives as a wheel with Control held: that is the browser's zoom, not a step.
+    // A pinch on a trackpad arrives as a wheel with Control held: that is the browser's zoom, left to the browser.
     if (event.ctrlKey) return;
     event.preventDefault();
-    if (!this.handlers.canSteer()) return;
-    const now = performance.now();
-    // Inside one gesture (a flick's inertia, a spun wheel) every event pushes the end of the gesture back.
-    if (now < this.wheelLockedUntil) {
-      this.wheelLockedUntil = now + WHEEL_REST_MS;
-      return;
-    }
-    if (now - this.wheelLastAt > WHEEL_REST_MS * 2) this.wheelTravel = 0;
-    this.wheelLastAt = now;
-    const lines = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? 400 : 1;
-    this.wheelTravel += event.deltaY * lines;
-    if (this.handlers.interrupt()) {
-      this.wheelTravel = 0;
-      this.wheelLockedUntil = now + WHEEL_REST_MS;
-      return;
-    }
-    if (Math.abs(this.wheelTravel) < WHEEL_STEP_PX) return;
-    const direction = this.wheelTravel > 0 ? 1 : -1;
-    this.wheelTravel = 0;
-    this.wheelLockedUntil = now + WHEEL_REST_MS;
+    // The tour's glide brakes on any wheel; at the monitor the wheel scrolls the OS, never the camera.
+    if (this.handlers.interrupt() || !this.handlers.canSteer() || this.camera.destination === 'monitor') return;
     this.handlers.takeOver();
-    this.step(direction);
+    const orbit = this.handlers.orbit();
+    if (!orbit) return;
+    this.camera.touchOrbit();
+    // deltaY as the platform gives it (its own natural direction): positive moves out, as in three.js's OrbitControls.
+    const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? LINE_PX : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? PAGE_PX : 1;
+    orbit.zoom(event.deltaY * scale);
   }
 
   private onKey(event: KeyboardEvent) {
@@ -165,14 +208,24 @@ export class Navigation {
       if (!target?.closest?.('button, a')) event.preventDefault();
       return;
     }
-    const direction = STEP_KEYS[event.key];
+    const turn = ORBIT_KEYS[event.key];
+    const zoom = ZOOM_KEYS[event.key];
+    const step = STEP_KEYS[event.key];
     const home = event.key === 'Home';
     const out = event.key === 'Escape';
-    if (!direction && !home && !out) return;
+    if (!turn && !zoom && !step && !home && !out) return;
     if (!this.handlers.canSteer()) return;
+    // At the monitor the OS is being read: only Escape leaves it.
+    if (this.camera.destination === 'monitor' && !out) return;
     event.preventDefault();
     this.handlers.takeOver();
-    if (direction) this.step(direction);
+    if (turn || zoom) {
+      const orbit = this.handlers.orbit();
+      if (!orbit) return;
+      this.camera.touchOrbit();
+      if (turn) orbit.nudge(...turn);
+      else orbit.zoomBy(zoom);
+    } else if (step) this.step(step);
     else if (home) this.handlers.fly('idle', 'step');
     else this.stepOut();
   }

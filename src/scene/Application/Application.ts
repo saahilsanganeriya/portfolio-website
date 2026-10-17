@@ -4,6 +4,7 @@ import { Navigation } from '../Camera/Navigation';
 import type { RoomPlan } from '../Camera/glide';
 import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
 import type { Hotspot } from '../hotspots';
+import { Diorama } from '../World/Diorama';
 import { deferWindowPictures } from '../World/textures';
 import { Shine } from '../World/Shine';
 import { World } from '../World/World';
@@ -61,6 +62,14 @@ export interface RoomView {
   glide: { time: number; stops: number[]; end: number; braking: boolean } | null;
 }
 
+/** A box on the page, in CSS pixels from the viewport's top left. */
+export interface ScreenRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export interface RoomHandle {
   /** Leaves the boot framing: the arrival glide to the desk and on into the monitor, or with `open` the monitor at once. */
   start(options?: StartOptions): void;
@@ -89,8 +98,10 @@ export interface RoomHandle {
   skipIntro(): void;
   /** The visitor took over (the map opened, a stop chosen): nothing moves the camera by itself any more. */
   takeOver(): void;
-  /** Whether the projector is running his story film on the wall now. */
-  filmPlaying(): boolean;
+  /** Out of the monitor, back to the desk (the room's back control). */
+  back(): void;
+  /** Where the monitor's glass is on the page now, or null when it is not in view. */
+  monitorRect(): ScreenRect | null;
   /** The room's sound: unlock() on the first gesture, mute, volume, setState(state), sfx(name, position?). */
   readonly audio: AudioHandle;
   setPaused(paused: boolean): void;
@@ -125,8 +136,14 @@ export interface RoomProbe {
   /** The stations arrow keys and the wheel step through, in order. */
   readonly stations: readonly StationName[];
   readonly view: RoomView;
-  /** How far the free look has turned the view from its framing (radians). */
+  /** How far the pointer's lean has turned the view from its framing (radians). */
   readonly look: { yaw: number; pitch: number };
+  /** Where the camera stands about the set while the visitor turns it (radians, world units); null at a framing. */
+  readonly orbit: RoomCamera['orbitState'];
+  /** The orbit's centre (world units) and limits. */
+  readonly orbitSettings: RoomCamera['orbitSettings'];
+  /** Each wall of the diorama: its opacity, what fades with it, whether its hotspots take the pointer. */
+  readonly walls: ReturnType<Diorama['probe']>;
   /** Base width of each texture in the room, after the light tier halves them. */
   readonly textureWidths: number[];
   /** The visible meshes each proxy lifts on hover. */
@@ -137,7 +154,7 @@ export interface RoomProbe {
   /** The proxy under a client point, or null for empty space. */
   hit(x: number, y: number): string | null;
   goto(station: StationName): void;
-  /** The living room: the window, lava lamp, espresso, oven, projector, posters, Instax board, sticky notes, album. */
+  /** The living room: the window, lava lamp, espresso, oven, posters, Instax board, sticky notes. */
   readonly world: ReturnType<World['probe']>;
   /** performance.now() when the intro ended and the room became interactive; null before. */
   readonly interactiveAt: number | null;
@@ -152,7 +169,7 @@ export interface RoomProbe {
   readonly monitorStill: boolean;
   /** The last frame's draw calls and triangles, and what the GPU holds. */
   readonly gpu: { calls: number; triangles: number; textures: number; geometries: number; programs: number };
-  /** Everything that moves at once: the lava lamp cycling, steam, an espresso pour and the projector running in view or not. */
+  /** Everything that moves at once: the lava lamp cycling, steam and an espresso pour. */
   forceEverything(on: boolean): void;
   /** Renders the room's sound offline as heard from a framing; see RoomAudio.renderOffline. */
   renderSound(seconds: number, options: OfflineOptions & { view: string }): Promise<Float32Array[]>;
@@ -185,6 +202,7 @@ export class Application implements RoomHandle {
   private shine!: Shine;
   audio!: RoomAudio;
   private world!: World;
+  private diorama!: Diorama;
   private interactiveAt: number | null = null;
   private startedAt: number | null = null;
   private landedAt: number | null = null;
@@ -261,7 +279,8 @@ export class Application implements RoomHandle {
     });
     this.atlases = new AtlasStreamer(this.scene, this.renderer, this.ktx2, { light: this.light, onSwap: () => (this.dirty = true) });
 
-    this.camera = new RoomCamera(this.nodes, this.aspect());
+    const still = Boolean(this.options.reducedMotion);
+    this.camera = new RoomCamera(this.nodes, this.aspect(), still);
     this.monitor = new MonitorScreen(
       this.nodes.monitor,
       this.scene,
@@ -273,33 +292,28 @@ export class Application implements RoomHandle {
     if (this.light) this.addMonitorProxy();
     this.effects = new Effects(this.nodes, this.scene);
     this.effects.setTier(this.renderer.effective(this.quality.tier));
-    this.audio = new RoomAudio(
-      { crt: this.nodes.monitor.position, projector: this.nodes.projector?.lens ?? null, desk: this.nodes.framings.desk.target },
-      root,
-    );
+    this.audio = new RoomAudio({ crt: this.nodes.monitor.position, desk: this.nodes.framings.desk.target }, root);
     // Before the hover reactions: the world names and adds proxies (posters by slot, one per print, the dial's).
-    this.world = new World(this.nodes, this.scene, this.container, this.ktx2, this.effects, {
+    this.world = new World(this.nodes, this.scene, this.container, this.ktx2, {
       fly: (station) => this.fly(station),
       station: () => this.camera.destination,
       openWindow: (target) => this.openWindow(target),
       sfx: (name, at) => this.audio.sfx(name, at),
-      setProjectorRunning: (running) => this.audio.setProjectorRunning(running),
       audio: this.audio,
-      setMonitorBlocked: (blocked) => {
-        if (this.monitor.iframe) this.monitor.iframe.style.pointerEvents = blocked ? 'none' : '';
-      },
-      reducedMotion: Boolean(this.options.reducedMotion),
-      light: this.light,
+      reducedMotion: still,
     });
     this.world.setTier(this.renderer.effective(this.quality.tier));
     this.shine = new Shine(root, this.renderer.gl, this.nodes.crtGlow && { glass: this.nodes.crtGlow, pose: this.nodes.monitor }, () => (this.dirty = true));
     this.shine.setTier(this.renderer.effective(this.quality.tier));
-    this.hover = new HoverReactions(root, this.nodes.proxies, this.camera.instance, Boolean(this.options.reducedMotion));
+    // After the world: it names and adds the proxies the walls' hotspots are found among.
+    this.diorama = new Diorama(root, this.nodes.proxies, this.camera.orbitSettings.center, still);
+    this.hover = new HoverReactions(root, this.nodes.proxies, this.camera.instance, still);
     this.navigation = new Navigation(this.container, this.camera, this.nodes, {
       fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
-      canSteer: () => this.started && !this.handedOver && !this.world.capturing,
+      canSteer: () => this.started && !this.handedOver,
       takeOver: () => this.takeOver(),
       interrupt: () => this.camera.brake(),
+      orbit: () => this.enterOrbit(),
     });
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
       hotspot: (hotspot, proxy) => this.onHotspot(hotspot, proxy),
@@ -311,7 +325,7 @@ export class Application implements RoomHandle {
         if (kind === 'mouse-down') this.camera.brake();
         this.audio.click(kind);
       },
-      canHover: () => this.started && this.camera.destination !== 'monitor' && !this.handedOver && !this.world.capturing,
+      canHover: () => this.started && this.camera.destination !== 'monitor' && !this.handedOver,
       endedDrag: () => this.navigation.endedDrag(),
     });
     this.resize();
@@ -422,9 +436,25 @@ export class Application implements RoomHandle {
     clearTimeout(this.stepIn);
   }
 
-  filmPlaying() {
-    const projector = this.world.projector;
-    return projector !== null && projector.running && projector.state.program === 'story';
+  back() {
+    if (this.camera.destination === 'monitor') this.leaveMonitor();
+  }
+
+  monitorRect(): ScreenRect | null {
+    const { position, quaternion, width, height } = this.nodes.monitor;
+    const rect = this.container.getBoundingClientRect();
+    const camera = this.camera.instance;
+    const corners = [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ].map(([x, y]) => new THREE.Vector3((x * width) / 2, (y * height) / 2, 0).applyQuaternion(quaternion).add(position).project(camera));
+    if (corners.some((p) => p.z > 1)) return null;
+    const xs = corners.map((p) => rect.left + ((p.x + 1) / 2) * rect.width);
+    const ys = corners.map((p) => rect.top + ((1 - p.y) / 2) * rect.height);
+    const box = { left: Math.min(...xs), top: Math.min(...ys), right: Math.max(...xs), bottom: Math.max(...ys) };
+    return box.right < rect.left || box.left > rect.right || box.bottom < rect.top || box.top > rect.bottom ? null : box;
   }
 
   /** Stops every motion that runs by itself (sway, dust, LEDs); the camera still answers clicks. */
@@ -461,6 +491,7 @@ export class Application implements RoomHandle {
     this.world?.dispose();
     this.atlases?.dispose();
     this.shine?.dispose();
+    this.diorama?.dispose();
     this.ktx2.dispose();
     this.effects?.dispose();
     this.renderer.dispose();
@@ -508,8 +539,9 @@ export class Application implements RoomHandle {
   }
 
   private enterMonitor() {
-    // The glide passes the desk: a pointer resting where the glass goes by is not the visitor asking to go in.
-    if (this.camera.glideState) return;
+    // The glide passes the desk: a pointer resting where the glass goes by is not the visitor asking to go in; nor is
+    // a drag of the set that let go over the screen.
+    if (this.camera.glideState || this.navigation.endedDrag()) return;
     if (this.started && this.camera.destination !== 'monitor') this.toMonitor('monitor', null);
   }
 
@@ -519,9 +551,19 @@ export class Application implements RoomHandle {
     this.flyTo('desk', 'step');
   }
 
+  /** The visitor turns or zooms the set: the camera leaves where it is (the monitor too) for the orbit about the set. */
+  private enterOrbit() {
+    if (!this.started || this.handedOver) return null;
+    if (this.camera.destination === 'monitor') this.leftMonitorAt = performance.now();
+    this.takeOver();
+    this.intro = false;
+    this.dirty = true;
+    return this.camera.startOrbit();
+  }
+
   /**
    * A click on empty space: in to the desk from the wide view, back to the desk from the monitor, out to the wide view
-   * from anywhere else.
+   * from a framing. Turned about the set, the camera stays where the visitor put it.
    */
   private toggle() {
     const now = performance.now();
@@ -529,6 +571,7 @@ export class Application implements RoomHandle {
     if (!this.started || now - this.skippedAt < SKIP_CLICK_MS || now - this.leftMonitorAt < SKIP_CLICK_MS) return;
     if (this.camera.brake()) return;
     const here = this.camera.destination;
+    if (here === 'orbit') return;
     this.flyTo(here === 'idle' || here === 'monitor' ? 'desk' : 'idle', 'step');
   }
 
@@ -618,7 +661,6 @@ export class Application implements RoomHandle {
     // Hidden (the drawn monitor took over, or the page is off screen) the room stops drawing.
     const visibility = new IntersectionObserver(([entry]) => {
       this.onScreen = entry.isIntersecting;
-      this.world.projector?.suspend(!this.onScreen);
       if (this.onScreen) this.loop();
     });
     visibility.observe(this.container);
@@ -650,10 +692,11 @@ export class Application implements RoomHandle {
     }
 
     this.camera.update(dt, this.clock, this.interaction.pointer);
+    if (this.diorama.update(this.camera.instance.position, dt)) this.dirty = true;
     this.interaction.update();
     this.hover.set(this.interaction.hoveredProxy);
     if (this.hover.update(dt, now)) this.dirty = true;
-    if (!this.paused) this.effects.update(this.clock, this.renderer.gl.getPixelRatio());
+    if (!this.paused) this.effects.update(this.clock);
     this.monitor.update(this.clock, this.camera.instance);
     const still = this.quality.tier.resolution <= STILL_SCREEN_RESOLUTION && this.camera.phase === 'idle' && this.camera.destination === 'idle';
     if (still !== this.monitor.isStill) {
@@ -712,13 +755,18 @@ export class Application implements RoomHandle {
       get look() {
         return app.camera.lookAngles;
       },
+      get orbit() {
+        return app.camera.orbitState;
+      },
+      orbitSettings: this.camera.orbitSettings,
+      get walls() {
+        return app.diorama.probe();
+      },
       textureWidths: widths,
       claims: this.hover.claims,
       lift: (proxy) => this.hover.liftOf(proxy),
       point(name) {
         const rect = app.container.getBoundingClientRect();
-        const feature = app.world.point(name, rect);
-        if (feature !== undefined) return feature;
         let world: THREE.Vector3;
         if (name === 'monitor') world = app.nodes.monitor.position.clone();
         else {

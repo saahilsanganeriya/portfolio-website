@@ -1,8 +1,8 @@
 // The 3D room on every page: Henry Heffernan's portfolio-website scene (MIT, see NOTICE), ported to current three.js.
-import { Application, type RoomHandle, type RoomOptions, type RoomView, type StartOptions } from './Application/Application';
+import { Application, type RoomHandle, type RoomOptions, type RoomView, type ScreenRect, type StartOptions } from './Application/Application';
 import type { StationName } from './Application/RoomModel';
 
-export type { RoomHandle, RoomOptions, RoomView, StartOptions, StationName };
+export type { RoomHandle, RoomOptions, RoomView, ScreenRect, StartOptions, StationName };
 
 /** Builds the room inside `container` and resolves once everything has loaded and the room can be entered. */
 export async function startRoom(container: HTMLElement, opts: RoomOptions): Promise<RoomHandle> {
@@ -24,7 +24,8 @@ export async function startRoom(container: HTMLElement, opts: RoomOptions): Prom
     view: () => app.view(),
     skipIntro: () => app.skipIntro(),
     takeOver: () => app.takeOver(),
-    filmPlaying: () => app.filmPlaying(),
+    back: () => app.back(),
+    monitorRect: () => app.monitorRect(),
     audio: app.audio,
     setPaused: (paused) => app.setPaused(paused),
     measureFps: (ms) => app.measureFps(ms),

@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import type { Framing, RoomNodes, StationName } from '../Application/RoomModel';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import { brakedTime, fromGlidePose, glidePose, glideRate, glideTime, planGlide, toGlidePose, type GlidePlan, type RoomPlan } from './glide';
+import { Orbit, readOrbit, type OrbitSettings } from './orbit';
 import { Spring, springFor, type SpringSettings } from './spring';
 
-export type CameraPhase = 'loading' | StationName;
+/** Where the camera is: a framing, the boot framing, or turned freely about the set (the orbit). */
+export type CameraPhase = 'loading' | 'orbit' | StationName;
 
 /** How a move feels: each is a spring tuned to land in about the time named. */
 export const MOTIONS = {
@@ -67,14 +69,13 @@ const IDLE_PERIOD_S = 80;
 const MONITOR_MARGIN = 1.3;
 // Henry's framings were tuned for a 16:10 window; taller windows step back so the desk stays in frame.
 const REFERENCE_ASPECT = 900 / 1440;
-// Free look: the pointer turns the view a little; a drag turns it further, within these limits.
+// Free look: the pointer turns the view a little at a framing (a drag turns the whole set: the orbit).
 const POINTER_LOOK = { yaw: 0.06, pitch: 0.035 };
 // Room v3's wide view stands about 8.5 m back, so its props are small on screen: the full lean slid the mango plant
 // 55 px from under a still pointer onto the window behind it. There the lean (and the eye's slide with it) is gentler.
 const WIDE_LEAN = 0.4;
-// The wide view already fills its frame with the cut-away room (the idle sway's ±8° is its edge); inside the room,
-// where walls surround the camera, a drag may look further.
-const DRAG_LIMITS = { wide: { yaw: 0.14, pitch: 0.08 }, inside: { yaw: 0.35, pitch: 0.18 } };
+// Turned about the set and left alone this long, the camera starts the wide view's slow sway again.
+const ORBIT_REST_S = 4;
 // The eye also slides a little with the pointer (Henry's desk parallax), as a share of the distance to what it looks at.
 const POINTER_SHIFT = { x: 0.03, y: 0.02 };
 const LOOK_SPRING = springFor(0.45);
@@ -101,13 +102,12 @@ export class RoomCamera {
   // position xyz, target xyz, fov
   private readonly rig = new Spring(7);
   private readonly goal = new Float64Array(7);
-  // pointer yaw, pointer pitch, drag yaw, drag pitch
-  private readonly look = new Spring(4);
-  private readonly lookGoal = new Float64Array(4);
+  // pointer yaw, pointer pitch
+  private readonly look = new Spring(2);
+  private readonly lookGoal = new Float64Array(2);
   /** How much of the idle sway applies: it fades in slowly on the wide view and out faster when the camera leaves. */
   private readonly swayWeight = new Spring(1);
   private clock = 0;
-  private readonly drag = { yaw: 0, pitch: 0 };
   private readonly pointer = new THREE.Vector2();
   private readonly position = new THREE.Vector3();
   private readonly target = new THREE.Vector3();
@@ -116,8 +116,19 @@ export class RoomCamera {
   private restDistance = 1;
   /** A pose between framings, where a braked glide came to rest; any flight replaces it. */
   private held: Held | null = null;
+  readonly orbitSettings: OrbitSettings;
+  /** The visitor turning and zooming the set; null at a framing or in flight. */
+  private orbit: Orbit | null = null;
+  /** Seconds since the visitor last turned or zoomed the set. */
+  private orbitRest = 0;
 
-  constructor(nodes: RoomNodes, aspect: number) {
+  constructor(
+    nodes: RoomNodes,
+    aspect: number,
+    /** Reduced motion: no inertia, no glides and no sway (each move lands at once). */
+    private readonly still = false,
+  ) {
+    this.orbitSettings = readOrbit(nodes.root);
     this.framings = nodes.framings;
     this.monitorCenter = nodes.monitor.position.clone();
     this.monitorNormal = new THREE.Vector3(0, 0, 1).applyQuaternion(nodes.monitor.quaternion);
@@ -131,10 +142,10 @@ export class RoomCamera {
   }
 
   get moving() {
-    return this.flight !== null;
+    return this.flight !== null || (this.orbit !== null && this.orbit.turning > 0);
   }
 
-  /** The station the camera is at or flying to. */
+  /** The station the camera is at or flying to ('orbit' while the visitor turns the set). */
   get destination(): CameraPhase {
     return this.flight?.to ?? this.phase;
   }
@@ -156,7 +167,7 @@ export class RoomCamera {
    */
   fly(station: StationName, motion: Motion, onDone?: () => void, cut = false, distance = 1): boolean {
     if (!this.has(station)) return false;
-    this.drag.yaw = this.drag.pitch = 0;
+    this.orbit = null;
     const wasHeld = this.held !== null;
     this.held = null;
     if (cut) {
@@ -179,7 +190,7 @@ export class RoomCamera {
    */
   flyPath(waypoints: readonly Framing[], station: StationName, seconds: number, onDone?: () => void) {
     if (!this.has(station)) return false;
-    this.drag.yaw = this.drag.pitch = 0;
+    this.orbit = null;
     this.held = null;
     this.writeGoal(station);
     const v = this.rig.value;
@@ -212,7 +223,7 @@ export class RoomCamera {
   glide(stops: readonly { station: StationName; distance: number }[], end: StationName, seconds: number, onDone?: () => void, room?: RoomPlan) {
     const framed = stops.filter((s) => s.station !== 'monitor' && this.has(s.station));
     if (!this.has(end) || !framed.length) return false;
-    this.drag.yaw = this.drag.pitch = 0;
+    this.orbit = null;
     this.held = null;
     const fit = this.aspectFit();
     const pose = ({ position, target, fov }: { position: THREE.Vector3; target: THREE.Vector3; fov: number }) => toGlidePose(position, target, fov);
@@ -256,14 +267,44 @@ export class RoomCamera {
     this.apply();
   }
 
-  /** Turns the view by a drag of (dx, dy) CSS pixels: the room follows the finger. */
-  dragLook(dx: number, dy: number, viewportHeight: number) {
-    const station = this.destination;
-    if (station === 'monitor' || station === 'loading') return;
-    const limit = station === 'idle' ? DRAG_LIMITS.wide : DRAG_LIMITS.inside;
-    const radiansPerPixel = THREE.MathUtils.degToRad(this.instance.fov) / Math.max(1, viewportHeight);
-    this.drag.yaw = THREE.MathUtils.clamp(this.drag.yaw + dx * radiansPerPixel, -limit.yaw, limit.yaw);
-    this.drag.pitch = THREE.MathUtils.clamp(this.drag.pitch + dy * radiansPerPixel, -limit.pitch, limit.pitch);
+  /**
+   * Hands the camera to the visitor, turned about the set from exactly where it is seen now (a flight, a framing, the
+   * monitor): the sway and the pointer's lean are folded into the pose, so nothing jumps. A no-op while orbiting.
+   */
+  startOrbit(): Orbit {
+    if (this.orbit) return this.orbit;
+    const eye = this.instance.position.clone();
+    const v = this.rig.value;
+    const distance = Math.hypot(v[0] - v[3], v[1] - v[4], v[2] - v[5]);
+    const target = eye.clone().addScaledVector(this.instance.getWorldDirection(new THREE.Vector3()), distance);
+    this.rig.set([eye.x, eye.y, eye.z, target.x, target.y, target.z, this.instance.fov]);
+    this.look.set([0, 0]);
+    this.swayWeight.set([0]);
+    this.flight = null;
+    this.held = null;
+    this.phase = 'orbit';
+    this.restDistance = 1;
+    this.orbitRest = 0;
+    this.orbit = new Orbit(eye, target, this.orbitSettings, this.still);
+    return this.orbit;
+  }
+
+  /** The visitor turned or zoomed the set (the orbit's own methods move it; this restarts the rest before the sway). */
+  touchOrbit() {
+    this.orbitRest = 0;
+  }
+
+  /** Where the camera stands about the set while orbiting, for tests and the map; null at a framing. */
+  get orbitState() {
+    const orbit = this.orbit;
+    if (!orbit) return null;
+    return {
+      azimuth: orbit.azimuth,
+      polar: orbit.polar,
+      radius: orbit.radius,
+      centred: orbit.centred,
+      turning: orbit.turning,
+    };
   }
 
   /** The point the camera looks at, before the free look turns it (world units). */
@@ -274,8 +315,8 @@ export class RoomCamera {
 
   /** How far the view is turned from its framing (radians), for tests and measurements. */
   get lookAngles() {
-    const [pointerYaw, pointerPitch, dragYaw, dragPitch] = this.look.value;
-    return { yaw: pointerYaw + dragYaw, pitch: pointerPitch + dragPitch };
+    const [pointerYaw, pointerPitch] = this.look.value;
+    return { yaw: pointerYaw, pitch: pointerPitch };
   }
 
   /** `pointer` is in [-1, 1] on both axes, +y up; `clock` is the ambient time in seconds (frozen while paused). */
@@ -283,7 +324,9 @@ export class RoomCamera {
     const station = this.destination;
     this.clock = clock;
     this.writeGoal(station);
-    if (this.flight?.glide) {
+    if (this.orbit) {
+      this.followOrbit(this.orbit, dt);
+    } else if (this.flight?.glide) {
       this.followGlide(this.flight.glide);
     } else if (this.flight?.path) {
       this.followPath(this.flight.path, dt);
@@ -297,17 +340,29 @@ export class RoomCamera {
       this.rig.set(this.goal);
     }
 
-    if (station === 'monitor' || station === 'loading') this.pointer.set(0, 0);
+    // The pointer leans the view at a framing; at the monitor, in the boot framing and while orbiting it does not.
+    if (station === 'monitor' || station === 'loading' || station === 'orbit') this.pointer.set(0, 0);
     else this.pointer.copy(pointer);
     const lean = station === 'idle' ? WIDE_LEAN : 1;
     this.lookGoal[0] = -this.pointer.x * POINTER_LOOK.yaw * lean;
     this.lookGoal[1] = this.pointer.y * POINTER_LOOK.pitch * lean;
-    this.lookGoal[2] = this.drag.yaw;
-    this.lookGoal[3] = this.drag.pitch;
     this.look.step(this.lookGoal, dt, LOOK_SPRING);
-    const swayOn = station === 'idle';
+    // The wide view sways by itself; so does the orbit once the visitor has left it alone a while.
+    this.orbitRest += dt;
+    const swayOn = !this.still && (station === 'idle' || (station === 'orbit' && this.orbitRest > ORBIT_REST_S && this.orbit?.turning === 0));
     this.swayWeight.step([swayOn ? 1 : 0], dt, swayOn ? SWAY_IN : SWAY_OUT);
     this.apply();
+  }
+
+  /** One frame of the orbit: its inertia and glides, written into the rig with their speed (a fly re-aims from it). */
+  private followOrbit(orbit: Orbit, dt: number) {
+    orbit.step(dt);
+    const eye = orbit.eye(this.position);
+    const next = [eye.x, eye.y, eye.z, orbit.pivot.x, orbit.pivot.y, orbit.pivot.z, this.rig.value[6]];
+    for (let i = 0; i < next.length; i++) {
+      if (dt > 0) this.rig.velocity[i] = (next[i] - this.rig.value[i]) / dt;
+      this.rig.value[i] = next[i];
+    }
   }
 
   /** One frame along the path; the rig's velocity is kept so a re-aim mid-path curves away instead of stopping. */
@@ -380,12 +435,12 @@ export class RoomCamera {
     forward.normalize();
     const right = forward.clone().cross(UP).normalize();
     const up = right.clone().cross(forward);
-    const [pointerYaw, pointerPitch, dragYaw, dragPitch] = this.look.value;
-    // The eye slides with the pointer, as in Henry's desk parallax; a drag only turns the head.
+    const [pointerYaw, pointerPitch] = this.look.value;
+    // The eye slides with the pointer, as in Henry's desk parallax.
     this.position
       .addScaledVector(right, (-pointerYaw / POINTER_LOOK.yaw) * POINTER_SHIFT.x * distance)
       .addScaledVector(up, (pointerPitch / POINTER_LOOK.pitch) * POINTER_SHIFT.y * distance);
-    forward.applyAxisAngle(right, pointerPitch + dragPitch).applyAxisAngle(UP, pointerYaw + dragYaw);
+    forward.applyAxisAngle(right, pointerPitch).applyAxisAngle(UP, pointerYaw);
 
     this.instance.position.copy(this.position);
     this.instance.lookAt(this.position.clone().addScaledVector(forward, distance));
@@ -403,6 +458,11 @@ export class RoomCamera {
     let fov: number;
     if (!this.flight && this.held?.station === phase) {
       this.goal.set(this.held.pose);
+      return;
+    }
+    // The orbit has no framing: the rig follows the orbit itself.
+    if (phase === 'orbit') {
+      this.goal.set(this.rig.value);
       return;
     }
     if (phase === 'monitor') ({ position, target, fov } = this.monitorPose());

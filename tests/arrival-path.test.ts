@@ -11,6 +11,7 @@ const framing = (position: number[], target: number[]): Framing => ({
 });
 const WAYPOINTS = [framing([2.75, 1.95, 2.85], [1.85, 1.45, -0.42]), framing([1.3, 1.45, 1.1], [1.44, 1.1, -0.35]), framing([0.4, 1.42, 1.8], [0, 1.05, 0])];
 const nodes = {
+  root: new THREE.Object3D(),
   framings: {
     loading: framing([3.8, 5, 13.9], [-0.45, 0.95, 1.35]),
     idle: framing([2.2, 2.75, 9.2], [-0.45, 0.95, 1.35]),

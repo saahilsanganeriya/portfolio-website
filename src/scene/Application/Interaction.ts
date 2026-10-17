@@ -31,7 +31,6 @@ export class Interaction {
   hoveredProxy: THREE.Object3D | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private readonly clientPointer = { x: 0, y: 0, inside: false };
-  private pressedInMonitor = false;
   private heldKey = '';
   private touch = false;
   private overMonitor = false;
@@ -70,15 +69,16 @@ export class Interaction {
     iframe.addEventListener('pointerleave', () => this.overMonitor && this.onMonitorPointer(false), { signal });
     // Tabbing into the OS takes the camera to it; tabbing out goes back to the desk. A Tab between the page and the
     // frame moves focus without focus or blur events on the frame element (Chromium), so the page window's own focus
-    // and blur count too, read against document.activeElement. Only the keyboard takes the camera in: a window the room
-    // opens on an address focuses itself inside the OS, and the camera stays at the desk for that.
+    // and blur count too, read against document.activeElement. Only the keyboard moves the camera this way: a window
+    // the room opens on an address focuses itself inside the OS, and a click on the page's own controls (Sound, the
+    // tour) takes focus out of the OS without taking the visitor away from what they were reading.
     const onFocusMove = () => {
       const inMonitor = document.activeElement === iframe;
       if (inMonitor === this.focusInMonitor) return;
       this.focusInMonitor = inMonitor;
-      if (inMonitor) {
-        if (performance.now() - this.tabbedAt < KEYBOARD_FOCUS_MS) handlers.enterMonitor();
-      } else if (!this.overMonitor) handlers.leaveMonitor();
+      if (performance.now() - this.tabbedAt >= KEYBOARD_FOCUS_MS) return;
+      if (inMonitor) handlers.enterMonitor();
+      else handlers.leaveMonitor();
     };
     for (const type of ['focus', 'blur']) {
       iframe.addEventListener(type, onFocusMove, { signal });
@@ -94,9 +94,7 @@ export class Interaction {
       this.movePointer(event.x, event.y);
       if (!this.overMonitor) this.onMonitorPointer(true);
     } else if (event.type === 'press') {
-      this.pressedInMonitor = event.down;
       this.handlers.click(event.down ? 'mouse-down' : 'mouse-up');
-      if (!event.down && !this.overMonitor) this.handlers.leaveMonitor();
     } else if (!event.down) {
       if (event.key === this.heldKey) this.heldKey = '';
     } else if (event.key !== this.heldKey) {
@@ -154,15 +152,14 @@ export class Interaction {
     this.pointer.set(0, 0);
   }
 
+  /**
+   * Resting on the glass takes the camera in (Henry's room). Leaving it does not take the camera out: a pointer that
+   * slips off the screen while reading should not move the room. Escape, the back control or a drag do.
+   */
   private onMonitorPointer(over: boolean) {
     this.overMonitor = over;
     clearTimeout(this.dwell);
-    if (over) {
-      this.dwell = window.setTimeout(() => this.handlers.enterMonitor(), MONITOR_DWELL_MS);
-    } else if (!this.pressedInMonitor) {
-      // Henry's room follows the pointer: leaving the glass goes back to the desk, even if the OS keeps focus.
-      this.handlers.leaveMonitor();
-    }
+    if (over) this.dwell = window.setTimeout(() => this.handlers.enterMonitor(), MONITOR_DWELL_MS);
   }
 
   dispose() {
