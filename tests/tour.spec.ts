@@ -32,8 +32,15 @@ const settledAt = (page: Page, at: string, timeout = 30_000) =>
 
 const map = (page: Page) => page.getByRole('region', { name: 'Map of the room' });
 const stopButtons = (page: Page) => map(page).getByRole('list', { name: 'Stops' }).getByRole('button');
-// Empty floor in front of the desk at the monitor's framing is off the glass and has no prop; checked in the test.
-const EMPTY_SPOT: [number, number] = [720, 860];
+// Spots off the glass at the edges of the frame; the test clicks the first with no prop under it at that moment.
+const EDGE_SPOTS: [number, number][] = [
+  [720, 860],
+  [60, 450],
+  [1380, 450],
+  [720, 60],
+  [200, 860],
+  [1240, 860],
+];
 
 interface GlideFrame {
   t: number;
@@ -95,7 +102,9 @@ test('the map opens, a stop flies the camera there, the tour glides through ever
   // The projector left the room in round 8: no stop of the tour is it.
   expect(STOPS.map((s) => s.id)).not.toContain('projector');
   await expect(map(page)).not.toContainText(/projector/i);
-  // The camera rests at the desk or its monitor, at the first stop: the map says so.
+  // The camera rests at the desk or its monitor, at the first stop: the map says so (once the camera has come to rest:
+  // the map may open while the arrival's step into the monitor is still flying).
+  await page.waitForFunction(() => !window.__room!.moving, null, { timeout: 60_000 });
   await expect(stopButtons(page).first()).toHaveAttribute('aria-current', 'location');
 
   const second = STOPS[1];
@@ -166,8 +175,9 @@ test('any input during the glide slows it to rest where it is, and does nothing 
   await page.mouse.move(5, 5);
   await page.getByRole('button', { name: 'Take the tour' }).click();
   const stations = STOPS.map(station);
+  let empty: [number, number] = EDGE_SPOTS[0];
   const inputs: [string, () => Promise<void>][] = [
-    ['a click on the room', () => page.mouse.click(...EMPTY_SPOT)],
+    ['a click on the room', () => page.mouse.click(...empty)],
     ['a key', () => page.keyboard.press('ArrowRight')],
     // Over the inset, where the pointer rests after pressing Play.
     ['the wheel', () => page.mouse.wheel(0, 240)],
@@ -178,8 +188,9 @@ test('any input during the glide slows it to rest where it is, and does nothing 
     await page.waitForFunction(() => (window.__room!.view.glide?.time ?? 0) > 6, null, { timeout: 30_000 });
     if (name === 'a click on the room') {
       // A spot with no prop under it, so the click would otherwise step the camera out to the wide view.
-      const hit = await page.evaluate(([x, y]) => window.__room!.hit(x, y), EMPTY_SPOT);
-      expect(hit, 'nothing under the click').toBeNull();
+      const free = await page.evaluate((spots) => spots.find(([x, y]) => window.__room!.hit(x, y) === null) ?? null, EDGE_SPOTS);
+      expect(free, 'a spot with nothing under the click').not.toBeNull();
+      empty = free!;
     }
     const before = await page.evaluate(() => window.__room!.view);
     await input();
@@ -246,6 +257,8 @@ test('the map has no serious axe violations', async ({ page }) => {
   await arrived(page);
   await page.getByRole('button', { name: 'Take the tour' }).click();
   await expect(map(page)).toBeVisible();
+  // Colours are read once the button has finished warming (a contrast check mid-transition reads a blend of two states).
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
   const { violations } = await new AxeBuilder({ page }).include('#room-tour').include('[data-tour-open]').withTags(AXE_TAGS).analyze();
   test.info().attach('axe-map.json', { body: JSON.stringify(violations, null, 2), contentType: 'application/json' });
   expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);

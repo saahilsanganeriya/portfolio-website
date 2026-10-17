@@ -149,9 +149,8 @@ export class Navigation {
         this.dragEndedAt = performance.now();
         return;
       }
+      // The set then turns by the whole way the pointer has come since the press, so a drag never loses its start.
       this.handlers.takeOver();
-      press.lastX = event.clientX;
-      press.lastY = event.clientY;
     }
     const orbit = this.handlers.orbit();
     if (!orbit) return;

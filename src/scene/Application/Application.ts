@@ -153,6 +153,8 @@ export interface RoomProbe {
   point(name: string): { x: number; y: number } | null;
   /** The proxy under a client point, or null for empty space. */
   hit(x: number, y: number): string | null;
+  /** Where the monitor's glass is on the page now (RoomHandle.monitorRect). */
+  monitorRect(): ScreenRect | null;
   goto(station: StationName): void;
   /** The living room: the window, lava lamp, espresso, oven, posters, Instax board, sticky notes. */
   readonly world: ReturnType<World['probe']>;
@@ -788,6 +790,7 @@ export class Application implements RoomHandle {
       goto(station) {
         app.fly(station);
       },
+      monitorRect: () => app.monitorRect(),
       openRecords() {
         app.world.openRecords();
       },

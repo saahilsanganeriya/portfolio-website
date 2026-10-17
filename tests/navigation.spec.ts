@@ -10,8 +10,21 @@ test.describe.configure({ timeout: 180_000 });
 const room = (page: Page) =>
   page.evaluate(() => {
     const r = window.__room!;
-    return { phase: r.phase, destination: r.destination, moving: r.moving, stations: r.stations, look: r.look, light: r.light, textureWidths: r.textureWidths };
+    return {
+      phase: r.phase,
+      destination: r.destination,
+      moving: r.moving,
+      stations: r.stations,
+      look: r.look,
+      light: r.light,
+      textureWidths: r.textureWidths,
+      orbit: r.orbit,
+      view: r.view,
+    };
   });
+const TURN = Math.PI * 2;
+/** Radians per CSS pixel of drag on the 900 px stage (the orbit turns 1.6 pi per stage height). */
+const RAD_PER_PX = (Math.PI * 1.6) / 900;
 
 async function settledAt(page: Page, station: string, timeout = 30_000) {
   await page.waitForFunction((s) => window.__room?.phase === s && !window.__room.moving, station, { timeout });
@@ -108,36 +121,6 @@ test('Escape inside SaahilOS steps back to the desk, unless it closed the Start 
   await settledAt(page, 'desk');
 });
 
-/** Catches arrow keys or the scroll wheel that do nothing, skip a framing, or step more than once per gesture. */
-test('arrow keys and the scroll wheel step between framings, one per press or gesture', async ({ page }) => {
-  await inRoom(page);
-  const { stations } = await room(page);
-  const at = stations.indexOf('idle');
-  expect(stations).toEqual(expect.arrayContaining(['idle', 'desk', 'monitor']));
-  // The room's tour stops are stepped through too (a stop at the same spot as the desk counts once).
-  expect(stations.filter((s) => s.startsWith('tour_')).length).toBeGreaterThanOrEqual(5);
-  expect(stations.indexOf('monitor')).toBe(stations.indexOf('desk') + 1);
-
-  await page.keyboard.press('ArrowRight');
-  await settledAt(page, stations[at + 1]);
-  await page.keyboard.press('ArrowLeft');
-  await settledAt(page, 'idle');
-
-  // One flick of a trackpad: a burst of small deltas (dispatched in one task, so no clock decides it) is one step, not five.
-  const flick = (deltaY: number, events: number) =>
-    page.evaluate(
-      ([deltaY, events]) => {
-        const stage = document.querySelector('[data-room-world]')!;
-        for (let i = 0; i < events; i++) stage.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true }));
-      },
-      [deltaY, events],
-    );
-  await flick(30, 5);
-  await settledAt(page, stations[at + 1]);
-  await flick(-120, 1);
-  await settledAt(page, 'idle');
-});
-
 /** Catches a prop that does not answer the pointer, or one that stays lifted after the pointer leaves. */
 test('hovering a prop lifts it a little; leaving lets it back down', async ({ page }) => {
   await inRoom(page);
@@ -149,31 +132,198 @@ test('hovering a prop lifts it a little; leaving lets it back down', async ({ pa
   await expect.poll(() => page.evaluate(() => window.__room!.lift('hit_mango'))).toBe(0);
 });
 
-/** Catches a drag that clicks what is under it, turns the view without limit, or keeps its turn after a step. */
-test('a drag turns the view within limits, clicks nothing, and the next step looks straight again', async ({ page }) => {
-  await inRoom(page);
-  // 1,100 px at 35° over 900 px would turn 0.75 rad; the wide view stops at 0.14 rad, before the room leaves the frame.
-  await page.mouse.move(300, 450);
+/** Drags across the stage by (dx, dy) in steps; `rest` waits before letting go, so the turn hands no speed to the inertia. */
+async function drag(page: Page, dx: number, dy = 0, { from = [720, 520], rest = true } = {}) {
+  const [x, y] = from;
+  await page.mouse.move(x, y);
   await page.mouse.down();
-  for (let x = 300; x <= 1400; x += 50) await page.mouse.move(x, 450);
+  for (let i = 1; i <= 16; i++) await page.mouse.move(x + (dx * i) / 16, y + (dy * i) / 16);
+  if (rest) await page.waitForTimeout(150);
   await page.mouse.up();
-  await page.mouse.move(720, 450);
-  await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.13);
-  const { look, phase, destination } = await room(page);
-  expect(look.yaw).toBeLessThanOrEqual(0.14 + 0.01);
-  expect({ phase, destination }).toEqual({ phase: 'idle', destination: 'idle' });
-  await page.keyboard.press('ArrowRight');
-  await expect.poll(async () => Math.abs((await room(page)).look.yaw)).toBeLessThan(0.01);
+}
+
+const orbitRests = (page: Page) => page.waitForFunction(() => window.__room!.orbit !== null && window.__room!.orbit.turning === 0 && !window.__room!.moving, null, { timeout: 30_000 });
+
+/**
+ * Catches a drag that turns the view only a little (round 7's limited look) instead of the whole set, an orbit that
+ * cannot go all the way round, a drag that also clicks what is under it, a wall that stays solid when the camera is
+ * behind it (or fades while the camera is in front), and a faded wall whose hotspots still take the pointer.
+ */
+test('a drag turns the set all the way round, and each wall turns see-through from behind', async ({ page }) => {
+  await inRoom(page);
+  const sectors = new Set<number>();
+  const walls: Record<string, number[]> = {};
+  let unwrapped = 0;
+  let last: number | null = null;
+  // Into the orbit, then twelve turns of 30°, one way: the camera passes every side of the set.
+  for (let k = 0; k < 13; k++) {
+    await drag(page, -(Math.PI / 6) / RAD_PER_PX);
+    await orbitRests(page);
+    const r = await room(page);
+    expect(r.destination, 'a drag never clicks a prop or toggles a framing').toBe('orbit');
+    const azimuth = r.orbit!.azimuth;
+    if (last !== null) unwrapped += azimuth - last;
+    last = azimuth;
+    sectors.add(Math.floor((((azimuth % TURN) + TURN) % TURN) / (TURN / 8)));
+    for (const wall of await page.evaluate(() => window.__room!.walls)) (walls[wall.name] ??= []).push(wall.opacity);
+    // From a wall's outside, its hotspots are not in the way of the pointer.
+    const faded = (await page.evaluate(() => window.__room!.walls)).filter((w) => w.opacity < 0.5);
+    for (const wall of faded) {
+      for (const proxy of wall.proxies) {
+        const at = await page.evaluate((n) => window.__room!.point(n), proxy);
+        if (at) expect(await page.evaluate(({ x, y }) => window.__room!.hit(x, y), at), `${proxy} on the faded ${wall.name} wall`).not.toBe(proxy);
+      }
+    }
+  }
+  expect(unwrapped, 'the set turned a whole turn and more').toBeGreaterThan(TURN * 0.95);
+  expect([...sectors].sort(), 'every eighth of the circle was seen').toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  // Every wall was gone at some point of the turn and whole at another.
+  for (const [name, opacities] of Object.entries(walls)) {
+    expect(Math.min(...opacities), `the ${name} wall from behind`).toBeLessThan(0.05);
+    expect(Math.max(...opacities), `the ${name} wall from the front`).toBe(1);
+  }
 });
 
-/** Catches glides under reduced motion: steps cut. */
-test('with reduced motion an arrow key cuts to the next framing', async ({ page }) => {
+/** Catches a wheel that steps between framings instead of zooming, zooms the wrong way, or breaks out of the limits. */
+test('the wheel zooms in and out within the orbit’s limits, as the platform scrolls', async ({ page }) => {
+  await inRoom(page);
+  const { minDist, maxDist } = await page.evaluate(() => window.__room!.orbitSettings.limits);
+  await page.mouse.move(720, 520);
+  // Negative deltaY (the wheel turned toward the screen, or two fingers pushed up on a trackpad) moves in.
+  await page.mouse.wheel(0, -200);
+  await orbitRests(page);
+  const start = (await room(page)).orbit!.radius;
+  await page.mouse.wheel(0, -200);
+  await expect.poll(async () => (await room(page)).orbit!.radius).toBeLessThan(start - 1);
+  for (let i = 0; i < 30; i++) await page.mouse.wheel(0, -400);
+  await page.waitForTimeout(800);
+  expect((await room(page)).orbit!.radius).toBeGreaterThanOrEqual(minDist - 1);
+  expect((await room(page)).orbit!.radius).toBeLessThan(minDist + 50);
+  for (let i = 0; i < 40; i++) await page.mouse.wheel(0, 600);
+  await page.waitForTimeout(800);
+  expect((await room(page)).orbit!.radius).toBeLessThanOrEqual(maxDist + 1);
+  expect((await room(page)).orbit!.radius).toBeGreaterThan(maxDist - 50);
+  expect((await room(page)).destination).toBe('orbit');
+});
+
+/** Catches keys that step framings instead of turning the set, a zoom key that does nothing, and a lost way back. */
+test('arrow keys turn the set, + and - zoom, Escape goes back to the wide view, Page Down steps a framing', async ({ page }) => {
+  await inRoom(page);
+  await page.keyboard.press('ArrowRight');
+  await orbitRests(page);
+  const turned = (await room(page)).orbit!;
+  await page.keyboard.press('ArrowRight');
+  await orbitRests(page);
+  expect((await room(page)).orbit!.azimuth - turned.azimuth).toBeCloseTo(Math.PI / 12, 1);
+  await page.keyboard.press('+');
+  await orbitRests(page);
+  await expect.poll(async () => (await room(page)).orbit!.radius).toBeLessThan(turned.radius - 100);
+  await page.keyboard.press('Escape');
+  await settledAt(page, 'idle');
+  const { stations } = await room(page);
+  await page.keyboard.press('PageDown');
+  await settledAt(page, stations[stations.indexOf('idle') + 1]);
+});
+
+/** Catches the orbit's inertia, glides or sway under reduced motion: each input lands at once and then holds still. */
+test('with reduced motion a key turns the set at once, a drag lets go without coasting, and nothing drifts', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.phase === 'monitor', null, { timeout: 120_000 });
-  const { stations } = await room(page);
-  await page.keyboard.press('ArrowRight');
-  expect(await room(page)).toMatchObject({ phase: stations[stations.indexOf('monitor') + 1], moving: false });
+  await settledAt(page, 'monitor', 120_000);
+  await page.keyboard.press('Escape');
+  await settledAt(page, 'desk');
+  await page.keyboard.press('ArrowLeft');
+  const first = (await room(page)).orbit!;
+  expect(first.turning).toBe(0);
+  await page.keyboard.press('ArrowLeft');
+  expect(first.azimuth - (await room(page)).orbit!.azimuth).toBeCloseTo(Math.PI / 12, 3);
+  // A fast flick, let go while moving: no speed carries on.
+  await drag(page, 300, 0, { rest: false });
+  const released = await room(page);
+  expect(released.orbit!.turning).toBe(0);
+  await page.waitForTimeout(1500);
+  const later = await room(page);
+  expect(later.orbit!.azimuth).toBeCloseTo(released.orbit!.azimuth, 6);
+  expect([later.view.x, later.view.z]).toEqual([released.view.x, released.view.z]);
+});
+
+/** Catches the wheel at the monitor moving the camera, or not reaching the OS window under the pointer (the friend's "weird" scrolling). */
+test('at the monitor the wheel scrolls the OS window under the pointer, and the camera stays still', async ({ page }) => {
+  await page.goto('/about');
+  await settledAt(page, 'monitor', 120_000);
+  const body = os(page).getByRole('dialog', { name: 'About' }).locator('p').nth(2);
+  await expect(body).toBeVisible();
+  const box = (await body.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // The scrolling box that holds the paragraph under the pointer.
+  const scroller = () =>
+    body.evaluate((paragraph) => {
+      let el: Element | null = paragraph;
+      while (el && !(el.scrollHeight > el.clientHeight && /auto|scroll/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+      return el ? el.scrollTop : null;
+    });
+  const before = { scroll: await scroller(), view: (await room(page)).view };
+  expect(before.scroll, 'About has a scrolling body').not.toBeNull();
+  for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 200);
+  await expect.poll(scroller).toBeGreaterThan(before.scroll! + 100);
+  await page.waitForTimeout(600);
+  const after = await room(page);
+  expect(after).toMatchObject({ phase: 'monitor', destination: 'monitor', moving: false, orbit: null });
+  expect([after.view.x, after.view.z, after.view.targetX, after.view.targetZ]).toEqual([before.view.x, before.view.z, before.view.targetX, before.view.targetZ]);
+  // The wheel on the bezel beside the screen does not move the camera either.
+  await page.mouse.move(30, 450);
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(600);
+  expect(await room(page)).toMatchObject({ phase: 'monitor', destination: 'monitor', orbit: null });
+});
+
+/** Catches a pointer that slips off the glass pulling the camera out, and the ways out (back control, drag) that do not. */
+test('the monitor is left by the back control or a drag, not by the pointer slipping off the screen', async ({ page }) => {
+  await page.goto('/about');
+  await settledAt(page, 'monitor', 120_000);
+  await page.mouse.move(720, 450);
+  await page.mouse.move(25, 450);
+  await page.waitForTimeout(1200);
+  expect(await room(page)).toMatchObject({ destination: 'monitor' });
+  const back = page.getByRole('button', { name: 'Back to the room' });
+  await expect(back).toBeVisible();
+  await back.click();
+  await settledAt(page, 'desk');
+  await expect(back).toBeHidden();
+  await page.evaluate(() => window.__room!.goto('monitor'));
+  await settledAt(page, 'monitor');
+  // A drag that starts on the bezel takes the camera out into the orbit.
+  await drag(page, 260, 0, { from: [25, 450] });
+  await expect.poll(async () => (await room(page)).destination).toBe('orbit');
+});
+
+/**
+ * Catches a corner label without his name, title or the visitor's time (hh:mm), one that sits over the monitor, or one
+ * a screen reader hears every minute.
+ */
+test('the HUD shows his name, Software Engineer and the local time, and keeps off the monitor', async ({ page }) => {
+  await page.goto('/');
+  await settledAt(page, 'monitor', 120_000);
+  const hud = page.locator('[data-room-hud]');
+  await expect(hud).toHaveAttribute('data-hidden', '');
+  await page.keyboard.press('Escape');
+  await settledAt(page, 'desk');
+  await expect(hud).not.toHaveAttribute('data-hidden', '');
+  await expect(hud).toHaveText(/Saahil Sanganeriya\s*Software Engineer\s*\d{2}:\d{2}/);
+  const shown = await hud.locator('time').textContent();
+  // The page's own clock now and a minute ago (the minute may turn between the two reads).
+  const local = await page.evaluate(() =>
+    [0, 60_000].map((ago) => {
+      const at = new Date(Date.now() - ago);
+      return [at.getHours(), at.getMinutes()].map((n) => String(n).padStart(2, '0')).join(':');
+    }),
+  );
+  expect(local).toContain(shown);
+  expect(await hud.locator('[aria-live]').count()).toBe(0);
+  const label = (await hud.boundingBox())!;
+  const glass = (await page.evaluate(() => window.__room!.monitorRect()))!;
+  const meets = label.x < glass.right && label.x + label.width > glass.left && label.y < glass.bottom && label.y + label.height > glass.top;
+  expect(meets, 'the label and the glass do not meet at the desk').toBe(false);
 });
 
 test.describe('on a phone', () => {
@@ -205,24 +355,22 @@ test.describe('on a phone', () => {
     await expect(page.locator('html')).toHaveClass(/room-os/, { timeout: 30_000 });
   });
 
-  /** Catches a phone page that pans or zooms under a finger instead of turning the view, or that goes into the monitor anyway. */
-  test('a finger drags the view on a phone, and the room then stays out of the monitor', async ({ page }) => {
+  /** Catches a phone page that pans or zooms under a finger instead of turning the set, or that goes into the monitor anyway. */
+  test('a finger turns the set on a phone, and the room then stays out of the monitor', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => window.__room?.moving, null, { timeout: 120_000 });
     // Touches through the browser's input pipeline, so touch-action and pointer events are what a phone gets.
     const cdp = await page.context().newCDPSession(page);
     const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) =>
       cdp.send('Input.dispatchTouchEvent', { type, touchPoints: x === undefined ? [] : [{ x, y: 420 }] });
-    // 120 px at 35° over 664 px turns the view 0.11 rad, inside the desk's 0.35 rad limit.
     await touch('touchStart', 100);
     for (let x = 110; x <= 220; x += 10) await touch('touchMove', x);
     await touch('touchEnd');
-    await expect.poll(async () => (await room(page)).look.yaw).toBeGreaterThan(0.09);
-    expect((await room(page)).look.yaw).toBeLessThan(0.13);
+    await expect.poll(async () => (await room(page)).destination).toBe('orbit');
     expect(await page.evaluate(() => scrollX + scrollY)).toBe(0);
     // Past the 1.2 s the phone would hold the desk before going in by itself.
     await page.waitForTimeout(3000);
-    expect(await room(page)).toMatchObject({ phase: 'desk', destination: 'desk' });
+    expect(await room(page)).toMatchObject({ phase: 'orbit', destination: 'orbit' });
     await expect(page.locator('html')).not.toHaveClass(/room-os/);
   });
 
