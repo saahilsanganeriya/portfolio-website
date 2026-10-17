@@ -192,7 +192,7 @@ review that names one of those people.
 | `npm run preview` | Serves the last build from `.vercel/output/`, `/api/films.json` included (`astro preview` does not support the Vercel adapter). |
 | `npm run check` | Type-checks the project (`astro check`). |
 | `npm run test:e2e` | Playwright tests in `tests/*.spec.ts`. They build with `SAMPLES=1` (draft posts included) and serve the build themselves. |
-| `node scripts/check-routes.mjs` | Builds, then checks every address: each entry's page is the room opening its window, with its JSON body; no page exists beyond those, `/os` (framed inside the room) and `/404`; each page has a title, description, `og:title`, `og:image` and one `<h1>`; no internal link is broken. `--samples` includes draft posts. |
+| `node scripts/check-routes.mjs` | Builds, then checks every address: each entry's page is the room opening its window, with its JSON body; no page exists beyond those, `/os` (framed inside the room) and `/404`; each page has a title, description, `og:title`, `og:image` and one `<h1>`; no internal link is broken; no built file except the résumé PDF holds an email address or a `mailto:` link (example domains pass). `--samples` includes draft posts. |
 | `npm run photos:ingest -- <folder>` | Strips all metadata from the photos in a folder, writes AVIF and WebP sizes, and adds an entry per photo (see "Add photos in one step"). |
 | `npm run films` | Writes `src/content/films.json`: the archive and the cached copy, with the Letterboxd feed merged over them. When the feed fails, it keeps the cached copy and exits 0. |
 | `npm run posters [-- <slug> ...]` | Draws the hand-drawn posters into `blender/posters/` (SVG and 2048-px PNG). |

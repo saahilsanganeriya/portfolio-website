@@ -1,7 +1,8 @@
 // Builds the site, then checks the output: every content entry has an address that is the room opening its SaahilOS
 // window on the monitor, and its JSON body; no other page exists beyond the documents framed inside the room and the
 // 404 page; every page carries the tags a shared link needs (title, description, og:title, og:image) and one <h1>;
-// no internal link or anchor is broken, and no link is glued to the word next to it.
+// no internal link or anchor is broken, and no link is glued to the word next to it; no built file carries an email
+// address or a mailto: link (the Contact window takes their place).
 // Usage: node scripts/check-routes.mjs [--samples] [--no-build]   (--samples builds with SAMPLES=1: draft posts too)
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -100,9 +101,9 @@ const osRouteProblem = (fragment) => {
 const FRAMED_PAGES = new Set(['/os/']);
 const ERROR_PAGE = '/404.html';
 
-const walk = (dir) =>
+const walk = (dir, keep) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((d) =>
-    d.isDirectory() ? walk(join(dir, d.name)) : d.name.endsWith('.html') ? [join(dir, d.name)] : [],
+    d.isDirectory() ? walk(join(dir, d.name), keep) : keep.test(d.name) ? [join(dir, d.name)] : [],
   );
 
 const htmlCache = new Map();
@@ -124,7 +125,7 @@ const resolveTarget = (pathname) => {
   return candidates.map((c) => join(DIST, c)).find((c) => existsSync(c));
 };
 
-const pages = walk(DIST);
+const pages = walk(DIST, /\.html$/);
 const roomPagesSeen = new Set();
 for (const file of pages) {
   const page = '/' + relative(DIST, file);
@@ -165,7 +166,8 @@ for (const file of pages) {
       problems.push(`${page}: broken link ${href}`);
       continue;
     }
-    if (fragment && pathname.replace(/\/$/, '') === '/os') {
+    // The room's front page opens a window from its hash too (/#contact), as /os does inside the monitor.
+    if (fragment && beforeHash && ['', '/os'].includes(pathname.replace(/\/$/, ''))) {
       const problem = osRouteProblem(decodeURIComponent(fragment));
       if (problem) problems.push(`${page}: link ${href} ${problem}`);
       continue;
@@ -173,6 +175,22 @@ for (const file of pages) {
     if (fragment && target.endsWith('.html') && !readHtml(target).includes(`id="${fragment}"`)) {
       problems.push(`${page}: link ${href} names a missing anchor`);
     }
+  }
+}
+
+// ---- no contact address ----
+
+// The owner's address is never on the site; only the published résumé PDF carries it. An address in any other built
+// file must be on a domain reserved for examples (RFC 2606, RFC 6761), as the posts' made-up ones are.
+const TEXT_FILE = /\.(html|js|mjs|json|xml|txt|css|svg|webmanifest|map)$/i;
+const ADDRESS = /[\w.%+-]+@([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})\b/gi;
+const EXAMPLE_DOMAIN = /(^|\.)(example\.(com|net|org)|example|invalid|test|localhost)$/i;
+for (const file of walk(DIST, TEXT_FILE)) {
+  const text = readFileSync(file, 'utf8');
+  const where = '/' + relative(DIST, file);
+  if (/mailto:/i.test(text)) problems.push(`${where}: a mailto: link; link the Contact window (/#contact) instead`);
+  for (const [address, domain] of text.matchAll(ADDRESS)) {
+    if (!EXAMPLE_DOMAIN.test(domain)) problems.push(`${where}: an email address (${address}); the site prints none`);
   }
 }
 
