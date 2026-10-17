@@ -28,8 +28,6 @@ if (!process.env.REPOS_WITHHOLD) {
   process.exit(1);
 }
 const WITHHELD = new RegExp(process.env.REPOS_WITHHOLD, 'i');
-// The site publishes one contact address (src/site.ts); any other address in a README or doc is removed.
-const SITE_EMAIL = 'saahilsanganeria666@gmail.com';
 
 if (process.env.VERCEL) {
   console.error('repos: refusing to run at Vercel build time; the snapshot is committed. Run it locally.');
@@ -69,11 +67,12 @@ async function gh(path, accept = 'application/vnd.github+json') {
 
 const HTML = 'application/vnd.github.html+json';
 
+// The site prints no email address, the owner's included (the Contact window takes its place): every address in a
+// README or doc is removed.
 function withoutEmails(html) {
-  const keep = (address) => address.toLowerCase() === SITE_EMAIL;
   return html
-    .replace(/<a href="mailto:([^"]+)">([^<]*)<\/a>/g, (link, address) => (keep(address) ? link : '(email removed)'))
-    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, (address) => (keep(address) ? address : '(email removed)'))
+    .replace(/<a href="mailto:[^"]+">[^<]*<\/a>/g, '(email removed)')
+    .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, '(email removed)')
     .replace(/[\w.-]+ at [\w-]+(?: dot [\w-]+)+/g, '(email removed)');
 }
 
