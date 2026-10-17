@@ -92,6 +92,8 @@ export interface WorldNodes {
   windowSky: WindowSkyNode | null;
   windowMotif: WindowMotifNode | null;
   coffeeSteam: CoffeeSteamNode | null;
+  /** Leaves and prints that sway in the breeze (`plant_sway_*`; vertex colour R is how far each vertex may move). */
+  sway: THREE.Mesh[];
   posters: ArtNode[];
   /** The Pale Blue Dot print on the space wall and its picture's file beside the room (public/room/). */
   paleBlueDot: { node: ArtNode; file: string } | null;
@@ -360,6 +362,8 @@ export function readWorld(room: RoomNodes): WorldNodes {
     skyMesh && skyCentre && skyEye ? { mesh: skyMesh, centre: worldPosition(skyCentre), eye: worldPosition(skyEye) } : null;
   const windowMotif = motifOf(root, find('window_motif'), find('hit_window'));
   const coffeeSteam = steamOf(root, find('coffee_steam'), find('desk_mug'));
+  const sway: THREE.Mesh[] = [];
+  root.traverse((node) => node instanceof THREE.Mesh && node.name.startsWith('plant_sway_') && sway.push(node));
 
   const posters: ArtNode[] = [];
   for (let n = 0; n < POSTER_SLOTS; n++) {
@@ -414,6 +418,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
     windowSky,
     windowMotif,
     coffeeSteam,
+    sway,
     posters,
     paleBlueDot,
     prints,

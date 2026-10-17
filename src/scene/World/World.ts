@@ -20,11 +20,12 @@ import type { RecordPlayer } from './RecordPlayer';
 import { CoffeeSteam } from './Steam';
 import { StickyNotes } from './StickyNotes';
 import { TextureStore } from './textures';
+import { Wind } from './Wind';
 import { WindowView } from './WindowView';
 
 // Everything in the room that lives and reacts (PLAN 11.1, 12.1, PLAN-ROUND-7 §3–§4 and §7): the window's two cities
-// by day with the flight between them, the coffee's steam, the lava lamp and its light, the espresso machine's pour and
-// the cup's steam, the oven's door
+// by day with the flight between them, the coffee's steam, the breeze in the plants, the lava lamp and its light, the
+// espresso machine's pour and the cup's steam, the oven's door
 // and glow, the projector on the wall, the favourite posters, the Instax board, the sticky notes and the photo album.
 // It carries out every hotspot's room action, with the recordings its actions make. A click that comes from across
 // the room takes the camera to the prop first, and the prop acts once the camera has landed. What the visitor first
@@ -91,6 +92,8 @@ export class World {
   private readonly stickies: StickyNotes | null;
   private readonly windowView: WindowView | null;
   private readonly coffeeSteam: CoffeeSteam | null;
+  /** The room's breeze; other modules can sway by it (Wind.uniforms, WIND_GLSL). */
+  readonly wind: Wind;
   private readonly lava: LavaLamp | null;
   private readonly espresso: Espresso | null;
   private readonly steam: Steam | null;
@@ -136,6 +139,8 @@ export class World {
       ? new WindowView(n.windowViews, n.windowSky, n.windowMotif, this.textures, { reducedMotion: still })
       : null;
     this.coffeeSteam = n.coffeeSteam ? new CoffeeSteam(n.coffeeSteam, still) : null;
+    this.wind = new Wind(still);
+    for (const mesh of n.sway) this.wind.sway(mesh);
     this.lava = n.lava ? new LavaLamp(n.lava.glass, n.lava.light, this.lamp, scene, room.root) : null;
     this.espresso = n.espresso ? new Espresso(n.espresso, scene) : null;
     this.steam = n.steam ? new Steam(n.steam, scene) : null;
@@ -306,6 +311,7 @@ export class World {
     this.instax?.update(realDt);
     this.windowView?.update(realDt);
     this.coffeeSteam?.update(realDt);
+    this.wind.update(realDt);
     // Under reduced motion the lamp's wax and the oven's flicker hold still.
     const ambient = still ? 0 : clock;
     this.lava?.update(ambient, realDt, camera);
@@ -375,6 +381,7 @@ export class World {
       interactive: this.interactive,
       window: this.windowView?.state() ?? null,
       coffeeSteam: this.coffeeSteam?.state() ?? null,
+      wind: this.wind.state(),
       posters: this.posters.loaded,
       paleBlueDot: this.paleBlueDot?.shown ?? null,
       instax: this.instax?.probe() ?? null,
@@ -399,6 +406,7 @@ export class World {
     this.stickies?.dispose();
     this.windowView?.dispose();
     this.coffeeSteam?.dispose();
+    this.wind.dispose();
     this.lava?.dispose();
     this.espresso?.dispose();
     this.steam?.dispose();
