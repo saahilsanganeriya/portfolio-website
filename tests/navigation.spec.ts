@@ -326,11 +326,12 @@ test('a pointer resting beside the glass does not pull a passing camera into the
   await page.mouse.move(note!.x, note!.y);
   await page.waitForTimeout(600);
   await watchDestinations(page);
-  await page.evaluate(() => window.__room!.goto('idle'));
-  await settledAt(page, 'idle');
+  // Toward the darkroom wall the screen sweeps across under the resting pointer.
+  await page.evaluate(() => window.__room!.goto('photos'));
+  await settledAt(page, 'photos');
   await page.waitForTimeout(1000);
-  // From the desk straight to the wide view: never by way of the monitor.
-  expect(await destinations(page)).toEqual(['desk', 'idle']);
+  // From the desk straight to the darkroom: never by way of the monitor.
+  expect(await destinations(page)).toEqual(['desk', 'photos']);
 });
 
 /**
