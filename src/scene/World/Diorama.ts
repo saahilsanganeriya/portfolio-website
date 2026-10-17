@@ -7,11 +7,16 @@ import { WORLD_SCALE } from '../Application/RoomModel';
 // bare wall meshes (`env_wall_back`, `env_wall_left`, `env_wall_right`), so there a wall takes the thin things hung on
 // it. What lies outside a wall (the window's city view and sky, a hallway) shows only while the wall itself stands
 // whole between it and the eye: hidden outright when the wall is faded at all, or when the camera is far enough round
-// to see past the wall's free end. A faded wall's hotspots stop catching the pointer.
+// to see past the wall's free end. Set v4 boxes the window's view in (`window_view_mask`, void-coloured panels on every
+// side but the wall's): while that box holds all of it, the box hides it from the side and above, and it shows whenever
+// the wall is whole. A faded wall's hotspots stop catching the pointer.
 
 const WALL_MESH = /^(?:env_)?wall_(back|left|right)$/;
 // The window's own parts behind the wall: its view, sky and motif (and anything the room hangs under them), and the pane.
-const OUTSIDE_NODE = /^window_(?:view_|sky|motif|glass)/;
+const OUTSIDE_NODE = /^window_(?:view_(?!mask)|sky|motif|glass)/;
+// The box round them fades with the wall, like anything else hung on it.
+const MASK_NODE = /^window_view_mask$/;
+const MASK_SLACK_M = 0.01;
 // Where the eye stands from the wall's plane (metres, positive behind it): still solid in front of this, gone past it.
 const FADE_FROM_M = -0.2;
 const FADE_TO_M = 0.9;
@@ -47,6 +52,8 @@ interface Wall {
   outside: Outside[];
   /** The plan corners (world x, z) of the box round everything outside, and the wall's extent along itself. */
   outsideCorners: THREE.Vector2[];
+  /** Whether a mask box holds everything outside (from the wall's face back), so no angle needs it hidden. */
+  masked: boolean;
   span: [number, number];
   along: 'x' | 'z';
   across: 'x' | 'z';
@@ -123,6 +130,7 @@ export class Diorama {
         proxies: [],
         outside: [],
         outsideCorners: [],
+        masked: false,
         span: [box.min[along], box.max[along]],
         along,
         across,
@@ -142,7 +150,11 @@ export class Diorama {
    */
   private collect(wall: Wall) {
     const outsideRoots: THREE.Object3D[] = [];
-    wall.group?.traverse((node) => OUTSIDE_NODE.test(node.name) && !isUnder(node.parent!, outsideRoots) && outsideRoots.push(node));
+    let mask = null as THREE.Object3D | null;
+    wall.group?.traverse((node) => {
+      if (MASK_NODE.test(node.name)) mask = node;
+      else if (OUTSIDE_NODE.test(node.name) && !isUnder(node.parent!, outsideRoots)) outsideRoots.push(node);
+    });
     const meshes = new Set<THREE.Mesh>(wall.meshes.slice(0, 1));
     this.root.traverse((node) => {
       if (!(node instanceof THREE.Mesh) || node.name.startsWith('hit_') || isUnder(node, outsideRoots)) return;
@@ -167,6 +179,9 @@ export class Diorama {
     wall.outsideCorners = box.isEmpty()
       ? []
       : [box.min, box.max].flatMap((a) => [box.min, box.max].map((b) => new THREE.Vector2(a.x, b.z)));
+    // The pane sits in the wall's opening, in front of the box: the box counts from the wall's room face back.
+    const held = mask && new THREE.Box3().setFromObject(mask).expandByPoint(wall.point).expandByScalar(MASK_SLACK_M * WORLD_SCALE);
+    wall.masked = !box.isEmpty() && !!held && held.containsBox(box);
     wall.proxies = this.proxies.filter((p) => {
       const box = new THREE.Box3().setFromObject(p);
       return (wall.group !== null && isUnder(p, [wall.group])) || wall.mounted(box, PROXY_DEPTH_M) || wall.behind(box);
@@ -216,10 +231,10 @@ export class Diorama {
     });
   }
 
-  /** What lies outside the wall shows only while the wall is whole and covers it from the eye; true if any changed. */
+  /** What lies outside the wall shows only while the wall is whole and covers it (or its mask does); true if any changed. */
   private showOutside(wall: Wall, camera: THREE.Vector3, opacity: number) {
     let changed = false;
-    const show = opacity >= 1 && this.covers(wall, camera);
+    const show = opacity >= 1 && (wall.masked || this.covers(wall, camera));
     for (const o of wall.outside) {
       // Re-hidden if the room showed it again meanwhile; only what this hid is shown again.
       if (!show && o.node.visible) {
@@ -279,11 +294,12 @@ export class Diorama {
     mesh.material = copy;
   }
 
-  /** Each wall's opacity, what fades with it, what is hidden outside it, whether its hotspots take the pointer (tests). */
+  /** Each wall's opacity, what fades with it, what is hidden outside it and whether a mask holds that, whether its hotspots take the pointer (tests). */
   probe() {
-    return this.walls.map(({ name, opacity, meshes, proxies, outside, clickable }) => ({
+    return this.walls.map(({ name, opacity, meshes, proxies, outside, masked, clickable }) => ({
       name,
       opacity,
+      masked,
       meshes: meshes.map((m) => m.name),
       proxies: proxies.map((p) => p.name),
       outside: outside.map((o) => ({ name: o.node.name, shown: o.node.visible })),

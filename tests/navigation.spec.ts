@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page } from '@playwright/test';
+import sharp from 'sharp';
 import type {} from '../src/scene/Application/Application';
 
 // Headless Chromium only has WebGL through SwiftShader; the room needs it.
@@ -157,6 +158,15 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
   // From the front, the window's city view shows; it is checked hidden from every side the camera turns to below.
   const front = await page.evaluate(() => window.__room!.walls);
   for (const wall of front) expect(wall.outside.every((o) => o.shown), `the ${wall.name} wall's outside from the front`).toBe(true);
+  // ...and it is drawn: the window's middle is the city, not the void colour (#14110F) of a hidden view.
+  const pane = (await page.evaluate(() => window.__room!.point('hit_window')))!;
+  const pixels = await sharp(await page.screenshot({ clip: { x: pane.x - 30, y: pane.y - 20, width: 60, height: 40 } }))
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+  const mean = [0, 1, 2].map((c) => pixels.reduce((sum, v, i) => (i % 3 === c ? sum + v : sum), 0) / (pixels.length / 3));
+  const fromVoid = Math.max(...mean.map((v, c) => Math.abs(v - [20, 17, 15][c])));
+  expect(fromVoid, `the window from the wide view is ${mean.map(Math.round)}`).toBeGreaterThan(40);
   let unwrapped = 0;
   let last: number | null = null;
   // Into the orbit, then twelve turns of 30°, one way: the camera passes every side of the set.
@@ -190,8 +200,9 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
     expect(Math.min(...opacities), `the ${name} wall from behind`).toBeLessThan(0.05);
     expect(Math.max(...opacities), `the ${name} wall from the front`).toBe(1);
   }
-  // From the side, past the back wall's free end (80° round, where the wall still stands whole), the city behind it is
-  // hidden too.
+  // From the side, past the back wall's free end (80° round, where the wall still stands whole), the city behind it stays
+  // boxed in by the wall's void-coloured mask (set v4's window_view_mask), which holds all of it; a room without one
+  // hides it there instead (tests/diorama.test.ts).
   const side = (80 * Math.PI) / 180;
   for (let k = 0; k < 3; k++) {
     const { azimuth } = (await room(page)).orbit!;
@@ -202,7 +213,8 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
   }
   const back = (await page.evaluate(() => window.__room!.walls)).find((w) => w.name === 'back')!;
   expect(back.opacity, 'the back wall from the side').toBe(1);
-  expect(back.outside.filter((o) => o.shown).map((o) => o.name), 'the city behind the back wall, from the side').toEqual([]);
+  expect(back.masked, 'the mask holds the city behind the back wall').toBe(true);
+  expect(back.outside.every((o) => o.shown), 'the city behind the back wall, from the side, in its mask').toBe(true);
 });
 
 /** Catches a wheel that steps between framings instead of zooming, zooms the wrong way, or breaks out of the limits. */
