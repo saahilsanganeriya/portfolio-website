@@ -168,6 +168,9 @@ export function Window({
   const startDrag = (event: ReactPointerEvent<HTMLElement>) => {
     if (win.maximized || event.button !== 0 || (event.target as Element).closest('button')) return;
     event.preventDefault();
+    // That also stops the browser focusing the window, so a click on the title bar would leave the keyboard elsewhere.
+    const section = sectionRef.current;
+    if (section && !section.contains(document.activeElement)) section.focus({ preventScroll: true });
     const desktop = desktopRef.current;
     const from = { x: x.get(), y: y.get() };
     const maxX = desktop ? desktop.clientWidth - width.get() : Infinity;
