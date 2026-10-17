@@ -4,12 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 // Typed a character at a time, `~` a pause; the key=value log line prints whole, as a log does.
 const SCRIPT = [
   'Saving the open windows… done.',
-  'Rewinding the reels~.~.~.~ done.',
-  'Switching off the projector lamp… done.',
-  'Watering the mango plant… done.',
+  'Unmounting ~/projects, ~/writing, ~/photos~.~.~.~ done.',
   'time={now} level=INFO msg="run finished" stage=shutdown',
-  '',
-  'Goodnight.',
 ];
 
 const CHAR_MS = 12;

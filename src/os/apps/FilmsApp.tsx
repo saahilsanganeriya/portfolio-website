@@ -119,10 +119,6 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
 
   return (
     <div className="os-films">
-      <blockquote className="os-films-epigraph">
-        <p>I love movies about making greatness happen.</p>
-      </blockquote>
-
       <section
         id="film-favourites"
         className="os-films-favourites"
@@ -151,8 +147,7 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
           Diary <span className="os-films-heading-aside">— from Letterboxd, updates every hour</span>
         </h2>
         <p className="os-films-note">
-          Every film I log, newest first. The stars are my rating out of five, and ½ is half a star. No stars means I
-          logged it without a rating. “Rewatch” means I had seen it before.
+          Every film I log, newest first, with my rating out of five stars. No stars means I did not rate it.
         </p>
         <p className="os-films-note os-films-updated">
           {source === 'saved' ? (
