@@ -5,371 +5,379 @@ import landVert from '../shaders/window_land.vert.glsl?raw';
 import skyFrag from '../shaders/window_sky.frag.glsl?raw';
 import skyVert from '../shaders/window_sky.vert.glsl?raw';
 import { WORLD_SCALE } from '../Application/RoomModel';
-import { CITIES, localTime, moonAge, nightAt, nightWeight, solarPosition, type CityId } from './daylight';
-import { lookAt, oneMoon, type RGB, type SkyLook } from './sky';
-import type { WindowSkyNode, WindowViewNode } from './nodes';
+import { CITIES, type CityId } from './daylight';
+import { loadHand, seedOf, writeHand } from './handwriting';
+import { BLEND_HALF_WIDTH_M, horizons, skyColour, type SkyFrame } from './sky';
+import type { WindowMotifNode, WindowSkyNode, WindowViewNode } from './nodes';
 import type { TextureStore } from './textures';
 
-// The window looks out on San Francisco (left) and Delhi (right). One sky spans both: its colour runs from San
-// Francisco's sky to Delhi's across a wide band in the middle, each lit by its own sun, with the sun on a side in
-// daylight, the moon on a side at night and stars after dark (window_sky). The land of each half shows its day and night
-// pictures by the same blend, so the cities meet without a line. One picture per city loads with the room; the others
-// load once the room is interactive, because the blend carries each city's light into the other's half.
+// The window looks out on San Francisco (left) and New Delhi (right), both by day. One sky spans them (window_sky): its
+// colour runs from San Francisco's day sky to Delhi's with no seam, worked out once per vertex (sky.ts). Each city's
+// land is its day picture, loaded with the room. Across the sky a small plane flies a dotted arc from New Delhi to San
+// Francisco, the two names written in his hand (window_motif); under reduced motion the plane holds still.
 
 const ROOM_PATH = '/room/';
-const CHECK_EVERY_S = 10;
-const LOOKAHEAD_MS = 45 * 60_000;
-// A change of light already under way moves at these rates, so a dusk that happens during a visit is seen to fall.
-const ELEVATION_DEG_PER_S = 2;
-const HOUR_DEG_PER_S = 20;
-// Half-width of the blend from San Francisco's sky and light to Delhi's, on the window's plane (the window is 1.5 m
-// wide): wide enough that the change runs across most of the window, so neither city's half reads as a block.
-const BLEND_HALF_WIDTH_M = 0.62;
 // Without the sky's markers (an older room), how far in front of the window the eye stands.
 const FALLBACK_EYE_M = 3;
-
-type Phase = 'day' | 'night';
 const CITY_ORDER: CityId[] = ['sf', 'delhi'];
+
+export interface CityState {
+  name: string;
+  /** Whether its day picture has arrived. */
+  loaded: boolean;
+}
+
+export interface MotifState {
+  drawn: boolean;
+  /** Where the plane is on the arc: 0 over New Delhi, 1 over San Francisco; -1 while it is off the arc. */
+  plane: number;
+  moving: boolean;
+}
+
+const vec3 = () => new THREE.Vector3();
+const withBlend = (glsl: string) => glsl.replace('#include <window_blend>', blendGlsl);
 
 interface View {
   node: WindowViewNode;
   material: THREE.ShaderMaterial;
-  pictures: Record<Phase, THREE.Texture | null>;
-  requested: Set<Phase>;
+  day: THREE.Texture | null;
 }
-
-interface Sun {
-  elevation: number;
-  hourAngle: number;
-}
-
-export interface CityState {
-  name: string;
-  local: string;
-  /** 0 day, 1 night, as shown now. */
-  night: number;
-  /** Which pictures have arrived. */
-  loaded: Phase[];
-  /** The sun's height there (degrees), and how much of the sun, the moon and the stars show in its half. */
-  elevation: number;
-  sun: number;
-  moon: number;
-  stars: number;
-}
-
-const vec3 = () => new THREE.Vector3();
-const linear = (rgb: RGB, out: THREE.Vector3) => {
-  const colour = new THREE.Color().setRGB(rgb[0], rgb[1], rgb[2], THREE.SRGBColorSpace);
-  return out.set(colour.r, colour.g, colour.b);
-};
-const withBlend = (glsl: string) => glsl.replace('#include <window_blend>', blendGlsl);
-const towards = (from: number, to: number, step: number) => from + THREE.MathUtils.clamp(to - from, -step, step);
 
 export class WindowView {
   private readonly views: View[];
-  private readonly sky: THREE.ShaderMaterial | null;
-  private readonly shared = {
-    uCentre: { value: vec3() },
-    uEye: { value: vec3() },
-    uOut: { value: vec3() },
-    uRight: { value: vec3() },
-    uBand: { value: 1 },
-  };
-  private readonly land = {
-    uNightSide: { value: [0, 0] },
-    uDuskSide: { value: [0, 0] },
-    uHorizonSide: { value: [vec3(), vec3()] },
-    uHaze: { value: new THREE.Vector2(0, 1) },
-  };
-  private readonly target: Record<CityId, Sun> = { sf: { elevation: 0, hourAngle: 0 }, delhi: { elevation: 0, hourAngle: 0 } };
-  private readonly shown: Record<CityId, Sun> = { sf: { elevation: 0, hourAngle: 0 }, delhi: { elevation: 0, hourAngle: 0 } };
-  private looks: Record<CityId, SkyLook> | null = null;
-  private readonly skyMesh: THREE.Mesh | null;
-  private readonly raycaster = new THREE.Raycaster();
-  private readonly bodies = new Map<string, { key: string; direction: THREE.Vector3 }>();
-  private skyRadius = 1;
-  private sinceCheck = 0;
-  private onDemand = false;
-  private time = 0;
-  private appliedKey = '';
+  private readonly frame: SkyFrame;
+  private readonly skyMaterial: THREE.ShaderMaterial | null;
+  private readonly motif: Motif | null;
 
   constructor(
     nodes: WindowViewNode[],
     skyNode: WindowSkyNode | null,
+    motifNode: WindowMotifNode | null,
     private readonly textures: TextureStore,
-    private readonly options: { reducedMotion?: boolean; now?: () => Date } = {},
+    options: { reducedMotion?: boolean } = {},
   ) {
-    this.placeBlend(nodes, skyNode);
+    this.frame = placeBlend(nodes, skyNode);
+    const [sfHorizon, delhiHorizon] = horizons();
+    const shared = {
+      uCentre: { value: this.frame.centre },
+      uEye: { value: this.frame.eye },
+      uOut: { value: this.frame.out },
+      uRight: { value: this.frame.right },
+      uBand: { value: this.frame.band },
+      uHorizonSide: { value: [new THREE.Vector3(...sfHorizon), new THREE.Vector3(...delhiHorizon)] },
+      uHaze: { value: farLand(nodes, this.frame) },
+    };
     this.views = nodes.map((node) => {
       const old = node.mesh.material as THREE.MeshBasicMaterial;
-      const standin = node.mesh.userData.standin as Record<Phase, THREE.Texture> | undefined;
       // The room's own material carries the day picture when the exporter embedded it (not a deferred placeholder).
       const deferred = old.map?.userData.deferredWindowPicture === true;
       if (deferred) old.map!.dispose();
-      const embeddedDay = deferred ? null : (old.map ?? null);
+      const day = deferred ? null : (old.map ?? null);
       const material = new THREE.ShaderMaterial({
         vertexShader: withBlend(landVert),
-        fragmentShader: withBlend(landFrag),
-        uniforms: {
-          uDay: { value: null },
-          uNight: { value: null },
-          uHasDay: { value: 0 },
-          uHasNight: { value: 0 },
-          ...this.shared,
-          ...this.land,
-        },
+        fragmentShader: landFrag,
+        uniforms: { uDay: { value: day }, ...shared },
       });
       node.mesh.material = material;
-      return { node, material, pictures: { day: standin?.day ?? embeddedDay, night: standin?.night ?? null }, requested: new Set<Phase>() };
+      return { node, material, day };
     });
-    this.sky = skyNode ? this.makeSky(skyNode) : null;
-    this.skyMesh = skyNode?.mesh ?? null;
-    if (this.skyMesh) {
-      // A body whose direction misses the trimmed dome stands at its usual distance from the centre.
-      const box = new THREE.Box3().setFromObject(this.skyMesh);
-      this.skyRadius = box.getSize(vec3()).length() / 3;
-    }
+    this.skyMaterial = skyNode ? paintSky(skyNode.mesh, this.frame) : null;
+    this.motif = motifNode ? new Motif(motifNode, options.reducedMotion ?? false) : null;
   }
 
-  /**
-   * Sets the light for the current time and loads one picture per city before the room is shown: the one its land is
-   * nearer now. The other pictures follow once the room is interactive (allowOnDemand), so the first load is the same
-   * size at every hour.
-   */
+  /** Loads each city's day picture and draws the motif before the room is shown. */
   async load() {
-    this.check(true);
-    this.apply();
-    await Promise.all(this.views.map((view) => this.fetch(view, this.nightOf(view.node.city) >= 0.5 ? 'night' : 'day')));
-    this.apply();
-  }
-
-  /** From now on, fetch the pictures the blend needs, and any a city will need within the hour. */
-  allowOnDemand() {
-    this.onDemand = true;
-    this.sinceCheck = CHECK_EVERY_S;
+    await Promise.all([...this.views.map((view) => this.fetch(view)), this.motif?.draw()]);
   }
 
   update(dt: number) {
-    this.sinceCheck += dt;
-    if (this.sinceCheck >= CHECK_EVERY_S) this.check(false);
-    const step = Math.max(dt, 0);
-    for (const city of CITY_ORDER) {
-      const shown = this.shown[city];
-      const target = this.target[city];
-      shown.elevation = towards(shown.elevation, target.elevation, ELEVATION_DEG_PER_S * step);
-      const turn = ((target.hourAngle - shown.hourAngle + 540) % 360) - 180;
-      shown.hourAngle = ((shown.hourAngle + THREE.MathUtils.clamp(turn, -HOUR_DEG_PER_S * step, HOUR_DEG_PER_S * step) + 540) % 360) - 180;
-    }
-    if (!this.options.reducedMotion) this.time += step;
-    this.apply();
+    this.motif?.update(Math.max(dt, 0));
   }
 
-  /** At the window framing, look again at once for pictures the view needs. */
-  setCloseUp(closeUp: boolean) {
-    if (closeUp) this.sinceCheck = Math.max(this.sinceCheck, CHECK_EVERY_S - 0.5);
-  }
-
-  /** "San Francisco 3:12 am · Delhi 3:42 pm" */
+  /** "San Francisco and New Delhi" */
   label() {
-    const date = this.now();
-    return CITY_ORDER.map((id) => `${CITIES[id].name} ${localTime(CITIES[id], date)}`).join(' · ');
+    return CITY_ORDER.map((id) => CITIES[id].name).join(' and ');
   }
 
-  state(): Record<string, CityState> {
-    const date = this.now();
-    return Object.fromEntries(
-      this.views.map((view) => {
-        const city = view.node.city;
-        const look = this.looks?.[city];
-        return [
-          city,
-          {
-            name: CITIES[city].name,
-            local: localTime(CITIES[city], date),
-            night: Number(this.nightOf(city).toFixed(3)),
-            loaded: (['day', 'night'] as const).filter((p) => view.pictures[p]),
-            elevation: Number(this.shown[city].elevation.toFixed(2)),
-            sun: Number((this.sky ? (look?.sun.shown ?? 0) : 0).toFixed(3)),
-            moon: Number((this.sky ? (look?.moon.shown ?? 0) : 0).toFixed(3)),
-            stars: Number((this.sky ? (look?.stars ?? 0) : 0).toFixed(3)),
-          },
-        ];
-      }),
-    );
+  state(): { sf?: CityState; delhi?: CityState; motif: MotifState | null; sky: boolean } {
+    const cities = Object.fromEntries(this.views.map((v) => [v.node.city, { name: CITIES[v.node.city].name, loaded: v.day != null }]));
+    return { ...cities, motif: this.motif?.state() ?? null, sky: this.skyMaterial != null };
   }
 
   dispose() {
-    this.sky?.dispose();
+    this.skyMaterial?.dispose();
+    this.motif?.dispose();
     for (const view of this.views) {
       view.material.dispose();
-      for (const picture of Object.values(view.pictures)) picture?.dispose();
+      view.day?.dispose();
     }
   }
 
-  private now() {
-    return this.options.now?.() ?? new Date();
-  }
-
-  private nightOf(city: CityId) {
-    return nightAt(this.shown[city].elevation);
-  }
-
-  /** Where the sky's directions start, the eye the blend is seen from, and the window's out and right directions. */
-  private placeBlend(nodes: WindowViewNode[], skyNode: WindowSkyNode | null) {
-    const bounds = nodes.map((n) => new THREE.Box3().setFromObject(n.mesh));
-    const { uCentre, uEye, uOut, uRight, uBand } = this.shared;
-    uBand.value = BLEND_HALF_WIDTH_M * WORLD_SCALE;
-    if (skyNode) {
-      uCentre.value.copy(skyNode.centre);
-      uEye.value.copy(skyNode.eye);
-    } else {
-      // An older room: the window's seam between the halves, facing the room's front (glTF +Z), the eye in front of it.
-      const all = bounds.reduce((box, b) => box.union(b), new THREE.Box3());
-      const sf = bounds[nodes.findIndex((n) => n.city === 'sf')];
-      const delhi = bounds[nodes.findIndex((n) => n.city === 'delhi')];
-      uCentre.value.set(sf && delhi ? (sf.max.x + delhi.min.x) / 2 : all.getCenter(vec3()).x, all.min.y, all.max.z);
-      uEye.value.copy(uCentre.value).add(new THREE.Vector3(0, 0, FALLBACK_EYE_M * WORLD_SCALE));
-    }
-    uOut.value.subVectors(uCentre.value, uEye.value).setY(0).normalize();
-    uRight.value.crossVectors(uOut.value, new THREE.Vector3(0, 1, 0)).normalize();
-    // The far land hazes into the sky's horizon: from about half the land's depth behind the window to its far edge.
-    let far = 0;
-    for (const box of bounds) {
-      for (const x of [box.min.x, box.max.x])
-        for (const z of [box.min.z, box.max.z]) far = Math.max(far, new THREE.Vector3(x, uCentre.value.y, z).sub(uCentre.value).dot(uOut.value));
-    }
-    this.land.uHaze.value.set(far * 0.45, far);
-  }
-
-  private makeSky(node: WindowSkyNode) {
-    const material = new THREE.ShaderMaterial({
-      vertexShader: withBlend(skyVert),
-      fragmentShader: withBlend(skyFrag),
-      uniforms: {
-        ...this.shared,
-        uZenith: { value: [vec3(), vec3()] },
-        uHorizon: { value: [vec3(), vec3()] },
-        uGlow: { value: [vec3(), vec3()] },
-        uGlowAmount: { value: [0, 0] },
-        uSunDir: { value: [vec3(), vec3()] },
-        uSunShown: { value: [0, 0] },
-        uSunColour: { value: [vec3(), vec3()] },
-        uMoonDir: { value: [vec3(), vec3()] },
-        uMoonShown: { value: [0, 0] },
-        uMoonAge: { value: 0 },
-        uStars: { value: [0, 0] },
-        uTime: { value: 0 },
-      },
-    });
-    node.mesh.material = material;
-    return material;
-  }
-
-  private check(immediately: boolean) {
-    this.sinceCheck = 0;
-    const date = this.now();
-    for (const city of CITY_ORDER) {
-      const { elevation, hourAngle } = solarPosition(CITIES[city], date);
-      this.target[city] = { elevation, hourAngle };
-      if (immediately) this.shown[city] = { elevation, hourAngle };
-    }
-    if (this.sky) this.sky.uniforms.uMoonAge.value = moonAge(date);
-    if (!this.onDemand) return;
-    for (const view of this.views) for (const phase of ['day', 'night'] as const) if (this.needs(view, phase)) void this.fetch(view, phase);
-  }
-
-  /**
-   * Whether `phase`'s picture shows now or within the hour. While the cities' light differs, the blend carries the other
-   * city's light into this half, so it needs both.
-   */
-  private needs(view: View, phase: Phase) {
-    const city = view.node.city;
-    const now = nightAt(this.target[city].elevation);
-    if (CITY_ORDER.some((other) => other !== city && Math.abs(nightAt(this.target[other].elevation) - now) > 0.02)) return true;
-    const later = nightWeight(CITIES[city], new Date(this.now().getTime() + LOOKAHEAD_MS));
-    return phase === 'night' ? now > 0 || later > 0 : now < 1 || later < 1;
-  }
-
-  private async fetch(view: View, phase: Phase) {
-    const file = phase === 'day' ? view.node.dayFile : view.node.nightFile;
-    if (view.pictures[phase] || view.requested.has(phase) || !file) return;
-    view.requested.add(phase);
+  private async fetch(view: View) {
+    const file = view.node.dayFile;
+    if (view.day || !file) return;
     try {
-      view.pictures[phase] = await this.textures.ktx2(ROOM_PATH + file);
+      view.day = await this.textures.ktx2(ROOM_PATH + file);
+      view.material.uniforms.uDay.value = view.day;
     } catch (error) {
-      console.warn(`room: the window's ${view.node.city} ${phase} view did not load`, error);
+      console.warn(`room: the window's ${view.node.city} view did not load`, error);
+    }
+  }
+}
+
+/** Where the sky's directions start, the eye the blend is seen from, and the window's out and right directions. */
+function placeBlend(nodes: WindowViewNode[], skyNode: WindowSkyNode | null): SkyFrame {
+  const centre = vec3();
+  const eye = vec3();
+  if (skyNode) {
+    centre.copy(skyNode.centre);
+    eye.copy(skyNode.eye);
+  } else {
+    // An older room: the window's seam between the halves, facing the room's front (glTF +Z), the eye in front of it.
+    const bounds = nodes.map((n) => new THREE.Box3().setFromObject(n.mesh));
+    const all = bounds.reduce((box, b) => box.union(b), new THREE.Box3());
+    const sf = bounds[nodes.findIndex((n) => n.city === 'sf')];
+    const delhi = bounds[nodes.findIndex((n) => n.city === 'delhi')];
+    centre.set(sf && delhi ? (sf.max.x + delhi.min.x) / 2 : all.getCenter(vec3()).x, all.min.y, all.max.z);
+    eye.copy(centre).add(new THREE.Vector3(0, 0, FALLBACK_EYE_M * WORLD_SCALE));
+  }
+  const out = vec3().subVectors(centre, eye).setY(0).normalize();
+  const right = vec3().crossVectors(out, new THREE.Vector3(0, 1, 0)).normalize();
+  return { centre, eye, out, right, band: BLEND_HALF_WIDTH_M * WORLD_SCALE };
+}
+
+/** The far land hazes into the sky's horizon: from about half the land's depth behind the window to its far edge. */
+function farLand(nodes: WindowViewNode[], frame: SkyFrame) {
+  let far = 0;
+  for (const node of nodes) {
+    const box = new THREE.Box3().setFromObject(node.mesh);
+    for (const x of [box.min.x, box.max.x])
+      for (const z of [box.min.z, box.max.z]) far = Math.max(far, new THREE.Vector3(x, frame.centre.y, z).sub(frame.centre).dot(frame.out));
+  }
+  return new THREE.Vector2(far * 0.45, far);
+}
+
+/** Gives every vertex of the dome its sky colour (it never changes) and a material that only draws it. */
+function paintSky(mesh: THREE.Mesh, frame: SkyFrame) {
+  mesh.updateWorldMatrix(true, false);
+  const position = mesh.geometry.getAttribute('position');
+  const colours = new Float32Array(position.count * 3);
+  const p = vec3();
+  for (let i = 0; i < position.count; i++) {
+    p.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+    colours.set(skyColour(p, frame), i * 3);
+  }
+  mesh.geometry.setAttribute('aSky', new THREE.BufferAttribute(colours, 3));
+  const material = new THREE.ShaderMaterial({ vertexShader: skyVert, fragmentShader: skyFrag });
+  mesh.material = material;
+  return material;
+}
+
+// ---- the motif: a plane on a dotted arc from New Delhi to San Francisco ----
+
+// The arc on the motif's canvas (fractions of its width and height): New Delhi's end, the control point, San
+// Francisco's end. The plane crosses in FLIGHT_S, then is off the arc for GROUND_S; under reduced motion it holds at
+// PARKED_AT.
+const ARC: [number, number][] = [[0.87, 0.64], [0.5, -0.04], [0.13, 0.64]];
+const MOTIF_PX = 2048;
+const FLIGHT_S = 48;
+const GROUND_S = 5;
+const PARKED_AT = 0.62;
+const INK = '#fbf6ec';
+const SHADOW = 'rgba(18, 28, 44, 0.38)';
+
+function arcPoint(s: number, w: number, h: number): [number, number] {
+  const [a, b, c] = ARC;
+  const u = 1 - s;
+  return [(u * u * a[0] + 2 * u * s * b[0] + s * s * c[0]) * w, (u * u * a[1] + 2 * u * s * b[1] + s * s * c[1]) * h];
+}
+
+function arcTangent(s: number, w: number, h: number): [number, number] {
+  const [a, b, c] = ARC;
+  return [(2 * (1 - s) * (b[0] - a[0]) + 2 * s * (c[0] - b[0])) * w, (2 * (1 - s) * (b[1] - a[1]) + 2 * s * (c[1] - b[1])) * h];
+}
+
+function canvasTexture(canvas: HTMLCanvasElement) {
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return texture;
+}
+
+/** The plane seen from below, nose along +x: fuselage, swept wings and tailplane, in `size` px. */
+function drawPlane(ctx: CanvasRenderingContext2D, size: number) {
+  const s = size / 160;
+  ctx.save();
+  ctx.scale(s, s);
+  ctx.translate(80, 80);
+  ctx.beginPath();
+  ctx.moveTo(62, 0);
+  ctx.quadraticCurveTo(60, -7, 48, -7.5);
+  ctx.lineTo(10, -7.5);
+  ctx.lineTo(-8, -58);
+  ctx.lineTo(-20, -58);
+  ctx.lineTo(-10, -7.5);
+  ctx.lineTo(-44, -7);
+  ctx.lineTo(-54, -24);
+  ctx.lineTo(-62, -24);
+  ctx.lineTo(-58, -5);
+  ctx.lineTo(-64, 0);
+  ctx.lineTo(-58, 5);
+  ctx.lineTo(-62, 24);
+  ctx.lineTo(-54, 24);
+  ctx.lineTo(-44, 7);
+  ctx.lineTo(-10, 7.5);
+  ctx.lineTo(-20, 58);
+  ctx.lineTo(-8, 58);
+  ctx.lineTo(10, 7.5);
+  ctx.lineTo(48, 7.5);
+  ctx.quadraticCurveTo(60, 7, 62, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+class Motif {
+  private readonly arc: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private readonly plane: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private readonly width: number;
+  private readonly height: number;
+  private readonly canvasH: number;
+  private clock = PARKED_AT * FLIGHT_S;
+  private drawn = false;
+  private s = PARKED_AT;
+
+  constructor(
+    node: WindowMotifNode,
+    private readonly still: boolean,
+  ) {
+    this.width = node.widthM;
+    this.height = node.heightM;
+    this.canvasH = Math.round((MOTIF_PX * this.height) / this.width);
+    const material = () => new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false, opacity: 0 });
+    this.arc = new THREE.Mesh(new THREE.PlaneGeometry(this.width, this.height), material());
+    this.arc.name = 'window_motif_arc';
+    const planeSize = 0.052 * (this.width / 1.24);
+    this.plane = new THREE.Mesh(new THREE.PlaneGeometry(planeSize, planeSize), material());
+    this.plane.name = 'window_motif_plane';
+    this.plane.position.z = 0.002;
+    node.anchor.add(this.arc, this.plane);
+    this.place(PARKED_AT, 1);
+  }
+
+  async draw() {
+    await loadHand();
+    const arc = document.createElement('canvas');
+    arc.width = MOTIF_PX;
+    arc.height = this.canvasH;
+    const ctx = arc.getContext('2d')!;
+    const [w, h] = [arc.width, arc.height];
+    ctx.shadowColor = SHADOW;
+    ctx.shadowBlur = 7;
+    ctx.shadowOffsetY = 1.5;
+    ctx.fillStyle = INK;
+    ctx.strokeStyle = INK;
+    // Dots every GAP px along the arc, measured along its length, clear of the end markers.
+    const GAP = w * 0.0118;
+    const steps = 2000;
+    let travelled = 0;
+    let next = GAP * 2.2;
+    let [px, py] = arcPoint(0, w, h);
+    let length = 0;
+    for (let i = 1; i <= steps; i++) {
+      const [x, y] = arcPoint(i / steps, w, h);
+      length += Math.hypot(x - px, y - py);
+      [px, py] = [x, y];
+    }
+    [px, py] = arcPoint(0, w, h);
+    for (let i = 1; i <= steps; i++) {
+      const [x, y] = arcPoint(i / steps, w, h);
+      travelled += Math.hypot(x - px, y - py);
+      [px, py] = [x, y];
+      if (travelled >= next && travelled <= length - GAP * 2.2) {
+        ctx.beginPath();
+        ctx.arc(x, y, w * 0.0017, 0, Math.PI * 2);
+        ctx.globalAlpha = 0.92;
+        ctx.fill();
+        next += GAP;
+      }
+    }
+    ctx.globalAlpha = 1;
+    const names: [string, number][] = [[CITIES.delhi.name, 0], [CITIES.sf.name, 1]];
+    for (const [name, s] of names) {
+      const [x, y] = arcPoint(s, w, h);
+      ctx.lineWidth = w * 0.0017;
+      ctx.beginPath();
+      ctx.arc(x, y, w * 0.0049, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, y, w * 0.0017, 0, Math.PI * 2);
+      ctx.fill();
+      writeHand(ctx, name, x, y + h * 0.17, {
+        size: w * 0.027,
+        slant: 0.06,
+        turn: s === 0 ? -0.025 : 0.02,
+        colour: INK,
+        weight: 0.03,
+        maxWidth: w * 0.24,
+        maxLines: 1,
+        lineHeight: 1.1,
+        seed: seedOf(name),
+      });
+    }
+    const planeCanvas = document.createElement('canvas');
+    planeCanvas.width = planeCanvas.height = 160;
+    const pctx = planeCanvas.getContext('2d')!;
+    pctx.shadowColor = SHADOW;
+    pctx.shadowBlur = 5;
+    pctx.shadowOffsetY = 1;
+    pctx.fillStyle = INK;
+    drawPlane(pctx, 160);
+    this.arc.material.map = canvasTexture(arc);
+    this.plane.material.map = canvasTexture(planeCanvas);
+    for (const m of [this.arc.material, this.plane.material]) {
+      m.opacity = 1;
+      m.needsUpdate = true;
+    }
+    this.drawn = true;
+    this.place(this.s, 1);
+  }
+
+  update(dt: number) {
+    if (this.still || !this.drawn) return;
+    this.clock = (this.clock + dt) % (FLIGHT_S + GROUND_S);
+    const s = this.clock / FLIGHT_S;
+    if (s > 1) {
+      this.s = -1;
+      this.plane.visible = false;
+      return;
+    }
+    const fade = Math.min(1, s / 0.04, (1 - s) / 0.04);
+    this.place(s, fade);
+  }
+
+  state(): MotifState {
+    return { drawn: this.drawn, plane: Number(this.s.toFixed(3)), moving: !this.still && this.drawn };
+  }
+
+  dispose() {
+    for (const mesh of [this.arc, this.plane]) {
+      mesh.material.map?.dispose();
+      mesh.material.dispose();
+      mesh.geometry.dispose();
+      mesh.removeFromParent();
     }
   }
 
-  /**
-   * The direction from the eye to a body that stands at `azimuth` and `height` as seen from the dome's centre: where that
-   * direction meets the sky. Measured from the eye, the body's disc is round from the room.
-   */
-  private bodyDirection(name: string, azimuth: number, height: number, out: THREE.Vector3) {
-    const key = `${azimuth.toFixed(3)} ${height.toFixed(3)}`;
-    const known = this.bodies.get(name);
-    if (known?.key === key) return out.copy(known.direction);
-    const { uCentre, uEye } = this.shared;
-    const along = this.direction(azimuth, height, vec3());
-    let point = uCentre.value.clone().addScaledVector(along, this.skyRadius);
-    if (this.skyMesh) {
-      this.raycaster.set(uCentre.value, along);
-      const hit = this.raycaster.intersectObject(this.skyMesh, false)[0];
-      if (hit) point = hit.point;
-    }
-    const direction = point.sub(uEye.value).normalize();
-    this.bodies.set(name, { key, direction });
-    return out.copy(direction);
-  }
-
-  /** The direction (world) from the dome's centre at `azimuth` degrees right of straight out and `height` degrees up. */
-  private direction(azimuth: number, height: number, out: THREE.Vector3) {
-    const a = THREE.MathUtils.degToRad(azimuth);
-    const h = THREE.MathUtils.degToRad(height);
-    return out
-      .copy(this.shared.uOut.value)
-      .multiplyScalar(Math.cos(h) * Math.cos(a))
-      .addScaledVector(this.shared.uRight.value, Math.cos(h) * Math.sin(a))
-      .add(new THREE.Vector3(0, Math.sin(h), 0))
-      .normalize();
-  }
-
-  private apply() {
-    if (this.sky) this.sky.uniforms.uTime.value = this.time;
-    for (const view of this.views) {
-      const { day, night } = view.pictures;
-      const u = view.material.uniforms;
-      u.uDay.value = day ?? night;
-      u.uNight.value = night ?? day;
-      u.uHasDay.value = day ? 1 : 0;
-      u.uHasNight.value = night ? 1 : 0;
-    }
-    // The colours and the bodies' places change only as the suns move.
-    const moon = this.sky ? (this.sky.uniforms.uMoonAge.value as number) : 0;
-    const key = [this.shown.sf.elevation, this.shown.sf.hourAngle, this.shown.delhi.elevation, this.shown.delhi.hourAngle, moon]
-      .map((v) => v.toFixed(4))
-      .join(' ');
-    if (key === this.appliedKey) return;
-    this.appliedKey = key;
-    const both = oneMoon(lookAt('sf', this.shown.sf.elevation, this.shown.sf.hourAngle), lookAt('delhi', this.shown.delhi.elevation, this.shown.delhi.hourAngle), moon);
-    this.looks = { sf: both.sf, delhi: both.delhi };
-    CITY_ORDER.forEach((city, side) => {
-      const look = both[city];
-      this.land.uNightSide.value[side] = look.night;
-      this.land.uDuskSide.value[side] = look.dusk;
-      linear(look.horizon, this.land.uHorizonSide.value[side]);
-      const sky = this.sky?.uniforms;
-      if (!sky) return;
-      linear(look.zenith, sky.uZenith.value[side]);
-      linear(look.horizon, sky.uHorizon.value[side]);
-      linear(look.glow, sky.uGlow.value[side]);
-      sky.uGlowAmount.value[side] = look.glowAmount;
-      this.bodyDirection(`sun-${city}`, look.sun.azimuth, look.sun.height, sky.uSunDir.value[side]);
-      sky.uSunShown.value[side] = look.sun.shown;
-      linear(look.sun.colour, sky.uSunColour.value[side]);
-      this.bodyDirection(`moon-${city}`, look.moon.azimuth, look.moon.height, sky.uMoonDir.value[side]);
-      sky.uMoonShown.value[side] = look.moon.shown;
-      sky.uStars.value[side] = look.stars;
-    });
+  /** Puts the plane at `s` along the arc, nose along it, at opacity `fade`. */
+  private place(s: number, fade: number) {
+    this.s = s;
+    const [x, y] = arcPoint(s, MOTIF_PX, this.canvasH);
+    const [dx, dy] = arcTangent(s, MOTIF_PX, this.canvasH);
+    this.plane.position.x = (x / MOTIF_PX - 0.5) * this.width;
+    this.plane.position.y = (0.5 - y / this.canvasH) * this.height;
+    this.plane.rotation.z = Math.atan2(-dy * (this.height / this.canvasH), dx * (this.width / MOTIF_PX));
+    this.plane.visible = true;
+    if (this.drawn) this.plane.material.opacity = fade;
   }
 }

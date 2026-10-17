@@ -1,68 +1,59 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { moonAge } from '../src/scene/World/daylight';
-import { palette, windowLook } from '../src/scene/World/sky';
+import { BLEND_HALF_WIDTH_M, DAY_SKY, linearOf, skyColour, windowBlend, type SkyFrame } from '../src/scene/World/sky';
 
-/** Catches a sky that jumps between palettes (a hard switch at sunset) instead of changing a little at a time. */
-describe('each city’s sky follows its sun smoothly', () => {
-  it('changes by under 3% a channel for each tenth of a degree the sun moves, night to noon', () => {
-    for (const city of ['sf', 'delhi'] as const) {
-      let before = palette(city, -20);
-      for (let elevation = -19.9; elevation <= 40; elevation += 0.1) {
-        const now = palette(city, elevation);
-        for (const part of ['zenith', 'horizon'] as const)
-          for (let c = 0; c < 3; c++) expect(Math.abs(now[part][c] - before[part][c]), `${city} ${part} at ${elevation.toFixed(1)}°`).toBeLessThan(0.03);
+// A frame like the room's, in metres: the window's middle on the back wall, the window framing's eye 3 m in front of it,
+// out of the window along -Z, San Francisco to the left (-X), Delhi to the right.
+const frame: SkyFrame = {
+  centre: new THREE.Vector3(1.85, 0.85, -0.6),
+  eye: new THREE.Vector3(1.85, 1.5, 2.4),
+  out: new THREE.Vector3(0, 0, -1),
+  right: new THREE.Vector3(1, 0, 0),
+  band: BLEND_HALF_WIDTH_M,
+};
+
+/** A point on the dome (radius 9 m about its centre) seen through the window at `x` metres right of the middle, `up` high. */
+function domePoint(x: number, up: number) {
+  const through = new THREE.Vector3(frame.centre.x + x, frame.centre.y + up, frame.centre.z);
+  const dir = through.sub(frame.eye).normalize();
+  // Walk from the eye along the ray until it is 9 m from the dome's centre.
+  const p = frame.eye.clone();
+  for (let step = 0; step < 400 && p.distanceTo(frame.centre) < 9; step++) p.addScaledVector(dir, 0.05);
+  return p;
+}
+
+describe('the sky over the window', () => {
+  /**
+   * Catches a seam: a step anywhere across the window bigger than the gradient around it (the old halves met in a hard
+   * straight line at the central bar; a 5 mm blend band reproduces it and turns this red).
+   */
+  it('changes by under 1.2% a channel per centimetre of window, at every height', () => {
+    for (const up of [0.15, 0.4, 0.7, 1.0]) {
+      let before = skyColour(domePoint(-0.75, up), frame);
+      for (let cm = -74; cm <= 75; cm++) {
+        const now = skyColour(domePoint(cm / 100, up), frame);
+        for (let c = 0; c < 3; c++) expect(Math.abs(now[c] - before[c]), `${up} m up, ${cm} cm`).toBeLessThan(0.012);
         before = now;
       }
     }
   });
-});
 
-/** Catches the sun on the night side or the moon in daylight, and a window with two moons in it. */
-describe('the window’s sun, moon and stars', () => {
-  it('puts the sun over the city in daylight and the moon and stars over the city at night', () => {
-    // 1:00 pm in San Francisco, 1:30 am in Delhi.
-    const { sf, delhi } = windowLook(new Date('2026-06-21T20:00:00Z'));
-    expect(sf.sun.shown).toBe(1);
-    expect(sf.moon.shown).toBe(0);
-    expect(sf.stars).toBe(0);
-    expect(delhi.sun.shown).toBe(0);
-    expect(delhi.moon.shown).toBeGreaterThan(0.9);
-    expect(delhi.stars).toBeGreaterThan(0.9);
-    // Each body stays in its own city's half: San Francisco left of straight out, Delhi right.
-    expect(sf.sun.azimuth).toBeLessThan(0);
-    expect(delhi.moon.azimuth).toBeGreaterThan(0);
+  /** Catches the cities swapped, or a blend that stops short so one side shows a mix of both skies. */
+  it('is San Francisco’s sky at the left edge and Delhi’s at the right', () => {
+    expect(windowBlend(domePoint(-0.75, 0.4), frame)).toBe(0);
+    expect(windowBlend(domePoint(0.75, 0.4), frame)).toBe(1);
+    expect(windowBlend(domePoint(0, 0.4), frame)).toBeCloseTo(0.5, 2);
+    // San Francisco's horizon is the cooler of the two (the marine layer), Delhi's the warmer and dustier.
+    const [left, right] = [skyColour(domePoint(-0.75, 0.02), frame), skyColour(domePoint(0.75, 0.02), frame)];
+    expect(left[2] - left[0]).toBeGreaterThan(right[2] - right[0]);
   });
 
-  it('shows one moon when both cities are dark', () => {
-    // December: 5:00 am in San Francisco, 6:30 pm in Delhi.
-    const { sf, delhi } = windowLook(new Date('2026-12-21T13:00:00Z'));
-    expect(sf.night).toBe(1);
-    expect(delhi.night).toBe(1);
-    expect(Math.max(sf.moon.shown, delhi.moon.shown)).toBeGreaterThan(0.9);
-    expect(Math.min(sf.moon.shown, delhi.moon.shown)).toBeLessThan(0.1);
-  });
-
-  it('never stands two suns side by side in the middle of the window', () => {
-    // Every quarter hour of a year: whenever both suns show, they stand at least 28° apart.
-    let closest = Infinity;
-    for (let t = Date.UTC(2026, 0, 1); t < Date.UTC(2027, 0, 1); t += 15 * 60_000) {
-      const { sf, delhi } = windowLook(new Date(t));
-      if (sf.sun.shown > 0.5 && delhi.sun.shown > 0.5) closest = Math.min(closest, delhi.sun.azimuth - sf.sun.azimuth);
+  /** Catches a gradient upside down (a dark horizon under a pale zenith reads as dusk, not day). */
+  it('is paler at the horizon than overhead, on both sides', () => {
+    for (const city of ['sf', 'delhi'] as const) {
+      const luma = (c: readonly number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+      expect(luma(linearOf(DAY_SKY[city].horizon))).toBeGreaterThan(luma(linearOf(DAY_SKY[city].zenith)));
     }
-    expect(closest).toBeGreaterThanOrEqual(28);
-  });
-
-  it('raises the sun in the window as it climbs', () => {
-    const heights = [6, 7, 8, 9, 10].map((h) => windowLook(new Date(Date.UTC(2026, 5, 21, h - 5, 30))).delhi.sun.height);
-    for (let i = 1; i < heights.length; i++) expect(heights[i]).toBeGreaterThan(heights[i - 1]);
-  });
-});
-
-/** Catches a moon drawn in the wrong phase: full on 2026-10-26, new on 2026-10-10. */
-describe('the moon’s phase', () => {
-  it('is full on 26 October 2026 and new on 10 October 2026', () => {
-    expect(moonAge(new Date('2026-10-26T04:00:00Z'))).toBeCloseTo(0.5, 1);
-    const age = moonAge(new Date('2026-10-10T16:00:00Z'));
-    expect(Math.min(age, 1 - age)).toBeLessThan(0.03);
+    for (const x of [-0.6, 0.6]) expect(skyColour(domePoint(x, 0.02), frame)[1]).toBeGreaterThan(skyColour(domePoint(x, 1.4), frame)[1]);
   });
 });

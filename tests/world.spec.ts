@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
-// The living room (PLAN 11.1, 12.1): the window by each city's clock, the album, the on-demand media, and what
-// every hotspot does. Props are clicked where the room projects them on screen.
+// The living room (PLAN 11.1, 12.1): the album, the on-demand media, and what every hotspot does (the window has its
+// own spec, window.spec.ts). Props are clicked where the room projects them on screen.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
 test.describe.configure({ timeout: 240_000 });
@@ -42,57 +42,6 @@ async function backToIdle(page: Page) {
   await page.evaluate(() => window.__room!.goto('idle'));
   await settledAt(page, 'idle');
 }
-
-/** Catches the window lit by the visitor's clock (or UTC) instead of each city's own day and night. */
-test('each half of the window shows its own city’s day or night, by that city’s clock', async ({ page }) => {
-  // 13:00 in San Francisco is 01:30 the next morning in Delhi.
-  await page.clock.setFixedTime('2026-06-21T20:00:00Z');
-  await inRoom(page);
-  const noon = (await world(page)).window!;
-  expect(noon.sf).toMatchObject({ local: '1:00 pm', night: 0 });
-  expect(noon.delhi).toMatchObject({ local: '1:30 am', night: 1 });
-  expect(noon.sf.loaded).toContain('day');
-  expect(noon.delhi.loaded).toContain('night');
-  const point = await page.evaluate(() => window.__room!.point('hit_window'));
-  await page.mouse.move(point!.x, point!.y);
-  await expect(page.locator('.room-label')).toHaveText('San Francisco 1:00 pm · Delhi 1:30 am');
-
-  await page.clock.setFixedTime('2026-06-22T08:00:00Z');
-  await page.reload();
-  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 150_000 });
-  const night = (await world(page)).window!;
-  expect(night.sf).toMatchObject({ local: '1:00 am', night: 1 });
-  expect(night.delhi).toMatchObject({ local: '1:30 pm', night: 0 });
-});
-
-/**
- * Catches the first load growing with the clock: both cities can be mid-twilight at once (2026-11-10T01:07Z: San
- * Francisco's dusk, Delhi's dawn), and all four window pictures loaded before the room was interactive, which put the
- * initial payload over 6 MB. One picture per city loads with the room; each city's second follows after it.
- */
-test('at an hour when both cities blend, the room loads one window picture per city first and the rest after', async ({ page }) => {
-  // Each window picture's fetch, and whether the room was interactive when it started (the mocked clock replaces
-  // performance, so there are no resource timings to compare).
-  await page.addInitScript(() => {
-    const log: { file: string; early: boolean }[] = [];
-    (window as unknown as { __pictures: typeof log }).__pictures = log;
-    const fetch = window.fetch.bind(window);
-    window.fetch = (input, init) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      const match = url.match(/\/room\/(window_[a-z]+_(?:day|night)\.ktx2)$/);
-      if (match) log.push({ file: match[1], early: window.__room?.interactiveAt == null });
-      return fetch(input, init);
-    };
-  });
-  await page.clock.setFixedTime('2026-11-10T01:07:00Z');
-  await inRoom(page);
-  await page.waitForFunction(() => Object.values(window.__room!.world.window!).every((city) => city.loaded.length === 2), null, { timeout: 30_000 });
-  const pictures = await page.evaluate(() => (window as unknown as { __pictures: { file: string; early: boolean }[] }).__pictures);
-  const first = pictures.filter((p) => p.early).map((p) => p.file);
-  expect(first).toHaveLength(2);
-  expect(new Set(first.map((f) => f.split('_')[1]))).toEqual(new Set(['sf', 'delhi']));
-  expect(pictures).toHaveLength(4);
-});
 
 /** Catches an album that does not open from the desk, does not page in both directions, or traps the visitor. */
 test('the photo album opens from the desk, pages both ways, and closes with Escape or a click beside it', async ({ page }) => {

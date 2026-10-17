@@ -22,7 +22,8 @@ import { TextureStore } from './textures';
 import { WindowView } from './WindowView';
 
 // Everything in the room that lives and reacts (PLAN 11.1, 12.1, PLAN-ROUND-7 §3–§4 and §7): the window's two cities
-// by their own clocks, the lava lamp and its light, the espresso machine's pour and the cup's steam, the oven's door
+// by day with the flight between them, the lava lamp and its light, the espresso machine's pour and the cup's steam,
+// the oven's door
 // and glow, the projector on the wall, the favourite posters, the Instax board, the sticky notes and the photo album.
 // It carries out every hotspot's room action, with the recordings its actions make. A click that comes from across
 // the room takes the camera to the prop first, and the prop acts once the camera has landed. What the visitor first
@@ -107,6 +108,8 @@ export class World {
   private printsWanted = false;
   private sinceLabels = LABELS_EVERY_S;
   private steamAt = -1;
+  /** The camera of the last frame, to project the window's motif for tests. */
+  private camera: THREE.Camera | null = null;
   private timer = 0;
 
   constructor(
@@ -127,7 +130,9 @@ export class World {
       : null;
     this.instax = n.prints.length ? new Instax(n.prints, this.lamp, HOTSPOTS, n.printsAreInstax) : null;
     this.stickies = n.stickies.length ? new StickyNotes(n.stickies, this.lamp) : null;
-    this.windowView = n.windowViews.length ? new WindowView(n.windowViews, n.windowSky, this.textures, { reducedMotion: still }) : null;
+    this.windowView = n.windowViews.length
+      ? new WindowView(n.windowViews, n.windowSky, n.windowMotif, this.textures, { reducedMotion: still })
+      : null;
     this.lava = n.lava ? new LavaLamp(n.lava.glass, n.lava.light, this.lamp, scene, room.root) : null;
     this.espresso = n.espresso ? new Espresso(n.espresso, scene) : null;
     this.steam = n.steam ? new Steam(n.steam, scene) : null;
@@ -162,7 +167,7 @@ export class World {
     this.refreshLabels();
   }
 
-  /** What the first view needs, before the room is shown: the posters, the window's pictures for now, the sticky notes. */
+  /** What the first view needs, before the room is shown: the posters, the window's pictures and motif, the sticky notes. */
   async load() {
     await Promise.all([this.posters.load(this.textures), this.windowView?.load(), this.stickies?.load()]);
   }
@@ -172,7 +177,6 @@ export class World {
     if (this.interactive) return;
     this.timer = window.setTimeout(() => {
       this.interactive = true;
-      this.windowView?.allowOnDemand();
       this.projector?.allowOnDemand();
       this.loadPaleBlueDot();
       if (this.instax) {
@@ -268,7 +272,7 @@ export class World {
       }
       case 'window':
         if (here !== 'window' && this.host.fly('window')) return true;
-        this.announce(`Out of the window: ${this.windowView?.label() ?? 'San Francisco and Delhi'}.`);
+        this.announce(`Out of the window: ${this.windowView?.label() ?? 'San Francisco and New Delhi'}.`);
         return true;
       case 'records': {
         const audio = this.host.audio;
@@ -290,13 +294,13 @@ export class World {
   update(frame: WorldFrame) {
     const { camera, clock, dt, realDt, running, pixelRatio } = frame;
     const still = this.host.reducedMotion;
+    this.camera = camera;
     this.land(camera, realDt);
     if (this.everything) this.keepEverythingRunning();
 
     this.posters.update(realDt);
     this.paleBlueDot?.update(realDt);
     this.instax?.update(realDt);
-    this.windowView?.setCloseUp(this.host.station() === 'window');
     this.windowView?.update(realDt);
     // Under reduced motion the lamp's wax and the oven's flicker hold still.
     const ambient = still ? 0 : clock;
@@ -352,6 +356,13 @@ export class World {
   /** Screen point of a world feature by name (album pages), for tests. */
   point(name: string, rect: DOMRect) {
     if (name === 'album_left' || name === 'album_right') return this.album?.point(name, rect) ?? null;
+    if (name === 'window_motif') {
+      const node = this.nodes.windowMotif?.anchor;
+      if (!node || !this.camera) return null;
+      const p = node.getWorldPosition(new THREE.Vector3()).project(this.camera);
+      if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1 || p.z > 1) return null;
+      return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+    }
     return undefined;
   }
 
@@ -477,7 +488,7 @@ export class World {
     return proxy ? new THREE.Box3().setFromObject(proxy).getCenter(new THREE.Vector3()) : undefined;
   }
 
-  /** Labels that change with the room: the time in both cities, and the projector's next program on its dial. */
+  /** Labels that change with the room: the window's two cities, and the projector's next program on its dial. */
   private refreshLabels() {
     this.sinceLabels = 0;
     for (const hotspot of HOTSPOTS) {

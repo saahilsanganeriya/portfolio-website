@@ -9,9 +9,8 @@ import type { CityId } from './daylight';
 export interface WindowViewNode {
   city: CityId;
   mesh: THREE.Mesh;
-  /** File names under /room/ from the node's extras (`texture_day`, `texture_night`). */
+  /** The day picture's file under /room/, from the node's extras (`texture_day`). */
   dayFile: string | null;
-  nightFile: string | null;
 }
 
 /** The sky over the window: its dome, where sky directions start, and the window framing's eye. */
@@ -19,6 +18,13 @@ export interface WindowSkyNode {
   mesh: THREE.Mesh;
   centre: THREE.Vector3;
   eye: THREE.Vector3;
+}
+
+/** Where the window's motif hangs (local +Z toward the room, +X toward Delhi's side) and its size in metres. */
+export interface WindowMotifNode {
+  anchor: THREE.Object3D;
+  widthM: number;
+  heightM: number;
 }
 
 /** A runtime art surface (poster, print, sticky note): its slot and the shape of its face. */
@@ -77,6 +83,7 @@ export interface ProjectorNodes {
 export interface WorldNodes {
   windowViews: WindowViewNode[];
   windowSky: WindowSkyNode | null;
+  windowMotif: WindowMotifNode | null;
   posters: ArtNode[];
   /** The Pale Blue Dot print on the space wall and its picture's file beside the room (public/room/). */
   paleBlueDot: { node: ArtNode; file: string } | null;
@@ -250,6 +257,29 @@ function proxyInFront(root: THREE.Object3D, art: THREE.Mesh, name: string, depth
   return proxy;
 }
 
+/**
+ * The motif's anchor: the room's window_motif, or in a room without it a stand-in behind the window's click box, high in
+ * the window where the sky shows (1.24 x 0.48 m, as the room's own).
+ */
+function motifOf(root: THREE.Object3D, motif: THREE.Object3D | null, hit: THREE.Object3D | null): WindowMotifNode | null {
+  if (motif) {
+    return { anchor: motif, widthM: Number(motif.userData.width_m) || 1.24, heightM: Number(motif.userData.height_m) || 0.48 };
+  }
+  if (!hit) return null;
+  const box = new THREE.Box3().setFromObject(hit);
+  const anchor = new THREE.Object3D();
+  anchor.name = 'window_motif';
+  const at = new THREE.Vector3(
+    (box.min.x + box.max.x) / 2,
+    box.min.y + (box.max.y - box.min.y) * 0.72,
+    box.min.z - 0.04 * WORLD_SCALE,
+  );
+  anchor.position.copy(root.worldToLocal(at));
+  root.add(anchor);
+  anchor.updateMatrixWorld();
+  return { anchor, widthM: 1.24, heightM: 0.48 };
+}
+
 function pivotOf(node: THREE.Object3D | null, fallbackAngle: number, fallbackAxis = '+Y'): PivotNode | null {
   if (!node) return null;
   return {
@@ -296,7 +326,6 @@ export function readWorld(room: RoomNodes): WorldNodes {
         city,
         mesh: view,
         dayFile: typeof view.userData.texture_day === 'string' ? view.userData.texture_day : null,
-        nightFile: typeof view.userData.texture_night === 'string' ? view.userData.texture_night : null,
       });
     }
   }
@@ -306,6 +335,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
   const skyEye = find('window_sky_eye');
   const windowSky =
     skyMesh && skyCentre && skyEye ? { mesh: skyMesh, centre: worldPosition(skyCentre), eye: worldPosition(skyEye) } : null;
+  const windowMotif = motifOf(root, find('window_motif'), find('hit_window'));
 
   const posters: ArtNode[] = [];
   for (let n = 0; n < POSTER_SLOTS; n++) {
@@ -358,6 +388,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
   return {
     windowViews,
     windowSky,
+    windowMotif,
     posters,
     paleBlueDot,
     prints,
