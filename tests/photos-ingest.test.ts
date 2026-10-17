@@ -68,22 +68,20 @@ describe('photos:ingest', () => {
         'file: "../../assets/photography/test-photo/1200.webp"',
         'title: "Test photo"',
         'year: 2018',
-        'series: "2018"',
         'caption: ""',
-        'featured: false',
-        'onWall: false',
+        'camera: ""',
         '',
       ].join('\n'),
     );
     expect(await readdir(join(root, 'src/assets/photography/tiny'))).toEqual(['300.avif', '300.webp']);
   });
 
-  /** Catches --series and --year being ignored, which would file a whole folder under the wrong series. */
-  test('--series and --year set the defaults of new entries', async () => {
-    await ingestFolder({ folder, root, series: '2019', year: 2019 });
+  /** Catches --year being ignored, which would date a whole folder by the wrong year. */
+  test('--year sets the year of new entries', async () => {
+    await ingestFolder({ folder, root, year: 2019 });
 
     const entry = await readFile(join(root, 'src/content/photography/tiny.yaml'), 'utf8');
-    expect(entry).toContain('year: 2019\nseries: "2019"\n');
+    expect(entry).toContain('year: 2019\n');
   });
 
   /** Catches a re-run that overwrites the owner's edits or re-encodes photos already ingested. */

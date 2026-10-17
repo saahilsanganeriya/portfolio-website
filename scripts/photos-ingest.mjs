@@ -1,8 +1,8 @@
 // One-step photo ingest. For each image in a folder: apply its EXIF rotation, strip every metadata block (EXIF with
 // GPS, XMP, IPTC, ICC), write AVIF and WebP copies at a few long-edge sizes, and add an entry the owner can edit.
 // Re-running is safe: photos already ingested are skipped, and an existing entry is never overwritten.
-// Usage: npm run photos:ingest -- <folder> [--series <name>] [--year <yyyy>]   (photography; series defaults to the year)
-//        npm run photos:ingest -- <folder> --me                                (photos of the owner, src/content/me.json)
+// Usage: npm run photos:ingest -- <folder> [--year <yyyy>]   (photography)
+//        npm run photos:ingest -- <folder> --me              (photos of the owner, src/content/me.json)
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { basename, extname, join, resolve } from 'node:path';
@@ -48,18 +48,16 @@ export function exifYear(exif) {
 }
 
 export function parseArgs(argv) {
-  const options = { folder: null, series: null, year: null, me: false };
+  const options = { folder: null, year: null, me: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--me') options.me = true;
-    else if (arg === '--series') options.series = argv[++i];
     else if (arg === '--year') options.year = Number(argv[++i]);
     else if (arg.startsWith('--')) throw new Error(`unknown option ${arg}`);
     else if (options.folder === null) options.folder = arg;
     else throw new Error(`unexpected argument ${arg}`);
   }
-  if (!options.folder) throw new Error('usage: npm run photos:ingest -- <folder> [--series <name>] [--year <yyyy>] [--me]');
-  if (options.series === undefined || options.series === '') throw new Error('--series needs a name');
+  if (!options.folder) throw new Error('usage: npm run photos:ingest -- <folder> [--year <yyyy>] [--me]');
   if (options.year !== null && !(Number.isInteger(options.year) && options.year >= 1900 && options.year <= 2100)) {
     throw new Error('--year needs a four-digit year');
   }
@@ -95,9 +93,9 @@ const yamlEntry = (fields) =>
 
 /**
  * Ingests every supported image in `folder` under `root` (the repo by default); returns what it did per file.
- * @param {{ folder: string, series?: string | null, year?: number | null, me?: boolean, root?: string }} options
+ * @param {{ folder: string, year?: number | null, me?: boolean, root?: string }} options
  */
-export async function ingestFolder({ folder, series = null, year = null, me = false, root = ROOT }) {
+export async function ingestFolder({ folder, year = null, me = false, root = ROOT }) {
   const files = (await readdir(folder, { withFileTypes: true }))
     .filter((dirent) => dirent.isFile() && !dirent.name.startsWith('.'))
     .map((dirent) => dirent.name)
@@ -149,10 +147,9 @@ export async function ingestFolder({ folder, series = null, year = null, me = fa
             file: `../../assets/photography/${slug}/${Math.max(...edges)}.webp`,
             title: titleFromSlug(slug),
             year: entryYear,
-            series: series ?? String(entryYear),
             caption: '',
-            featured: false,
-            onWall: false,
+            // The camera line from his post is the evidence a photo belongs here; the build refuses an empty one.
+            camera: '',
           }),
         );
       }
@@ -178,7 +175,7 @@ async function main() {
   console.log(
     options.me
       ? `${added} added. Write each new photo's alt text (and use) in src/content/me.json before building.`
-      : `${added} added. Edit titles, captions and featured/onWall in src/content/photography/<name>.yaml.`,
+      : `${added} added. Write each one's camera (and film), caption and order in src/content/photography/<name>.yaml before building.`,
   );
 }
 

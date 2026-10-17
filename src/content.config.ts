@@ -67,24 +67,27 @@ const pages = defineCollection({
   }),
 });
 
-// The owner's own photography, one YAML file per photo, written by `npm run photos:ingest`. Never photos of him.
+// The owner's own photography, one YAML file per photo, written by `npm run photos:ingest`. Never photos of him: only
+// what he shot on his film or digital camera and posted, with the camera line from his post as the evidence.
 const photography = defineCollection({
   loader: glob({ base: './src/content/photography', pattern: '[^_]*.{yaml,yml}' }),
   schema: ({ image }) =>
     z.object({
       file: image(),
       title: z.string(),
+      /** The year he took it. */
       year: z.number().int(),
       place: z.string().optional(),
-      series: z.string(),
       /** One line in his voice; it also serves as the photo's alt text. */
       caption: z.string().max(140),
-      featured: z.boolean(),
-      onWall: z.boolean(),
+      /** Camera and lens, as his post names them; film stock separately (none for digital). */
+      camera: z.string().min(1),
+      film: z.string().optional(),
+      /** The one order of the set: the room's darkroom line and SaahilOS both follow it. */
       order: z.number().int().optional(),
-      /** The few words he writes on the print in the room, in marker. */
+      /** The few words he writes on the print's border in the room, in marker. */
       sharpie: z.string().max(40).optional(),
-      /** When he took or posted it. */
+      /** The day he posted it. */
       date: z.coerce.date().optional(),
       /** His own Instagram caption for it, as posted. */
       igCaption: z.string().optional(),

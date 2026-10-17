@@ -18,7 +18,7 @@ const ABOUT = (() => {
   const firstParagraph = mdx.split(/\n{2,}/).map((block) => block.trim()).find((block) => /^[A-Z]/.test(block))!;
   return { firstWords: firstParagraph.split(/[,.]/)[0], photos: (mdx.match(/<MePhoto\b/g) ?? []).length };
 })();
-// The first featured photograph in the collection, read from its YAML so a new photo set moves the tests with it.
+// The first photograph of the set by its order, read from its YAML so a new photo set moves the tests with it.
 const PHOTO = (() => {
   const dir = new URL('../src/content/photography/', import.meta.url);
   const entries = readdirSync(dir)
@@ -31,12 +31,10 @@ const PHOTO = (() => {
         title: field('title'),
         caption: field('caption'),
         igCaption: field('igCaption'),
-        featured: field('featured') === 'true',
         order: Number(field('order') || 1e9),
       };
     })
-    .filter((photo) => photo.featured)
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug));
   return entries[0];
 })();
 const PROJECT = {
@@ -454,11 +452,15 @@ test.describe('desktop', () => {
     await expect.poll(() => last.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   });
 
-  /** Catches a photograph's deep link opening the wrong one, and full-size files loading before a photograph is opened. */
+  /**
+   * Catches the exhibit out of the set's order, a photograph's deep link opening the wrong one, and full-size files
+   * loading before a photograph is opened.
+   */
   test('A Narrative in a Frame: thumbnails first, the full photograph on open', async ({ page }) => {
     await page.goto('/os?embed=1#photography');
     const exhibit = page.getByRole('dialog', { name: 'A Narrative in a Frame' });
-    await expect(exhibit.getByRole('heading', { name: 'Favourites' })).toBeVisible();
+    // The set's order, the darkroom line's too: its first photograph leads.
+    await expect(exhibit.locator('.os-print-title').first()).toHaveText(PHOTO.title);
     const thumbs = exhibit.locator('.os-print img');
     await expect.poll(() => thumbs.first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     // The widest file each <picture> may choose from, across its sources.
