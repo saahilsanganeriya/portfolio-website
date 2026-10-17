@@ -24,14 +24,12 @@ export interface OsPhotograph {
   title: string;
   year: number;
   place?: string;
-  series: string;
   /** One line in his voice; also the picture's alt text. */
   caption: string;
   /** Calendar day, YYYY-MM-DD, when known. */
   date?: string;
   /** His own Instagram caption for the photograph, as posted. */
   igCaption?: string;
-  featured: boolean;
   /** Small sizes for the browse view; the full set loads only when a photograph is opened. */
   thumb: OsPicture;
   full: OsPicture;

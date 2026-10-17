@@ -151,19 +151,15 @@ export async function photographs(): Promise<OsPhotograph[]> {
         title: data.title,
         year: data.year,
         place: data.place,
-        series: data.series,
         caption: data.caption,
         ...(data.date ? { date: isoDate(data.date) } : {}),
         ...(data.igCaption ? { igCaption: data.igCaption } : {}),
-        featured: data.featured,
         order: data.order ?? Number.MAX_SAFE_INTEGER,
         thumb,
         full,
       };
     })
-    .sort(
-      (a, b) =>
-        Number(b.featured) - Number(a.featured) || a.series.localeCompare(b.series) || a.order - b.order,
-    )
+    // The set's one order, the same as the darkroom line in the room.
+    .sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug))
     .map(({ order: _order, ...photo }) => photo);
 }

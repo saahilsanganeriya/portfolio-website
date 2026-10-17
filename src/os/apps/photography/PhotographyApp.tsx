@@ -41,30 +41,13 @@ function Prints({ photos, large = false }: { photos: OsPhotograph[]; large?: boo
   );
 }
 
-// The exhibit: the favourites first, then every series in turn.
+// The exhibit: the whole set in its one order, the same as the prints on the darkroom line in the room.
 function Browse({ photos }: { photos: OsPhotograph[] }) {
-  const featured = photos.filter((photo) => photo.featured);
-  const series = [...new Set(photos.filter((p) => !p.featured).map((p) => p.series))];
   if (photos.length === 0) return <p className="os-note">No photographs are published yet.</p>;
   return (
     <div className="os-darkroom">
       <p className="os-darkroom-intro">Photographs I have taken. Open one to see it large, with its title and a line about it.</p>
-      {featured.length > 0 && (
-        <section aria-labelledby="os-prints-featured">
-          <h2 className="os-darkroom-heading" id="os-prints-featured">
-            Favourites
-          </h2>
-          <Prints photos={featured} large />
-        </section>
-      )}
-      {series.map((name) => (
-        <section key={name} aria-labelledby={`os-prints-${name}`}>
-          <h2 className="os-darkroom-heading" id={`os-prints-${name}`}>
-            {name}
-          </h2>
-          <Prints photos={photos.filter((p) => !p.featured && p.series === name)} />
-        </section>
-      ))}
+      <Prints photos={photos} large />
     </div>
   );
 }
@@ -126,7 +109,7 @@ function Photograph({ photo, photos }: { photo: OsPhotograph; photos: OsPhotogra
   );
 }
 
-/** 'A Narrative in a Frame': his photographs by series; `#photography/<slug>` opens one. */
+/** 'A Narrative in a Frame': his photographs in the set's order; `#photography/<slug>` opens one. */
 export function PhotographyApp({ slug, os }: { slug?: string; os: OsApi }) {
   const photos = os.index.photography;
   const photo = slug ? photos.find((p) => p.slug === slug) : undefined;
