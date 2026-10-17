@@ -8,8 +8,7 @@ room.blend with the bake UVs.
     blender -b blender/room.blend -P blender/scripts/bake.py -- --regrade env   # new exposure, no re-bake
 
 Each atlas gets a second UV map "bake" (an object's own clean UVs or a smart projection, scaled by its area times
-its "texel" weight, so the density is uniform within an object, and packed together with a margin of 16 px at the
-shipped size). Then one Combined bake of the view-independent light only (diffuse, direct and indirect, and
+its "texel" weight, so the density is uniform within an object, and packed together with a margin, MARGIN_PX). Then one Combined bake of the view-independent light only (diffuse, direct and indirect, and
 emission; the site adds the shine of the surfaces tagged "gloss" live, since a glossy bake is right from one viewpoint
 only), with metals and glass baked as diffuse in their own colour so they do not come out black, a diffuse-colour
 and a normal bake that guide OIDN's denoising, the scene's AgX view transform, and the void fade: each texel blends toward
@@ -47,8 +46,10 @@ BLEND = REPO / "blender" / "room.blend"
 # a couple of baked ones: sharper type and edges, less noise. The view's halves ship at their bake size.
 ATLAS_SIZES = {"desk": 6144, "art": 6144, "props": 6144, "env": 6144, "window_sf": 1280, "window_delhi": 1280}
 SHIP_PX = 4096
-# Island margin: 16 px at the shipped 4096 (CRAFT-R8 4), so 24 px at the 6144 bake; the view keeps 6 px.
-MARGIN_PX = {"desk": 24, "art": 24, "props": 24, "env": 24, "window_sf": 6, "window_delhi": 6}
+# Island margin at the bake size. The desk keeps CRAFT-R8's 16 px at the shipped 4096 (24 at the 6144 bake); the art,
+# props and env atlases hold thousands of small islands, where that margin left the props atlas 10 % full, so they use
+# round seven's 12 (8 px shipped): props 40 % full, art 43 % (measured on this set). The view keeps 6 px.
+MARGIN_PX = {"desk": 24, "art": 12, "props": 12, "env": 12, "window_sf": 6, "window_delhi": 6}
 # The world seen through the open front of the view while it bakes: a pale day sky.
 VIEW_WORLD = ((0.62, 0.70, 0.82, 1.0), 0.35)
 GUIDE_SAMPLES = 4  # the albedo and normal guides for OIDN (they barely change within a texel)

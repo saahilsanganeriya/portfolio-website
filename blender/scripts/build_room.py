@@ -1375,8 +1375,7 @@ def reduce_geometry():
 # atlas) and the rest (props).
 ATLAS_BY_NAME = [
     ("desk", ("desk_desk_top", "desk_crt_front", "desk_computer_front", "keyboard", "mouse", "coffee_mug", "crt_glow",
-              "crt_badge", "sticky_note_", "desk_notebook", "desk_paper", "desk_tray", "desk_lamp", "lamp_bulb",
-              "props_fujifilm_x100", "props_pen_cup", "props_nas_4bay", "nas_led_", "desk_cables", "desk_headphones")),
+              "crt_badge", "sticky_note_")),
     ("art", ("env_window", "env_curtain_rod", "env_picture_light", "env_space_light", "props_poster_frame_", "poster_art_", "poster_plaque",
              "voyager_record", "props_frame_pale_blue_dot", "print_pale_blue_dot", "pennant_gatech",
              "print_japanese_lit", "darkroom_", "env_darkroom_light")),
@@ -1388,9 +1387,11 @@ TEXEL_WEIGHTS = {
     # desk: the desk top is big and smooth; the small things on it carry the detail
     "desk_desk_top": 0.72, "keyboard": 1.3, "mouse": 1.0, "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4,
     "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3, "props_mouse_cable": 0.3,
-    "desk_computer_front": 0.85, "crt_glow": 0.3, "desk_notebook": 1.0, "desk_lamp_shade": 0.8, "desk_lamp": 0.7,
-    "desk_lamp_neck": 0.7, "props_nas_4bay": 0.8, "desk_tray_bottom": 0.7, "desk_tray_top": 0.7, "desk_cables": 0.6,
-    "desk_headphones": 0.8, "desk_papers_a": 0.8, "desk_papers_b": 0.8,
+    "desk_computer_front": 0.85, "crt_glow": 0.3,
+    # the rest of the desk sits in the props atlas, a little above its average: the desk view sees it
+    "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4, "props_nas_4bay": 1.6,
+    "desk_tray_bottom": 1.2, "desk_tray_top": 1.2, "desk_cables": 0.8, "desk_headphones": 1.2, "desk_papers_a": 1.4,
+    "desk_papers_b": 1.4, "desk_paper": 1.4, "props_fujifilm_x100": 1.6, "props_pen_cup": 1.4, "lamp_bulb": 1.0,
     # art: frames and the window frame by area; the engraved and printed type sharper
     "env_window_frame": 0.8, "env_window_sill": 0.8, "poster_plaque": 3.0, "voyager_record": 1.6, "pennant_gatech": 1.4,
     "print_japanese_lit": 1.4, "props_frame_pale_blue_dot": 1.0, "env_curtain_rod": 0.6,
@@ -1552,13 +1553,11 @@ def tune_atlas_objects():
         name = obj.name
         weight = TEXEL_WEIGHTS.get(name)
         if weight is None and name.startswith("props_poster_frame_"):
-            weight = 0.35
+            weight = 1.0
         elif obj.get("runtime_art"):
             # Only the light on the picture is baked (the site draws the art), and light is smooth.
             weight = 0.45
             obj["bake_uv"] = "project"  # the art UV is a unit square; project for the true aspect
-        elif weight is None and obj.get("prop") == "fujifilm_x100":
-            weight = 1.0
         if weight is not None:
             obj["texel"] = weight
         if name in ("lamp_bulb", "crt_glow", "lava_lamp_glass", "oven_glow", "oven_door", "croissant") or \

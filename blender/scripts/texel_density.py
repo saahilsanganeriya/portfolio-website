@@ -69,7 +69,7 @@ def main():
     by_atlas, named, named_all = {}, {}, {}
     for obj in bpy.context.scene.objects:
         atlas = obj.get("atlas")
-        if obj.type != "MESH" or not atlas:
+        if obj.type != "MESH" or not atlas or atlas == "window_sky":  # the sky is drawn by the site, never baked
             continue
         size = shipped_size(atlas)
         found = object_density(obj, size)
