@@ -154,7 +154,6 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
   await inRoom(page);
   const sectors = new Set<number>();
   const walls: Record<string, number[]> = {};
-  const shownOutside: Record<string, number[]> = {};
   // From the front, the window's city view shows; it is checked hidden from every side the camera turns to below.
   const front = await page.evaluate(() => window.__room!.walls);
   for (const wall of front) expect(wall.outside.every((o) => o.shown), `the ${wall.name} wall's outside from the front`).toBe(true);
@@ -174,7 +173,6 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
       (walls[wall.name] ??= []).push(wall.opacity);
       // What lies outside a wall (the window's city view and sky) never shows while that wall is faded at all.
       if (wall.opacity < 1) expect(wall.outside.filter((o) => o.shown).map((o) => o.name), `outside the faded ${wall.name} wall`).toEqual([]);
-      (shownOutside[wall.name] ??= []).push(wall.outside.filter((o) => o.shown).length);
     }
     // From a wall's outside, its hotspots are not in the way of the pointer.
     const faded = (await page.evaluate(() => window.__room!.walls)).filter((w) => w.opacity < 0.5);
@@ -192,12 +190,19 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
     expect(Math.min(...opacities), `the ${name} wall from behind`).toBeLessThan(0.05);
     expect(Math.max(...opacities), `the ${name} wall from the front`).toBe(1);
   }
-  // From the side, past a wall's free end, its outside is hidden even while the wall itself stands whole.
-  const outsideAt = Object.entries(shownOutside).filter(([name]) => front.find((w) => w.name === name)!.outside.length > 0);
-  for (const [name, counts] of outsideAt) {
-    const sideways = counts.filter((n, k) => n === 0 && walls[name][k] === 1).length;
-    expect(sideways, `turns where the ${name} wall stood whole with its outside hidden`).toBeGreaterThan(0);
+  // From the side, past the back wall's free end (80° round, where the wall still stands whole), the city behind it is
+  // hidden too.
+  const side = (80 * Math.PI) / 180;
+  for (let k = 0; k < 3; k++) {
+    const { azimuth } = (await room(page)).orbit!;
+    const delta = ((((side - azimuth) % TURN) + TURN * 1.5) % TURN) - Math.PI;
+    if (Math.abs(delta) < 0.02) break;
+    await drag(page, -Math.max(-2, Math.min(2, delta)) / RAD_PER_PX);
+    await orbitRests(page);
   }
+  const back = (await page.evaluate(() => window.__room!.walls)).find((w) => w.name === 'back')!;
+  expect(back.opacity, 'the back wall from the side').toBe(1);
+  expect(back.outside.filter((o) => o.shown).map((o) => o.name), 'the city behind the back wall, from the side').toEqual([]);
 });
 
 /** Catches a wheel that steps between framings instead of zooming, zooms the wrong way, or breaks out of the limits. */

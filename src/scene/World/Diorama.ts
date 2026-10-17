@@ -5,9 +5,9 @@ import { WORLD_SCALE } from '../Application/RoomModel';
 // hangs on it, fades out while the camera stands behind it and comes back as the camera comes round to the front.
 // The corner set names its walls' groups (`wall_back_group`, `wall_left_group`, PLAN-ROUND-8 §4); the first room has
 // bare wall meshes (`env_wall_back`, `env_wall_left`, `env_wall_right`), so there a wall takes the thin things hung on
-// it. What lies outside a wall (the window's city view and sky, a hallway) is hidden outright whenever its wall is
-// faded at all or the camera is off to the side, where it would be seen past the wall's free end. A faded wall's
-// hotspots stop catching the pointer.
+// it. What lies outside a wall (the window's city view and sky, a hallway) shows only while the wall itself stands
+// whole between it and the eye: hidden outright when the wall is faded at all, or when the camera is far enough round
+// to see past the wall's free end. A faded wall's hotspots stop catching the pointer.
 
 const WALL_MESH = /^(?:env_)?wall_(back|left|right)$/;
 // The window's own parts behind the wall: its view, sky and motif (and anything the room hangs under them), and the pane.
@@ -16,8 +16,6 @@ const OUTSIDE_NODE = /^window_(?:view_|sky|motif|glass)/;
 const FADE_FROM_M = -0.2;
 const FADE_TO_M = 0.9;
 const FADE_TAU_S = 0.18;
-// What is outside a wall shows only while the eye is within this angle of the wall's front, seen from it.
-const OUTSIDE_FRONT_COS = Math.cos(THREE.MathUtils.degToRad(55));
 // Below this opacity a wall's hotspots stop taking the pointer; below the second, its meshes are not drawn at all.
 const CLICKABLE_ABOVE = 0.5;
 const DRAWN_ABOVE = 0.004;
@@ -34,8 +32,6 @@ export const FADED_LAYER = 31;
 
 interface Outside {
   node: THREE.Object3D;
-  /** Its middle (world units), where the angle to the eye is measured from. */
-  at: THREE.Vector3;
   /** Whether this hid it (the room may hide some of its own). */
   hidden: boolean;
 }
@@ -49,6 +45,11 @@ interface Wall {
   meshes: THREE.Mesh[];
   proxies: THREE.Object3D[];
   outside: Outside[];
+  /** The plan corners (world x, z) of the box round everything outside, and the wall's extent along itself. */
+  outsideCorners: THREE.Vector2[];
+  span: [number, number];
+  along: 'x' | 'z';
+  across: 'x' | 'z';
   /** Whether a mesh or hotspot (by box) is hung on this wall, by the first room's test. */
   mounted(box: THREE.Box3, thin: number): boolean;
   behind(box: THREE.Box3): boolean;
@@ -88,7 +89,6 @@ export class Diorama {
   readonly walls: Wall[] = [];
   private readonly faded = new Map<THREE.Mesh, Faded>();
   private readonly eye = new THREE.Vector3();
-  private readonly toEye = new THREE.Vector3();
 
   constructor(
     private readonly root: THREE.Object3D,
@@ -122,6 +122,10 @@ export class Diorama {
         meshes: [node as THREE.Mesh],
         proxies: [],
         outside: [],
+        outsideCorners: [],
+        span: [box.min[along], box.max[along]],
+        along,
+        across,
         mounted: (b, thin) => inSpan(b) && depth(b) <= thin && offset(b) + depth(b) / 2 >= -TOUCH_M,
         behind: (b) => inSpan(b) && offset(b) > 0,
         opacity: 1,
@@ -152,8 +156,17 @@ export class Diorama {
     wall.meshes = [...meshes].filter((m) => !others.has(m));
     for (const mesh of wall.meshes) if (mesh.material instanceof THREE.ShaderMaterial) patchShader(mesh.material);
     const known = new Map(wall.outside.map((o) => [o.node, o]));
-    wall.outside = outsideRoots.map((node) => known.get(node) ?? { node, at: new THREE.Box3().setFromObject(node).getCenter(node.getWorldPosition(new THREE.Vector3())), hidden: false });
-    for (const o of wall.outside) if (new THREE.Box3().setFromObject(o.node).isEmpty()) o.node.getWorldPosition(o.at);
+    wall.outside = outsideRoots.map((node) => known.get(node) ?? { node, hidden: false });
+    const box = new THREE.Box3();
+    for (const o of wall.outside) {
+      const was = o.node.visible;
+      o.node.visible = true;
+      box.union(new THREE.Box3().setFromObject(o.node));
+      o.node.visible = was;
+    }
+    wall.outsideCorners = box.isEmpty()
+      ? []
+      : [box.min, box.max].flatMap((a) => [box.min, box.max].map((b) => new THREE.Vector2(a.x, b.z)));
     wall.proxies = this.proxies.filter((p) => {
       const box = new THREE.Box3().setFromObject(p);
       return (wall.group !== null && isUnder(p, [wall.group])) || wall.mounted(box, PROXY_DEPTH_M) || wall.behind(box);
@@ -184,13 +197,30 @@ export class Diorama {
     return changed;
   }
 
-  /** What lies outside the wall shows only while the wall is whole and the eye is in front of it; true if any changed. */
+  /**
+   * Whether the wall stands between the eye and everything outside it: the eye is in front of the wall, and the line
+   * from the eye to each corner of the box round the outside crosses the wall's plane within the wall's length (in plan).
+   */
+  private covers(wall: Wall, camera: THREE.Vector3) {
+    const { across, along, normal, point, span } = wall;
+    const side = (x: number, z: number) => ((across === 'x' ? x : z) - point[across]) * normal[across];
+    const eyeSide = side(camera.x, camera.z);
+    if (eyeSide >= 0) return false;
+    const eyeAlong = camera[along];
+    return wall.outsideCorners.every(({ x, y: z }) => {
+      const cornerSide = side(x, z);
+      if (cornerSide <= 0) return true;
+      const t = eyeSide / (eyeSide - cornerSide);
+      const crossing = eyeAlong + t * ((along === 'x' ? x : z) - eyeAlong);
+      return crossing >= span[0] && crossing <= span[1];
+    });
+  }
+
+  /** What lies outside the wall shows only while the wall is whole and covers it from the eye; true if any changed. */
   private showOutside(wall: Wall, camera: THREE.Vector3, opacity: number) {
     let changed = false;
+    const show = opacity >= 1 && this.covers(wall, camera);
     for (const o of wall.outside) {
-      const toEye = this.toEye.copy(camera).sub(o.at).setY(0);
-      const facing = -toEye.dot(wall.normal) / Math.max(1e-6, toEye.length());
-      const show = opacity >= 1 && facing > OUTSIDE_FRONT_COS;
       if (!show && !o.hidden && o.node.visible) {
         o.node.visible = false;
         o.hidden = true;

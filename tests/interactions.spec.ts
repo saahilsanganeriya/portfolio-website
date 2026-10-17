@@ -74,6 +74,8 @@ test.describe('room v3 interactions', () => {
   test.describe.configure({ mode: 'serial', timeout: 300_000 });
   let page: Page;
   test.beforeAll(async ({ browser }) => {
+    // The room loads in the hook: under load that takes longer than a hook's default 30 s.
+    test.setTimeout(240_000);
     page = await openRoom(browser, 'no-preference');
   });
   test.afterAll(async () => page.close());
@@ -204,6 +206,7 @@ test.describe('room v3 interactions with reduced motion', () => {
   test.describe.configure({ mode: 'serial', timeout: 300_000 });
   let page: Page;
   test.beforeAll(async ({ browser }) => {
+    test.setTimeout(240_000);
     page = await openRoom(browser, 'reduce');
   });
   test.afterAll(async () => page.close());

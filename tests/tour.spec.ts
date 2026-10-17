@@ -232,6 +232,8 @@ test('with reduced motion, Play visits the stops one by one, each with its capti
   await expect(caption).toHaveText(`2 of ${STOPS.length} · ${STOPS[1].label}. ${STOPS[1].caption}`, { timeout: 20_000 });
   await expect(caption).toHaveText('Back at the desk.', { timeout: 120_000 });
   await settledAt(page, 'desk');
+  // The page's own frame loop records the last cut on its next frame, which a slow machine draws late.
+  await expect.poll(() => page.evaluate(() => (window as unknown as { seen: string[] }).seen.at(-1))).toBe('desk');
   const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
   expect(seen.slice(seen.indexOf(station(STOPS[0])))).toEqual([...STOPS.map(station), 'desk']);
   await page.close();
