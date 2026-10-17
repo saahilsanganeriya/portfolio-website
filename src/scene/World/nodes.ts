@@ -27,6 +27,13 @@ export interface WindowMotifNode {
   heightM: number;
 }
 
+/** Where the coffee's steam starts (local +Y up) and how wide and tall it rises, in metres. */
+export interface CoffeeSteamNode {
+  anchor: THREE.Object3D;
+  widthM: number;
+  heightM: number;
+}
+
 /** A runtime art surface (poster, print, sticky note): its slot and the shape of its face. */
 export interface ArtNode {
   slot: number;
@@ -84,6 +91,7 @@ export interface WorldNodes {
   windowViews: WindowViewNode[];
   windowSky: WindowSkyNode | null;
   windowMotif: WindowMotifNode | null;
+  coffeeSteam: CoffeeSteamNode | null;
   posters: ArtNode[];
   /** The Pale Blue Dot print on the space wall and its picture's file beside the room (public/room/). */
   paleBlueDot: { node: ArtNode; file: string } | null;
@@ -280,6 +288,21 @@ function motifOf(root: THREE.Object3D, motif: THREE.Object3D | null, hit: THREE.
   return { anchor, widthM: 1.24, heightM: 0.48 };
 }
 
+/** Where the coffee's steam starts: the room's coffee_steam, or in a room without it just under the desk mug's rim. */
+function steamOf(root: THREE.Object3D, empty: THREE.Object3D | null, mug: THREE.Object3D | null): CoffeeSteamNode | null {
+  if (empty) {
+    return { anchor: empty, widthM: Number(empty.userData.width_m) || 0.07, heightM: Number(empty.userData.height_m) || 0.16 };
+  }
+  if (!mug) return null;
+  const box = new THREE.Box3().setFromObject(mug);
+  const anchor = new THREE.Object3D();
+  anchor.name = 'coffee_steam';
+  anchor.position.copy(root.worldToLocal(new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y - 0.012 * WORLD_SCALE, (box.min.z + box.max.z) / 2)));
+  root.add(anchor);
+  anchor.updateMatrixWorld();
+  return { anchor, widthM: 0.07, heightM: 0.16 };
+}
+
 function pivotOf(node: THREE.Object3D | null, fallbackAngle: number, fallbackAxis = '+Y'): PivotNode | null {
   if (!node) return null;
   return {
@@ -336,6 +359,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
   const windowSky =
     skyMesh && skyCentre && skyEye ? { mesh: skyMesh, centre: worldPosition(skyCentre), eye: worldPosition(skyEye) } : null;
   const windowMotif = motifOf(root, find('window_motif'), find('hit_window'));
+  const coffeeSteam = steamOf(root, find('coffee_steam'), find('desk_mug'));
 
   const posters: ArtNode[] = [];
   for (let n = 0; n < POSTER_SLOTS; n++) {
@@ -389,6 +413,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
     windowViews,
     windowSky,
     windowMotif,
+    coffeeSteam,
     posters,
     paleBlueDot,
     prints,

@@ -17,13 +17,14 @@ import type { Photograph } from './photographs';
 import { Projector } from './Projector';
 import { Oven, Steam } from './props';
 import type { RecordPlayer } from './RecordPlayer';
+import { CoffeeSteam } from './Steam';
 import { StickyNotes } from './StickyNotes';
 import { TextureStore } from './textures';
 import { WindowView } from './WindowView';
 
 // Everything in the room that lives and reacts (PLAN 11.1, 12.1, PLAN-ROUND-7 §3–§4 and §7): the window's two cities
-// by day with the flight between them, the lava lamp and its light, the espresso machine's pour and the cup's steam,
-// the oven's door
+// by day with the flight between them, the coffee's steam, the lava lamp and its light, the espresso machine's pour and
+// the cup's steam, the oven's door
 // and glow, the projector on the wall, the favourite posters, the Instax board, the sticky notes and the photo album.
 // It carries out every hotspot's room action, with the recordings its actions make. A click that comes from across
 // the room takes the camera to the prop first, and the prop acts once the camera has landed. What the visitor first
@@ -89,6 +90,7 @@ export class World {
   readonly instax: Instax | null;
   private readonly stickies: StickyNotes | null;
   private readonly windowView: WindowView | null;
+  private readonly coffeeSteam: CoffeeSteam | null;
   private readonly lava: LavaLamp | null;
   private readonly espresso: Espresso | null;
   private readonly steam: Steam | null;
@@ -108,7 +110,7 @@ export class World {
   private printsWanted = false;
   private sinceLabels = LABELS_EVERY_S;
   private steamAt = -1;
-  /** The camera of the last frame, to project the window's motif for tests. */
+  /** The camera of the last frame, to project the window's motif and the coffee's steam for tests. */
   private camera: THREE.Camera | null = null;
   private timer = 0;
 
@@ -133,6 +135,7 @@ export class World {
     this.windowView = n.windowViews.length
       ? new WindowView(n.windowViews, n.windowSky, n.windowMotif, this.textures, { reducedMotion: still })
       : null;
+    this.coffeeSteam = n.coffeeSteam ? new CoffeeSteam(n.coffeeSteam, still) : null;
     this.lava = n.lava ? new LavaLamp(n.lava.glass, n.lava.light, this.lamp, scene, room.root) : null;
     this.espresso = n.espresso ? new Espresso(n.espresso, scene) : null;
     this.steam = n.steam ? new Steam(n.steam, scene) : null;
@@ -302,6 +305,7 @@ export class World {
     this.paleBlueDot?.update(realDt);
     this.instax?.update(realDt);
     this.windowView?.update(realDt);
+    this.coffeeSteam?.update(realDt);
     // Under reduced motion the lamp's wax and the oven's flicker hold still.
     const ambient = still ? 0 : clock;
     this.lava?.update(ambient, realDt, camera);
@@ -356,8 +360,8 @@ export class World {
   /** Screen point of a world feature by name (album pages), for tests. */
   point(name: string, rect: DOMRect) {
     if (name === 'album_left' || name === 'album_right') return this.album?.point(name, rect) ?? null;
-    if (name === 'window_motif') {
-      const node = this.nodes.windowMotif?.anchor;
+    if (name === 'coffee_steam_plume' || name === 'window_motif') {
+      const node = name === 'window_motif' ? this.nodes.windowMotif?.anchor : this.coffeeSteam?.mesh;
       if (!node || !this.camera) return null;
       const p = node.getWorldPosition(new THREE.Vector3()).project(this.camera);
       if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1 || p.z > 1) return null;
@@ -370,6 +374,7 @@ export class World {
     return {
       interactive: this.interactive,
       window: this.windowView?.state() ?? null,
+      coffeeSteam: this.coffeeSteam?.state() ?? null,
       posters: this.posters.loaded,
       paleBlueDot: this.paleBlueDot?.shown ?? null,
       instax: this.instax?.probe() ?? null,
@@ -393,6 +398,7 @@ export class World {
     this.instax?.dispose();
     this.stickies?.dispose();
     this.windowView?.dispose();
+    this.coffeeSteam?.dispose();
     this.lava?.dispose();
     this.espresso?.dispose();
     this.steam?.dispose();
