@@ -718,6 +718,8 @@ test.describe('desktop at 1440 × 900', () => {
    * desktop, Code's views and a photograph, each alone in a fresh load (stacked windows overlap their controls).
    */
   test('axe passes on every window, colour contrast included', async ({ page }) => {
+    // Nineteen fresh loads, each settled and scanned: about 3 s apiece, more on a loaded machine.
+    test.setTimeout(180_000);
     await serveShelves(page, 'sample');
     await serveGithubFiles(page, 'import napari  # the viewer\n');
     await serveFilms(page);
@@ -834,6 +836,8 @@ test.describe('iPhone 13', () => {
 
   /** Catches a window failing axe (colour contrast included), or spilling sideways, on a phone: every app, and Code's views. */
   test('every app fits a phone and passes axe', async ({ page }) => {
+    // Seventeen fresh loads, each sliding in, then scanned.
+    test.setTimeout(180_000);
     await serveShelves(page, 'sample');
     await serveGithubFiles(page, '[build-system]\nrequires = ["setuptools>=42"]\n');
     await serveFilms(page);

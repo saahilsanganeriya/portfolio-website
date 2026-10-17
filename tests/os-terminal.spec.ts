@@ -16,6 +16,8 @@ const PROJECT = { slug: 'swe-sim', title: 'swe-sim: a SWE simulator for coding-a
 
 async function openTerminal(page: Page, url = '/os?embed=1') {
   await page.goto(url);
+  // About opens once the OS has hydrated; a double-click before that reaches only the server's markup.
+  await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
   await page.getByRole('button', { name: 'Terminal', exact: true }).dblclick();
   const prompt = page.getByRole('dialog', { name: 'Terminal' }).getByRole('textbox');
   await expect(prompt).toBeFocused();
