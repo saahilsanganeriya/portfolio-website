@@ -21,7 +21,6 @@ export function TerminalApp({ os }: { os: OsApi }) {
   const [lines, setLines] = useState<TermLine[]>([]);
   const [value, setValue] = useState('');
   const [cwd, setCwd] = useState(displayPath(HOME));
-  const [busy, setBusy] = useState(false);
   const [vim, setVim] = useState(false);
   const vimTries = useRef(0);
   const historyAt = useRef(0);
@@ -113,7 +112,7 @@ export function TerminalApp({ os }: { os: OsApi }) {
     const scroller = rootRef.current?.closest('.os-well, .os-phone-body');
     if (scroller) scroller.scrollTop = scroller.scrollHeight;
   };
-  useEffect(toBottom, [lines, busy]);
+  useEffect(toBottom, [lines]);
   // A phone's keyboard shrinks the visible area after the prompt takes focus; keep the prompt above it.
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -121,23 +120,24 @@ export function TerminalApp({ os }: { os: OsApi }) {
     return () => viewport?.removeEventListener('resize', toBottom);
   }, []);
 
-  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (busy) return;
-    pending.current?.flush();
-    const input = value;
-    setValue('');
-    if (vim) {
+  // Commands run one after another; one typed while another is still working waits its turn, as on a real terminal.
+  const queue = useRef(Promise.resolve());
+  const vimMode = useRef(false);
+
+  const execute = async (input: string) => {
+    if (vimMode.current) {
       vimTries.current += 1;
       const result = vimInput(input, vimTries.current);
       append(result.lines);
-      if (result.quit) setVim(false);
+      if (result.quit) {
+        vimMode.current = false;
+        setVim(false);
+      }
       return;
     }
     if (input.trim()) shell.history.push(input);
     historyAt.current = shell.history.length;
     append([{ text: input, tone: 'echo', cwd: displayPath(shell.cwd) }]);
-    setBusy(true);
     let result: TermResult;
     try {
       result = await runCommand(input, shell);
@@ -149,10 +149,18 @@ export function TerminalApp({ os }: { os: OsApi }) {
     else await print(result);
     if (result.vim) {
       vimTries.current = 0;
+      vimMode.current = true;
       setVim(true);
     }
-    setBusy(false);
     if (result.exit) window.setTimeout(() => os.close('terminal'), reduceMotion ? 0 : 500);
+  };
+
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    pending.current?.flush();
+    const input = value;
+    setValue('');
+    queue.current = queue.current.then(() => execute(input));
   };
 
   const onKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
@@ -206,13 +214,12 @@ export function TerminalApp({ os }: { os: OsApi }) {
           </p>
         ))}
       </div>
-      <form className="os-terminal-prompt" onSubmit={submit} data-busy={busy || undefined}>
+      <form className="os-terminal-prompt" onSubmit={submit}>
         <span aria-hidden="true">{!vim && <Prompt cwd={cwd} />}</span>
         <input
           ref={inputRef}
           aria-label={vim ? 'vim command' : `Command, in ${cwd}`}
           value={value}
-          readOnly={busy}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={onKeyDown}
           autoComplete="off"

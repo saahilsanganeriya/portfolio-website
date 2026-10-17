@@ -1827,10 +1827,6 @@ body.os-moving iframe {
   gap: 1ch;
 }
 
-.os-terminal-prompt[data-busy] {
-  opacity: 0;
-}
-
 .os-term-ps1,
 .os-terminal-prompt > span {
   flex: none;
@@ -1892,8 +1888,10 @@ body.os-moving iframe {
   color: var(--os-muted);
 }
 
+/* File paths have no spaces to break at; on a phone's column they would push the window sideways. */
 .os-credits-row dd {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .os-credits-row code {
