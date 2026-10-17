@@ -18,7 +18,7 @@ Three lines and six names, and you cannot tell whether it holds three people or 
 
 ## Why I care
 
-I work on anonymization at Mercor. The company data we deliver runs to terabytes, billions of tokens of it, and every real person in it has to disappear before anyone trains a model on it. Nobody reads that much text by hand. Whatever rule the pipeline follows for a name, it follows everywhere at once, mistakes included.
+I work on anonymization at Mercor. The company data we deliver is more text than any team could read, and every real person in it has to disappear before anyone trains a model on it. So whatever rule the pipeline follows for a name, it follows everywhere at once, mistakes included.
 
 So the question is not only “is the person gone?” It is also “is the data still worth anything once they are?”
 
@@ -67,7 +67,7 @@ Jordan Lee becomes Sophie Kim everywhere she appears. Her address matches her ne
 
 The thread keeps its shape. You can still see that the same person asked twice and nobody answered. Nothing in it points at Jordan.
 
-At work I built the generator that does step 2. It covers more than 90 kinds of personal data with replacements that keep their format, and the names and addresses it writes keep the length of the originals.
+At work I built the generator that does step 2. Each kind of personal data gets a replacement that keeps its format, and the names and addresses it writes keep the length of the originals. The table that pairs each real value with its fake is the one thing that could undo all of it, so it never leaves with the data.
 
 ## What it costs
 
@@ -81,7 +81,7 @@ Consistent fakes also do not make data private by themselves. The rest of the te
 
 ## What it bought
 
-Expert reviewers kept 95% of the generator’s replacements on 675 documents. I care more about the 5% they changed. That number says the fakes read right to the people who checked them. It does not say whether someone could find a real person behind them, which takes a different test.
+Expert reviewers read the generator’s replacements and kept nearly all of them. I care more about the few they changed. Their check says the fakes read right to the people who looked. It does not say whether someone could find a real person behind them, which takes a different test.
 
 Here is the opening chat again, with consistent fakes:
 

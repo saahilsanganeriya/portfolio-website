@@ -90,9 +90,9 @@ export async function osImage(src: ImageMetadata, alt: string): Promise<OsImage>
   return { src: image.src, srcset: image.srcSet.attribute, width: src.width, height: src.height, alt };
 }
 
-// Mercor's work has no public pictures; its row in Projects shows the one number the page and the résumé publish.
+// Mercor's work has no public pictures; its row in Projects names the problem in type instead.
 const PROJECT_CARDS: Record<string, OsProjectCard> = {
-  'entity-resolution-and-anonymization': { figure: '88 million', caption: 'mentions resolved in one run' },
+  'entity-resolution-and-anonymization': { figure: 'Who is who', caption: 'one person, one fake' },
 };
 
 export const projectCard = (slug: string): OsProjectCard | undefined => PROJECT_CARDS[slug];

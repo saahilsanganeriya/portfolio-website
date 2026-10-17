@@ -332,13 +332,13 @@ test.describe('desktop', () => {
     expect((await later.boundingBox())!.y).toBeGreaterThan((await first.boundingBox())!.y);
   });
 
-  /** Catches the first project a hiring manager sees showing "No public pictures" instead of its one number (T52 fix 7). */
-  test('Projects opens on the Mercor work with its number in place of a picture', async ({ page }) => {
+  /** Catches the first project a hiring manager sees showing "No public pictures" instead of its typeset card (T52 fix 7). */
+  test('Projects opens on the Mercor work with its typeset card in place of a picture', async ({ page }) => {
     await page.goto('/os?embed=1#projects');
     const list = page.getByRole('dialog', { name: 'Projects' });
     const first = list.locator('.os-row').first();
     await expect(first).toHaveAttribute('href', '#projects/entity-resolution-and-anonymization');
-    await expect(first.locator('.os-thumb-card')).toHaveText('88 million mentions resolved in one run');
+    await expect(first.locator('.os-thumb-card')).toHaveText('Who is who one person, one fake');
     await expect(list.getByText('No public pictures')).toHaveCount(0);
   });
 
