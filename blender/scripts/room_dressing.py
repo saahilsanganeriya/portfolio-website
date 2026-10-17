@@ -70,7 +70,7 @@ DARKROOM_LIGHT_Z = 2.34
 VOYAGER = Vector((-0.50, Y_BACK, 1.78))
 PALE_DOT = Vector((0.17, Y_BACK, 1.80))
 PALE_DOT_SIZE = 0.30  # the square print; the image is 5230 x 5175
-PENNANT = (Vector((-0.55, Y_BACK - 0.012, 2.33)), 0.78, 0.24)  # hoist top-left corner, length, hoist height
+PENNANT = (Vector((-0.55, Y_BACK - 0.012, 2.31)), 0.78, 0.24)  # hoist top-left corner, length, hoist height
 # The CRT's badge on the bezel's chin, under the glass, and its placeholder plate's size (T72's crt_badge replaces it).
 CRT_BADGE = (Vector((0.0, -1.0, 0.938)), (0.086, 0.015))
 

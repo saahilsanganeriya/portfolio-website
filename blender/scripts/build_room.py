@@ -130,7 +130,7 @@ CAMERA_FOV_DEG = 35.0
 # The 360-degree orbit (T74) turns about orbit_center: distances and polar angles (from straight up) chosen so every
 # angle frames the set from above the floor and inside the fades.
 ORBIT = {"center": (-0.05, -1.15, 0.95), "minDist": 2.4, "maxDist": 9.0, "minPolarDeg": 38.0, "maxPolarDeg": 80.0}
-EXPOSURE = 2.45  # round 7: brighter than round two's 2.15 (owner: a touch brighter overall), same lights
+EXPOSURE = 2.8  # round 8: the bake holds no glossy light any more (the floor's sheen is gone), so a stop brighter
 LAVA_GLOW = 0.45
 
 
@@ -633,6 +633,8 @@ def build_curtains(mats, cx, w):
 
 
 PICTURE_LIGHT = Vector((sum(POSTER_X) / len(POSTER_X), Y_BACK - 0.13, POSTER_Z + POSTER_SIZE[1] / 2 + 0.16))
+# The picture light over the desk wall (the pennant and the two space prints): (x0, x1) and its height.
+SPACE_LIGHT = ((-0.74, 0.40), 2.43)
 
 
 def build_fixtures(mats):
@@ -647,6 +649,16 @@ def build_fixtures(mats):
         add_box(bm, (0.012, 0.13, 0.012), Vector((p.x + dx, Y_BACK - 0.065, p.z + 0.03)), bevel=0.003)
         add_cylinder(bm, 0.03, 0.012, Vector((p.x + dx, Y_BACK - 0.006, p.z + 0.03)), segments=24, axis="Y")
     smooth_by_angle(new_object("env_picture_light", bm, "art", "art", [brass]), 50)
+
+    (x0, x1), z = SPACE_LIGHT
+    q = Vector(((x0 + x1) / 2, Y_BACK - 0.11, z))
+    bm = bmesh.new()
+    add_cylinder(bm, 0.018, x1 - x0, q, segments=24, axis="X")
+    add_box(bm, (x1 - x0 - 0.02, 0.012, 0.010), q + Vector((0, 0.01, -0.019)))
+    for dx in (-(x1 - x0) * 0.32, (x1 - x0) * 0.32):
+        add_box(bm, (0.010, 0.11, 0.010), Vector((q.x + dx, Y_BACK - 0.055, q.z + 0.025)), bevel=0.003)
+        add_cylinder(bm, 0.026, 0.010, Vector((q.x + dx, Y_BACK - 0.005, q.z + 0.025)), segments=24, axis="Y")
+    smooth_by_angle(new_object("env_space_light", bm, "art", "art", [brass]), 50)
 
 
 RUGS = {
@@ -825,8 +837,9 @@ def flatten(objs):
             obj.matrix_world = world
 
 
-def place_one(name, root, coll, atlas, mats):
-    """Append a prop (or a placeholder block) at root; returns its objects and the world position of each empty."""
+def place_one(name, root, coll, atlas, mats, empty_props=None):
+    """Append a prop (or a placeholder block) at root; returns its objects and the world position of each empty
+    (and fills empty_props with each empty's custom properties, when given)."""
     _, _, size = PROPS.get(name, (None, None, None))
     if (PROPS_DIR / f"{name}.blend").exists():
         objs = append_prop(name)
@@ -849,6 +862,8 @@ def place_one(name, root, coll, atlas, mats):
                 led.matrix_world = root
                 objs.append(led)
     anchors = {o.name.split(".")[0]: o.matrix_world.translation.copy() for o in objs if o.type == "EMPTY"}
+    if empty_props is not None:
+        empty_props.update({o.name.split(".")[0]: dict(o.items()) for o in objs if o.type == "EMPTY"})
     meshes = [o for o in objs if o.type == "MESH"]
     for empty in [o for o in objs if o.type == "EMPTY"]:
         bpy.data.objects.remove(empty, do_unlink=True)
@@ -876,6 +891,79 @@ def place_props(mats):
         placed[name] = meshes
         anchors[name] = {"root": root, **found}
     return placed, anchors
+
+
+# ---- T72's hero props ----
+# Each prop file (blender/props/<name>.blend, origin at its base, front -Y) replaces its stand-in where the stand-in
+# stood, when the file exists: the keyboard, mouse and mug take Henry's footprints on the desk, the croissant the oven's
+# and the bakery board's (scaled to each), the pennant hangs over the space prints, the badge sits on the CRT's chin.
+HERO_ON_DESK = ("keyboard", "mouse", "coffee_mug")
+PENNANT_AT = (-0.16, Y_BACK, 2.06)  # bottom centre of T72's pennant, over the Voyager record and the Pale Blue Dot
+HERO_ANCHORS: dict[str, dict] = {}  # the empties T72's props bring (coffee_steam), with their positions and extras
+
+
+def footprint_centre(objs):
+    lo, hi = world_bounds(objs)
+    return Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z)), lo, hi
+
+
+def swap_in(name, old, place, new_name, coll, atlas, mats):
+    """Append prop `name`, transform it by place(new_objs) and delete `old`; returns the new main mesh."""
+    props = {}
+    meshes, anchors = place_one(name, Matrix.Identity(4), coll, atlas, mats, empty_props=props)
+    main = next(o for o in meshes if o.name.split(".")[0] == name)
+    m = place(meshes)
+    for obj in meshes:
+        obj.matrix_world = m @ obj.matrix_world
+    for key, pos in anchors.items():
+        HERO_ANCHORS[key] = {"position": m @ pos, **props.get(key, {})}
+    if old is not None:
+        bpy.data.objects.remove(old, do_unlink=True)  # first, so the new mesh can take the name
+    for obj in meshes:
+        base = obj.name.split(".")[0]
+        obj.name = obj.data.name = new_name if obj is main else (f"props_{base}" if base.endswith("_cable") else base)
+    return main
+
+
+def place_hero_props(mats, dressing):
+    """Swap in T72's prop files over their stand-ins (see above); a missing file keeps the stand-in."""
+    bpy.context.view_layer.update()
+    have = lambda n: (PROPS_DIR / f"{n}.blend").exists()
+    for name in HERO_ON_DESK:
+        if not have(name):
+            continue
+        old = bpy.data.objects[name]
+        centre, _, _ = footprint_centre([old])
+
+        def on_desk(objs, centre=centre, name=name):
+            mine, _, _ = footprint_centre([o for o in objs if o.name.split(".")[0] == name])
+            return Matrix.Translation((centre.x - mine.x, centre.y - mine.y, centre.z - mine.z))
+        swap_in(name, old, on_desk, name, "desk", "desk", mats)
+    if have("croissant"):
+        for old_name in ("croissant", "props_board_croissant_0", "props_board_croissant_1"):
+            old = bpy.data.objects.get(old_name)
+            if old is None:
+                continue
+            centre, lo, hi = footprint_centre([old])
+            along_y = (hi.y - lo.y) > (hi.x - lo.x)
+
+            def in_place(objs, centre=centre, lo=lo, hi=hi, along_y=along_y):
+                mine_c, mlo, mhi = footprint_centre(objs)
+                scale = max(hi.x - lo.x, hi.y - lo.y) / max(mhi.x - mlo.x, mhi.y - mlo.y)
+                turn = Matrix.Rotation(math.pi / 2 if along_y else 0.0, 4, "Z")
+                return (Matrix.Translation(centre) @ turn @ Matrix.Diagonal((scale, scale, scale, 1.0))
+                        @ Matrix.Translation(-mine_c))
+            swap_in("croissant", old, in_place, old_name, "props", "props", mats)
+    if have("pennant_gatech"):
+        dressing["pennant"] = swap_in("pennant_gatech", dressing["pennant"], lambda objs: Matrix.Translation(PENNANT_AT),
+                                      "pennant_gatech", "props", "art", mats)
+        dressing["pennant"]["texel"] = 1.4
+    if have("crt_badge"):
+        old = dressing["crt_badge"]
+        at = old.matrix_world.copy()
+        h = old["height_m"]
+        dressing["crt_badge"] = swap_in("crt_badge", old, lambda objs: at @ Matrix.Translation((0, 0, -h / 2)),
+                                        "crt_badge", "desk", "desk", mats)
 
 
 def still_poster_image(slug: str) -> bpy.types.Image | None:
@@ -1004,7 +1092,7 @@ def build_proxies(placed, dressing, mats):
     add_proxy("hit_lava_lamp", *world_bounds(placed["lava_lamp"]), mats)
     machine = [o for o in placed["espresso_machine"] if o.name in ("espresso_machine", "espresso_cup")]
     add_proxy("hit_espresso", *world_bounds(machine), mats)
-    oven = [o for o in placed["countertop_oven"] if o.name in ("countertop_oven", "oven_door")]
+    oven = [bpy.data.objects[n] for n in ("countertop_oven", "oven_door")]
     add_proxy("hit_oven", *world_bounds(oven), mats)
     add_proxy("hit_croissant", *world_bounds([bpy.data.objects["croissant"]]), mats, pad=0.008)
     add_proxy("hit_window", Vector((WIN_X0, Y_BACK - 0.02, WIN_Z0)), Vector((WIN_X1, Y_BACK + WALL_T, WIN_Z1)), mats,
@@ -1045,11 +1133,15 @@ def build_markers(placed, anchors, dressing):
     add_empty("espresso_spout", anchors["espresso_machine"]["espresso_spout"])
     add_empty("espresso_steam", anchors["espresso_machine"]["espresso_steam"])
     # The steam starts just over the coffee's surface: the mug's rim centre, a little down into it.
-    mug = bpy.data.objects["coffee_mug"]
-    lo, hi = world_bounds([mug])
-    rim = [mug.matrix_world @ v.co for v in mug.data.vertices if (mug.matrix_world @ v.co).z > hi.z - 0.004]
-    rim_centre = sum(rim, Vector()) / len(rim)
-    add_empty("coffee_steam", (rim_centre.x, rim_centre.y, hi.z - 0.01), width_m=0.07, height_m=0.16)
+    if "coffee_steam" in HERO_ANCHORS:
+        steam = dict(HERO_ANCHORS["coffee_steam"])
+        add_empty("coffee_steam", steam.pop("position"), **steam)
+    else:
+        mug = bpy.data.objects["coffee_mug"]
+        lo, hi = world_bounds([mug])
+        rim = [mug.matrix_world @ v.co for v in mug.data.vertices if (mug.matrix_world @ v.co).z > hi.z - 0.004]
+        rim_centre = sum(rim, Vector()) / len(rim)
+        add_empty("coffee_steam", (rim_centre.x, rim_centre.y, hi.z - 0.01), width_m=0.07, height_m=0.16)
     # The window's motif (a small plane on a dotted arc from Delhi, right, to San Francisco, left) spans the sky just
     # behind the glass; local +Z (glTF) faces the room.
     add_empty("window_motif", ((WIN_X0 + WIN_X1) / 2, Y_BACK + WALL_T + 0.04, 1.96), width_m=1.24, height_m=0.48,
@@ -1084,9 +1176,12 @@ def build_lights(mats):
     lights.objects.link(obj)
 
     span = POSTER_X[-1] - POSTER_X[0] + 0.25
+    (sx0, sx1), sz = SPACE_LIGHT
     for name, loc, size, tilt, energy, spread in (
         ("picture_light", PICTURE_LIGHT + Vector((0, 0, -0.03)), (span, 0.04), Euler((math.radians(38), 0, 0)), 30.0,
          120),
+        ("space_light", Vector(((sx0 + sx1) / 2, Y_BACK - 0.11, sz - 0.025)), (sx1 - sx0, 0.04),
+         Euler((math.radians(30), 0, 0)), 20.0, 120),
     ):
         light = bpy.data.lights.new(name, "AREA")
         light.shape, light.size, light.size_y = "RECTANGLE", *size
@@ -1103,7 +1198,7 @@ def build_lights(mats):
     win = bpy.data.lights.new("window_day", "AREA")
     win.shape, win.size, win.size_y = "RECTANGLE", WIN_X1 - WIN_X0, WIN_Z1 - WIN_Z0
     win.color = (0.84, 0.89, 1.0)
-    win.energy = 120.0
+    win.energy = 160.0
     win.spread = math.radians(140)
     obj = bpy.data.objects.new("light_window", win)
     obj.location = ((WIN_X0 + WIN_X1) / 2, Y_BACK + WALL_T + 0.01, (WIN_Z0 + WIN_Z1) / 2)
@@ -1251,7 +1346,7 @@ ATLAS_BY_NAME = [
     ("desk", ("desk_desk_top", "desk_crt_front", "desk_computer_front", "keyboard", "mouse", "coffee_mug", "crt_glow",
               "crt_badge", "sticky_note_", "desk_notebook", "desk_paper", "desk_tray", "desk_lamp", "lamp_bulb",
               "props_fujifilm_x100", "props_pen_cup", "props_nas_4bay", "nas_led_", "desk_cables", "desk_headphones")),
-    ("art", ("env_window", "env_curtain_rod", "env_picture_light", "props_poster_frame_", "poster_art_", "poster_plaque",
+    ("art", ("env_window", "env_curtain_rod", "env_picture_light", "env_space_light", "props_poster_frame_", "poster_art_", "poster_plaque",
              "voyager_record", "props_frame_pale_blue_dot", "print_pale_blue_dot", "pennant_gatech",
              "print_japanese_lit", "darkroom_", "env_darkroom_light")),
     ("env", ("wall_back", "wall_left", "floor", "env_skirting", "env_rug", "env_curtains")),
@@ -1260,7 +1355,8 @@ ATLAS_BY_NAME = [
 # desk view and the type on the books and prints get more texels, the big smooth surfaces fewer.
 TEXEL_WEIGHTS = {
     # desk: the desk top is big and smooth; the small things on it carry the detail
-    "desk_desk_top": 0.72, "keyboard": 1.0, "mouse": 1.0, "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4,
+    "desk_desk_top": 0.72, "keyboard": 1.3, "mouse": 1.0, "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4,
+    "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3, "props_mouse_cable": 0.3,
     "desk_computer_front": 0.85, "crt_glow": 0.3, "desk_notebook": 1.0, "desk_lamp_shade": 0.8, "desk_lamp": 0.7,
     "desk_lamp_neck": 0.7, "props_nas_4bay": 0.8, "desk_tray_bottom": 0.7, "desk_tray_top": 0.7, "desk_cables": 0.6,
     "desk_headphones": 0.8, "desk_papers_a": 0.8, "desk_papers_b": 0.8,
@@ -1461,6 +1557,7 @@ def tune_atlas_objects():
 # other node stands on the floor and stays at the top.
 WALL_GROUPS = {
     "wall_back_group": ("wall_back", "env_skirting_back", "env_window", "window_", "env_curtain", "env_picture_light",
+                        "env_space_light",
                         "props_poster_frame_", "poster_art_", "poster_plaque", "hit_poster_", "hit_plaque", "hit_window",
                         "voyager_record", "hit_voyager", "props_frame_pale_blue_dot", "print_pale_blue_dot",
                         "hit_pale_blue_dot", "pennant_gatech", "hit_pennant", "props_mango", "mango_", "hit_mango",
@@ -1501,6 +1598,7 @@ def main():
     placed, anchors = place_props(mats)
     build_posters(mats)
     dressing = room_dressing.build_dressing(mats, placed)
+    place_hero_props(mats, dressing)
     build_proxies(placed, dressing, mats)
     build_markers(placed, anchors, dressing)
     build_lights(mats)
