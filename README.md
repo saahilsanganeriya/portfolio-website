@@ -2,7 +2,7 @@
 
 Saahil Sanganeriya's personal site, at https://saahilsanganeriya.com. On a desktop, it opens on a vintage room built in
 Blender: the camera glides to the desk and into the CRT, which runs SaahilOS, a small retro desktop, with About open.
-"Take the tour" shows a map of the room and visits its stops. Every post, project and app has its own address, and
+"Take the tour" shows a map of the room, and its "Play the tour" glides through every stop in one slow camera move. Every post, project and app has its own address, and
 opening one loads the room straight at the monitor with that window open; there are no plain pages. Phones get the room at a lighter tier; a browser without
 WebGL gets SaahilOS on a drawn monitor. The site is built with Astro, MDX content collections, React (SaahilOS) and
 three.js (the room), and deploys to Vercel.
@@ -171,8 +171,7 @@ The schemas are in `src/content.config.ts`. Books, recipes and the Voyager page 
 passes and the window says so. Every entry is also served as static JSON at `/content/<collection>/<slug>.json`
 (`{ data, html }`), which SaahilOS reader windows load; `/content/books.json`, `/content/recipes.json` and
 `/content/credits.json` (from `blender/ASSETS.md`) hold the lists. The room's sticky notes are `src/content/sticky-notes.json`
-(his own phrases, at most six), and the projector's film is `public/room/story-film.*` with its manifest in
-`src/scene/reel.json`.
+(at most three, on the monitor: `[{ kind, lines, label? }]`, kind `text`, `equations` or `todo`).
 
 SaahilOS's Code window reads the owner's public GitHub repositories from a snapshot committed in
 `src/os/apps/code/snapshot/` (README and Markdown files as GitHub renders them, the file tree, the last 30 commits),
