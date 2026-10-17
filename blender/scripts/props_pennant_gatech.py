@@ -30,6 +30,11 @@ TIP = 0.0011
 FELT_T = 0.0022
 NX, NZ = 56, 16
 SAG = 0.032
+# The desk wall's picture light and the room's exposure (2.8 stops) washed the felt out to sky blue and white in the
+# bake. The felt's brightness is scaled per colour of its art, by the art's luminance from the navy (0.028) to the gold
+# (0.37): measured on straight-on renders of the room's light, these land near #003057 and #B3A369.
+LUM_NAVY, LUM_GOLD = 0.028, 0.37
+FELT_SCALE_NAVY, FELT_SCALE_GOLD = 0.075, 0.03
 
 
 def srgb(hexstr):
@@ -85,10 +90,12 @@ def felt_material(name, colour, art=None):
         base = tex.outputs["Color"]
         lum = k.node("ShaderNodeRGBToBW", inputs={"Color": base}).outputs[0]
         height = k.math("ADD", k.math("MULTIPLY", fuzz, 0.5), k.map_range(lum, 0.12, 0.3, 0.0, 0.6))
+        scale = k.map_range(lum, LUM_NAVY, LUM_GOLD, FELT_SCALE_NAVY, FELT_SCALE_GOLD, smooth=False)
     else:
         base = colour + (1.0,)
         height = fuzz
-    hsv = k.node("ShaderNodeHueSaturation", inputs={"Color": base, "Value": mottle})
+        scale = FELT_SCALE_NAVY
+    hsv = k.node("ShaderNodeHueSaturation", inputs={"Color": base, "Value": k.math("MULTIPLY", mottle, scale)})
     bump = k.node("ShaderNodeBump", inputs={"Strength": 0.22, "Distance": 0.0005, "Height": height})
     for key, value in (("Base Color", hsv.outputs["Color"]), ("Roughness", 0.92), ("Sheen Weight", 0.32),
                        ("Sheen Roughness", 0.45), ("Specular IOR Level", 0.3), ("Normal", bump.outputs["Normal"])):
