@@ -522,8 +522,9 @@ def split_at_seam(obj):
     return halves
 
 
-def heightfield(b, x0, x1, y0, y1, step, height, mat, keep):
-    """A faceted ground grid; faces where keep(x, y) is false (open water) are left out."""
+def heightfield(b, x0, x1, y0, y1, step, height, mat, keep, skirt=False):
+    """A faceted ground grid; faces where keep(x, y) is false (open water) are left out. With skirt, its front row
+    drops to below the water (skirt_front)."""
     nx, ny = int((x1 - x0) / step) + 1, int((y1 - y0) / step) + 1
     rng = random.Random(SEED + int(x0 * 100))
     grid = {}
@@ -547,7 +548,27 @@ def heightfield(b, x0, x1, y0, y1, step, height, mat, keep):
                     verts[q] = bm.verts.new(grid[q])
                 vs.append(verts[q])
             bm.faces.new(vs)
+    if skirt:
+        skirt_front(bm, y0)
     return b._wrap(before, None, mat)
+
+
+def skirt_front(bm, y_front):
+    """The land's front row stood open over the water: through the bottom of the window the eye passed under it onto
+    water in the land's shadow, a black band above the sill. Extrude that row down to below the water."""
+    front = [e for e in bm.edges if e.is_boundary and all(abs(v.co.y - y_front) < 1e-5 for v in e.verts)]
+    if not front:
+        return
+    made = bmesh.ops.extrude_edge_only(bm, edges=front)["geom"]
+    for v in made:
+        if isinstance(v, bmesh.types.BMVert):
+            v.co.z = WATER_Z - 0.02
+    for f in made:
+        if isinstance(f, bmesh.types.BMFace):
+            f.material_index = next((g.material_index for e in f.edges for g in e.link_faces if g is not f), 0)
+            f.normal_update()
+            if f.normal.y > 0:
+                f.normal_flip()
 
 
 def dome(b, mats_by_side):
@@ -1158,7 +1179,8 @@ def build_window_view(framings):
 
     sf = pl.Builder("land")
     heightfield(sf, -0.95, SEAM_X, WALL_BACK + 0.01, 2.35, 0.055, sf_height,
-                mats["sf_land"], keep=lambda x, y: x < sf_coast(y) + 0.02 and inside_dome(Vector((x, y, sf_height(x, y)))))
+                mats["sf_land"], keep=lambda x, y: x < sf_coast(y) + 0.02 and inside_dome(Vector((x, y, sf_height(x, y)))),
+                skirt=True)
     parts.add("land", sf, texel=0.7, side="sf")
 
     city = pl.Builder("city")
@@ -1197,7 +1219,7 @@ def build_window_view(framings):
 
     dl = pl.Builder("land")
     heightfield(dl, SEAM_X, 2.1, WALL_BACK + 0.01, 1.8, 0.04, delhi_height, mats["delhi_land"],
-                keep=lambda x, y: x > delhi_coast(y) - 0.02 and inside_dome(Vector((x, y, WATER_Z + 0.04))))
+                keep=lambda x, y: x > delhi_coast(y) - 0.02 and inside_dome(Vector((x, y, WATER_Z + 0.04))), skirt=True)
     parts.add("land", dl, texel=0.7, side="delhi")
 
     ground = pl.Builder("ground")
