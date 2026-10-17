@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { bandingOf, findDarkGradients } from '../scripts/lib/banding.mjs';
 import type {} from '../src/scene/Application/Application';
 import type {} from '../src/scene/Application/Renderer';
+import type {} from '../src/scene/Application/Resources';
 
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
@@ -117,6 +118,8 @@ for (const { tier, shrink } of [
     await page.waitForFunction(() => window.__room?.landedAt != null && !window.__room.moving, null, { timeout: 180_000 });
     await page.evaluate(() => window.__room!.goto('idle'));
     await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
+    // A full atlas swapping in between two shots would read as a moving dither.
+    await page.waitForFunction(() => !window.__roomStats || window.__roomStats.done || window.__roomStats.skipped, null, { timeout: 180_000 });
     await page.mouse.move(2, 2);
     await page.locator('[data-room-pause]').click();
     const frame: Clip = { x: 0, y: 0, width: 1440, height: 900 };
