@@ -425,6 +425,15 @@ test.describe('desktop', () => {
     await expect(page.getByRole('dialog', { name: 'Contact' })).toBeVisible();
   });
 
+  /** Catches the résumé's header line linking an address (or nothing) where the Contact window should open. */
+  test('the résumé’s header line opens the Contact window, beside GitHub and LinkedIn', async ({ page }) => {
+    await page.goto('/os?embed=1#resume');
+    const header = page.getByRole('dialog', { name: 'Résumé' }).locator('.os-prose p').first();
+    await expect(header.getByRole('link')).toHaveText(['Contact', 'GitHub', 'LinkedIn']);
+    await header.getByRole('link', { name: 'Contact' }).click();
+    await expect(page.getByRole('dialog', { name: 'Contact' })).toBeVisible();
+  });
+
   /** Catches every picture in a window loading at once, which put all of About's photos into the room's first load. */
   test('pictures far down a window load only when scrolled near', async ({ page }) => {
     // A short screen, so About's last photo stands more than the 400 px look-ahead below the window's view.
