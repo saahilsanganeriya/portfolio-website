@@ -295,8 +295,9 @@ test('at the monitor the wheel scrolls the OS window under the pointer, and the 
       while (el && !(el.scrollHeight > el.clientHeight && /auto|scroll/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
       return el ? el.scrollTop : null;
     });
+  // About only overflows once its photos have laid out, so wait for the scrolling body before measuring.
+  await expect.poll(scroller, { message: 'About has a scrolling body', timeout: 15_000 }).not.toBeNull();
   const before = { scroll: await scroller(), view: (await room(page)).view };
-  expect(before.scroll, 'About has a scrolling body').not.toBeNull();
   for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 200);
   await expect.poll(scroller).toBeGreaterThan(before.scroll! + 100);
   await page.waitForTimeout(600);
