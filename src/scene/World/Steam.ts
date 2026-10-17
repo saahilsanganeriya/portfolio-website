@@ -9,7 +9,7 @@ import type { CoffeeSteamNode } from './nodes';
 // holds still.
 
 const COLOUR = '#d8d0c4';
-const OPACITY = 0.55;
+const OPACITY = 0.85;
 // Under reduced motion the noise stops at this moment, a wisp mid-rise.
 const STILL_AT_S = 7.3;
 
