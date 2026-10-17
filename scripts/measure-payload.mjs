@@ -21,10 +21,22 @@
 // --mock <dir> serves room.glb, atlases.json and atlas/* from a folder instead (a stand-in for the exported set).
 //
 //   node scripts/measure-payload.mjs [--no-build] [--url https://…] [--at 2026-11-10T01:07:00Z] [--full] [--mock dir]
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { routeMock } from './lib/room-capture.mjs';
 import { serveBuild } from './lib/serve-build.mjs';
+
+/** How many recordings the room's first input fetches: RoomAudio loads every name in mix.ts's LOOPS and SHOTS. */
+async function roomRecordingCount() {
+  const source = await readFile(new URL('../src/scene/audio/mix.ts', import.meta.url), 'utf8');
+  const list = (name) => {
+    const match = new RegExp(`export const ${name} = \\[([^\\]]*)\\]`).exec(source);
+    if (!match) throw new Error(`measure-payload: no ${name} list in src/scene/audio/mix.ts`);
+    return match[1].split(',').map((item) => item.trim()).filter(Boolean);
+  };
+  const keys = list('KEYS').length;
+  return [...list('LOOPS'), ...list('SHOTS')].reduce((count, item) => count + (item === '...KEYS' ? keys : 1), 0);
+}
 
 const args = process.argv.slice(2);
 const option = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
@@ -93,11 +105,11 @@ try {
   await settle();
   await step('sound');
   await page.locator('[data-room-sound]').click();
-  // The sound the first input loads: the room's twelve recordings and the music's three stems.
-  await room(() => {
+  // The sound the first input loads: the room's recordings and the music's three stems.
+  await room((recordings) => {
     const sounds = performance.getEntriesByType('resource').map((e) => e.name);
-    return sounds.filter((name) => name.includes('/audio/room/')).length >= 12 && sounds.filter((name) => name.includes('/audio/music/')).length >= 3;
-  });
+    return sounds.filter((name) => name.includes('/audio/room/')).length >= recordings && sounds.filter((name) => name.includes('/audio/music/')).length >= 3;
+  }, await roomRecordingCount());
   // Close up at the window, each city also shows the picture the other city's time of day needs near the seam.
   await step('window');
   await page.evaluate(() => window.__room.goto('window'));
