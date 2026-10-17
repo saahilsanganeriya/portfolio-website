@@ -72,6 +72,13 @@ export function AboutApp({ os }: { os: OsApi }) {
       </nav>
 
       {page && <p className="os-reader-lead os-about-lead">{page.summary}</p>}
+      {/* Opens the Résumé window, on a phone too. */}
+      <p className="os-about-resume">
+        <PixelIcon name="resume" size={32} />
+        <span>
+          <strong>Looking for my resume?</strong> <a href="#resume">Click here</a> to open it.
+        </span>
+      </p>
       <Body content={content} what="About" />
     </article>
   );
