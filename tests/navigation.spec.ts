@@ -402,7 +402,8 @@ test.describe('on a phone', () => {
   /** Catches a phone page that pans or zooms under a finger instead of turning the set, or that goes into the monitor anyway. */
   test('a finger turns the set on a phone, and the room then stays out of the monitor', async ({ page }) => {
     await page.goto('/');
-    await page.waitForFunction(() => window.__room?.moving, null, { timeout: 120_000 });
+    // The room has started its arrival (polled on a timer: a slow phone page draws too few frames to poll on them).
+    await page.waitForFunction(() => window.__room?.startedAt != null, null, { timeout: 120_000, polling: 100 });
     // Touches through the browser's input pipeline, so touch-action and pointer events are what a phone gets.
     const cdp = await page.context().newCDPSession(page);
     const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', x?: number) =>
