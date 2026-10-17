@@ -20,7 +20,7 @@ import type { RecordPlayer } from './RecordPlayer';
 import { CoffeeSteam } from './Steam';
 import { StickyNotes } from './StickyNotes';
 import { TextureStore } from './textures';
-import { Wind } from './Wind';
+import { Wind, WIND_GLSL } from './Wind';
 import { WindowView } from './WindowView';
 
 // Everything in the room that lives and reacts (PLAN 11.1, 12.1, PLAN-ROUND-7 §3–§4 and §7): the window's two cities
@@ -133,8 +133,6 @@ export class World {
     this.paleBlueDot = n.paleBlueDot
       ? new ArtSurface(n.paleBlueDot.node, this.lamp, { ambient: 0.55, top: 0.6, lightAbove: 0.3, fall: 0.45 })
       : null;
-    const darkroom = new Darkroom(room.root, room.proxies, HOTSPOTS, this.lamp, null, still);
-    this.darkroom = darkroom.hasClips ? darkroom : null;
     this.stickies = n.stickies.length ? new StickyNotes(n.stickies, this.lamp) : null;
     this.windowView = n.windowViews.length
       ? new WindowView(n.windowViews, n.windowSky, n.windowMotif, this.textures, { reducedMotion: still })
@@ -142,6 +140,9 @@ export class World {
     this.coffeeSteam = n.coffeeSteam ? new CoffeeSteam(n.coffeeSteam, still) : null;
     this.wind = new Wind(still);
     for (const mesh of n.sway) this.wind.sway(mesh);
+    // The darkroom's prints sway in the same breeze as the plants (never under reduced motion).
+    const darkroom = new Darkroom(room.root, room.proxies, HOTSPOTS, this.lamp, { uniforms: this.wind.uniforms, glsl: WIND_GLSL }, still);
+    this.darkroom = darkroom.hasClips ? darkroom : null;
     this.lava = n.lava ? new LavaLamp(n.lava.glass, n.lava.light, this.lamp, scene, room.root) : null;
     this.espresso = n.espresso ? new Espresso(n.espresso, scene) : null;
     this.steam = n.steam ? new Steam(n.steam, scene) : null;
