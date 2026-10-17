@@ -901,9 +901,9 @@ def build_view_mask():
     right, top and back), so that from the sides and from above the orbit sees only the void where the diorama would
     show past the wall's corner, free end or top. Invisible to every ray in Blender (it changes no bake); the site draws
     it in the void colour, and it fades with the back wall's group."""
-    parts = [o for o in bpy.data.collections["window_view"].objects if o.type == "MESH"]
+    parts = [o for o in bpy.data.collections["window_view"].objects if o.type == "MESH" and o.name != "window_view_mask"]
     lo, hi = world_bounds(parts)
-    x0, x1 = X_LEFT - WALL_T, BACK_X1
+    x0, x1 = min(X_LEFT - WALL_T, lo.x - 0.02), max(BACK_X1, hi.x + 0.02)
     y0, y1 = Y_BACK + WALL_T, hi.y + 0.05
     z0, z1 = lo.z - 0.05, WALL_H
     bm = bmesh.new()
@@ -912,6 +912,9 @@ def build_view_mask():
     for quad in (((0, 0, 0), (0, 1, 0), (0, 1, 1), (0, 0, 1)), ((1, 0, 0), (1, 0, 1), (1, 1, 1), (1, 1, 0)),
                  ((0, 0, 1), (0, 1, 1), (1, 1, 1), (1, 0, 1)), ((0, 1, 0), (1, 1, 0), (1, 1, 1), (0, 1, 1))):
         bm.faces.new([corners[c] for c in quad])
+    if x1 > BACK_X1 + 1e-4:  # where the box reaches past the wall's free end, close its front too
+        strip = [bm.verts.new((x, y0, z)) for x, z in ((BACK_X1, z0), (x1, z0), (x1, z1), (BACK_X1, z1))]
+        bm.faces.new(strip)
     bm.normal_update()
     centre = Vector(((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2))
     for f in bm.faces:
@@ -1390,7 +1393,7 @@ TEXEL_WEIGHTS = {
     "desk_computer_front": 0.85, "crt_glow": 0.3,
     # the rest of the desk sits in the props atlas, a little above its average: the desk view sees it
     "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4, "props_nas_4bay": 1.6,
-    "desk_tray_bottom": 1.2, "desk_tray_top": 1.2, "desk_cables": 0.8, "desk_headphones": 1.2, "desk_papers_a": 1.4,
+    "desk_tray_bottom": 1.2, "desk_tray_top": 1.2, "desk_cables": 0.8, "desk_papers_a": 1.4,
     "desk_papers_b": 1.4, "desk_paper": 1.4, "props_fujifilm_x100": 1.6, "props_pen_cup": 1.4, "lamp_bulb": 1.0,
     # art: frames and the window frame by area; the engraved and printed type sharper
     "env_window_frame": 0.8, "env_window_sill": 0.8, "poster_plaque": 3.0, "voyager_record": 1.6, "pennant_gatech": 1.4,
@@ -1407,7 +1410,7 @@ TEXEL_WEIGHTS = {
     "props_reading_mug": 1.4, "props_floor_books": 0.9, "espresso_machine": 1.6, "espresso_cup": 2.2,
     "espresso_coffee": 1.0, "countertop_oven": 1.6, "oven_door": 1.8, "croissant": 3.0, "lava_lamp": 1.6,
     "lava_lamp_glass": 1.8, "oven_glow": 1.6, "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_desk": 0.6,
-    "desk_crt": 0.7, "desk_computer": 0.6, "props_mango_plant_leaves": 1.4,
+    "desk_crt": 2.0, "desk_computer": 1.5, "props_mango_plant_leaves": 1.4,
 }
 # Heights things rest on (their bottoms there are hidden): floor, desk, record cabinet, credenza, sill, counter,
 # bookcase levels.

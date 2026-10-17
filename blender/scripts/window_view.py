@@ -291,16 +291,15 @@ def lit_windows(k, color, n, scale=(180.0, 180.0, 260.0), share=0.45, warm=(1.0,
 
 
 def sky_material(side):
-    """The sky's light on the diorama while the halves bake: a day gradient, a touch warmer over Delhi. Emission only;
-    the site draws the sky itself (window_sky), so nothing here is seen."""
+    """The sky's light on the diorama while the halves bake: one day gradient over both cities. Emission only; the site
+    draws the sky itself (window_sky), so nothing here is seen."""
     mat, k = pl.new_material(f"view_sky_{side}")
     geo = k.node("ShaderNodeNewGeometry")
     rel = k.node("ShaderNodeVectorMath", operation="SUBTRACT", inputs={0: geo.outputs["Position"], 1: tuple(DOME_CENTRE)})
     d = k.node("ShaderNodeVectorMath", operation="NORMALIZE", inputs={0: rel.outputs[0]})
     sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": d.outputs[0]})
     up = k.math("MAXIMUM", sep.outputs["Z"], 0.0)
-    warm = 1.0 if side == "delhi" else 0.0
-    day_hz = (0.74 + 0.10 * warm, 0.74 - 0.02 * warm, 0.72 - 0.16 * warm, 1.0)
+    day_hz = (0.78, 0.73, 0.66, 1.0)  # one glow for both halves: their water then meets at the seam in one colour
     day = k.mix_color(k.math("POWER", up, 0.55), day_hz, (0.13, 0.30, 0.62, 1.0))
     emit = k.node("ShaderNodeEmission", inputs={"Color": day, "Strength": 0.34})
     k.set(k.node("ShaderNodeOutputMaterial"), "Surface", emit.outputs[0])

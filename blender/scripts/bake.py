@@ -42,14 +42,15 @@ REPO = Path(__file__).resolve().parents[2]
 BAKE_DIR = REPO / "blender" / ".cache" / "bake"
 BLEND = REPO / "blender" / "room.blend"
 
-# The four atlases bake at 1.5x the 4096 px they ship at (export.py resamples them), so every shipped texel averages
-# a couple of baked ones: sharper type and edges, less noise. The view's halves ship at their bake size.
-ATLAS_SIZES = {"desk": 6144, "art": 6144, "props": 6144, "env": 6144, "window_sf": 1280, "window_delhi": 1280}
+# Bake sizes (coordinator ruling, 2026-10-17 08:00Z, for a night-long budget): the desk hero atlas bakes at 1.5x the
+# 4096 px it ships at, so every shipped texel averages a couple of baked ones; art and props bake at their 4096 ship
+# size, and the walls and floor, smooth diffuse light, at 3072. The view's halves ship at their bake size.
+ATLAS_SIZES = {"desk": 6144, "art": 4096, "props": 4096, "env": 3072, "window_sf": 1280, "window_delhi": 1280}
 SHIP_PX = 4096
 # Island margin at the bake size. The desk keeps CRAFT-R8's 16 px at the shipped 4096 (24 at the 6144 bake); the art,
 # props and env atlases hold thousands of small islands, where that margin left the props atlas 10 % full, so they use
 # round seven's 12 (8 px shipped): props 40 % full, art 43 % (measured on this set). The view keeps 6 px.
-MARGIN_PX = {"desk": 24, "art": 12, "props": 12, "env": 12, "window_sf": 6, "window_delhi": 6}
+MARGIN_PX = {"desk": 24, "art": 8, "props": 8, "env": 6, "window_sf": 6, "window_delhi": 6}
 # The world seen through the open front of the view while it bakes: a pale day sky.
 VIEW_WORLD = ((0.62, 0.70, 0.82, 1.0), 0.35)
 GUIDE_SAMPLES = 4  # the albedo and normal guides for OIDN (they barely change within a texel)
@@ -66,6 +67,7 @@ def parse_args():
     parser.add_argument("--samples", type=int, default=256)
     parser.add_argument("--threads", type=int, default=MAX_THREADS)
     parser.add_argument("--no-save", action="store_true", help="do not write room.blend")
+    parser.add_argument("--save-as", default="", help="write the baked blend here instead (a parallel lane)")
     parser.add_argument("--regrade", default="", help="atlases to re-grade from their saved light, without baking")
     return parser.parse_args(argv)
 
@@ -479,13 +481,17 @@ def set_light_probes(value: float):
             mat.node_tree.nodes["light_probe"].outputs[0].default_value = value
 
 
+SAVE_AS = [BLEND]  # main() points this at --save-as for a parallel lane
+
+
 def save_blend():
-    """Write room.blend with the bake UVs and images so far (after every atlas: a long bake keeps what it finished)."""
+    """Write the blend with the bake UVs and images so far (after every atlas: a long bake keeps what it finished)."""
+    target = SAVE_AS[0]
     for img in bpy.data.images:
         if img.filepath and not img.packed_file:
-            img.filepath = bpy.path.relpath(img.filepath, start=str(BLEND.parent))
-    bpy.ops.wm.save_as_mainfile(filepath=str(BLEND), compress=True, relative_remap=True)
-    print(f"bake: saved {BLEND}")
+            img.filepath = bpy.path.relpath(img.filepath, start=str(target.parent))
+    bpy.ops.wm.save_as_mainfile(filepath=str(target), compress=True, relative_remap=True)
+    print(f"bake: saved {target}")
 
 
 def bake_room(atlases, scale, samples, save=True):
@@ -545,6 +551,8 @@ def regrade(atlas: str):
 
 def main():
     args = parse_args()
+    if args.save_as:
+        SAVE_AS[0] = Path(args.save_as).resolve()
     if args.regrade:
         for atlas in args.regrade.split(","):
             regrade(atlas)

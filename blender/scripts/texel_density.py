@@ -32,7 +32,7 @@ WATCH = ("wall_back", "wall_left", "floor", "floor_fade", "desk_desk_top", "desk
 def shipped_size(atlas: str) -> int:
     if atlas.startswith("window_"):
         return bake.ATLAS_SIZES[atlas]  # the view ships at its bake size
-    return export.FULL_PX
+    return export.FULL_PX[atlas]
 
 
 def object_density(obj, size):

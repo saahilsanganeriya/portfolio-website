@@ -55,12 +55,12 @@ DARKROOM_LINES = [
     (-1.92, 0.10, 1.31, 0.036, 0.078),
 ]
 DARKROOM_PRINTS = [
-    [(0.07, 0.26, 0.36, -2.5), (0.23, 0.33, 0.30, 1.5), (0.40, 0.22, 0.34, 3.0), (0.56, 0.30, 0.36, -1.0),
-     (0.74, 0.26, 0.30, 2.0), (0.91, 0.24, 0.36, -3.5)],
-    [(0.10, 0.24, 0.36, 2.0), (0.27, 0.30, 0.36, -1.5), (0.50, 0.45, 0.38, 0.8), (0.72, 0.26, 0.34, -2.5),
-     (0.90, 0.30, 0.36, 1.0)],
-    [(0.06, 0.28, 0.34, 1.5), (0.22, 0.24, 0.34, -2.0), (0.38, 0.32, 0.34, 2.5), (0.56, 0.22, 0.34, -1.0),
-     (0.72, 0.30, 0.34, -3.0), (0.90, 0.26, 0.34, 2.0)],
+    [(0.08, 0.34, 0.26, -2.5), (0.235, 0.24, 0.32, 1.5), (0.385, 0.33, 0.25, 3.0), (0.55, 0.36, 0.27, -1.0),
+     (0.72, 0.32, 0.24, 2.0), (0.89, 0.35, 0.27, -3.0)],
+    [(0.10, 0.33, 0.25, 2.0), (0.28, 0.35, 0.26, -1.5), (0.50, 0.45, 0.32, 0.8), (0.72, 0.34, 0.26, -2.5),
+     (0.90, 0.31, 0.24, 1.0)],
+    [(0.08, 0.34, 0.26, 1.5), (0.245, 0.32, 0.25, -2.0), (0.41, 0.36, 0.27, 2.5), (0.575, 0.24, 0.32, -1.0),
+     (0.735, 0.33, 0.25, -3.0), (0.905, 0.35, 0.27, 2.0)],
 ]
 DARKROOM_HERO = (1, 2)  # (line, print)
 DARKROOM_LIGHT_Z = 2.34
@@ -940,7 +940,6 @@ def build_desk_clutter(rng):
     b.box((0.04, 0.0025, 0.0018), loc=(0.0, -0.0275, 0.0205), rot=(0, 0, 18), mat=pen_metal)
     notebook = finish(b, "desk_notebook", atlas="desk", smooth=40)
     place(notebook, Vector((-0.40, -0.30, DESK_TOP + 0.0005)), -9.0)
-    build_headphones()
     return build_sticky_notes()
 
 
@@ -1069,37 +1068,6 @@ def notebook_page_material():
     bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": 0.85})
     k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs[0])
     return mat
-
-
-def build_headphones():
-    """Closed-back headphones put down on the desk: padded band, two cups on swivel yokes, a coiled cable."""
-    shell = pl.surface("headphone_shell", (0.02, 0.019, 0.018), 0.38, smudges=0.4, edge_wear=0.4,
-                       edge_color=(0.10, 0.09, 0.08), dust=0.4, color_var=0.03)
-    pad = pl.surface("headphone_pad", (0.03, 0.025, 0.022), 0.65, micro_bump=(900, 0.4), color_var=0.04)
-    metal = pl.surface("headphone_metal", (0.55, 0.55, 0.54), 0.3, metallic=1.0, scratches=0.3, color_var=0.02)
-    b = pl.Builder("desk_headphones")
-    r_band = 0.085
-    band = []
-    for k in range(17):
-        a = math.radians(-80 + 160 * k / 16)
-        band.append(Vector((r_band * math.sin(a), -r_band * math.cos(a) + 0.02, 0.012)))
-    b.tube(band, 0.011, sides=8, mat=pad)
-    b.tube([p + Vector((0, 0.004, 0.008)) for p in band], 0.004, sides=6, mat=metal)
-    for side in (-1, 1):
-        end = band[0] if side < 0 else band[-1]
-        cup = end + Vector((side * 0.012, 0.035, 0.0))
-        b.cylinder(0.046, 0.032, segments=28, loc=tuple(cup + Vector((0, 0, -0.004))), mat=shell, bevel=0.006)
-        b.torus(0.033, 0.011, segments=24, sides=8, loc=tuple(cup + Vector((0, 0, 0.033))), mat=pad)
-        b.box((0.006, 0.05, 0.012), loc=tuple(cup + Vector((-side * 0.045, -0.02, 0.016))), mat=metal, bevel=0.002)
-    cable = [band[-1] + Vector((0.02, 0.06, -0.006))]
-    for k in range(1, 30):
-        t = k / 29
-        cable.append(cable[0] + Vector((0.11 * t + 0.008 * math.cos(t * 40), 0.06 * t * t + 0.008 * math.sin(t * 40),
-                                        -0.002)))
-    b.tube(cable, 0.0022, sides=5, mat=shell)
-    obj = finish(b, "desk_headphones", atlas="desk", smooth=40)
-    place(obj, Vector((0.37, -0.14, DESK_TOP)), -28.0)
-    return obj
 
 
 # ---- the research corner: bookcase, space wall, Japanese-literature print; the pennant ----

@@ -45,10 +45,11 @@ RENDERS = REPO / "blender" / "renders"
 
 ATLASES = ("desk", "art", "props", "env")
 LOW_PX = 1024  # the first-frame copies embedded in room.glb
-FULL_PX = 4096  # the full atlases, resampled (Lanczos) from the 6144 px bakes
-# The full atlases' codecs (CRAFT-R8 3, then each atlas's own A/B: bytes, SSIM and a crop; dark ramps especially).
-# uastc: UASTC level 2 + RDO lambda 1 + zstd 18 in KTX2 (GPU-compressed); avif: AVIF crf 20 (decoded to RGBA8).
-FULL_CODEC = {"desk": "uastc", "art": "uastc", "props": "avif", "env": "avif"}
+FULL_PX = {"desk": 4096, "art": 4096, "props": 4096, "env": 3072}  # the full atlases (desk resampled from 6144)
+# The full atlases' codecs (CRAFT-R8 3, then each atlas's own A/B: bytes, SSIM and a crop; dark ramps especially;
+# evidence/T71/codec-ab-final/). uastc: UASTC level 2 + RDO lambda 1 + zstd 18 in KTX2 (GPU-compressed);
+# ("avif", crf): AVIF at that crf (decoded to RGBA8). UASTC for props too would put the full set over its budget.
+FULL_CODEC = {"desk": "uastc", "art": "uastc", "props": ("avif", 14), "env": ("avif", 14)}
 VIEW_ATLASES = {"window_sf": "window_view_sf", "window_delhi": "window_view_delhi"}
 RUNTIME_MESHES = {"crt_glow": "crt_glow", "lamp_bulb": "lamp_bulb", "lava_lamp_glass": "lava_lamp_glass",
                   "oven_glow": "oven_glow"}  # mesh name -> material name
@@ -74,15 +75,7 @@ STILLS = {
     "room_v4_idle": ("cam_idle", 1600, 1000),
     "room_v4_desk": ("cam_desk", 1600, 1000),
     "room_v4_window": ("cam_window", 1600, 1000),
-    "room_v4_space": ("cam_tour_2", 1600, 1000),
-    "room_v4_books": ("cam_tour_3", 1600, 1000),
-    "room_v4_kitchen": ("cam_tour_4", 1600, 1000),
-    "room_v4_darkroom": ("cam_tour_5", 1600, 1000),
-    "room_v4_posters": ("cam_tour_6", 1600, 1000),
-    "room_v4_records": ("cam_tour_7", 1600, 1000),
-    "room_v4_shelf": ("cam_shelf", 1600, 1000),
-    "room_v4_oven": ("cam_oven", 1600, 1000),
-    "room_v4_espresso": ("cam_espresso", 1600, 1000),
+    "room_v4_darkroom": ("cam_photos", 1600, 1000),
 }
 
 
@@ -442,11 +435,12 @@ def export_view_textures() -> dict[str, int]:
 
 def encode_full(atlas: str) -> Path:
     """The full atlas at FULL_PX in its codec: KTX2 UASTC (RDO, zstd) with mipmaps, or AVIF."""
-    src = resized_atlas(atlas, FULL_PX)
+    src = resized_atlas(atlas, FULL_PX[atlas])
     ATLAS_DIR.mkdir(parents=True, exist_ok=True)
     for old in ATLAS_DIR.glob(f"{atlas}.*"):
         old.unlink()
-    if FULL_CODEC[atlas] == "uastc":
+    codec = FULL_CODEC[atlas]
+    if codec == "uastc":
         dst = ATLAS_DIR / f"{atlas}.ktx2"
         run("nice", "-n", "10", "ktx", "create", "--format", "R8G8B8_SRGB", "--assign-tf", "srgb", "--encode", "uastc",
             "--uastc-quality", "2", "--uastc-rdo", "--uastc-rdo-l", "1.0", "--zstd", "18", "--generate-mipmap",
@@ -454,7 +448,7 @@ def encode_full(atlas: str) -> Path:
     else:
         dst = ATLAS_DIR / f"{atlas}.avif"
         run("nice", "-n", "10", "ffmpeg", "-v", "error", "-y", "-i", src, "-c:v", "libaom-av1", "-still-picture", "1",
-            "-crf", "20", "-cpu-used", "4", "-threads", "8", dst)
+            "-crf", str(codec[1]), "-cpu-used", "4", "-threads", "8", dst)
     return dst
 
 
@@ -475,7 +469,7 @@ def write_atlases_json(full: dict[str, Path] | None) -> dict:
                  "low": {"uri": "room.glb", "image": image_index, "px": LOW_PX, "bytes": view["byteLength"]}}
         if full and atlas in full:
             path = full[atlas]
-            entry["full"] = {"uri": f"atlas/{path.name}", "px": FULL_PX, "bytes": path.stat().st_size,
+            entry["full"] = {"uri": f"atlas/{path.name}", "px": FULL_PX[atlas], "bytes": path.stat().st_size,
                              "format": "ktx2-uastc" if path.suffix == ".ktx2" else "avif"}
         entries.append(entry)
     (OUT_DIR / "atlases.json").write_text(json.dumps(entries, indent=2) + "\n")
@@ -510,6 +504,9 @@ def render_probe() -> dict:
     scene = bpy.context.scene
     saved = (scene.camera, scene.render.resolution_x, scene.render.resolution_y, scene.render.film_transparent,
              scene.render.image_settings.file_format, scene.render.filepath, scene.cycles.samples)
+    background = scene.world.node_tree.nodes["Background"].inputs["Strength"]
+    world_strength = background.default_value
+    background.default_value = 0.0  # the void stays dark in reflections (the site's clear colour is near black)
     cam = bpy.data.objects.new("probe_cam", bpy.data.cameras.new("probe_cam"))
     scene.collection.objects.link(cam)
     cam.data.type = "PANO"
@@ -532,6 +529,7 @@ def render_probe() -> dict:
     finally:
         (scene.camera, scene.render.resolution_x, scene.render.resolution_y, scene.render.film_transparent,
          scene.render.image_settings.file_format, scene.render.filepath, scene.cycles.samples) = saved
+        background.default_value = world_strength
         bpy.data.objects.remove(cam, do_unlink=True)
     size = out.stat().st_size
     print(f"export: probe {out} {size:,} bytes")
@@ -539,6 +537,7 @@ def render_probe() -> dict:
         raise SystemExit(f"export: the probe is {size:,} bytes, over {MAX_PROBE_BYTES:,}")
     x, y, z = PROBE["position"]
     return {"uri": "probe/room.hdr", "format": "rgbe-equirect", "px": list(PROBE["size"]), "bytes": size,
+            "exposureStops": scene.view_settings.exposure,
             "position": [x, z, -y], "orientation": "glTF: the panorama's centre looks toward -z (the back wall), "
                                                    "up is +y"}
 
@@ -660,10 +659,10 @@ def show_view_from_bakes():
 
 # Stills only: the darkroom's clips hang real prints so the framings read as they will on the site (T75 draws the
 # site's own set at runtime). 2022 film shots with the camera in their caption, the Chinatown bus on the hero clip.
-STILL_PRINTS = [
-    ["a-fable-in-six-things", "diner", "the-varsity", "purples-and-blues", "colorful-tshirts", "take-a-minute"],
+STILL_PRINTS = [  # the two portrait photographs on the two portrait clips (0_1, 2_3)
+    ["a-fable-in-six-things", "the-varsity", "diner", "purples-and-blues", "colorful-tshirts", "take-a-minute"],
     ["taiwan-cafe", "boston-in-love", "chinatown-bus", "brownstone", "green-lamps"],
-    ["reading-room", "courtyard", "boyhood-1", "chinatown-2", "manhattan-bridge", "ny-over-thanksgiving"],
+    ["reading-room", "courtyard", "boyhood-1", "manhattan-bridge", "chinatown-2", "ny-over-thanksgiving"],
 ]
 PRINT_BORDER = 0.06  # the white paper round the picture, as a share of the print's short side
 
