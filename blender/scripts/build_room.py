@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_henry  # noqa: E402
 from import_henry import CACHE, REPO, fetch_cached  # noqa: E402
 import room_dressing  # noqa: E402
+import room_lib  # noqa: E402
 import window_view  # noqa: E402
 from room_lib import (BACK_X1, DADO_Z, FLOOR_AXES, FLOOR_CENTRE, FLOOR_EDGE, FLOOR_POWER, FLOOR_SOLID,  # noqa: E402
                       LEFT_Y0, WALL_H, WALL_T, WIN_X0, WIN_X1, WIN_Z0, WIN_Z1, X_LEFT, Y_BACK, Mat, add_box,
@@ -893,6 +894,36 @@ def place_props(mats):
     return placed, anchors
 
 
+# ---- The window view's mask ----
+
+def build_view_mask():
+    """window_view_mask: an open-fronted box of void-coloured panels round the city diorama behind the window (left,
+    right, top and back), so that from the sides and from above the orbit sees only the void where the diorama would
+    show past the wall's corner, free end or top. Invisible to every ray in Blender (it changes no bake); the site draws
+    it in the void colour, and it fades with the back wall's group."""
+    parts = [o for o in bpy.data.collections["window_view"].objects if o.type == "MESH"]
+    lo, hi = world_bounds(parts)
+    x0, x1 = X_LEFT - WALL_T, BACK_X1
+    y0, y1 = Y_BACK + WALL_T, hi.y + 0.05
+    z0, z1 = lo.z - 0.05, WALL_H
+    bm = bmesh.new()
+    corners = {(i, j, k): bm.verts.new((x, y, z)) for i, x in enumerate((x0, x1)) for j, y in enumerate((y0, y1))
+               for k, z in enumerate((z0, z1))}
+    for quad in (((0, 0, 0), (0, 1, 0), (0, 1, 1), (0, 0, 1)), ((1, 0, 0), (1, 0, 1), (1, 1, 1), (1, 1, 0)),
+                 ((0, 0, 1), (0, 1, 1), (1, 1, 1), (1, 0, 1)), ((0, 1, 0), (1, 1, 0), (1, 1, 1), (0, 1, 1))):
+        bm.faces.new([corners[c] for c in quad])
+    bm.normal_update()
+    centre = Vector(((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2))
+    for f in bm.faces:
+        if f.normal.dot(f.calc_center_median() - centre) < 0:
+            f.normal_flip()  # facing out: seen by a camera beside or above it, culled through the window
+    mask = new_object("window_view_mask", bm, "window_view", None, [Mat("void").set(base=srgb(room_lib.VOID_HEX)).mat])
+    for attr in ("visible_camera", "visible_diffuse", "visible_glossy", "visible_transmission", "visible_shadow",
+                 "visible_volume_scatter"):
+        setattr(mask, attr, False)
+    return mask
+
+
 # ---- T72's hero props ----
 # Each prop file (blender/props/<name>.blend, origin at its base, front -Y) replaces its stand-in where the stand-in
 # stood, when the file exists: the keyboard, mouse and mug take Henry's footprints on the desk, the croissant the oven's
@@ -1591,6 +1622,7 @@ def main():
     build_window(mats)
     if not QUICK:
         window_view.build_window_view(CAMERAS)
+        build_view_mask()
     build_fixtures(mats)
     build_rug(mats)
     build_lamp(mats)

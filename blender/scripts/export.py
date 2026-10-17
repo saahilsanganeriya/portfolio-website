@@ -187,6 +187,17 @@ def export_sky() -> list[bpy.types.Object]:
     return [sky]
 
 
+def export_mask() -> list[bpy.types.Object]:
+    """window_view_mask: positions only, a plain unlit material that void_materials() sets to the void colour."""
+    mask = bpy.data.objects["window_view_mask"]
+    mask.data = private_copy(mask.data)
+    mask.data.materials.clear()
+    mask.data.materials.append(unlit_material("window_view_mask", None))
+    mask.data.name = mask.name
+    mask.hide_render = False
+    return [mask]
+
+
 def export_glass() -> list[bpy.types.Object]:
     """window_glass: the one pane, its 0-1 UVs kept; clear_glass() makes its material transparent in the glb."""
     glass = bpy.data.objects["window_glass"]
@@ -200,7 +211,7 @@ def export_glass() -> list[bpy.types.Object]:
 
 def prepare_meshes() -> list[bpy.types.Object]:
     art_names = [o.name for o in bpy.context.scene.objects if o.get("runtime_art")]
-    for name in ["proxy", "window_sky", "window_glass", "plant_sway", *WALL_MATERIALS, *RUNTIME_MESHES.values(), "nas_led",
+    for name in ["proxy", "window_sky", "window_glass", "window_view_mask", "plant_sway", *WALL_MATERIALS, *RUNTIME_MESHES.values(), "nas_led",
                  "room_props_leaves", *(f"room_{a}" for a in ATLASES), *VIEW_ATLASES.values(), *art_names]:
         if name in bpy.data.materials:
             bpy.data.materials[name].name = f"{name}_scene"
@@ -216,7 +227,7 @@ def prepare_meshes() -> list[bpy.types.Object]:
     sway.use_backface_culling = False
     runtime = {}
     proxy = unlit_material("proxy", None)
-    exported = join_view_halves() + export_sky() + export_glass()
+    exported = join_view_halves() + export_sky() + export_glass() + export_mask()
     for obj in list(bpy.context.scene.objects):
         if obj.type != "MESH" or obj in exported:
             continue
@@ -385,11 +396,13 @@ def write_glb(path: Path, gltf, rest: bytes):
 
 def clear_glass(path: Path):
     """The pane's material: white at zero opacity, blended, so the view shows through it until the site gives the
-    glass its look."""
+    glass its look; and the view's mask in the void colour (glTF factors are linear)."""
     gltf, rest = read_glb(path)
     mat = next(m for m in gltf["materials"] if m.get("name") == "window_glass")
     mat.setdefault("pbrMetallicRoughness", {})["baseColorFactor"] = [1.0, 1.0, 1.0, 0.0]
     mat["alphaMode"] = "BLEND"
+    mask = next(m for m in gltf["materials"] if m.get("name") == "window_view_mask")
+    mask.setdefault("pbrMetallicRoughness", {})["baseColorFactor"] = [round(c, 6) for c in room_lib.srgb(room_lib.VOID_HEX)]
     write_glb(path, gltf, rest)
 
 
@@ -543,7 +556,7 @@ REQUIRED_NODES = (
                            "cam_arrival_1", "cam_arrival_2", *(f"cam_tour_{i}" for i in range(8)))
        for s in ("", "_target")]
     + ["window_glass", "window_view_sf", "window_view_delhi", "window_sky", "window_sky_centre", "window_sky_eye",
-       "window_motif", "hit_window"]
+       "window_motif", "window_view_mask", "hit_window"]
     + [f"darkroom_line_{n}" for n in range(3)] + ["hit_darkroom"]
     + ["keyboard", "mouse", "coffee_mug", "coffee_steam", "croissant", "hit_croissant", "crt_badge", "hit_crt_badge",
        "pennant_gatech", "hit_pennant", "voyager_record", "hit_voyager", "print_pale_blue_dot", "hit_pale_blue_dot"]
@@ -645,6 +658,62 @@ def show_view_from_bakes():
         sky.visible_diffuse = sky.visible_glossy = sky.visible_shadow = False
 
 
+# Stills only: the darkroom's clips hang real prints so the framings read as they will on the site (T75 draws the
+# site's own set at runtime). 2022 film shots with the camera in their caption, the Chinatown bus on the hero clip.
+STILL_PRINTS = [
+    ["a-fable-in-six-things", "diner", "the-varsity", "purples-and-blues", "colorful-tshirts", "take-a-minute"],
+    ["taiwan-cafe", "boston-in-love", "chinatown-bus", "brownstone", "green-lamps"],
+    ["reading-room", "courtyard", "boyhood-1", "chinatown-2", "manhattan-bridge", "ny-over-thanksgiving"],
+]
+PRINT_BORDER = 0.06  # the white paper round the picture, as a share of the print's short side
+
+
+def hang_still_prints() -> list[bpy.types.Object]:
+    """A print under each darkroom clip for the stills: the photograph on white paper, fitted to the clip's largest
+    size by its aspect, lit by the set like the rest; removed again before the glb is written."""
+    src = REPO / "src" / "assets" / "photography"
+    made = []
+    for clip in sorted((o for o in bpy.context.scene.objects if o.name.startswith("darkroom_clip_")), key=lambda o: o.name):
+        _, _, line, k = clip.name.split("_")
+        slug = STILL_PRINTS[int(line)][int(k)]
+        files = sorted((src / slug).glob("*.webp"), key=lambda f: int(f.stem) if f.stem.isdigit() else 0)
+        png = CACHE / "photos" / f"{slug}.png"
+        if not png.exists():
+            png.parent.mkdir(parents=True, exist_ok=True)
+            ffmpeg("-i", files[-1], png)
+        image = bpy.data.images.load(str(png), check_existing=True)
+        aspect = image.size[0] / image.size[1]
+        border = PRINT_BORDER * min(clip["maxW_m"], clip["maxH_m"])
+        w = min(clip["maxW_m"] - 2 * border, (clip["maxH_m"] - 2 * border) * aspect)
+        h = w / aspect
+        mat = bpy.data.materials.new(f"still_print_{slug}")
+        nt = mat.node_tree
+        bsdf = nt.nodes["Principled BSDF"]
+        bsdf.inputs["Roughness"].default_value = 0.6
+        tex = nt.nodes.new("ShaderNodeTexImage")
+        tex.image = image
+        nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        paper = bpy.data.materials.new("still_print_paper")
+        paper.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.82, 0.80, 0.76, 1.0)
+        for name, (hw, hh, depth, material, uv) in (
+                ("paper", (w / 2 + border, h + 2 * border, -0.0006, paper, False)),
+                ("photo", (w / 2, h, -0.0012, mat, True))):
+            me = bpy.data.meshes.new(f"still_print_{name}")
+            top = 0.0 if name == "paper" else -border
+            verts = [(-hw, depth, top - hh), (hw, depth, top - hh), (hw, depth, top), (-hw, depth, top)]
+            me.from_pydata(verts, [], [(0, 1, 2, 3)])
+            if uv:
+                layer = me.uv_layers.new(name="UVMap")
+                for loop, coord in zip(layer.data, ((0, 0), (1, 0), (1, 1), (0, 1))):
+                    loop.uv = coord
+            me.materials.append(material)
+            obj = bpy.data.objects.new(f"still_print_{clip.name}_{name}", me)
+            obj.matrix_world = clip.matrix_world.copy()
+            bpy.context.scene.collection.objects.link(obj)
+            made.append(obj)
+    return made
+
+
 def show_current_notes():
     """Redraw the sticky notes' art from the current phrases (room_art.mjs reads src/content/sticky-notes.json) and
     give each note its material again, so the stills show what the site writes on them."""
@@ -665,6 +734,7 @@ def render_stills(samples: int, threads: int, only: set[str]):
 
     show_view_from_bakes()
     show_current_notes()
+    prints = hang_still_prints()
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.samples = samples
@@ -694,6 +764,8 @@ def render_stills(samples: int, threads: int, only: set[str]):
             ffmpeg(*avif_args(flat), OUT_DIR / "poster.avif")
             ffmpeg("-i", flat, "-q:v", "3", OUT_DIR / "poster.jpg")
         print(f"export: still {stem} from {framing}")
+    for obj in prints:
+        bpy.data.objects.remove(obj, do_unlink=True)
 
 
 def avif_args(src):
