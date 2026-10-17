@@ -322,7 +322,8 @@ export class Darkroom {
         this.prints.map(async (print) => {
           try {
             const source = pictureFor(print.photo, print.size.photoW * texelsPerM);
-            const bitmap = await textures.bitmap(source.src);
+            // AVIF where the browser decodes it, else the WebP copy.
+            const bitmap = source.avif ? await textures.bitmap(source.avif).catch(() => textures.bitmap(source.src)) : await textures.bitmap(source.src);
             if (this.wanted !== density) return bitmap.close();
             const canvas = drawPrint(print.photo, bitmap, print.size, texelsPerM);
             bitmap.close();

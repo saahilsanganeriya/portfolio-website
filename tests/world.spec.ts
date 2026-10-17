@@ -142,7 +142,7 @@ test('the prints and the photographs load only after the room is interactive', a
   await page.waitForFunction(() => window.__room!.world.darkroom!.prints.every((p) => p.shown > 0), null, { timeout: 30_000 });
   const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
   await page.waitForFunction(() => window.__room!.world.paleBlueDot! > 0, null, { timeout: 30_000 });
-  const onDemand = started.filter(({ url }) => /\/\d{3,4}\.[^/]*\.webp|photographs\.[^/]*\.js|api\/films\.json|pale-blue-dot\.ktx2/.test(url));
+  const onDemand = started.filter(({ url }) => /\/\d{3,4}\.[^/]*\.(webp|avif)|photographs\.[^/]*\.js|api\/films\.json|pale-blue-dot\.ktx2/.test(url));
   expect(onDemand.length).toBeGreaterThan(3);
   expect(onDemand.filter(({ at }) => at < interactive).map(({ url }) => url)).toEqual([]);
   // The posters hang in the first view, so they are part of it.

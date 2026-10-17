@@ -4,7 +4,9 @@
 import type { ImageMetadata } from 'astro';
 
 export interface Picture {
+  /** The WebP copy, and the same size as AVIF (about 40% smaller) when the ingest made one. */
   src: string;
+  avif?: string;
   width: number;
   height: number;
 }
@@ -40,6 +42,7 @@ const LARGE_EDGE_PX = 1600;
 
 const entries = import.meta.glob<string>('/src/content/photography/*.{yaml,yml}', { query: '?raw', import: 'default', eager: true });
 const pictures = import.meta.glob<ImageMetadata>('/src/assets/photography/*/*.webp', { import: 'default', eager: true });
+const avifs = import.meta.glob<ImageMetadata>('/src/assets/photography/*/*.avif', { import: 'default', eager: true });
 
 /** The ingest script writes one `key: <JSON value>` per line. */
 function parseEntry(text: string): Record<string, unknown> {
@@ -55,7 +58,7 @@ function parseEntry(text: string): Record<string, unknown> {
 function sizesOf(slug: string): Picture[] {
   return Object.entries(pictures)
     .filter(([path]) => path.startsWith(`/src/assets/photography/${slug}/`))
-    .map(([, image]) => ({ src: image.src, width: image.width, height: image.height }))
+    .map(([path, image]) => ({ src: image.src, avif: avifs[path.replace(/\.webp$/, '.avif')]?.src, width: image.width, height: image.height }))
     .sort((a, b) => a.width - b.width);
 }
 
