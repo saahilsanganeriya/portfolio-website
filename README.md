@@ -79,31 +79,35 @@ The write-up.
 
 ## Add photos in one step
 
-Put the photos in a folder (JPEG, PNG, WebP, AVIF or TIFF; export HEIC as JPEG first) and run:
+The set is photography only: what I shot on my film or digital camera and posted, with the camera line from the post
+as the evidence. Put the photos in a folder (JPEG, PNG, WebP, AVIF or TIFF; export HEIC as JPEG first) and run:
 
 ```sh
-npm run photos:ingest -- path/to/photos --series 2019 --year 2019    # both optional
+npm run photos:ingest -- path/to/photos --year 2022    # --year optional
 ```
 
 For each photo it applies the camera's rotation, strips every metadata block (EXIF with GPS location, XMP, IPTC, ICC),
 writes AVIF and WebP copies at 480, 960 and 1600 px and the original size (up to 2400 px) on the long edge into
 `src/assets/photography/<name>/`, and writes `src/content/photography/<name>.yaml`. The file name is the `<name>`.
-Running it again skips photos already in, and never overwrites an entry, so edit the entries freely:
+Running it again skips photos already in, and never overwrites an entry, so edit the entries freely. The build refuses
+an entry without its camera:
 
 ```yaml
 file: "../../assets/photography/the-varsity/1200.webp"   # written by the script
 title: "the varsity"
-year: 2022                # default: --year, else the photo's own capture year, else this year
+year: 2022                # the year it was taken; default: --year, else the photo's own capture year, else this year
 place: "Atlanta"          # optional
-series: "2022"            # default: --series, else the year; name a series by year, place or what the photos share
 caption: "The Varsity's glass doors at dusk, the red sign lit from inside."   # one line; it is also the alt text, so say what is in it
-featured: false           # the favourites
-onWall: true              # pinned to the room's Instax board, by order, until its prints run out
-order: 9                  # optional; lower comes first
-sharpie: "the varsity, atlanta"   # optional; written on the print in marker, at most 28 characters to fit the margin
+camera: "Canon A-1, 50mm f/1.4"   # camera and lens, as the post names them
+film: "Kodak Gold 200"    # optional; none for digital
+order: 8                  # the set's one order: the room's darkroom line (first = the hero clip) and SaahilOS
+sharpie: "the varsity, atlanta · kodak gold 200"   # optional; written on the print's border in marker: place, then film or camera
 date: "2022-02-05"        # optional; the day it was posted
-igCaption: "-\nKodak gold 200\nCanon A-1, 50mm f/1.4"   # optional; his own Instagram caption, as posted
+igCaption: "-\nKodak gold 200\nCanon A-1, 50mm f/1.4"   # optional; my own Instagram caption, as posted
 ```
+
+The room hangs the set on the darkroom lines in `order`, one print per clip, so keep about as many photographs as the
+lines have clips (17 on set v4).
 
 `src/content/photography/` is for photography only, never photos of me. Those go through `--me`:
 
