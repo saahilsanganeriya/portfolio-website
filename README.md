@@ -260,7 +260,7 @@ picks Chromium's WebGL switches; the sheet records the renderer the page got (on
 SwiftShader).
 
 **Switches and stats in the page.** `window.__roomDebug.set({ samples, dprCap, anisotropy, grade, bloom, vignette, dither,
-halfFloat, halos, motes })` overrides the tier for an A/B; `reset()` returns to it; `setClock(s)` sets the ambient
+halfFloat, halos })` overrides the tier for an A/B; `reset()` returns to it; `setClock(s)` sets the ambient
 clock. `window.__roomStats` reports the streamed atlases (`skipped`, `done`, `atlases[]`) and the GPU memory the room
 holds (`gpu`: each texture's size and format, render targets, total).
 

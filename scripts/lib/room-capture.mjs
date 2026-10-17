@@ -52,7 +52,7 @@ export async function openPage(browser, viewport, { tier = 0, seed = 7, mock = n
   await page.addInitScript(
     ({ tier, seed }) => {
       if (tier !== null) window.__roomTier = tier;
-      // mulberry32: the dust's and the grain's seeds are the same on every run.
+      // mulberry32: whatever the room draws at random is the same on every run.
       let a = seed >>> 0;
       Math.random = () => {
         a = (a + 0x6d2b79f5) | 0;

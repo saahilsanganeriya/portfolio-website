@@ -95,7 +95,7 @@ export class TexelDebug {
     this.enabled = true;
     const colors = BANDS.map((b) => new THREE.Color(b.color));
     scene.traverse((node) => {
-      // Halos, dust and lines add light on top of the bake: not drawn while the bands show.
+      // Halos, points and lines add light on top of the bake: not drawn while the bands show.
       if (node instanceof THREE.Sprite || node instanceof THREE.Points || node instanceof THREE.Line) {
         this.swaps.set(node, null);
         return;

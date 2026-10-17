@@ -43,7 +43,6 @@ export interface RenderSwitches {
   /** Half-float scene target. */
   halfFloat: boolean;
   halos: boolean;
-  motes: boolean;
 }
 
 /** Measurement hook for captures and the texel view; the application fills in what only it can do. */
@@ -122,7 +121,7 @@ export class RoomRenderer {
   private readonly switches: Partial<RenderSwitches> = {};
   private lastScene: THREE.Scene | null = null;
   private lastCamera: THREE.Camera | null = null;
-  /** The application's side of the debug hook: set the clock, re-apply the tier (pixel ratio, halos, dust), redraw. */
+  /** The application's side of the debug hook: set the clock, re-apply the tier (pixel ratio, halos), redraw. */
   hooks: { setClock(seconds: number): void; reapply(): void } = { setClock: () => {}, reapply: () => {} };
 
   constructor(webglHost: HTMLElement, cssHost: HTMLElement) {
@@ -158,8 +157,8 @@ export class RoomRenderer {
 
   /** The tier with the debug switches over it: what the effects and the world should draw. */
   effective(tier: QualityTier): QualityTier {
-    const { halos, motes } = this.switches;
-    return { ...tier, ...(halos !== undefined && { halos }), ...(motes !== undefined && { motes: motes ? tier.motes || 600 : 0 }) };
+    const { halos } = this.switches;
+    return { ...tier, ...(halos !== undefined && { halos }) };
   }
 
   /** The device pixel ratio a tier draws at, under the ladder's cap (or the debug switch's). */

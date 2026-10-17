@@ -10,7 +10,6 @@ export interface QualityTier {
   grade: boolean;
   bloom: boolean;
   film: boolean;
-  motes: number;
   halos: boolean;
   /** Live shine on gloss-tagged surfaces (T79 reads it): on wherever the machine has headroom. */
   shine: boolean;
@@ -25,23 +24,23 @@ export interface QualityLadder {
 
 export const FULL: QualityLadder = {
   tiers: [
-    { resolution: 1, msaa: 4, grade: false, bloom: true, film: true, motes: 600, halos: true, shine: true },
-    { resolution: 0.8, msaa: 4, grade: false, bloom: true, film: true, motes: 360, halos: true, shine: true },
-    { resolution: 0.62, msaa: 4, grade: false, bloom: true, film: true, motes: 200, halos: true, shine: true },
-    { resolution: 0.5, msaa: 4, grade: false, bloom: false, film: true, motes: 120, halos: false, shine: true },
-    { resolution: 0.4, msaa: 0, grade: false, bloom: false, film: false, motes: 60, halos: false, shine: false },
+    { resolution: 1, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true },
+    { resolution: 0.8, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true },
+    { resolution: 0.62, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true },
+    { resolution: 0.5, msaa: 4, grade: false, bloom: false, film: true, halos: false, shine: true },
+    { resolution: 0.4, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false },
     // At the DPR cap of 2 this is the old bottom tier's 0.6 device pixels per CSS pixel.
-    { resolution: 0.3, msaa: 0, grade: false, bloom: false, film: false, motes: 60, halos: false, shine: false },
+    { resolution: 0.3, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false },
   ],
   dprCap: 2,
 };
 
-/** Phones and small windows: one CSS pixel per pixel at most, a little dust, no halos, the grade without bloom or vignette. */
+/** Phones and small windows: one CSS pixel per pixel at most, no halos, no bloom or vignette. */
 export const LIGHT: QualityLadder = {
   tiers: [
-    { resolution: 1, msaa: 4, grade: false, bloom: false, film: false, motes: 120, halos: false, shine: true },
-    { resolution: 0.8, msaa: 4, grade: false, bloom: false, film: false, motes: 60, halos: false, shine: true },
-    { resolution: 0.62, msaa: 0, grade: false, bloom: false, film: false, motes: 30, halos: false, shine: false },
+    { resolution: 1, msaa: 4, grade: false, bloom: false, film: false, halos: false, shine: true },
+    { resolution: 0.8, msaa: 4, grade: false, bloom: false, film: false, halos: false, shine: true },
+    { resolution: 0.62, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false },
   ],
   dprCap: 1,
 };
