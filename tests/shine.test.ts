@@ -18,13 +18,14 @@ const luma = (out: Uint16Array, x: number, y: number) => THREE.DataUtils.fromHal
 
 describe('the room probe', () => {
   /**
-   * Catches reflections of the void showing as AgX's lifted grey (sRGB ~49,42,37 against the site's #14110F): the
-   * zenith's radiance comes off before the tone curve, so the void reflects as black.
+   * Catches reflections of the void showing as a grey veil (its world colour, which AgX lifts to sRGB ~49,42,37 against
+   * the site's #14110F): the zenith's radiance comes off, so the void reflects nothing, and the rest keeps its light at
+   * the bake's exposure.
    */
-  it('shows the void above the set as black and the lit set as the bake would', () => {
+  it('takes the void above the set off and keeps the lit set’s light at the bake’s exposure', () => {
     const out = prepareProbe(probe([[8, 4]]), W, H, 2.8);
-    expect(luma(out, 0, 0)).toBeLessThan(0.001);
-    expect(Math.max(...[...Array(W * H).keys()].map((i) => luma(out, i % W, Math.floor(i / W))))).toBeGreaterThan(0.9);
+    expect(luma(out, 0, 0)).toBe(0);
+    expect(Math.max(...[...Array(W * H).keys()].map((i) => luma(out, i % W, Math.floor(i / W))))).toBeCloseTo((5 - VOID[1]) * 2 ** 2.8, 1);
   });
 
   /**
@@ -33,8 +34,8 @@ describe('the room probe', () => {
    */
   it('lays the probe out in three’s equirect: −z a quarter from the left, the zenith in the last row', () => {
     const out = prepareProbe(probe([[W / 2, 1]]), W, H, 2.8);
-    expect(luma(out, W / 4, H - 2)).toBeGreaterThan(0.9);
-    expect(luma(out, W / 2, H - 2)).toBeLessThan(0.001);
+    expect(luma(out, W / 4, H - 2)).toBeGreaterThan(1);
+    expect(luma(out, W / 2, H - 2)).toBe(0);
   });
 });
 
@@ -53,7 +54,7 @@ describe('the box reflections are projected on', () => {
   });
 });
 
-/** A room: two tagged meshes, one untagged, and the CRT glass beside the screen. */
+/** A room: three tagged meshes (the CRT glass beside the screen among them) and one untagged. */
 function room() {
   const root = new THREE.Group();
   const mug = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 2, 12), new THREE.MeshBasicMaterial());
@@ -65,25 +66,30 @@ function room() {
   glass.name = 'crt_glow';
   glass.userData.gloss = 0.12;
   glass.visible = false;
-  root.add(mug, wall, glass);
+  const pane = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshBasicMaterial({ transparent: true }));
+  pane.name = 'window_glass';
+  pane.userData.gloss = 0.05;
+  root.add(mug, wall, glass, pane);
   root.updateMatrixWorld(true);
   const pose = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), width: 1, height: 1 };
-  return { root, mug, wall, glass, screen: { glass, pose } };
+  return { root, mug, wall, glass, pane, screen: { glass, pose } };
 }
 
 describe('the shine overlays', () => {
   /**
-   * Catches the CRT's shine vanishing with its hidden glow (a child of an invisible mesh never draws) and shine on
-   * surfaces T71 did not tag: one hidden overlay per gloss mesh, riding on it, the CRT's beside it, after the OS hole.
+   * Catches the CRT's shine vanishing with its hidden glow (a child of an invisible mesh never draws), and shine on a
+   * surface the set did not tag or the A/B turned down: one hidden overlay per listed gloss mesh, riding on it, the
+   * CRT's beside it, after the OS hole.
    */
-  it('puts one overlay on each gloss mesh, and the CRT glass’s beside it', () => {
-    const { root, mug, wall, glass, screen } = room();
+  it('puts one overlay on each listed gloss mesh, and the CRT glass’s beside it', () => {
+    const { root, mug, wall, glass, pane, screen } = room();
     const box = { probeAt: new THREE.Vector3(), min: new THREE.Vector3(-1, -1, -1), max: new THREE.Vector3(1, 1, 1) };
-    const overlays = addShine(root, new THREE.Texture(), box, screen);
+    const overlays = addShine(root, new THREE.Texture(), box, screen, { coffee_mug: 1, crt_glow: 0.25, wall_back: 1 });
     expect(overlays.map((o) => o.name).sort()).toEqual(['coffee_mug_shine', 'crt_glow_shine']);
     expect(overlays.every((o) => !o.visible)).toBe(true);
     expect(mug.children.map((c) => c.name)).toEqual(['coffee_mug_shine']);
     expect(wall.children).toHaveLength(0);
+    expect(pane.children).toHaveLength(0);
     const crt = overlays.find((o) => o.name === 'crt_glow_shine')!;
     expect(crt.parent).toBe(root);
     expect(glass.children).toHaveLength(0);

@@ -7,18 +7,24 @@ import { FLOORPLAN_URL } from '../Application/Resources';
 import { WORLD_SCALE, type MonitorPose } from '../Application/RoomModel';
 
 // Live shine (the hybrid render: baked view-independent light, live view-dependent light). The bake cannot hold a
-// reflection, which is right from one viewpoint only, so the surfaces T71 tags `gloss` (roughness 0–1) get it here:
-// the room probe, tone-mapped like the bake and prefiltered by roughness, weighted by Fresnel, and projected onto the set's
-// box (the two walls, the floor, the void beyond) so a reflection stays on the wall it shows as the camera orbits. Each
-// tagged mesh gets an overlay, so its own material (and what patches it, like the lava lamp's light) is left alone: on
-// glass (the window, the CRT) the reflection replaces its share of what shows through, `reflection * w + behind * (1 - w)`;
-// on glaze and varnish it adds to the bake, `baked + reflection * w`, so the bake stays as baked and only what is
-// brighter than it, a window or a lamp, shows. The probe loads after the room is interactive and only on a tier with
+// reflection, which is right from one viewpoint only, so the surfaces the set tags `gloss` (roughness 0–1) get it here:
+// the room probe's light, prefiltered by roughness, weighted by Fresnel, projected onto the set's box (the two walls, the
+// floor, the void beyond) so a reflection stays on the wall it shows as the camera orbits, and tone-mapped as the bake
+// was (AgX). Each tagged mesh gets an overlay, so its own material (and what patches it, like the lava lamp's light) is
+// left alone: on glaze and varnish the reflection is screened over the bake, `baked + shine * (1 - baked)`, so the bake
+// stays as baked and only what is brighter than it, a window or a lamp, shows; on glass it also takes its share of what
+// shows through, `shine + behind * (1 - F)`. The probe loads after the room is interactive and only on a tier with
 // `shine`; Save-Data visitors get no 3D room at all (src/layouts/Room.astro).
 
+// The surfaces that shine, and how strongly (1 = the physical Fresnel), as the off/on crops from three orbit angles each
+// decided: at full strength the window's glare washed the desk's varnish white and covered the OS on the CRT, at a
+// quarter both read as varnish and glass. The window pane, the mug's glaze, the espresso machine, the lamp shade, the
+// lava lamp, the platter and the Voyager record showed no gain or a smudge (the probe is 512 × 256 and taken at the
+// desk, so a near lamp or the far wall reflects as a blur), so their `gloss` tags draw nothing.
+const SHINES: Readonly<Record<string, number>> = { desk_desk_top: 0.25, crt_glow: 0.25 };
 // The bake's exposure (blender/scripts/build_room.py EXPOSURE), for a floor plan whose probe does not state it.
 const BAKE_EXPOSURE_STOPS = 2.8;
-// The walls' height (T71: each rises to 3.4 m and fades into the void); the top of the box reflections are projected on.
+// The set's walls rise to 3.4 m and fade into the void: the top of the box reflections are projected on.
 const WALL_HEIGHT_M = 3.4;
 // Smooth across edges up to this angle when the room file has no normals; sharper edges stay creased.
 const CREASE_DEG = 40;
@@ -59,48 +65,14 @@ export interface ShineScreen {
   pose: MonitorPose;
 }
 
-// ---- The probe: scene-linear radiance → what the bake would show, in three's equirect layout ----
-
-// three's AgX (tonemapping_pars_fragment, after Filament), in linear sRGB. GLSL matrices are column-major.
-const SRGB_TO_REC2020 = [0.6274, 0.0691, 0.0164, 0.3293, 0.9195, 0.088, 0.0433, 0.0113, 0.8956];
-const REC2020_TO_SRGB = [1.6605, -0.1246, -0.0182, -0.5876, 1.1329, -0.1006, -0.0728, -0.0083, 1.1187];
-const AGX_INSET = [
-  0.856627153315983, 0.137318972929847, 0.11189821299995, 0.0951212405381588, 0.761241990602591, 0.0767994186031903,
-  0.0482516061458583, 0.101439036467562, 0.811302368396859,
-];
-const AGX_OUTSET = [
-  1.1271005818144368, -0.1413297634984383, -0.14132976349843826, -0.11060664309660323, 1.157823702216272,
-  -0.11060664309660294, -0.016493938717834573, -0.016493938717834257, 1.2519364065950405,
-];
-const AGX_MIN_EV = -12.47393;
-const AGX_MAX_EV = 4.026069;
-
-const mul = (m: number[], [x, y, z]: number[]) => [
-  m[0] * x + m[3] * y + m[6] * z,
-  m[1] * x + m[4] * y + m[7] * z,
-  m[2] * x + m[5] * y + m[8] * z,
-];
-const sigmoid = (x: number) => {
-  const x2 = x * x;
-  const x4 = x2 * x2;
-  return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
-};
-
-/** three's AgXToneMapping on one linear-sRGB colour; the result is linear sRGB in [0, 1]. */
-export function agx(rgb: number[]): number[] {
-  const logged = mul(AGX_INSET, mul(SRGB_TO_REC2020, rgb)).map((v) =>
-    sigmoid(THREE.MathUtils.clamp((Math.log2(Math.max(v, 1e-10)) - AGX_MIN_EV) / (AGX_MAX_EV - AGX_MIN_EV), 0, 1)),
-  );
-  const linear = mul(AGX_OUTSET, logged).map((v) => Math.max(0, v) ** 2.2);
-  return mul(REC2020_TO_SRGB, linear).map((v) => THREE.MathUtils.clamp(v, 0, 1));
-}
+// ---- The probe: scene-linear radiance, in three's equirect layout ----
 
 /**
- * The probe as the overlays sample it (RGBA half floats, `width × height`): each texel shows its surface as the bake
- * shows it, AgX at the bake's exposure, after the zenith's radiance is taken off (straight up from the desk is the void
- * above the set, whose world colour AgX would lift to a grey; taken off, the void reflects as the site's near-black).
- * The rows go bottom-up and the columns are turned a quarter: the probe's centre looks at −z, three's equirect centre
- * at +x. `src` is the Radiance file's RGBA floats, top row first.
+ * The probe as the overlays sample it (RGBA half floats, `width × height`): the light each texel saw, scaled by the
+ * bake's exposure, after the zenith's radiance is taken off (straight up from the desk is the void above the set: its
+ * world colour would otherwise reflect as a grey veil; taken off, the void reflects as black). The shader tone-maps
+ * what a surface reflects as the bake was (AgX). The rows go bottom-up and the columns are turned a quarter: the
+ * probe's centre looks at −z, three's equirect centre at +x. `src` is the Radiance file's RGBA floats, top row first.
  */
 export function prepareProbe(src: Float32Array, width: number, height: number, exposureStops: number): Uint16Array {
   const zenith = [0, 0, 0];
@@ -113,9 +85,8 @@ export function prepareProbe(src: Float32Array, width: number, height: number, e
     const row = (height - 1 - y) * width;
     for (let x = 0; x < width; x++) {
       const s = (row + ((x + quarter) % width)) * 4;
-      const shown = agx([0, 1, 2].map((c) => Math.max(0, src[s + c] - zenith[c]) * gain));
       const d = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) out[d + c] = THREE.DataUtils.toHalfFloat(shown[c]);
+      for (let c = 0; c < 3; c++) out[d + c] = THREE.DataUtils.toHalfFloat(Math.max(0, src[s + c] - zenith[c]) * gain);
       out[d + 3] = one;
     }
   }
@@ -211,7 +182,7 @@ ${shineGlsl}
 #endif
 void main() {`;
 
-// Premultiplied output (rgb × alpha by three), blended over what is behind (glass) or added to the bake.
+// rgb is the reflection as the bake would show it; alpha (glass) is the share of what shows through that it replaces.
 const FRAGMENT_SHINE = /* glsl */ `
 #ifdef SHINE_SCREEN
   vec3 shineOnScreen = (shineScreenToLocal * vec4(vShinePosition, 1.0)).xyz;
@@ -220,28 +191,37 @@ const FRAGMENT_SHINE = /* glsl */ `
 vec3 shineN = normalize(vShineNormal) * (gl_FrontFacing ? 1.0 : -1.0);
 vec3 shineV = normalize(cameraPosition - vShinePosition);
 float shineR = shineFilteredRoughness(shineN, shineRoughness);
-outgoingLight = textureCubeUV(envMap, shineOnBox(vShinePosition, reflect(-shineV, shineN)), shineR).rgb;
-diffuseColor.a = shineWeight(saturate(dot(shineN, shineV)), shineR) * shineStrength;
+float shineF = shineWeight(saturate(dot(shineN, shineV)), shineR) * shineStrength;
 #ifdef SHINE_SCREEN
-  diffuseColor.a *= smoothstep(SHINE_FADE_NEAR, SHINE_FADE_FAR, distance(cameraPosition, vShinePosition));
-#endif`;
+  shineF *= smoothstep(SHINE_FADE_NEAR, SHINE_FADE_FAR, distance(cameraPosition, vShinePosition));
+#endif
+outgoingLight = shineAgX(textureCubeUV(envMap, shineOnBox(vShinePosition, reflect(-shineV, shineN)), shineR).rgb * shineF);
+diffuseColor.a = shineF;`;
 
-function shineMaterial(env: THREE.Texture, box: ShineBox, roughness: number, side: THREE.Side, glass: boolean, screen: MonitorPose | null) {
+interface ShineLook {
+  roughness: number;
+  strength: number;
+  side: THREE.Side;
+  /** Glass shows what is behind it; glaze and varnish are opaque. */
+  glass: boolean;
+  /** The OS hole the CRT glass is drawn over. */
+  screen: MonitorPose | null;
+}
+
+function shineMaterial(env: THREE.Texture, box: ShineBox, { roughness, strength, side, glass, screen }: ShineLook) {
   const material = new THREE.MeshBasicMaterial({
     name: 'shine',
     envMap: env,
     side,
     transparent: true,
-    premultipliedAlpha: true,
     depthWrite: false,
-    // Added light leaves the canvas's alpha (the OS hole's) alone.
-    ...(!glass && {
-      blending: THREE.CustomBlending,
-      blendSrc: THREE.OneFactor,
-      blendDst: THREE.OneFactor,
-      blendSrcAlpha: THREE.ZeroFactor,
-      blendDstAlpha: THREE.OneFactor,
-    }),
+    blending: THREE.CustomBlending,
+    // Glass: shine + behind × (1 − F). Glaze and varnish: a screen, which never brightens past white and leaves the
+    // canvas's alpha alone.
+    blendSrc: glass ? THREE.OneFactor : THREE.OneMinusDstColorFactor,
+    blendDst: glass ? THREE.OneMinusSrcAlphaFactor : THREE.OneFactor,
+    blendSrcAlpha: glass ? THREE.OneFactor : THREE.ZeroFactor,
+    blendDstAlpha: glass ? THREE.OneMinusSrcAlphaFactor : THREE.OneFactor,
     // Drawn on the baked mesh's own triangles: wins the depth tie.
     polygonOffset: true,
     polygonOffsetFactor: -1,
@@ -249,7 +229,7 @@ function shineMaterial(env: THREE.Texture, box: ShineBox, roughness: number, sid
   });
   const uniforms: ShineUniforms = {
     shineRoughness: { value: roughness },
-    shineStrength: { value: 1 },
+    shineStrength: { value: strength },
     shineProbeAt: { value: box.probeAt },
     shineBoxMin: { value: box.min },
     shineBoxMax: { value: box.max },
@@ -287,20 +267,27 @@ function shineMaterial(env: THREE.Texture, box: ShineBox, roughness: number, sid
 }
 
 /**
- * Adds a shine overlay for every mesh under `root` tagged `gloss`: a child of the mesh (it moves, lifts and hides
- * with it), except the CRT glass, whose baked glow Effects hides: its overlay stands beside it and draws over the OS
- * hole. Returns the overlays, hidden.
+ * Adds a shine overlay for every mesh under `root` tagged `gloss` that `strengths` lists: a child of the mesh (it
+ * moves, lifts and hides with it), except the CRT glass, whose baked glow Effects hides: its overlay stands beside it
+ * and draws over the OS hole. Returns the overlays, hidden.
  */
-export function addShine(root: THREE.Object3D, env: THREE.Texture, box: ShineBox, screen: ShineScreen | null): THREE.Mesh[] {
+export function addShine(
+  root: THREE.Object3D,
+  env: THREE.Texture,
+  box: ShineBox,
+  screen: ShineScreen | null,
+  strengths: Readonly<Record<string, number>> = SHINES,
+): THREE.Mesh[] {
   const tagged: THREE.Mesh[] = [];
   root.traverse((node) => {
-    if (node instanceof THREE.Mesh && typeof node.userData.gloss === 'number') tagged.push(node);
+    if (node instanceof THREE.Mesh && typeof node.userData.gloss === 'number' && node.name in strengths) tagged.push(node);
   });
   return tagged.map((mesh) => {
     const onScreen = mesh === screen?.glass;
     const own = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
     const glass = onScreen || own.transparent;
-    const overlay = new THREE.Mesh(shineGeometry(mesh), shineMaterial(env, box, mesh.userData.gloss, own.side, glass, onScreen ? screen.pose : null));
+    const look = { roughness: mesh.userData.gloss, strength: strengths[mesh.name], side: own.side, glass, screen: onScreen ? screen.pose : null };
+    const overlay = new THREE.Mesh(shineGeometry(mesh), shineMaterial(env, box, look));
     overlay.name = `${mesh.name}_shine`;
     overlay.visible = false;
     if (onScreen && mesh.parent) {
