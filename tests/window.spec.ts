@@ -32,6 +32,8 @@ const change = (a: number[], b: number[]) => Math.max(...a.map((v, c) => Math.ab
 /** Loads the room at `at`, logging every window picture it fetches, and settles at the window framing. */
 async function windowAt(page: Page, at: string) {
   await page.addInitScript(() => {
+    // One quality tier at every hour, whatever the machine's load: the ladder would draw each load at its own resolution.
+    (window as unknown as { __roomTier: number }).__roomTier = 0;
     const log: string[] = [];
     (window as unknown as { __pictures: string[] }).__pictures = log;
     const fetch = window.fetch.bind(window);
@@ -49,6 +51,8 @@ async function windowAt(page: Page, at: string) {
   await page.evaluate(() => window.__room!.goto('window'));
   await page.waitForFunction(() => window.__room!.phase === 'window' && !window.__room!.moving, null, { timeout: 30_000 });
   await page.waitForFunction(() => window.__room!.world.window?.motif?.drawn !== false, null, { timeout: 30_000 });
+  // The HUD's clock shows the visitor's hour by design; the window behind it must not.
+  await page.addStyleTag({ content: '[data-room-hud] { visibility: hidden !important; }' });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
