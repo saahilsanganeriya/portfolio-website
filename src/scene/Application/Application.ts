@@ -320,7 +320,7 @@ export class Application implements RoomHandle {
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
       hotspot: (hotspot, proxy) => this.onHotspot(hotspot, proxy),
       toggle: () => this.toggle(),
-      enterMonitor: () => this.enterMonitor(),
+      enterMonitor: (rested) => this.enterMonitor(rested),
       leaveMonitor: () => this.leaveMonitor(),
       click: (kind) => {
         // A press inside the monitor while the tour glides past the desk stops the glide too.
@@ -540,10 +540,11 @@ export class Application implements RoomHandle {
     else if (!hotspot.fly) this.enterMonitor();
   }
 
-  private enterMonitor() {
-    // The glide passes the desk: a pointer resting where the glass goes by is not the visitor asking to go in; nor is
-    // a drag of the set that let go over the screen.
-    if (this.camera.glideState || this.navigation.endedDrag()) return;
+  private enterMonitor(rested = false) {
+    // A pointer the glass slid under while the camera moved (a flight, the tour's glide, the orbit coasting) is not the
+    // visitor asking to go in; nor is a drag of the set that let go over the screen.
+    if (this.camera.glideState) return;
+    if (rested && (this.camera.moving || this.navigation.endedDrag())) return;
     if (this.started && this.camera.destination !== 'monitor') this.toMonitor('monitor', null);
   }
 

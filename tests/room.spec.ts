@@ -20,7 +20,7 @@ const PROJECT = { slug: 'entity-resolution-and-anonymization', title: 'Entity re
 const os = (page: Page) => page.frameLocator('.room-monitor iframe');
 const drawnOs = (page: Page) => page.frameLocator('[data-monitor-glass] iframe');
 
-async function settled(page: Page, phase: 'idle' | 'desk' | 'monitor' | 'projector' | 'shelf', timeout = 120_000) {
+async function settled(page: Page, phase: 'idle' | 'desk' | 'monitor' | 'shelf', timeout = 120_000) {
   await page.waitForFunction((p) => window.__room?.phase === p && !window.__room.moving, phase, { timeout });
 }
 
@@ -334,20 +334,6 @@ test('the new props open their windows, and the Georgia Tech pennant only labels
   await click('hit_books');
   await settled(page, 'monitor', 30_000);
   await expect(os(page).getByRole('dialog', { name: 'Books' })).toBeVisible();
-});
-
-/** Catches the projector opening a window straight away instead of flying to its framing first (owner 07:56Z). */
-test('clicking the projector glides to it and opens nothing', async ({ page }) => {
-  await page.goto('/');
-  await arrived(page);
-  await page.evaluate(() => window.__room!.goto('idle'));
-  await settled(page, 'idle');
-  const projector = await screenPoint(page, 'hit_projector');
-  await page.mouse.move(projector.x, projector.y);
-  await expect(page.locator('.room-label')).toHaveText('Projector');
-  await page.mouse.click(projector.x, projector.y);
-  await settled(page, 'projector', 30_000);
-  expect(await page.evaluate(() => window.__room!.destination)).toBe('projector');
 });
 
 /**

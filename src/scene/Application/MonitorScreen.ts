@@ -13,6 +13,23 @@ const PROJECTOR = new THREE.Color('#9db4c0');
 const STILL_WIDTH_PX = 320;
 const INK = '#14110f';
 const PAPER = '#ede4d3';
+// A wheel's line and page modes, in pixels.
+const LINE_PX = 16;
+const PAGE_PX = 400;
+
+/** The box under `from` that can still scroll by (dx, dy): the nearest one, as the browser would chain a scroll. */
+function scrollerFor(from: Element | null, dx: number, dy: number): Element | null {
+  for (let el = from; el; el = el.parentElement) {
+    const style = el.ownerDocument.defaultView?.getComputedStyle(el);
+    if (!style) return null;
+    const canY = /auto|scroll/.test(style.overflowY) && el.scrollHeight > el.clientHeight;
+    const canX = /auto|scroll/.test(style.overflowX) && el.scrollWidth > el.clientWidth;
+    const roomY = dy > 0 ? el.scrollTop + el.clientHeight < el.scrollHeight - 1 : el.scrollTop > 0;
+    const roomX = dx > 0 ? el.scrollLeft + el.clientWidth < el.scrollWidth - 1 : el.scrollLeft > 0;
+    if ((dy !== 0 && canY && roomY) || (dx !== 0 && canX && roomX)) return el;
+  }
+  return null;
+}
 
 export type MonitorEvent =
   | { type: 'pointer'; x: number; y: number }
@@ -208,10 +225,36 @@ export class MonitorScreen {
   load(): Promise<void> {
     const iframe = this.iframe;
     if (!iframe) return Promise.resolve();
+    iframe.addEventListener('load', () => this.takeWheel(iframe));
     return new Promise((resolve) => {
       iframe.addEventListener('load', () => resolve(), { once: true });
       iframe.src = this.osUrl;
     });
+  }
+
+  /**
+   * The wheel over the screen scrolls the OS window under the pointer, as on any page. Chromium delivers the wheel to
+   * the OS inside the CSS3D-transformed frame but stops applying its scroll after the pointer has rested there a
+   * moment (main had it too: the "weird" scrolling at the monitor), so the room scrolls the box itself: the nearest
+   * one under the pointer that can still move that way, by the wheel's own deltas. A pinch (ctrl) stays the browser's.
+   */
+  private takeWheel(iframe: HTMLIFrameElement) {
+    const view = iframe.contentWindow;
+    if (!view) return;
+    view.addEventListener(
+      'wheel',
+      (event) => {
+        if (event.ctrlKey) return;
+        const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? LINE_PX : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? PAGE_PX : 1;
+        // Shift turns a plain wheel sideways, as browsers do.
+        const [dx, dy] = event.shiftKey && event.deltaX === 0 ? [event.deltaY * scale, 0] : [event.deltaX * scale, event.deltaY * scale];
+        event.preventDefault();
+        // The OS's own elements come from its window, so the room's Element class does not recognise them.
+        const target = event.target as Element | null;
+        scrollerFor(typeof target?.closest === 'function' ? target : null, dx, dy)?.scrollBy({ left: dx, top: dy });
+      },
+      { passive: false },
+    );
   }
 
   /** Opens an app in the OS (PLAN 3.7 target, e.g. "about" or "films/la-la-land"), once the OS says it is ready. */
