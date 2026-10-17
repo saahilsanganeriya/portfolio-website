@@ -254,6 +254,12 @@ small one on the next frame; the small texture is then freed. Phones (the light 
 (Save-Data visitors get the drawn monitor, never the 3D room). The clear colour behind the set is `voidColor` in
 `public/room/floorplan.json`.
 
+**Live shine.** The bake holds no reflections. Once the room is interactive, on a tier with `shine`, the runtime loads
+the room probe (`probe` in `floorplan.json`) and draws the reflections of the surfaces in `SHINES`
+(`src/scene/World/Shine.ts`, each with a strength) that also carry a `gloss` tag in `room.glb`. Add `?shine=off` to
+an address to capture a build without it. `window.__shine.set(true | false | null)` turns it on, off or back to the
+tier; `window.__shine.tune(name, { roughness, strength })` changes one surface for an A/B.
+
 ## Deploy
 
 Vercel, through `@astrojs/vercel`. Every page is prerendered. A route that must run on request sets
