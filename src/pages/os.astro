@@ -10,7 +10,6 @@ import {
   favourites as loadFavourites,
   osImage,
   osWallpaper,
-  ovenList,
   photographs,
   projectCard,
   projectFigures,
@@ -55,8 +54,7 @@ const index: OsIndex = {
   pages: pages.map(({ id, data }) => ({ slug: id, title: data.title, summary: data.summary })),
   films: windowDiary(filmsData, favourites),
   favourites,
-  oven: ovenList(),
-  wallpaper: await osWallpaper(),
+  wallpaper: osWallpaper(),
   me: await aboutPortrait(),
   photography: await photographs(),
 };

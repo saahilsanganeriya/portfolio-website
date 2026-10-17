@@ -1,5 +1,5 @@
-// Build-time data for /os that is not in a content collection: the "On the bench" list, the favourite films, the
-// project figures, the wallpaper and the About portrait. Imported by src/pages/os.astro only, so zod and astro:assets stay out of the island.
+// Build-time data for /os that is not in a content collection: the favourite films, the project figures, the
+// wallpaper and the About portrait. Imported by src/pages/os.astro only, so zod and astro:assets stay out of the island.
 import type { ImageMetadata } from 'astro';
 import { getImage } from 'astro:assets';
 import { getCollection } from 'astro:content';
@@ -8,8 +8,6 @@ import headshot from '../assets/headshot/saahil-sanganeriya.webp';
 import projectionistArchitecture from '../assets/projects/projectionist-architecture.png';
 import samcellPipeline from '../assets/projects/samcell-paper-figure-3.jpg';
 import favouritesFile from '../content/favorites.json';
-import ovenFile from '../content/oven.json';
-import wallpaper from './assets/wallpaper/wallpaper.jpg';
 import type {
   OsFavourite,
   OsFigure,
@@ -18,27 +16,9 @@ import type {
   OsPicture,
   OsProjectCard,
   OsWallpaper,
-  OvenList,
 } from './types';
 
-const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}/);
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
-
-const ovenSchema = z.object({
-  items: z
-    .array(
-      z.object({
-        title: z.string().min(1),
-        note: z.string().min(1),
-        link: z
-          .string()
-          .regex(/^(\/|https?:\/\/)/, 'a site path or an http(s) URL')
-          .optional(),
-      }),
-    )
-    .min(1),
-  updated: isoDay,
-});
 
 // src/content/favorites.json, rebuilt from each Letterboxd export (scripts/favorites.mjs).
 const favouritesSchema = z.object({
@@ -54,8 +34,6 @@ const favouritesSchema = z.object({
     )
     .min(1),
 });
-
-export const ovenList = (): OvenList => ovenSchema.parse(ovenFile);
 
 export const favourites = (): OsFavourite[] => favouritesSchema.parse(favouritesFile).films;
 
@@ -102,15 +80,27 @@ export const projectFigures = (slug: string): Promise<OsFigure[]> =>
     (EXTRA_FIGURES[slug] ?? []).map(async ({ src, alt, ...text }) => ({ ...(await osImage(src, alt)), ...text })),
   );
 
-// A starfield is all fine detail, so it stays at 1280 px at most (the monitor's width): about the bytes the old
-// wallpaper cost the room's first load.
-export async function osWallpaper(): Promise<OsWallpaper> {
-  const widths = [960, 1280];
-  const [avif, webp] = await Promise.all([
-    getImage({ src: wallpaper, widths, format: 'avif', quality: 34 }),
-    getImage({ src: wallpaper, widths, format: 'webp', quality: 62 }),
-  ]);
-  return { avif: avif.srcSet.attribute, webp: webp.srcSet.attribute, src: webp.src };
+// The wallpaper's sizes, cut and encoded ahead of time from ESA/Webb's full-resolution image (see blender/ASSETS.md):
+// preview-960 for the room's first load, then 1280, 1920 and 2560 px wide.
+const wallpaperFiles = import.meta.glob<ImageMetadata>('./assets/wallpaper/*.{avif,webp}', { eager: true, import: 'default' });
+
+export function osWallpaper(): OsWallpaper {
+  const files = (format: 'avif' | 'webp', preview: boolean) =>
+    Object.entries(wallpaperFiles)
+      .filter(([path]) => path.endsWith(`.${format}`) && path.includes('/preview-') === preview)
+      .map(([, image]) => image)
+      .sort((a, b) => a.width - b.width);
+  const srcset = (images: ImageMetadata[]) => images.map((image) => `${image.src} ${image.width}w`).join(', ');
+  const largest = files('webp', false).at(-1);
+  const preview = files('webp', true)[0];
+  if (!largest || !preview) throw new Error('src/os/assets/wallpaper/ needs preview-*.{avif,webp} and the full sizes');
+  return {
+    preview: { avif: srcset(files('avif', true)), webp: srcset([preview]), src: preview.src },
+    avif: srcset(files('avif', false)),
+    webp: srcset(files('webp', false)),
+    width: largest.width,
+    height: largest.height,
+  };
 }
 
 // ---- The owner's portrait and his photography (sizes made ahead of time by `npm run photos:ingest`) ----

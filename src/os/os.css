@@ -64,13 +64,15 @@ body.os-moving iframe {
 
 /* ---- Desktop ---- */
 
-/* The wallpaper: Webb's Pillars of Creation (ESA/Webb, CC BY 4.0). Walnut shows until it loads. */
+/* The wallpaper: Webb's Pillars of Creation (ESA/Webb, CC BY 4.0). Walnut shows until it loads; a narrow screen
+   keeps the pillar tips, which stand right of centre. */
 .os-wallpaper img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: 70% 50%;
   pointer-events: none;
 }
 
@@ -81,15 +83,20 @@ body.os-moving iframe {
   outline: none;
 }
 
-/* Labels sit on a photograph, so each carries a hard ink drop and a soft ink halo, the way later Windows did. */
+/* Text on the photograph sits on a chip of the desktop's own walnut, as Win95 drew icon labels: paper on walnut is
+   10.8:1 and dust 5.2:1, whatever the picture behind is doing. */
 .os-icon-label,
-.os-icon-caption,
-.os-desktop-foot,
+.os-icon-caption span,
+.os-desktop-foot p {
+  background: var(--os-desk);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .os-phonebar {
   text-shadow:
     1px 1px 0 var(--ink),
-    0 0 4px rgb(20 17 15 / 0.9),
-    0 0 10px rgb(20 17 15 / 0.7);
+    0 0 4px rgb(20 17 15 / 0.9);
 }
 
 /* Two sides, the work on the left and life off the clock on the right; sizes match iconGutter in wm/windows.ts. */
@@ -114,6 +121,10 @@ body.os-moving iframe {
   color: var(--dust);
   font: inherit;
   text-align: center;
+}
+
+.os-icon-caption span {
+  padding: 0 4px 1px;
 }
 
 /* A definite height, so the rows fill first and only a short desktop wraps a side into a second column. */
@@ -160,7 +171,7 @@ body.os-moving iframe {
 }
 
 .os-icon-label {
-  padding: 0 2px;
+  padding: 0 3px 1px;
   overflow-wrap: anywhere;
 }
 
@@ -169,24 +180,26 @@ body.os-moving iframe {
   color: var(--os-light);
 }
 
+/* The credit stands in the corner under the right-hand icons, narrow enough to stay clear of the first window. */
 .os-desktop-foot {
   position: absolute;
-  right: 16px;
-  bottom: 10px;
-  max-width: min(34rem, calc(100% - 120px));
+  right: 8px;
+  bottom: 8px;
+  max-width: 228px;
   color: var(--dust);
   text-align: right;
 }
 
 .os-desktop-foot p {
-  margin: 0;
+  width: fit-content;
+  margin: 0 0 0 auto;
+  padding: 1px 5px;
 }
 
 .os-wallpaper-credit {
-  margin-top: 4px;
   font-family: var(--font-sans);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--paper);
 }
 
@@ -771,24 +784,6 @@ body.os-moving iframe {
   color: var(--dust);
 }
 
-/* His own line, set like an epigraph on the title card of a film. */
-.os-films-epigraph {
-  max-width: 30em;
-  margin: 4px 0 24px;
-  padding: 0;
-}
-
-.os-films-epigraph p {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: 1.5rem;
-  font-style: italic;
-  font-weight: 300;
-  line-height: 1.3;
-  color: var(--paper);
-  -webkit-font-smoothing: auto;
-}
-
 .os-films-favourites {
   outline: none;
 }
@@ -884,31 +879,6 @@ body.os-moving iframe {
   -webkit-box-orient: vertical;
   overflow: hidden;
   user-select: text;
-}
-
-/* ---- On the bench (the oven window: src/content/oven.json) ---- */
-
-.os-oven-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.os-oven-list li + li {
-  margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid var(--os-shade);
-}
-
-.os-oven-list h3 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 500;
-  line-height: 1.3;
-}
-
-.os-oven-list p {
-  margin: 4px 0 0;
 }
 
 /* ---- Books: the shelf as a reading list. Title in the serif, author and year small, his line under it ---- */
@@ -1506,6 +1476,127 @@ body.os-moving iframe {
   font-style: italic;
 }
 
+/* Henry's résumé strip, as a Win98 inset: the icon, then one line in the chrome face. */
+.os-about-resume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 10px 12px;
+  background: #fff;
+  box-shadow: var(--os-sunken);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.os-about-resume svg {
+  flex: none;
+}
+
+.os-about-resume strong {
+  font-family: var(--os-chrome);
+  font-size: 17px;
+  -webkit-font-smoothing: none;
+}
+
+/* ---- Contact: Win98 fields on the reader's paper; thread marks a field to fix (5.2:1 on the light well) ---- */
+
+.os-contact-form {
+  display: grid;
+  gap: 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.os-field {
+  display: grid;
+  gap: 4px;
+}
+
+.os-field label {
+  font-family: var(--os-chrome);
+  font-size: 16px;
+  font-weight: 700;
+  -webkit-font-smoothing: none;
+}
+
+.os-field :is(input, textarea) {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: var(--os-sunken);
+  color: var(--os-dark);
+  font: inherit;
+  user-select: text;
+}
+
+.os-field textarea {
+  min-height: 8.5rem;
+  resize: vertical;
+}
+
+.os-field :is(input, textarea):focus-visible {
+  outline: 1px dotted var(--os-dark);
+  outline-offset: 2px;
+}
+
+.os-field :is(input, textarea)[aria-invalid] {
+  box-shadow:
+    var(--os-sunken),
+    0 0 0 2px var(--thread);
+}
+
+.os-field :is(input, textarea):read-only {
+  background: var(--os-face);
+}
+
+.os-field-error,
+.os-contact-failed {
+  margin: 0;
+  color: var(--thread);
+  font-size: 14px;
+}
+
+.os-contact-send {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.os-contact-button {
+  min-width: 7rem;
+  min-height: 32px;
+  font-family: var(--os-chrome);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.os-contact-button[aria-disabled] {
+  color: var(--os-muted);
+  box-shadow: var(--os-pressed);
+}
+
+.os-contact-note,
+.os-contact-status {
+  margin: 0;
+  color: var(--os-muted);
+  font-size: 14px;
+}
+
+.os-contact-status {
+  color: var(--os-dark);
+}
+
+.os-contact-trap {
+  display: none;
+}
+
 /* ---- A Narrative in a Frame: prints on a darkroom wall ---- */
 
 .os-darkroom {
@@ -1698,17 +1789,18 @@ body.os-moving iframe {
   }
 }
 
-/* ---- Terminal: a CRT inside the CRT, so the projector light is allowed here ---- */
+/* ---- Terminal: the window's own paper and ink, the prompt in thread (5.2:1 on the light well) ---- */
 
 .os-terminal {
   min-height: 100%;
   padding: 10px 12px;
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--os-light);
+  color: var(--os-dark);
   font-family: var(--font-mono);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: auto;
+  cursor: text;
 }
 
 .os-terminal-log p {
@@ -1717,17 +1809,17 @@ body.os-moving iframe {
   overflow-wrap: anywhere;
 }
 
-.os-term-muted,
-.os-term-info {
-  color: var(--dust);
+.os-term-muted {
+  color: var(--os-muted);
 }
 
 .os-term-warn {
-  color: #c9a66b;
+  color: var(--thread);
 }
 
-.os-term-echo {
-  color: var(--paper);
+.os-term-ps1 {
+  color: var(--thread);
+  font-weight: 600;
 }
 
 .os-terminal-prompt {
@@ -1735,9 +1827,13 @@ body.os-moving iframe {
   gap: 1ch;
 }
 
-.os-term-ps1 {
+.os-terminal-prompt[data-busy] {
+  opacity: 0;
+}
+
+.os-term-ps1,
+.os-terminal-prompt > span {
   flex: none;
-  color: var(--projector);
 }
 
 .os-terminal-prompt input {
@@ -1746,10 +1842,28 @@ body.os-moving iframe {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--paper);
+  color: var(--os-dark);
   font: inherit;
-  caret-color: var(--projector);
+  caret-color: var(--thread);
   outline: none;
+}
+
+/* A narrow window (a phone) keeps the folder in the prompt and drops the user and machine. */
+@container (max-width: 480px) {
+  .os-term-user {
+    display: none;
+  }
+}
+
+/* rm -rf /: the desktop goes dark for a moment, then everything is back. */
+.os-wallpaper img,
+.os-icons-nav {
+  transition: opacity 0.35s ease;
+}
+
+.os[data-wiped] .os-wallpaper img,
+.os[data-wiped] .os-icons-nav {
+  opacity: 0;
 }
 
 /* ---- Credits ---- */
@@ -2158,10 +2272,19 @@ body.os-moving iframe {
     padding: 0 16px 24px;
     text-align: center;
   }
+
+  html:not([data-embedded]) .os-desktop-foot p {
+    margin: 0 auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .os-thread-line {
     animation: none;
+  }
+
+  .os-wallpaper img,
+  .os-icons-nav {
+    transition: none;
   }
 }

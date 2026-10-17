@@ -24,7 +24,7 @@ export function DesktopIcons({ phone, selected, onSelect, onOpen }: DesktopIcons
       {SIDES.map(({ side, caption, apps }) => (
         <div key={side} className="os-icon-group" data-side={side}>
           <h2 id={`os-icons-${side}`} className="os-icon-caption">
-            {caption}
+            <span>{caption}</span>
           </h2>
           <ul className="os-icons" aria-labelledby={`os-icons-${side}`}>
             {apps.map((id) => (
