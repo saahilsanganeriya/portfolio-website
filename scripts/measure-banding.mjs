@@ -110,6 +110,7 @@ try {
     await driveTo(page, server.url, 'idle', { frameMs: viewport.width < 768 ? 16 : 50 });
     await stepUntil(page, () => !window.__roomStats || window.__roomStats.done || window.__roomStats.skipped, { ms: 100, realMs: 100, timeoutMs: 600_000 });
     const renderer = await glRenderer(page);
+    const streamed = await page.evaluate(() => window.__roomStats?.atlases.map((a) => `${a.name} ${a.state} ${a.px}px`) ?? null);
     const perView = {};
     const rows = [];
     for (const view of views) {
@@ -168,7 +169,7 @@ try {
       }
       perView[view].mean = mean;
     }
-    result.viewports[viewport.label] = { viewport: `${viewport.width}x${viewport.height}@${viewport.dpr}`, renderer, pixelRatio: await page.evaluate(() => window.__roomDebug.pixelRatio), views: perView };
+    result.viewports[viewport.label] = { viewport: `${viewport.width}x${viewport.height}@${viewport.dpr}`, renderer, streamed, pixelRatio: await page.evaluate(() => window.__roomDebug.pixelRatio), views: perView };
     await sheet(viewport, rows);
     console.log(`renderer (${glMode}): ${renderer}`);
     await page.context().close();

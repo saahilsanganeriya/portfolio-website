@@ -28,7 +28,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { driveTo, glRenderer, launch, openPage, parseViewports, tick } from './lib/room-capture.mjs';
+import { driveTo, glRenderer, launch, openPage, parseViewports, stepUntil, tick } from './lib/room-capture.mjs';
 import { serveBuild } from './lib/serve-build.mjs';
 
 const args = process.argv.slice(2);
@@ -201,6 +201,8 @@ try {
   for (const viewport of viewports) {
     const page = await openPage(browser, viewport, { tier, mock: option('--mock', null) });
     await driveTo(page, server.url, 'idle');
+    // The full atlases swap in after the room is interactive; a swap inside a capture would read as crawl.
+    await stepUntil(page, () => !window.__roomStats || window.__roomStats.done || window.__roomStats.skipped, { ms: 100, realMs: 100, timeoutMs: 600_000 });
     const renderer = await glRenderer(page);
     const rects = await placeCrops(page, viewport);
     for (const [name, switches] of Object.entries(variants)) {
