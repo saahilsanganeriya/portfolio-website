@@ -107,7 +107,7 @@ const result = { gl: glMode, tier, clock: startClock, variants, viewports: {} };
 try {
   for (const viewport of viewports) {
     const page = await openPage(browser, viewport, { tier, mock: option('--mock', null) });
-    await driveTo(page, server.url, 'idle');
+    await driveTo(page, server.url, 'idle', { frameMs: viewport.width < 768 ? 16 : 50 });
     await stepUntil(page, () => !window.__roomStats || window.__roomStats.done || window.__roomStats.skipped, { ms: 100, realMs: 100, timeoutMs: 600_000 });
     const renderer = await glRenderer(page);
     const perView = {};

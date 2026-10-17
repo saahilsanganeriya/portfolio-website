@@ -101,12 +101,14 @@ export async function stepUntil(page, predicate, { ms = 50, realMs = 30, timeout
 
 /**
  * Loads `url` and brings the camera to rest at `station` with page time under the script's control: the arrival runs
- * in coarse steps, then `settleMs` of page time passes at the station (the idle sway fades in over about 5 s).
+ * in coarse steps, then `settleMs` of page time passes at the station (the idle sway fades in over about 5 s). Until
+ * the room starts, frames are `frameMs` long: a phone-width page (the light tier) measures its frame rate first and
+ * shows the drawn monitor instead if the frames look slow, so it needs 16.
  */
-export async function driveTo(page, url, station = 'idle', { settleMs = 6000 } = {}) {
+export async function driveTo(page, url, station = 'idle', { settleMs = 6000, frameMs = 50 } = {}) {
   await page.goto(url, { waitUntil: 'commit' });
   await page.clock.pauseAt(CAPTURE_TIME + 1000);
-  await stepUntil(page, () => window.__room?.startedAt != null);
+  await stepUntil(page, () => window.__room?.startedAt != null, { ms: frameMs });
   // The arrival glides by page time: 100 ms steps pass it in about fifty frames.
   await stepUntil(page, () => window.__room.landedAt != null, { ms: 100, realMs: 0 });
   await page.evaluate((s) => window.__room.goto(s), station);

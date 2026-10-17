@@ -209,11 +209,14 @@ review that names one of those people.
 | `node scripts/media/build-audio.mjs`, `node scripts/media/build-records.mjs` | Rebuild the room's sounds and the record crate from their recorded sources (listed in `blender/ASSETS.md`). |
 | `npm run measure:payload`, `npm run measure:fps` | Measure the room's payload (the first room frame: everything until the room is interactive, budget 6,000,000 B; `-- --full` also waits for the streamed atlases and checks the full room, budget 25,000,000 B) and its frame rate in each framing with the full atlases loaded (2020-laptop profile; run it only when the machine's 1-minute load is under 16). |
 | `node scripts/capture-crawl.mjs`, `node scripts/capture-sheet.mjs` | The crawl check and the side-by-side sheet against Henry's live site; see "Measure the render". |
+| `node scripts/measure-banding.mjs` | The banding check on the room's darkest smooth gradients; see "Measure the render". |
 
 ## Measure the render
 
 The room draws into a multisampled target (MSAA ×4) at up to 2 device pixels per CSS pixel, and the finishing pass
-resolves it onto the canvas. The quality ladder (`src/scene/Application/Quality.ts`) starts at the top tier and steps
+resolves it onto the canvas. Its last step adds a dither of ±0.5 of an 8-bit level, fixed per pixel (interleaved
+gradient noise on the pixel position, never animated), so dark gradients do not show flat steps. Tiers without MSAA
+keep the scene in a half-float target, so the dither has the shades between two levels to place there too. The quality ladder (`src/scene/Application/Quality.ts`) starts at the top tier and steps
 down only when the measured frame rate stays under 50 fps.
 
 **Crawl check.** `node scripts/capture-crawl.mjs --out <dir> [--viewports 1440x900@1,1280x720@2] [--seconds 5]
@@ -232,6 +235,19 @@ Edge pixels are those whose gradient in the capture's mean image is at least 10 
 `crawl.json`, the first frame, the crops, eight-frame strips of each crop (×3, nearest) and, with `--video`, an MP4.
 A variants file maps names to render switches (below), one capture each.
 
+**Banding check.** `node scripts/measure-banding.mjs --out <dir> [--viewports 1440x900@1,1280x720@2] [--views
+idle,desk] [--variants file.json] [--crops banding.json]` draws one frame per view and variant at the same moment of the
+drift. The first variant's frame picks the crops: the four darkest windows (mean luma 5–48) that have a gradient across
+them and no edge or texture in them, away from the monitor. Per crop, on each of R, G and B (`scripts/lib/banding.mjs`):
+
+| Number | Formula | Reads as |
+|---|---|---|
+| run | pixel-weighted mean length of the runs of identical 8-bit values along rows and columns, in CSS px | the width of a flat step: tens of pixels on a banded gradient, a few on a dithered or textured one |
+| ripple | RMS of (blur σ 1 CSS px − blur σ 8 CSS px), in levels | the staircase the eye still sees; steps that are in the atlas itself stay here whatever the output does |
+
+Out come `banding.json`, each frame, each crop at 1:1 and with its levels stretched (the same stretch for every
+variant), and a sheet per viewport. `--crops` reuses an earlier run's crops, so two builds compare on the same pixels.
+
 **Texel density.** Add `?debug=texels` to any room address (or run `window.__roomDebug.texels(true)`): each baked
 surface is drawn in the band of texels per screen pixel it gets, from the UV derivatives × the atlas size: red < 1
 (the bake is magnified, soft), green 1–2, blue > 2. `window.__roomDebug.texelStats()` returns, per mesh, its pixels,
@@ -243,8 +259,8 @@ labelled sheet with 1:1 crops of the desk edge, keyboard, monitor bezel and wall
 picks Chromium's WebGL switches; the sheet records the renderer the page got (on the devbox, every mode is
 SwiftShader).
 
-**Switches and stats in the page.** `window.__roomDebug.set({ samples, dprCap, anisotropy, grade, bloom, vignette, halos,
-motes })` overrides the tier for an A/B; `reset()` returns to it; `setClock(s)` sets the ambient
+**Switches and stats in the page.** `window.__roomDebug.set({ samples, dprCap, anisotropy, grade, bloom, vignette, dither,
+halfFloat, halos, motes })` overrides the tier for an A/B; `reset()` returns to it; `setClock(s)` sets the ambient
 clock. `window.__roomStats` reports the streamed atlases (`skipped`, `done`, `atlases[]`) and the GPU memory the room
 holds (`gpu`: each texture's size and format, render targets, total).
 

@@ -7,19 +7,27 @@ import practicalVert from './shaders/practical.vert.glsl?raw';
 import upFrag from './shaders/up.frag.glsl?raw';
 import { buildGradeLut, LUT_SIZE, type GradeSettings } from './grade';
 
-/** The look: the grade's table, how strongly the practicals' blurred light is screened over the frame, the vignette. */
+/**
+ * The look: the grade's table, how strongly the practicals' blurred light is screened over the frame, the vignette, and
+ * the output dither's amplitude in 8-bit levels (0.5 = ±0.5/255; 0 = none).
+ */
 export interface FinishSettings {
   grade: GradeSettings;
   bloom: number;
   vignette: number;
+  dither: number;
 }
 
-/** Which parts this frame draws (the quality tier decides); `film` is the vignette, at `vignette` (the settings' or an A/B's). */
+/**
+ * Which parts this frame draws (the quality tier decides); `film` is the vignette, at `vignette`, and `dither` the
+ * output dither's amplitude (the settings' or an A/B's).
+ */
 export interface FinishFrame {
   grade: boolean;
   bloom: boolean;
   film: boolean;
   vignette: number;
+  dither: number;
 }
 
 interface Practical {
@@ -158,6 +166,7 @@ export class FinishingPass {
       uGrade: { value: 1 },
       uBloom: { value: 0 },
       uVignette: { value: 0 },
+      uDither: { value: 0 },
     });
     this.down = passMaterial(downFrag, { tInput: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.up = passMaterial(upFrag, { tInput: { value: null }, uTexel: { value: new THREE.Vector2() } });
@@ -177,12 +186,26 @@ export class FinishingPass {
     this.sceneTarget.dispose();
   }
 
+  /**
+   * The scene target's colour: 8 bits per channel, or half-float where the GPU can render to it. Half-float keeps the
+   * shades between two 8-bit levels (a dark atlas magnified across many pixels) for the dither to place.
+   */
+  setHalfFloat(on: boolean) {
+    const half = on && this.gl.extensions.has('EXT_color_buffer_float');
+    const type = half ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    if (this.sceneTarget.texture.type === type) return;
+    this.sceneTarget.texture.type = type;
+    this.sceneTarget.texture.internalFormat = half ? 'RGBA16F' : 'RGBA8';
+    this.sceneTarget.dispose();
+  }
+
   /** Bytes the pass's targets hold on the GPU (colour, depth, MSAA renderbuffers, the bloom chain). */
   memoryBytes() {
     const { width, height, samples } = this.sceneTarget;
     const pixels = width * height;
-    // Colour RGBA8 + depth 32-bit; with MSAA, a renderbuffer of each per sample on top of the resolved pair.
-    let bytes = pixels * 8 * (1 + samples);
+    // Colour RGBA8 or RGBA16F + depth 32-bit; with MSAA, a renderbuffer of each per sample on top of the resolved pair.
+    const colour = this.sceneTarget.texture.type === THREE.HalfFloatType ? 8 : 4;
+    let bytes = pixels * (colour + 4) * (1 + samples);
     const bloomTexel = this.bloomTargets[0].texture.type === THREE.HalfFloatType ? 8 : 4;
     for (const target of this.bloomTargets) bytes += target.width * target.height * bloomTexel;
     return bytes;
@@ -211,6 +234,7 @@ export class FinishingPass {
     u.uGrade.value = frame.grade ? 1 : 0;
     u.uBloom.value = bloom ? settings.bloom : 0;
     u.uVignette.value = frame.film ? frame.vignette : 0;
+    u.uDither.value = frame.dither;
     this.screen.draw(gl, this.composite, null);
   }
 

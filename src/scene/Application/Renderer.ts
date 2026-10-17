@@ -11,6 +11,8 @@ const FINISH: FinishSettings = {
   grade: { tone: 'aces', exposure: 0.4, toe: [0.03, 0.3], keepHue: 0.85, strength: 0.6 },
   bloom: 0.85,
   vignette: 0.42,
+  // Half an 8-bit level, static: dark gradients no longer band, and the drift's crawl does not rise (T73b A/B).
+  dither: 0.5,
 };
 // Every atlas is filtered this anisotropically (or the GPU's maximum, if lower): the floor and the desk top are seen at
 // grazing angles, where plain trilinear filtering blurs them and steps between mip levels as the camera drifts.
@@ -36,6 +38,10 @@ export interface RenderSwitches {
   grade: boolean;
   bloom: boolean;
   vignette: number;
+  /** Output dither amplitude in 8-bit levels. */
+  dither: number;
+  /** Half-float scene target. */
+  halfFloat: boolean;
   halos: boolean;
   motes: boolean;
 }
@@ -145,6 +151,9 @@ export class RoomRenderer {
   setTier(tier: QualityTier) {
     this.tier = tier;
     this.finish.setSamples(this.switches.samples ?? tier.msaa);
+    // The dither places the shades between two 8-bit levels. The vignette and the bloom make them in the pass; a tier
+    // with neither (the lowest desktop tiers, phones) keeps the scene's own in a half-float target (T73b A/B).
+    this.finish.setHalfFloat(this.switches.halfFloat ?? !(tier.bloom || tier.film));
   }
 
   /** The tier with the debug switches over it: what the effects and the world should draw. */
@@ -216,9 +225,10 @@ export class RoomRenderer {
     const s = this.switches;
     const parts: Parts = { grade: s.grade ?? tier.grade, bloom: s.bloom ?? tier.bloom, film: tier.film, ...this.probe.force };
     const vignette = s.vignette ?? this.finish.settings.vignette;
-    const frame: FinishFrame = { ...parts, film: parts.film && vignette > 0, vignette };
+    const frame: FinishFrame = { ...parts, film: parts.film && vignette > 0, vignette, dither: s.dither ?? this.finish.settings.dither };
     const antialiased = (s.samples ?? tier.msaa) > 0;
-    if (antialiased || parts.grade || parts.bloom || frame.film) this.finish.render(scene, camera, frame);
+    // The dither is on every tier, so every tier finishes through the pass.
+    if (antialiased || parts.grade || parts.bloom || frame.film || frame.dither > 0) this.finish.render(scene, camera, frame);
     else {
       this.gl.setRenderTarget(null);
       this.gl.render(scene, camera);

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import sharp from 'sharp';
+import { bandingOf, findDarkGradients } from '../scripts/lib/banding.mjs';
 import type {} from '../src/scene/Application/Application';
 import type {} from '../src/scene/Application/Renderer';
 
@@ -97,3 +98,43 @@ test('the top tier draws antialiased edges', async ({ page }) => {
   const [aliased] = await shoot(page, () => window.__roomDebug!.set({ samples: 0 }), [edges]);
   expect(await edgeSteepness(shipped), 'MSAA softens the steepest steps').toBeLessThan((await edgeSteepness(aliased)) * 0.97);
 });
+
+/**
+ * Catches banding coming back in the room's dark gradients: the output dither missing, too weak to break the flat
+ * steps, or left with nothing to place on a tier with no vignette or bloom (an 8-bit scene target, or the room drawn
+ * straight onto the canvas, as tiers 4–5 and phones were); and a dither that moves from frame to frame, which would
+ * crawl while the camera drifts. On the darkest smooth gradient of the wide view, the flat steps shrink, and two
+ * redraws of the still room differ no more with the dither than without it.
+ */
+for (const { tier, shrink } of [
+  { tier: 0, shrink: 0.5 },
+  // Tier 4 draws 0.4 device px per CSS px, so the dither's grain is upscaled too: steps shrink by about 45%, not 85%.
+  { tier: 4, shrink: 0.75 },
+]) {
+  test(`dark gradients are dithered with a pattern that never moves (tier ${tier})`, async ({ page }) => {
+    await page.addInitScript((t) => ((window as unknown as { __roomTier: number }).__roomTier = t), tier);
+    await page.goto('/');
+    await page.waitForFunction(() => window.__room?.landedAt != null && !window.__room.moving, null, { timeout: 180_000 });
+    await page.evaluate(() => window.__room!.goto('idle'));
+    await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
+    await page.mouse.move(2, 2);
+    await page.locator('[data-room-pause]').click();
+    const frame: Clip = { x: 0, y: 0, width: 1440, height: 900 };
+    const decode = async (png: Buffer) => (await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true })).data;
+
+    const [plain] = await shoot(page, () => window.__roomDebug!.set({ dither: 0 }), [frame]);
+    const [plainAgain] = await shoot(page, () => window.__roomDebug!.set({ dither: 0 }), [frame]);
+    const [dithered] = await shoot(page, () => window.__roomDebug!.reset(), [frame]);
+    const [ditheredAgain] = await shoot(page, () => window.__roomDebug!.reset(), [frame]);
+    const plainRgb = await decode(plain);
+    const [rect] = findDarkGradients(plainRgb, 1440, 900, 1, { count: 1 });
+    expect(rect, 'the wide view has a dark gradient to measure').toBeTruthy();
+    const crop = (png: Buffer) => sharp(png).extract({ left: rect.left, top: rect.top, width: rect.width, height: rect.height }).png().toBuffer();
+
+    const before = bandingOf(plainRgb, 1440, 900, rect, 1);
+    const after = bandingOf(await decode(dithered), 1440, 900, rect, 1);
+    expect(after.run, `flat steps ${before.run} → ${after.run} CSS px`).toBeLessThan(before.run * shrink);
+    const roomNoise = await difference(await crop(plain), await crop(plainAgain));
+    expect(await difference(await crop(dithered), await crop(ditheredAgain)), 'the dither is the same every frame').toBeLessThanOrEqual(roomNoise + 0.02);
+  });
+}
