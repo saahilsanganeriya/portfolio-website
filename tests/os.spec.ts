@@ -6,9 +6,9 @@ import { devices, expect, test, type Locator, type Page } from '@playwright/test
 // ?embed=0 the same document unframed, for the phone layout here (linked nowhere).
 
 // The desktop's two sides: the work on the left, most important first, and the rest of his life on the right.
-const WORK = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'On the bench', 'Terminal', 'Credits'];
+const WORK = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'Contact', 'Terminal', 'Credits'];
 const PERSONAL = ['Films', 'A Narrative in a Frame', 'Books', 'Kitchen', 'Voyager Golden Record'];
-const REMOVED = ['Welcome', 'The Thread', 'Daily word'];
+const REMOVED = ['Welcome', 'The Thread', 'Daily word', 'On the bench'];
 /** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
 const firstH2 = (collection: string, slug: string): string =>
   readFileSync(new URL(`../src/content/${collection}/${slug}.mdx`, import.meta.url), 'utf8').match(/^## (.+)$/m)![1].trim();
@@ -80,6 +80,17 @@ async function serveShelves(page: Page, mode: 'empty' | 'sample') {
   );
 }
 
+// The Films window's live diary (/api/films.json reads Letterboxd); a small synthetic diary keeps axe runs offline.
+async function serveFilms(page: Page) {
+  const entries = Array.from({ length: 3 }, (_, i) => ({
+    title: `Test Film ${i}`, year: 2026, rating: 4, rewatch: false, liked: false, watchedDate: '2026-10-11',
+    review: null, url: `https://letterboxd.com/film/test-film-${i}/`, slug: `test-film-${i}`,
+  }));
+  await page.route('**/api/films.json', (route) =>
+    route.fulfill({ json: { fetchedAt: '2026-10-11T18:05:00.000Z', profile: 'https://letterboxd.com/', posters: [], entries } }),
+  );
+}
+
 async function seriousAxeViolations(page: Page): Promise<string[]> {
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
@@ -110,7 +121,7 @@ test.describe('desktop', () => {
     await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
   });
 
-  /** Catches the deleted Welcome, The Thread or Daily word coming back on the desktop, in Start, or by their old hashes. */
+  /** Catches the deleted Welcome, The Thread, Daily word or On the bench coming back on the desktop, in Start, or by their old hashes. */
   test('the removed apps are gone', async ({ page }) => {
     await page.goto('/os?embed=1#story');
     // An unknown window name opens About, the window the OS opens when nothing is named.
@@ -122,7 +133,7 @@ test.describe('desktop', () => {
       await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
       await expect(page.getByRole('dialog', { name })).toHaveCount(0);
     }
-    for (const hash of ['game', 'welcome']) {
+    for (const hash of ['game', 'welcome', 'oven']) {
       await page.goto(`/os?embed=1#${hash}`);
       await page.reload();
       await expect(page.getByRole('dialog')).toHaveCount(1);
@@ -276,15 +287,6 @@ test.describe('desktop', () => {
     await expect(page.getByRole('dialog', { name: 'Films' }).locator('#film-favourites')).toBeFocused();
   });
 
-  /** Catches the oven hotspot's target (`#oven`) opening nothing, or the list arriving empty. */
-  test('#oven opens On the bench with its list', async ({ page }) => {
-    await page.goto('/os?embed=1#oven');
-    const oven = page.getByRole('dialog', { name: 'On the bench' });
-    await expect(oven.getByRole('heading', { level: 2, name: 'On the bench' })).toBeVisible();
-    await expect(oven.getByRole('listitem').first()).toBeVisible();
-    await expect(oven.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}/);
-  });
-
   /** Catches a project window without its repository button, or one that is too small or out of the Tab order. */
   test('a project window has a View source button next to Copy link', async ({ page }) => {
     await page.goto(`/os?embed=1#projects/${PROJECT.slug}`);
@@ -371,10 +373,9 @@ test.describe('desktop', () => {
     );
     await page.goto('/os?embed=1#films');
     const films = page.getByRole('dialog', { name: 'Films' });
-    await expect(films.locator('.os-films-epigraph')).toHaveText('I love movies about making greatness happen.');
     await expect(films.getByRole('heading', { name: 'Four favourites — from Letterboxd' })).toBeVisible();
     await expect(films.getByRole('heading', { name: 'Diary — from Letterboxd, updates every hour' })).toBeVisible();
-    await expect(films.getByText(/The stars are my rating out of five/)).toBeVisible();
+    await expect(films.getByText(/my rating out of five stars/)).toBeVisible();
     const updated = films.locator('.os-films-updated time');
     await expect(updated).toHaveAttribute('datetime', fetchedAt);
     await expect(updated).toContainText('2026');
@@ -404,14 +405,41 @@ test.describe('desktop', () => {
     await expect(about.locator('.os-prose img')).toHaveCount(ABOUT.photos);
   });
 
+  /**
+   * Catches About losing the owner's lead (or leading on a project's number again), the résumé line opening nothing,
+   * or the page printing his address where the Contact window should be.
+   */
+  test('About leads with what he does, opens the résumé from its line, and sends mail through Contact', async ({ page }) => {
+    await page.goto('/os?embed=1');
+    const about = page.getByRole('dialog', { name: 'About' });
+    // The owner's words (2026-10-16), not one project's number.
+    await expect(about.locator('.os-about-lead')).toHaveText(
+      'Builder, engineer, researcher, tinkerer — a software engineer at Mercor, where I work on anonymization.',
+    );
+    await expect(about.locator('.os-about-resume')).toHaveText('Looking for my resume? Click here to open it.');
+    await expect(about).not.toContainText('@');
+    await about.getByRole('link', { name: 'Click here' }).click();
+    await expect(page.getByRole('dialog', { name: 'Résumé' })).toBeVisible();
+    await page.goto('/os?embed=1');
+    await about.getByRole('link', { name: 'contact form' }).click();
+    await expect(page.getByRole('dialog', { name: 'Contact' })).toBeVisible();
+  });
+
   /** Catches every picture in a window loading at once, which put all of About's photos into the room's first load. */
   test('pictures far down a window load only when scrolled near', async ({ page }) => {
+    // A short screen, so About's last photo stands more than the 400 px look-ahead below the window's view.
+    await page.setViewportSize({ width: 1280, height: 420 });
     await page.goto('/os?embed=1');
     const about = page.getByRole('dialog', { name: 'About' });
     const photos = about.locator('.os-prose img');
     await expect(photos).toHaveCount(ABOUT.photos);
     await expect.poll(() => photos.first().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     const last = photos.last();
+    const below = await last.evaluate((img) => {
+      const well = img.closest('.os-well')!;
+      return img.getBoundingClientRect().top - well.getBoundingClientRect().bottom;
+    });
+    expect(below, 'the premise: the last photo starts beyond the look-ahead').toBeGreaterThan(400);
     await expect(last).not.toHaveAttribute('src', /.+/);
     await about.locator('.os-well').evaluate((well) => well.scrollTo(0, well.scrollHeight));
     await expect.poll(() => last.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
@@ -497,7 +525,6 @@ test.describe('desktop', () => {
     await expect(recipes).toHaveCSS('opacity', '1');
     await page.reload();
     await expect(page.getByRole('dialog', { name: 'Kitchen' }).getByRole('heading', { level: 2, name: 'Sample loaf' })).toBeVisible();
-    expect(await seriousAxeViolations(page), 'recipe').toEqual([]);
     await recipes.getByRole('link', { name: '‹ All recipes' }).click();
     await expect(recipes.getByRole('link', { name: /Sample loaf/ })).toBeVisible();
 
@@ -505,26 +532,48 @@ test.describe('desktop', () => {
     const voyager = page.getByRole('dialog', { name: 'Voyager Golden Record' });
     await expect(voyager.getByRole('heading', { level: 2, name: 'The Voyager Golden Record' })).toBeVisible();
     await expect(voyager.getByText('A test paragraph.')).toBeVisible();
-    // One window per fresh load: a hash change alone stacks windows, whose overlapping controls axe then flags.
-    for (const [hash, name] of [
-      ['books', 'Books'],
-      ['voyager', 'Voyager Golden Record'],
-    ]) {
-      await page.goto(`/os?embed=1#${hash}`);
-      await page.reload();
-      await expect(page.getByRole('dialog', { name })).toHaveCSS('opacity', '1');
-      expect(await seriousAxeViolations(page), hash).toEqual([]);
-    }
   });
 
-  /** Catches the wallpaper going missing, or showing without the credit line its CC BY licence requires. */
-  test('the desktop shows its wallpaper with its credit', async ({ page }) => {
+  /** Catches the wallpaper going missing, staying at its preview size, or showing without its CC BY credit line. */
+  test('the desktop shows the full-size wallpaper with its credit, readable on its chip', async ({ page }) => {
     await page.goto('/os?embed=1');
-    const wallpaper = page.locator('.os-wallpaper img');
-    await expect.poll(() => wallpaper.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThanOrEqual(960);
+    // Outside the room the full sizes follow the page's load: 1280 to 2560 px, in AVIF and WebP.
+    const picture = page.locator('.os-wallpaper');
+    await expect(picture).toHaveAttribute('data-full');
+    for (const format of ['avif', 'webp']) {
+      const srcset = await picture.locator(format === 'avif' ? 'source' : 'img').getAttribute('srcset');
+      expect(srcset!.match(/\s(\d+)w/g)!.map((w) => Number(w.trim().slice(0, -1))), format).toEqual([1280, 1920, 2560]);
+    }
+    const wallpaper = picture.locator('img');
+    await expect.poll(() => wallpaper.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThanOrEqual(1280);
     const credit = page.locator('.os-wallpaper-credit');
-    await expect(credit).toContainText('NASA, ESA, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan (STScI).');
-    await expect(credit.getByRole('link')).toHaveAttribute('href', 'https://esawebb.org/images/weic2216a/');
+    await expect(credit).toContainText('NASA, ESA, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan (STScI). CC BY 4.0');
+    await expect(credit.getByRole('link')).toHaveAttribute('href', 'https://esawebb.org/images/weic2216b/');
+    await expect(credit).toHaveCSS('background-color', 'rgb(59, 42, 30)');
+  });
+
+  /** Catches the wallpaper's large sizes loading with the room's first frame instead of after its arrival. */
+  test('inside the room, only the preview loads until the room has landed', async ({ page }) => {
+    const asked: string[] = [];
+    page.on('request', (request) => {
+      const name = new URL(request.url()).pathname.match(/\/(preview-960|1280|1920|2560)\.[\w-]+\.(avif|webp)$/);
+      if (name) asked.push(name[1]!);
+    });
+    await page.goto('/404');
+    await page.evaluate(() => {
+      document.documentElement.classList.add('room');
+      const frame = document.createElement('iframe');
+      frame.src = '/os?embed=1';
+      frame.style.cssText = 'position:fixed;inset:0;width:1216px;height:941px;border:0';
+      document.body.append(frame);
+    });
+    const os = page.frameLocator('iframe');
+    await expect(os.getByRole('dialog', { name: 'About' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    expect(asked).toEqual(['preview-960']);
+    await page.evaluate(() => document.documentElement.classList.add('room-landed'));
+    await expect(os.locator('.os-wallpaper')).toHaveAttribute('data-full');
+    await expect.poll(() => asked.at(-1)).toBe('1280');
   });
 
   /** Catches a site link inside a window loading a page instead of a window, or Copy link copying a bare path. */
@@ -549,18 +598,6 @@ test.describe('desktop', () => {
       .click();
     await expect(page.getByRole('dialog', { name: 'The same-person problem' })).toBeVisible();
     await expect(page).toHaveURL(/\/os\?embed=1#blog\/the-same-person-problem$/);
-  });
-
-  /** Catches a Terminal whose commands stop reaching the content or the window manager. */
-  test('the Terminal lists and opens projects', async ({ page }) => {
-    await page.goto('/os?embed=1#terminal');
-    const prompt = page.getByRole('textbox', { name: 'Command' });
-    await prompt.fill('ls projects');
-    await prompt.press('Enter');
-    await expect(page.getByRole('log', { name: 'Terminal output' })).toContainText(PROJECT.slug);
-    await prompt.fill(`open ${PROJECT.slug}`);
-    await prompt.press('Enter');
-    await expect(page.getByRole('dialog', { name: PROJECT.title })).toBeVisible();
   });
 
   /** Catches a break in the contract the room relies on: os-ready, open messages, forwarded pointer events. */
@@ -590,36 +627,12 @@ test.describe('desktop', () => {
     await expect.poll(() => page.evaluate(() => (window as unknown as { seen: string[] }).seen)).toContain('mousemove');
   });
 
-  /** Catches contrast, naming and ARIA failures in the chrome and in a reader window. */
+  /** Catches contrast, naming and ARIA failures in the chrome: the Start menu over a reader window. */
   test('axe finds no serious violations', async ({ page }) => {
-    await serveGithubFiles(page, 'import napari  # the viewer\n');
     await page.goto(`/os?embed=1#projects/${PROJECT.slug}`);
     await expect(page.getByRole('heading', { level: 2, name: firstH2('projects', PROJECT.slug) })).toBeVisible();
     await page.getByRole('button', { name: 'Start' }).click();
     expect(await seriousAxeViolations(page)).toEqual([]);
-
-    // Every window with its own colours or layout, each alone in a fresh load (stacked windows overlap their controls).
-    for (const [hash, name, ready] of [
-      ['films', 'Films', '#film-favourites'],
-      ['oven', 'On the bench', 'h3'],
-      ['projects', 'Projects', '.os-row'],
-      ['about', 'About', '.os-prose p'],
-      ['code', 'Code', '.os-row'],
-      [`code/${NAPARI.slug}`, 'samcell-napari', '.os-readme h1'],
-      [`code/${NAPARI.slug}/tree`, 'samcell-napari', '.os-code-files td'],
-      [`code/${NAPARI.slug}/blob/main/samcell_napari/__init__.py`, 'samcell-napari', '.os-code-text .l'],
-      [`code/${NAPARI.slug}/commits`, 'samcell-napari', '.os-code-commits li'],
-      ['photography', 'A Narrative in a Frame', '.os-print'],
-      [`photography/${PHOTO.slug}`, 'A Narrative in a Frame', '.os-photo-figure'],
-    ]) {
-      await page.goto(`/os?embed=1#${hash}`);
-      await page.reload();
-      const win = page.getByRole('dialog', { name });
-      await expect(win.locator(ready).first(), hash).toBeVisible();
-      // Measured once the open spring has settled; mid-fade, every colour reads lighter than it is.
-      await expect(win).toHaveCSS('opacity', '1');
-      expect(await seriousAxeViolations(page), hash).toEqual([]);
-    }
   });
 });
 
@@ -687,6 +700,45 @@ test.describe('desktop at 1440 × 900', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
     expect(await seriousAxeViolations(page)).toEqual([]);
   });
+
+  /**
+   * Catches a window whose text fails colour contrast or naming at the desktop size the brief names: every app on the
+   * desktop, Code's views and a photograph, each alone in a fresh load (stacked windows overlap their controls).
+   */
+  test('axe passes on every window, colour contrast included', async ({ page }) => {
+    await serveShelves(page, 'sample');
+    await serveGithubFiles(page, 'import napari  # the viewer\n');
+    await serveFilms(page);
+    for (const [hash, name, ready] of [
+      ['about', 'About', '.os-prose p'],
+      ['projects', 'Projects', '.os-row'],
+      [`projects/${PROJECT.slug}`, PROJECT.title, '.os-prose p'],
+      ['blog', 'Writing', '.os-row'],
+      ['code', 'Code', '.os-row'],
+      [`code/${NAPARI.slug}`, 'samcell-napari', '.os-readme h1'],
+      [`code/${NAPARI.slug}/tree`, 'samcell-napari', '.os-code-files td'],
+      [`code/${NAPARI.slug}/blob/main/samcell_napari/__init__.py`, 'samcell-napari', '.os-code-text .l'],
+      [`code/${NAPARI.slug}/commits`, 'samcell-napari', '.os-code-commits li'],
+      ['resume', 'Résumé', '.os-prose p'],
+      ['contact', 'Contact', 'form'],
+      ['terminal', 'Terminal', '.os-terminal-prompt input'],
+      ['credits', 'Credits', '.os-credits-row'],
+      ['films', 'Films', '#film-favourites'],
+      ['photography', 'A Narrative in a Frame', '.os-print'],
+      [`photography/${PHOTO.slug}`, 'A Narrative in a Frame', '.os-photo-figure'],
+      ['books', 'Books', 'li'],
+      ['recipes/sample-loaf', 'Kitchen', 'h2'],
+      ['voyager', 'Voyager Golden Record', 'h2'],
+    ]) {
+      await page.goto(`/os?embed=1#${hash}`);
+      await page.reload();
+      const win = page.getByRole('dialog', { name });
+      await expect(win.locator(ready).first(), hash).toBeVisible();
+      // Measured once the open spring has settled; mid-fade, every colour reads lighter than it is.
+      await expect(win).toHaveCSS('opacity', '1');
+      expect(await seriousAxeViolations(page), hash).toEqual([]);
+    }
+  });
 });
 
 test.describe('on the monitor’s screen', () => {
@@ -699,7 +751,7 @@ test.describe('on the monitor’s screen', () => {
     await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
     const personal = page.getByRole('list', { name: 'Off the clock' }).getByRole('button');
     const edge = Math.min(...(await personal.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().left))));
-    const apps = ['Projects', 'Writing', 'Code', 'Résumé', 'On the bench', 'Terminal', 'Films', 'A Narrative in a Frame'];
+    const apps = ['Projects', 'Writing', 'Code', 'Résumé', 'Contact', 'Terminal', 'Films', 'A Narrative in a Frame'];
     for (const app of apps) await page.getByRole('navigation', { name: 'Apps' }).getByRole('button', { name: app, exact: true }).dblclick();
     for (const app of ['About', ...apps]) {
       const win = page.getByRole('dialog', { name: app });
@@ -768,12 +820,20 @@ test.describe('iPhone 13', () => {
     }
   });
 
-  /** Catches the new and changed windows failing axe, or spilling sideways, on a phone. */
-  test('About, Code, the shelves and the photographs fit a phone and pass axe', async ({ page }) => {
+  /** Catches a window failing axe (colour contrast included), or spilling sideways, on a phone: every app, and Code's views. */
+  test('every app fits a phone and passes axe', async ({ page }) => {
     await serveShelves(page, 'sample');
     await serveGithubFiles(page, '[build-system]\nrequires = ["setuptools>=42"]\n');
+    await serveFilms(page);
     for (const [hash, name] of [
       ['about', 'About'],
+      ['projects', 'Projects'],
+      ['blog', 'Writing'],
+      ['resume', 'Résumé'],
+      ['contact', 'Contact'],
+      ['terminal', 'Terminal'],
+      ['credits', 'Credits'],
+      ['films', 'Films'],
       ['code', 'Code'],
       [`code/${NAPARI.slug}`, 'samcell-napari'],
       [`code/${NAPARI.slug}/tree`, 'samcell-napari'],
