@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { CITIES, nightWeight, type CityId } from '../World/daylight';
 import compositeFrag from './shaders/composite.frag.glsl?raw';
 import downFrag from './shaders/down.frag.glsl?raw';
 import fullscreenVert from './shaders/fullscreen.vert.glsl?raw';
@@ -8,21 +7,19 @@ import practicalVert from './shaders/practical.vert.glsl?raw';
 import upFrag from './shaders/up.frag.glsl?raw';
 import { buildGradeLut, LUT_SIZE, type GradeSettings } from './grade';
 
-/** The look: the grade's table, how strongly the practicals' blurred light is screened over the frame, the film. */
+/** The look: the grade's table, how strongly the practicals' blurred light is screened over the frame, the vignette. */
 export interface FinishSettings {
   grade: GradeSettings;
   bloom: number;
-  grain: number;
   vignette: number;
 }
 
-/** Which parts this frame draws (the quality tier decides), and the clocks: `time` drives the grain, `flicker` the shutter. */
+/** Which parts this frame draws (the quality tier decides); `film` is the vignette, at `vignette` (the settings' or an A/B's). */
 export interface FinishFrame {
   grade: boolean;
   bloom: boolean;
   film: boolean;
-  time: number;
-  flicker: number;
+  vignette: number;
 }
 
 interface Practical {
@@ -31,8 +28,6 @@ interface Practical {
   gain: number;
   /** Display brightness where its bloom starts and where it is full: only a light's bright core glows. */
   knee: [number, number];
-  /** The window's city: its lights glow only after dark there. */
-  city?: CityId;
 }
 
 // Only the room's own light sources bloom; everything else in the bake stays crisp however bright it is.
@@ -46,8 +41,6 @@ const PRACTICALS: Practical[] = [
   { names: ['projection_surface'], gain: 0.45, knee: [0.45, 0.9] },
   { names: ['projector_beam'], gain: 0.5, knee: [0, 0.2] },
   { names: ['nas_led_0', 'nas_led_1', 'nas_led_2', 'nas_led_3'], gain: 1, knee: [0.2, 0.6] },
-  { names: ['window_view_sf'], gain: 0.9, knee: [0.4, 0.8], city: 'sf' },
-  { names: ['window_view_delhi'], gain: 0.9, knee: [0.4, 0.8], city: 'delhi' },
 ];
 // The CRT's screen is the OS hole, so its glow is a constant light behind the glass, masked off the OS itself.
 const CRT_GLOW = new THREE.Color('#9db4c0').multiplyScalar(0.5);
@@ -56,7 +49,6 @@ const BLOOM_LAYER = 11;
 // Millimetres (the world's unit) a surface may sit behind the visible one and still count as seen.
 const DEPTH_BIAS_MM = 6;
 const BLUR_LEVELS = 3;
-const NIGHT_REFRESH_MS = 30_000;
 
 /** Full-screen triangle in its own scene; each pass swaps the material. */
 class FullScreen {
@@ -95,7 +87,7 @@ const passMaterial = (fragmentShader: string, uniforms: Record<string, THREE.IUn
 
 /**
  * The room drawn into a target, then finished onto the canvas in one pass: grade (tone curve + warm table), bloom from
- * the practical lights only, film grain and vignette. The target is drawn exactly as the canvas would be (display
+ * the practical lights only, and the vignette. The target is drawn exactly as the canvas would be (display
  * values, blending in display space), so the room's custom shaders and additive glows look as they were tuned.
  */
 export class FinishingPass {
@@ -103,6 +95,7 @@ export class FinishingPass {
   private readonly sceneTarget: THREE.WebGLRenderTarget;
   private readonly bloomTargets: THREE.WebGLRenderTarget[] = [];
   private readonly lut: THREE.Data3DTexture;
+  private lutBuilt = false;
   private readonly screen = new FullScreen();
   private readonly composite: THREE.ShaderMaterial;
   private readonly down: THREE.ShaderMaterial;
@@ -115,10 +108,9 @@ export class FinishingPass {
     uFar: { value: 1000 },
     uBias: { value: DEPTH_BIAS_MM },
   };
-  private practicals: { mesh: THREE.Mesh; material: THREE.ShaderMaterial; city?: CityId; gain: number }[] = [];
+  private practicals: { mesh: THREE.Mesh; material: THREE.ShaderMaterial }[] = [];
   private crt: THREE.Mesh | null = null;
   private litScene: THREE.Scene | null = null;
-  private nightCheckedAt = -Infinity;
 
   constructor(
     private readonly gl: THREE.WebGLRenderer,
@@ -133,6 +125,8 @@ export class FinishingPass {
       generateMipmaps: false,
       stencilBuffer: false,
       depthTexture: new THREE.DepthTexture(1, 1),
+      // The bloom's depth test reads the resolved depth; the multisampled one is not needed after the resolve.
+      storeMultisampledDepthBuffer: false,
     });
     // three.js encodes sRGB in the shaders (as for the canvas) only for an XR target, and for one stores the bytes
     // as they are; a plain sRGB target would decode the room's display-space glows as linear light. RGBA8 keeps the
@@ -148,13 +142,13 @@ export class FinishingPass {
       );
     }
 
-    this.lut = new THREE.Data3DTexture(buildGradeLut(settings.grade), LUT_SIZE, LUT_SIZE, LUT_SIZE);
+    // Built on first use: no tier grades the room by default, the table is for tuning and a veto (DECISIONS, T73).
+    this.lut = new THREE.Data3DTexture(new Uint8Array(LUT_SIZE ** 3 * 4), LUT_SIZE, LUT_SIZE, LUT_SIZE);
     this.lut.format = THREE.RGBAFormat;
     this.lut.type = THREE.UnsignedByteType;
     this.lut.minFilter = this.lut.magFilter = THREE.LinearFilter;
     this.lut.wrapR = this.lut.wrapS = this.lut.wrapT = THREE.ClampToEdgeWrapping;
     this.lut.unpackAlignment = 1;
-    this.lut.needsUpdate = true;
 
     this.composite = passMaterial(compositeFrag, {
       tScene: { value: this.sceneTarget.texture },
@@ -163,23 +157,38 @@ export class FinishingPass {
       uLutSize: { value: LUT_SIZE },
       uGrade: { value: 1 },
       uBloom: { value: 0 },
-      uTime: { value: 0 },
-      uGrain: { value: 0 },
       uVignette: { value: 0 },
-      uFlicker: { value: 1 },
-      uGrainScale: { value: 1 },
     });
     this.down = passMaterial(downFrag, { tInput: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.up = passMaterial(upFrag, { tInput: { value: null }, uTexel: { value: new THREE.Vector2() } });
   }
 
-  /** Rebuilds the grade's table after `settings.grade` changed (tuning only; the shipped grade is built once). */
+  /** Rebuilds the grade's table from `settings.grade` (at its first use, and after tuning changed it). */
   rebuildLut() {
     this.lut.image.data = buildGradeLut(this.settings.grade);
     this.lut.needsUpdate = true;
+    this.lutBuilt = true;
   }
 
-  setSize(width: number, height: number, grainScale: number) {
+  /** MSAA samples on the scene target (0 = none); a new count rebuilds the target on the next frame. */
+  setSamples(samples: number) {
+    if (this.sceneTarget.samples === samples) return;
+    this.sceneTarget.samples = samples;
+    this.sceneTarget.dispose();
+  }
+
+  /** Bytes the pass's targets hold on the GPU (colour, depth, MSAA renderbuffers, the bloom chain). */
+  memoryBytes() {
+    const { width, height, samples } = this.sceneTarget;
+    const pixels = width * height;
+    // Colour RGBA8 + depth 32-bit; with MSAA, a renderbuffer of each per sample on top of the resolved pair.
+    let bytes = pixels * 8 * (1 + samples);
+    const bloomTexel = this.bloomTargets[0].texture.type === THREE.HalfFloatType ? 8 : 4;
+    for (const target of this.bloomTargets) bytes += target.width * target.height * bloomTexel;
+    return bytes;
+  }
+
+  setSize(width: number, height: number) {
     this.sceneTarget.setSize(width, height);
     // The bloom starts at half size; each blur level halves it again, then climbs back to a quarter.
     const size = (level: number) => [Math.max(1, Math.round(width / 2 ** level)), Math.max(1, Math.round(height / 2 ** level))];
@@ -188,7 +197,6 @@ export class FinishingPass {
       const [w, h] = size(level);
       this.bloomTargets[i].setSize(w, h);
     }
-    this.composite.uniforms.uGrainScale.value = grainScale;
   }
 
   /** Draws the room into the target and finishes it onto the canvas. */
@@ -199,12 +207,10 @@ export class FinishingPass {
 
     const bloom = frame.bloom && settings.bloom > 0 && this.renderBloom(scene, camera);
     const u = this.composite.uniforms;
+    if (frame.grade && !this.lutBuilt) this.rebuildLut();
     u.uGrade.value = frame.grade ? 1 : 0;
     u.uBloom.value = bloom ? settings.bloom : 0;
-    u.uTime.value = frame.time;
-    u.uGrain.value = frame.film ? settings.grain : 0;
-    u.uVignette.value = frame.film ? settings.vignette : 0;
-    u.uFlicker.value = frame.flicker;
+    u.uVignette.value = frame.film ? frame.vignette : 0;
     this.screen.draw(gl, this.composite, null);
   }
 
@@ -212,7 +218,6 @@ export class FinishingPass {
   private renderBloom(scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
     if (this.litScene !== scene) this.findPracticals(scene);
     if (!this.practicals.length) return false;
-    this.updateNight();
 
     const { gl } = this;
     const source = this.bloomTargets[0];
@@ -266,12 +271,12 @@ export class FinishingPass {
         side: THREE.DoubleSide,
       });
 
-    for (const { names, gain, knee, city } of PRACTICALS) {
+    for (const { names, gain, knee } of PRACTICALS) {
       for (const name of names) {
         scene.getObjectByName(name)?.traverse((node) => {
           if (!(node instanceof THREE.Mesh) || node.name.startsWith('hit_')) return;
           node.layers.enable(BLOOM_LAYER);
-          this.practicals.push({ mesh: node, material: material(gain, knee), city, gain });
+          this.practicals.push({ mesh: node, material: material(gain, knee) });
         });
       }
     }
@@ -290,16 +295,8 @@ export class FinishingPass {
       this.crt.name = 'finish_crt_glow';
       scene.add(this.crt);
       this.crt.updateMatrixWorld();
-      this.practicals.push({ mesh: this.crt, material: glow, gain: 1 });
+      this.practicals.push({ mesh: this.crt, material: glow });
     }
-  }
-
-  private updateNight() {
-    const now = performance.now();
-    if (now - this.nightCheckedAt < NIGHT_REFRESH_MS) return;
-    this.nightCheckedAt = now;
-    const date = new Date();
-    for (const p of this.practicals) if (p.city) p.material.uniforms.uGain.value = p.gain * nightWeight(CITIES[p.city], date);
   }
 
   dispose() {

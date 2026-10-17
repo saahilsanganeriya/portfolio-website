@@ -221,6 +221,16 @@ export class Application implements RoomHandle {
     this.renderer.gl.domElement.addEventListener('webglcontextlost', () => this.options.onLost?.());
     this.quality = new Quality(this.light ? LIGHT : FULL, (tier) => this.applyTier(tier));
     this.renderer.setTier(this.quality.tier);
+    // Captures and A/Bs (window.__roomDebug): the same moment of the idle drift, and switches applied at once.
+    this.renderer.hooks = {
+      setClock: (seconds) => {
+        this.clock = seconds;
+        this.dirty = true;
+      },
+      reapply: () => {
+        if (this.world) this.applyTier(this.quality.tier);
+      },
+    };
   }
 
   async load() {
@@ -243,7 +253,7 @@ export class Application implements RoomHandle {
     );
     if (this.light) this.addMonitorProxy();
     this.effects = new Effects(this.nodes, this.scene);
-    this.effects.setTier(this.quality.tier);
+    this.effects.setTier(this.renderer.effective(this.quality.tier));
     this.audio = new RoomAudio(
       { crt: this.nodes.monitor.position, projector: this.nodes.projector?.lens ?? null, desk: this.nodes.framings.desk.target },
       root,
@@ -262,7 +272,7 @@ export class Application implements RoomHandle {
       reducedMotion: Boolean(this.options.reducedMotion),
       light: this.light,
     });
-    this.world.setTier(this.quality.tier);
+    this.world.setTier(this.renderer.effective(this.quality.tier));
     this.hover = new HoverReactions(root, this.nodes.proxies, this.camera.instance, Boolean(this.options.reducedMotion));
     this.navigation = new Navigation(this.container, this.camera, this.nodes, {
       fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
@@ -283,6 +293,7 @@ export class Application implements RoomHandle {
 
     await this.world.load();
     report(0.85, 'posters');
+    this.renderer.prepareTextures(this.scene);
     // Compile every shader and upload the textures now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
     this.render();
@@ -374,7 +385,7 @@ export class Application implements RoomHandle {
     return projector !== null && projector.running && projector.state.program === 'story';
   }
 
-  /** Stops every motion that runs by itself (sway, dust, LEDs, grain); the camera still answers clicks. */
+  /** Stops every motion that runs by itself (sway, dust, LEDs); the camera still answers clicks. */
   setPaused(paused: boolean) {
     this.paused = paused;
     if (paused) this.takeOver();
@@ -537,14 +548,14 @@ export class Application implements RoomHandle {
   }
 
   private pixelRatio(tier: QualityTier = this.quality.tier) {
-    return Math.min(window.devicePixelRatio || 1, this.quality.ladder.dprCap) * tier.resolution;
+    return this.renderer.pixelRatio(this.quality.ladder.dprCap, tier);
   }
 
   private applyTier(tier: QualityTier) {
     this.renderer.setTier(tier);
     this.renderer.setPixelRatio(this.pixelRatio(tier));
-    this.effects.setTier(tier);
-    this.world.setTier(tier);
+    this.effects.setTier(this.renderer.effective(tier));
+    this.world.setTier(this.renderer.effective(tier));
     this.dirty = true;
   }
 
@@ -619,7 +630,7 @@ export class Application implements RoomHandle {
 
   private render() {
     this.renderer.gl.info.reset();
-    this.renderer.render(this.scene, this.cssScene, this.camera.instance, this.clock, this.effects.flicker);
+    this.renderer.render(this.scene, this.cssScene, this.camera.instance);
     this.lastView.copy(this.camera.instance.matrixWorld);
     this.dirty = false;
   }

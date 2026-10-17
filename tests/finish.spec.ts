@@ -9,6 +9,23 @@ test.describe.configure({ timeout: 240_000 });
 
 type Clip = { x: number; y: number; width: number; height: number };
 
+/** The mean of the steepest 5% of luma gradients in a shot (levels per pixel): aliased edges step harder. */
+async function edgeSteepness(png: Buffer) {
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height } = info;
+  const y = (x: number, r: number) => {
+    const i = (r * width + x) * 3;
+    return 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+  };
+  const steps: number[] = [];
+  for (let r = 1; r < height - 1; r++) {
+    for (let x = 1; x < width - 1; x++) steps.push(Math.hypot(y(x + 1, r) - y(x - 1, r), y(x, r + 1) - y(x, r - 1)) / 2);
+  }
+  steps.sort((a, b) => b - a);
+  const top = steps.slice(0, Math.ceil(steps.length * 0.05));
+  return top.reduce((sum, v) => sum + v, 0) / top.length;
+}
+
 /** Mean absolute difference per channel (0–255) between two shots of the same clip. */
 async function difference(a: Buffer, b: Buffer) {
   const [pa, pb] = await Promise.all([a, b].map((png) => sharp(png).removeAlpha().raw().toBuffer()));
@@ -50,7 +67,7 @@ test('the finishing pass changes the room but never the OS on the monitor', asyn
     page,
     () => {
       window.__finish!.force = { grade: true, bloom: true, film: true };
-      window.__finish!.set({ grade: { tone: 'aces', exposure: 2, toe: [0, 0.001], keepHue: 0, strength: 1 }, bloom: 4, grain: 0, vignette: 0.6 });
+      window.__finish!.set({ grade: { tone: 'aces', exposure: 2, toe: [0, 0.001], keepHue: 0, strength: 1 }, bloom: 4, vignette: 0.6 });
     },
     [os, room],
   );
@@ -59,4 +76,24 @@ test('the finishing pass changes the room but never the OS on the monitor', asyn
   const floor = await difference(osPlain, osAgain);
   expect(await difference(roomPlain, roomLoud), 'the room is finished').toBeGreaterThan(10);
   expect(await difference(osPlain, osLoud), 'the OS is untouched').toBeLessThan(floor + 1);
+});
+
+/**
+ * Catches the room's edges losing their antialiasing on a machine that holds the top tier: the scene target without
+ * samples, or the room drawn straight onto the canvas (antialias: false). The keyboard's keys and the monitor's
+ * edges step from pixel to pixel without it.
+ */
+test('the top tier draws antialiased edges', async ({ page }) => {
+  await page.addInitScript(() => ((window as unknown as { __roomTier: number }).__roomTier = 0));
+  await page.goto('/');
+  await page.waitForFunction(() => window.__room?.landedAt != null && !window.__room.moving, null, { timeout: 180_000 });
+  await page.evaluate(() => window.__room!.goto('desk'));
+  await page.waitForFunction(() => window.__room!.phase === 'desk' && !window.__room!.moving, null, { timeout: 60_000 });
+  await page.mouse.move(2, 2);
+  await page.locator('[data-room-pause]').click();
+  const monitor = (await page.evaluate(() => window.__room!.point('monitor')))!;
+  const edges: Clip = { x: monitor.x - 260, y: monitor.y + 60, width: 520, height: 220 };
+  const [shipped] = await shoot(page, () => window.__roomDebug!.reset(), [edges]);
+  const [aliased] = await shoot(page, () => window.__roomDebug!.set({ samples: 0 }), [edges]);
+  expect(await edgeSteepness(shipped), 'MSAA softens the steepest steps').toBeLessThan((await edgeSteepness(aliased)) * 0.97);
 });

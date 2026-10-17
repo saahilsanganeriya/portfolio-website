@@ -1,17 +1,20 @@
 import * as THREE from 'three';
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js';
 import { FinishingPass, type FinishFrame, type FinishSettings } from '../post/FinishingPass';
-import filmFrag from '../shaders/film.frag.glsl?raw';
-import filmVert from '../shaders/film.vert.glsl?raw';
+import { TexelDebug, type TexelStat } from '../post/TexelDebug';
 import type { QualityTier } from './Quality';
 
-// The shipped look; the T53 rows in DECISIONS.md hold the comparison it came from.
+// The look the finishing pass draws; the tiers pick the parts (no tier grades: the bake ships as baked). The T53 and T73
+// rows in DECISIONS.md hold the comparisons. No grain: it was the largest share of the idle drift's crawl at every
+// amplitude tried (T73 A/B).
 const FINISH: FinishSettings = {
   grade: { tone: 'aces', exposure: 0.4, toe: [0.03, 0.3], keepHue: 0.85, strength: 0.6 },
   bloom: 0.85,
-  grain: 0.05,
   vignette: 0.42,
 };
+// Every atlas is filtered this anisotropically (or the GPU's maximum, if lower): the floor and the desk top are seen at
+// grazing angles, where plain trilinear filtering blurs them and steps between mip levels as the camera drifts.
+export const ANISOTROPY = 8;
 
 type Parts = Pick<FinishFrame, 'grade' | 'bloom' | 'film'>;
 
@@ -23,27 +26,98 @@ export interface FinishProbe {
   force: Partial<Parts> | null;
 }
 
+/** The render's A/B switches (`window.__roomDebug.set`): each overrides what the tier or the shipped look says. */
+export interface RenderSwitches {
+  /** MSAA samples on the scene target (0 = off). */
+  samples: number;
+  /** Cap on the device pixel ratio. */
+  dprCap: number;
+  anisotropy: number;
+  grade: boolean;
+  bloom: boolean;
+  vignette: number;
+  halos: boolean;
+  motes: boolean;
+}
+
+/** Measurement hook for captures and the texel view; the application fills in what only it can do. */
+export interface RoomDebug {
+  readonly switches: Partial<RenderSwitches>;
+  set(patch: Partial<RenderSwitches>): void;
+  /** Back to what the tier and the shipped look say. */
+  reset(): void;
+  /** Draws every baked surface in its texel-density band, with a legend (also `?debug=texels`). */
+  texels(on: boolean): void;
+  /** Per-surface texel density for the current view (turns the texel view on). */
+  texelStats(): TexelStat[];
+  /** Sets the ambient clock (seconds), so two captures of the idle drift start from the same moment. */
+  setClock(seconds: number): void;
+  /** The device pixel ratio the room draws at, and the GPU memory it holds. */
+  readonly pixelRatio: number;
+}
+
+/** What the GPU holds for the room: textures (per texture) and the render targets, estimated from their sizes. */
+export interface GpuMemory {
+  textures: { name: string; width: number; height: number; format: string; bytes: number }[];
+  textureBytes: number;
+  targetBytes: number;
+  totalBytes: number;
+  /** three.js's own counts (renderer.info.memory). */
+  info: { textures: number; geometries: number };
+}
+
 declare global {
   interface Window {
     __finish?: FinishProbe;
+    __roomDebug?: RoomDebug;
   }
 }
 
+// Bytes per texel of what a compressed texture transcodes to (KTX2Loader's targets).
+const COMPRESSED_BYTES: Record<number, [string, number]> = {
+  [THREE.RGBA_ASTC_4x4_Format]: ['ASTC 4x4', 1],
+  [THREE.RGBA_BPTC_Format]: ['BC7', 1],
+  [THREE.RGB_S3TC_DXT1_Format]: ['BC1', 0.5],
+  [THREE.RGBA_S3TC_DXT1_Format]: ['BC1', 0.5],
+  [THREE.RGBA_S3TC_DXT5_Format]: ['BC3', 1],
+  [THREE.RGB_ETC1_Format]: ['ETC1', 0.5],
+  [THREE.RGB_ETC2_Format]: ['ETC2', 0.5],
+  [THREE.RGBA_ETC2_EAC_Format]: ['ETC2 RGBA', 1],
+  [THREE.RGB_PVRTC_4BPPV1_Format]: ['PVRTC', 0.5],
+};
+
+/** GPU bytes of one texture: compressed levels as stored, anything else as RGBA8 with a third more for mipmaps. */
+export function textureBytes(texture: THREE.Texture): { width: number; height: number; format: string; bytes: number } {
+  if (texture instanceof THREE.CompressedTexture) {
+    const levels = texture.mipmaps as { data: ArrayBufferView; width: number; height: number }[];
+    const [format = 'compressed', perTexel = 1] = COMPRESSED_BYTES[texture.format as number] ?? [];
+    const bytes = levels.reduce((sum, level) => sum + (level.data?.byteLength || level.width * level.height * perTexel), 0);
+    return { width: levels[0]?.width ?? 0, height: levels[0]?.height ?? 0, format, bytes };
+  }
+  const image = texture.image as { width?: number; height?: number } | null;
+  const width = image?.width ?? 0;
+  const height = image?.height ?? 0;
+  const mips = texture.generateMipmaps && texture.minFilter !== THREE.LinearFilter && texture.minFilter !== THREE.NearestFilter ? 4 / 3 : 1;
+  return { width, height, format: 'RGBA8', bytes: Math.round(width * height * 4 * mips) };
+}
+
 /**
- * Two layers, as in Henry's scene: a CSS3D layer holding the monitor iframe, and above it a transparent WebGL canvas
- * that punches an alpha hole where the screen is. The finishing pass (grade, bloom, film) draws the room into a target
- * and then onto that canvas; on the tier with film only, the old film pass blends straight over the canvas instead.
+ * Two layers, as in Henry's scene: a CSS3D layer holding the monitor iframe, and above it a WebGL canvas that punches
+ * an alpha hole where the screen is. The room draws into a multisampled target and the finishing pass (grade, bloom,
+ * vignette) resolves it onto the canvas; a tier with none of those and no MSAA draws straight onto the canvas.
  */
 export class RoomRenderer {
   readonly gl: THREE.WebGLRenderer;
   readonly css: CSS3DRenderer;
   private readonly finish: FinishingPass;
   private readonly probe: FinishProbe;
-  private parts: Parts = { grade: true, bloom: true, film: true };
-  private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  private readonly filmScene = new THREE.Scene();
-  private readonly filmCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  private readonly filmMaterial: THREE.ShaderMaterial;
+  private readonly texelView = new TexelDebug();
+  private tier!: QualityTier;
+  private readonly switches: Partial<RenderSwitches> = {};
+  private lastScene: THREE.Scene | null = null;
+  private lastCamera: THREE.Camera | null = null;
+  /** The application's side of the debug hook: set the clock, re-apply the tier (pixel ratio, halos, dust), redraw. */
+  hooks: { setClock(seconds: number): void; reapply(): void } = { setClock: () => {}, reapply: () => {} };
 
   constructor(webglHost: HTMLElement, cssHost: HTMLElement) {
     this.gl = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance', stencil: false });
@@ -53,34 +127,6 @@ export class RoomRenderer {
 
     this.css = new CSS3DRenderer();
     cssHost.appendChild(this.css.domElement);
-
-    this.filmMaterial = new THREE.ShaderMaterial({
-      vertexShader: filmVert,
-      fragmentShader: filmFrag,
-      uniforms: {
-        uTime: { value: 0 },
-        uGrain: { value: FINISH.grain },
-        uVignette: { value: FINISH.vignette },
-        uFlicker: { value: 1 },
-        uGrainScale: { value: 1 },
-      },
-      depthTest: false,
-      depthWrite: false,
-      transparent: true,
-      blending: THREE.CustomBlending,
-      blendEquation: THREE.AddEquation,
-      blendSrc: THREE.DstColorFactor,
-      blendDst: THREE.SrcAlphaFactor,
-      blendEquationAlpha: THREE.AddEquation,
-      blendSrcAlpha: THREE.ZeroFactor,
-      blendDstAlpha: THREE.OneFactor,
-    });
-    // One triangle that covers the screen.
-    const triangle = new THREE.BufferGeometry();
-    triangle.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
-    const filmMesh = new THREE.Mesh(triangle, this.filmMaterial);
-    filmMesh.frustumCulled = false;
-    this.filmScene.add(filmMesh);
 
     const finish = new FinishingPass(this.gl, structuredClone(FINISH));
     this.finish = finish;
@@ -93,21 +139,31 @@ export class RoomRenderer {
       force: null,
     };
     window.__finish = this.probe;
+    this.installDebug();
   }
 
   setTier(tier: QualityTier) {
-    this.parts = { grade: tier.grade, bloom: tier.bloom, film: tier.film };
+    this.tier = tier;
+    this.finish.setSamples(this.switches.samples ?? tier.msaa);
+  }
+
+  /** The tier with the debug switches over it: what the effects and the world should draw. */
+  effective(tier: QualityTier): QualityTier {
+    const { halos, motes } = this.switches;
+    return { ...tier, ...(halos !== undefined && { halos }), ...(motes !== undefined && { motes: motes ? tier.motes || 600 : 0 }) };
+  }
+
+  /** The device pixel ratio a tier draws at, under the ladder's cap (or the debug switch's). */
+  pixelRatio(dprCap: number, tier: QualityTier) {
+    return Math.min(window.devicePixelRatio || 1, this.switches.dprCap ?? dprCap) * tier.resolution;
   }
 
   setSize(width: number, height: number, pixelRatio: number) {
     this.gl.setPixelRatio(pixelRatio);
     this.gl.setSize(width, height);
     this.css.setSize(width, height);
-    // Grain cells stay about one CSS pixel whatever the render scale.
-    const grainScale = Math.max(1, pixelRatio);
-    this.filmMaterial.uniforms.uGrainScale.value = grainScale;
     const buffer = this.gl.getDrawingBufferSize(new THREE.Vector2());
-    this.finish.setSize(buffer.x, buffer.y, grainScale);
+    this.finish.setSize(buffer.x, buffer.y);
   }
 
   setPixelRatio(pixelRatio: number) {
@@ -115,34 +171,134 @@ export class RoomRenderer {
     this.setSize(size.x, size.y, pixelRatio);
   }
 
-  render(scene: THREE.Scene, cssScene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, flicker: number) {
-    const parts = { ...this.parts, ...this.probe.force };
-    // Reduced motion: the grain holds still and the shutter does not flicker.
-    const still = this.reducedMotion.matches;
-    const frame: FinishFrame = { ...parts, time: still ? 0 : time, flicker: still ? 1 : flicker };
-    if (parts.grade || parts.bloom) this.finish.render(scene, camera, frame);
-    else {
-      this.gl.render(scene, camera);
-      if (parts.film) {
-        const u = this.filmMaterial.uniforms;
-        u.uTime.value = frame.time;
-        u.uFlicker.value = frame.flicker;
-        u.uGrain.value = this.finish.settings.grain;
-        u.uVignette.value = this.finish.settings.vignette;
-        this.gl.autoClear = false;
-        this.gl.render(this.filmScene, this.filmCamera);
-        this.gl.autoClear = true;
+  /** The clear colour behind the set (floorplan.json `voidColor`); without one the canvas stays clear, as before. */
+  setVoidColor(color: THREE.ColorRepresentation | null) {
+    if (color === null) this.gl.setClearColor(0x000000, 0);
+    else this.gl.setClearColor(color, 1);
+  }
+
+  /** Anisotropic filtering on every texture under `root` (atlases, the window, art), as many taps as the GPU allows. */
+  prepareTextures(root: THREE.Object3D) {
+    const anisotropy = this.anisotropy();
+    root.traverse((node) => {
+      if (!(node instanceof THREE.Mesh)) return;
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+        for (const value of Object.values(material)) if (value instanceof THREE.Texture) this.filter(value, anisotropy);
+        for (const uniform of Object.values((material as THREE.ShaderMaterial).uniforms ?? {})) {
+          if (uniform?.value instanceof THREE.Texture) this.filter(uniform.value, anisotropy);
+        }
       }
+    });
+  }
+
+  /** The anisotropy textures get: the debug switch's, or ANISOTROPY, within what the GPU allows. */
+  anisotropy() {
+    return Math.max(1, Math.min(this.switches.anisotropy ?? ANISOTROPY, this.gl.capabilities.getMaxAnisotropy()));
+  }
+
+  private filter(texture: THREE.Texture, anisotropy: number) {
+    if (texture.anisotropy === anisotropy || texture.minFilter === THREE.NearestFilter) return;
+    texture.anisotropy = anisotropy;
+    // Already on the GPU: the sampler is set on upload.
+    if (texture.version > 0) texture.needsUpdate = true;
+  }
+
+  render(scene: THREE.Scene, cssScene: THREE.Scene, camera: THREE.PerspectiveCamera) {
+    this.lastScene = scene;
+    this.lastCamera = camera;
+    if (this.texelView.enabled) {
+      this.gl.setRenderTarget(null);
+      this.texelView.render(this.gl, scene, camera);
+      this.css.render(cssScene, camera);
+      return;
+    }
+    const tier = this.tier;
+    const s = this.switches;
+    const parts: Parts = { grade: s.grade ?? tier.grade, bloom: s.bloom ?? tier.bloom, film: tier.film, ...this.probe.force };
+    const vignette = s.vignette ?? this.finish.settings.vignette;
+    const frame: FinishFrame = { ...parts, film: parts.film && vignette > 0, vignette };
+    const antialiased = (s.samples ?? tier.msaa) > 0;
+    if (antialiased || parts.grade || parts.bloom || frame.film) this.finish.render(scene, camera, frame);
+    else {
+      this.gl.setRenderTarget(null);
+      this.gl.render(scene, camera);
     }
     this.css.render(cssScene, camera);
   }
 
+  /** GPU memory: every texture the scene's materials hold, and the render targets. */
+  memory(scene: THREE.Scene): GpuMemory {
+    const seen = new Set<unknown>();
+    const textures: GpuMemory['textures'] = [];
+    const add = (texture: THREE.Texture) => {
+      // Render targets' own textures are counted with the targets.
+      if (seen.has(texture.source) || texture.version === 0 || texture.isRenderTargetTexture || texture instanceof THREE.DepthTexture) return;
+      seen.add(texture.source);
+      textures.push({ name: texture.name || '(unnamed)', ...textureBytes(texture) });
+    };
+    scene.traverse((node) => {
+      const material = (node as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!material) return;
+      for (const m of Array.isArray(material) ? material : [material]) {
+        for (const value of Object.values(m)) if (value instanceof THREE.Texture) add(value);
+        for (const uniform of Object.values((m as THREE.ShaderMaterial).uniforms ?? {})) if (uniform?.value instanceof THREE.Texture) add(uniform.value);
+      }
+    });
+    textures.sort((a, b) => b.bytes - a.bytes);
+    const textureTotal = textures.reduce((sum, t) => sum + t.bytes, 0);
+    const buffer = this.gl.getDrawingBufferSize(new THREE.Vector2());
+    // The canvas's own colour and depth buffers, then the finishing pass's targets.
+    const targetBytes = buffer.x * buffer.y * 8 + this.finish.memoryBytes();
+    const { textures: count, geometries } = this.gl.info.memory;
+    return { textures, textureBytes: textureTotal, targetBytes, totalBytes: textureTotal + targetBytes, info: { textures: count, geometries } };
+  }
+
+  private installDebug() {
+    const renderer = this;
+    const texels = (on: boolean) => {
+      if (on && renderer.lastScene) renderer.texelView.enable(renderer.lastScene);
+      else if (!on) renderer.texelView.disable();
+      renderer.hooks.reapply();
+    };
+    window.__roomDebug = {
+      switches: this.switches,
+      set(patch) {
+        Object.assign(renderer.switches, patch);
+        renderer.setTier(renderer.tier);
+        if ('anisotropy' in patch && renderer.lastScene) renderer.prepareTextures(renderer.lastScene);
+        renderer.hooks.reapply();
+      },
+      reset() {
+        for (const key of Object.keys(renderer.switches)) delete renderer.switches[key as keyof RenderSwitches];
+        this.set({ anisotropy: undefined });
+      },
+      texels,
+      texelStats() {
+        if (!renderer.lastScene || !renderer.lastCamera) return [];
+        texels(true);
+        return renderer.texelView.measure(renderer.gl, renderer.lastScene, renderer.lastCamera);
+      },
+      setClock(seconds) {
+        renderer.hooks.setClock(seconds);
+      },
+      get pixelRatio() {
+        return renderer.gl.getPixelRatio();
+      },
+    };
+    if (new URLSearchParams(location.search).get('debug') === 'texels') {
+      // The scene is known once the first frame has drawn.
+      const once = () => (this.lastScene ? texels(true) : requestAnimationFrame(once));
+      requestAnimationFrame(once);
+    }
+  }
+
   dispose() {
+    this.texelView.dispose();
     this.finish.dispose();
-    this.filmMaterial.dispose();
     this.gl.dispose();
     this.gl.domElement.remove();
     this.css.domElement.remove();
     delete window.__finish;
+    delete window.__roomDebug;
   }
 }

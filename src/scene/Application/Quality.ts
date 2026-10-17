@@ -1,12 +1,19 @@
 export interface QualityTier {
   /** Multiplier on the capped device pixel ratio. */
   resolution: number;
-  /** The finishing pass: the tone curve and warm grade, bloom on the practical lights, film grain and vignette. */
+  /** MSAA samples on the room's render target (0 = none). */
+  msaa: number;
+  /**
+   * The finishing pass: the tone curve and warm grade (off on every tier: the bake is already Blender's AgX render, and
+   * a second curve on it is a double tone map), bloom on the practical lights, the vignette (`film`).
+   */
   grade: boolean;
   bloom: boolean;
   film: boolean;
   motes: number;
   halos: boolean;
+  /** Live shine on gloss-tagged surfaces (T79 reads it): on wherever the machine has headroom. */
+  shine: boolean;
 }
 
 export interface QualityLadder {
@@ -18,24 +25,33 @@ export interface QualityLadder {
 
 export const FULL: QualityLadder = {
   tiers: [
-    { resolution: 1, grade: true, bloom: true, film: true, motes: 600, halos: true },
-    { resolution: 0.8, grade: true, bloom: true, film: true, motes: 360, halos: true },
-    { resolution: 0.62, grade: true, bloom: true, film: true, motes: 200, halos: true },
-    { resolution: 0.5, grade: true, bloom: false, film: true, motes: 120, halos: false },
-    { resolution: 0.4, grade: false, bloom: false, film: false, motes: 60, halos: false },
+    { resolution: 1, msaa: 4, grade: false, bloom: true, film: true, motes: 600, halos: true, shine: true },
+    { resolution: 0.8, msaa: 4, grade: false, bloom: true, film: true, motes: 360, halos: true, shine: true },
+    { resolution: 0.62, msaa: 4, grade: false, bloom: true, film: true, motes: 200, halos: true, shine: true },
+    { resolution: 0.5, msaa: 4, grade: false, bloom: false, film: true, motes: 120, halos: false, shine: true },
+    { resolution: 0.4, msaa: 0, grade: false, bloom: false, film: false, motes: 60, halos: false, shine: false },
+    // At the DPR cap of 2 this is the old bottom tier's 0.6 device pixels per CSS pixel.
+    { resolution: 0.3, msaa: 0, grade: false, bloom: false, film: false, motes: 60, halos: false, shine: false },
   ],
-  dprCap: 1.5,
+  dprCap: 2,
 };
 
-/** Phones and small windows: one CSS pixel per pixel at most, a little dust, no halos, the grade without bloom or grain. */
+/** Phones and small windows: one CSS pixel per pixel at most, a little dust, no halos, the grade without bloom or vignette. */
 export const LIGHT: QualityLadder = {
   tiers: [
-    { resolution: 1, grade: true, bloom: false, film: false, motes: 120, halos: false },
-    { resolution: 0.8, grade: true, bloom: false, film: false, motes: 60, halos: false },
-    { resolution: 0.62, grade: false, bloom: false, film: false, motes: 30, halos: false },
+    { resolution: 1, msaa: 4, grade: false, bloom: false, film: false, motes: 120, halos: false, shine: true },
+    { resolution: 0.8, msaa: 4, grade: false, bloom: false, film: false, motes: 60, halos: false, shine: true },
+    { resolution: 0.62, msaa: 0, grade: false, bloom: false, film: false, motes: 30, halos: false, shine: false },
   ],
   dprCap: 1,
 };
+
+declare global {
+  interface Window {
+    /** Pins the quality tier before the page loads (screenshots and captures). */
+    __roomTier?: number;
+  }
+}
 
 const TARGET_FPS = 50;
 const STALL_MS = 250;
