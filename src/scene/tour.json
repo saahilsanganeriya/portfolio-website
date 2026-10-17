@@ -2,50 +2,35 @@
   "stops": [
     {
       "id": "desk",
-      "label": "Desk",
-      "camera": "cam_tour_0",
-      "caption": "My desk. The monitor holds my projects, writing and code, and the NAS beside it is my home lab."
+      "caption": "Projects, writing and code are on the monitor. The NAS next to it runs my film library."
     },
     {
       "id": "window",
-      "label": "Window and mango",
-      "camera": "cam_tour_1",
-      "caption": "San Francisco on the left, Delhi on the right, each lit by its own clock. The mango plant is for the seed I planted in Delhi in kindergarten."
+      "caption": "San Francisco and Delhi: where I live and where I grew up. The mango on the sill is for the one I planted in Delhi as a kid."
     },
     {
       "id": "space",
-      "label": "Space wall",
-      "camera": "cam_tour_3",
-      "distance": 1.6,
-      "caption": "The Voyager Golden Record and the Pale Blue Dot. Each one opens the story behind it."
+      "caption": "The Voyager Golden Record and the Pale Blue Dot. Each opens what I wrote about it."
     },
     {
-      "id": "armchair",
-      "label": "Armchair and books",
-      "camera": "cam_tour_9",
-      "distance": 1.1,
-      "caption": "The reading corner. The shelf holds my favourite books: Murakami, Yoshimoto, Vuong and Greene."
+      "id": "books",
+      "caption": "My favourite books: Murakami, Yoshimoto, Vuong and Greene. Click the shelf for the list."
     },
     {
       "id": "kitchen",
-      "label": "Kitchen nook",
-      "camera": "cam_tour_4",
-      "distance": 1.15,
-      "caption": "Coffee and baking. Open the oven for the recipes I keep coming back to."
+      "caption": "The espresso machine pulls a shot when you click it. The oven opens on my recipes."
     },
     {
-      "id": "projector",
-      "label": "Projector",
-      "camera": "cam_tour_6",
-      "when": "film",
-      "caption": "The projector is playing my story, a short silent film from Delhi to here."
+      "id": "darkroom",
+      "caption": "Photos from my film and digital cameras. Click a print to open it."
     },
     {
       "id": "posters",
-      "label": "Posters and lava lamp",
-      "camera": "cam_tour_5",
-      "distance": 1.15,
-      "caption": "My four favourite films on Letterboxd, lit by the lava lamp under them."
+      "caption": "My four favourite films on Letterboxd. Click the lava lamp under them to change its colour."
+    },
+    {
+      "id": "records",
+      "caption": "Pick a record from the crate and it plays instead of the room's music."
     }
   ]
 }

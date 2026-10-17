@@ -3,11 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { brakedTime, fromGlidePose, glidePose, glideTime, planGlide, toGlidePose } from '../src/scene/Camera/glide';
 
 // The played tour's glide over the real room: the framings come from public/room/room.glb (its cam_* empties sit at
-// the scene's top level, in metres) and the stops from src/scene/tour.json, as the room plays them at 1440 × 900.
+// the scene's top level, in metres) and the stops from public/room/floorplan.json (those src/scene/tour.json has a
+// caption for), as the room plays them at 1440 × 900.
 const glb = readFileSync(new URL('../public/room/room.glb', import.meta.url));
 const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString()) as { nodes: { name: string; translation?: number[]; extras?: { fov_deg?: number } }[] };
-const floorplan = JSON.parse(readFileSync(new URL('../public/room/floorplan.json', import.meta.url), 'utf8')) as { outline: [number, number][]; walls: [number, number][][] };
-const tour = JSON.parse(readFileSync(new URL('../src/scene/tour.json', import.meta.url), 'utf8')) as { stops: { camera: string; distance?: number }[] };
+const floorplan = JSON.parse(readFileSync(new URL('../public/room/floorplan.json', import.meta.url), 'utf8')) as {
+  outline: [number, number][];
+  walls: [number, number][][];
+  stops: { id: string; camera: string }[];
+};
+const tour = JSON.parse(readFileSync(new URL('../src/scene/tour.json', import.meta.url), 'utf8')) as { stops: { id: string }[] };
+const captioned = new Set(tour.stops.map((s) => s.id));
+const stops = floorplan.stops.filter((s) => captioned.has(s.id));
 const WALL_HEIGHT_M = 2.85;
 const SECONDS = 60;
 
@@ -22,7 +29,7 @@ function framing(camera: string, distance = 1) {
   const away = { x: target.x + (eye.x - target.x) * distance, y: target.y + (eye.y - target.y) * distance, z: target.z + (eye.z - target.z) * distance };
   return toGlidePose(away, target, node(camera).extras!.fov_deg!);
 }
-const poses = [framing('cam_monitor'), ...tour.stops.map((s) => framing(s.camera, s.distance)), framing('cam_desk')];
+const poses = [framing('cam_monitor'), ...stops.map((s) => framing(s.camera)), framing('cam_desk')];
 const glide = planGlide(poses, SECONDS, floorplan);
 
 /** Whether the line of sight from `eye` along `dir` meets a wall of the plan or the floor (not the dark outside the set). */

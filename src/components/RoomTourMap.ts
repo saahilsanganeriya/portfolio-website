@@ -7,37 +7,28 @@ type Segment = [[number, number], [number, number]];
 export interface FloorPlan {
   /** The floor; its sides without a wall are the room's open front. */
   outline: [number, number][];
+  /** The two walls of the corner set as one line: the left wall's free end, the corner, the back wall's free end. */
+  corner?: [number, number][];
   walls?: Segment[];
   windows?: Segment[];
   doors?: Segment[];
   furniture?: { label?: string; polygon: [number, number][] }[];
-  /** Every framing the room has a stop for, at its spot on the plan. */
+  /** The tour's stops in order, professional first: each names the camera node that frames it and its spot on the plan. */
   stops: { id: string; label: string; camera: string; position: [number, number] }[];
 }
 
+/** src/scene/tour.json: what the tour says at each of the plan's stops, by the stop's id. */
+export const CAPTIONS: ReadonlyMap<string, string> = new Map(tour.stops.map(({ id, caption }) => [id, caption]));
+
 /**
- * src/scene/tour.json: the stops the map offers and the played tour visits, in order (the work first). The plan's
- * geometry stays the room's own; a stop takes its spot from the plan's stop with the same camera (or id).
+ * The stops the map offers and the played tour visits: the plan's own, in its order and with its labels; a stop with
+ * no caption here is not part of the tour.
  */
-export interface TourStop {
-  id: string;
-  label: string;
-  /** The room's camera node, `cam_tour_<n>`. */
-  camera: string;
-  caption: string;
-  /** Stands the camera this many times further back than its node, for a framing authored too close. */
-  distance?: number;
-  /** 'film': the played tour visits it only while the projector runs his film (at rest the wall shows nothing to see). */
-  when?: string;
-}
-
-export const TOUR_STOPS: readonly TourStop[] = tour.stops;
-
-/** The stop the played tour visits after `from` (-1 to begin), passing a film stop while no film plays; the list's length ends it. */
-export function nextStopIndex(stops: readonly Pick<TourStop, 'when'>[], from: number, filmPlaying: boolean): number {
-  let next = from + 1;
-  while (next < stops.length && stops[next].when === 'film' && !filmPlaying) next++;
-  return next;
+export function tourStops(plan: Pick<FloorPlan, 'stops'>) {
+  return plan.stops.flatMap((stop) => {
+    const caption = CAPTIONS.get(stop.id);
+    return caption ? [{ ...stop, caption }] : [];
+  });
 }
 /**
  * Which caption the glide shows at path second `time`: the stop whose stretch of the path the camera is in (from halfway
@@ -89,26 +80,21 @@ export async function loadFloorPlan(): Promise<FloorPlan | null> {
 interface Stop {
   label: string;
   caption: string;
-  when?: string;
   station: StationName;
-  distance: number;
   position: [number, number];
   item: HTMLButtonElement;
   marker: HTMLElement;
 }
 
-/** Each tour stop with its camera and spot on the plan; a stop the room cannot frame is left out. */
+/** Each tour stop with its framing; a stop the room cannot frame is left out. */
 function placeStops(room: RoomHandle, plan: FloorPlan) {
-  return TOUR_STOPS.flatMap((stop) => {
-    const spot = plan.stops.find((s) => s.camera === stop.camera) ?? plan.stops.find((s) => s.id === stop.id);
-    // The room's own stop with this id stands in when the tour's camera is gone (the room renumbered its framings).
-    const camera = room.has(stop.camera.replace(/^cam_/, '')) ? stop.camera : (spot?.camera ?? stop.camera);
-    const station = camera.replace(/^cam_/, '');
-    if (!spot || !room.has(station)) {
+  return tourStops(plan).flatMap((stop) => {
+    const station = stop.camera.replace(/^cam_/, '');
+    if (!room.has(station)) {
       console.warn(`room tour: the room has no ${stop.camera} for the stop "${stop.label}"`);
       return [];
     }
-    return [{ ...stop, station, position: spot.position }];
+    return [{ ...stop, station }];
   });
 }
 
@@ -140,7 +126,11 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   const floor = q<SVGPolygonElement>('[data-tour-outline]');
   floor.setAttribute('points', polygonPoints(plan.outline));
   // With walls of its own, the outline is only the floor's edge; without, it stands for the walls.
-  if (plan.walls) floor.classList.add('room-tour-floor');
+  if (plan.walls || plan.corner) floor.classList.add('room-tour-floor');
+  // The corner set's two walls, drawn as one line so the corner itself is a mitred angle.
+  const corner = q<SVGPolylineElement>('[data-tour-corner]');
+  if (plan.corner) corner.setAttribute('points', polygonPoints(plan.corner));
+  else corner.remove();
   const segments = (group: SVGGElement, list: Segment[] | undefined, className: string) => {
     for (const [[x1, z1], [x2, z2]] of list ?? []) {
       const line = document.createElementNS(SVG_NS, 'line');
@@ -150,7 +140,7 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     }
   };
   const walls = q<SVGGElement>('[data-tour-walls]');
-  segments(walls, plan.walls, 'room-tour-wall');
+  if (!plan.corner) segments(walls, plan.walls, 'room-tour-wall');
   segments(walls, plan.windows, 'room-tour-window-gap');
   segments(walls, plan.windows, 'room-tour-window');
   const furniture = q<SVGGElement>('[data-tour-furniture]');
@@ -196,11 +186,10 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     marker.style.left = `${((spots[i][0] - minX) / width) * 100}%`;
     marker.style.top = `${((spots[i][1] - minZ) / height) * 100}%`;
     markers.append(marker);
-    const distance = stop.distance ?? 1;
-    stops.push({ label: stop.label, caption: stop.caption, when: stop.when, station, distance, position: stop.position, item, marker });
+    stops.push({ label: stop.label, caption: stop.caption, station, position: stop.position, item, marker });
     const go = () => {
       stopPlaying();
-      room.visit(station, undefined, distance);
+      room.visit(station);
     };
     item.addEventListener('click', go);
     marker.addEventListener('click', go);
@@ -240,14 +229,6 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     }, CAPTION_FADE_MS);
   };
 
-  /** The stops the tour plays, in order: a film stop only while his film shows. */
-  const route = () => {
-    const film = room.filmPlaying();
-    const played: Stop[] = [];
-    for (let i = nextStopIndex(stops, -1, film); i < stops.length; i = nextStopIndex(stops, i, film)) played.push(stops[i]);
-    return played;
-  };
-
   const visitStop = (index: number) => {
     if (playing?.mode !== 'steps') return;
     const stop = stops[index];
@@ -255,19 +236,15 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     playing.expected = at;
     if (stop) sayStop(stop);
     else say('Back at the desk.');
-    room.visit(
-      at,
-      () => {
-        if (playing?.mode !== 'steps' || playing.expected !== at) return;
-        if (index >= stops.length) {
-          stopPlaying(false);
-          ended = true;
-          return;
-        }
-        playing.timer = window.setTimeout(() => visitStop(nextStopIndex(stops, index, room.filmPlaying())), HOLD_MS);
-      },
-      stop?.distance,
-    );
+    room.visit(at, () => {
+      if (playing?.mode !== 'steps' || playing.expected !== at) return;
+      if (index >= stops.length) {
+        stopPlaying(false);
+        ended = true;
+        return;
+      }
+      playing.timer = window.setTimeout(() => visitStop(index + 1), HOLD_MS);
+    });
   };
 
   function stopPlaying(clearCaption = true) {
@@ -286,14 +263,14 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
 
   play.addEventListener('click', () => {
     if (playing) return stopPlaying();
-    const played = route();
+    const played = stops;
     panel.setAttribute('data-playing', '');
     play.textContent = 'Stop the tour';
     const seconds = Math.min(GLIDE_BOUNDS_S[1], Math.max(GLIDE_BOUNDS_S[0], (played.length + 1) * GLIDE_LEG_S));
     const glide: Playing = { mode: 'glide', route: played, arrived: false };
     playing = glide;
     const gliding = room.glideTour(
-      played.map(({ station, distance }) => ({ station, distance })),
+      played.map(({ station }) => ({ station, distance: 1 })),
       seconds,
       () => {
         if (playing !== glide) return;
@@ -306,9 +283,8 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
     );
     if (gliding) return;
     // Reduced motion (or a paused room): one stop at a time, a pause at each.
-    const first = nextStopIndex(stops, -1, room.filmPlaying());
-    playing = { mode: 'steps', expected: stops[first]?.station ?? 'desk', timer: 0 };
-    visitStop(first);
+    playing = { mode: 'steps', expected: stops[0]?.station ?? 'desk', timer: 0 };
+    visitStop(0);
   });
 
   // A wheel anywhere brakes the glide too, also over this inset where the pointer rests after pressing Play.

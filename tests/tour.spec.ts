@@ -1,18 +1,24 @@
 import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import type { TourStop } from '../src/components/RoomTourMap';
+import type { FloorPlan } from '../src/components/RoomTourMap';
 import type {} from '../src/scene/Application/Application';
 
-// "Take the tour" and its map of the room (brief §0, §1): the stops of src/scene/tour.json on the room's own
-// public/room/floorplan.json. Every stop's camera exists in today's room (the map leaves out a stop it cannot frame).
+// "Take the tour" and its map of the room (brief §0, §1, §6): the room's own public/room/floorplan.json gives the stops,
+// their order (professional first) and labels; src/scene/tour.json says what the tour says at each. Every stop's camera
+// exists in today's room (the map leaves out a stop it cannot frame).
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
 test.describe.configure({ timeout: 240_000 });
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
-const station = (stop: TourStop) => stop.camera.replace(/^cam_/, '');
-const STOPS: TourStop[] = JSON.parse(readFileSync(new URL('../src/scene/tour.json', import.meta.url), 'utf8')).stops;
+const PLAN: FloorPlan = JSON.parse(readFileSync(new URL('../public/room/floorplan.json', import.meta.url), 'utf8'));
+const CAPTIONS = new Map<string, string>(
+  JSON.parse(readFileSync(new URL('../src/scene/tour.json', import.meta.url), 'utf8')).stops.map((s: { id: string; caption: string }) => [s.id, s.caption]),
+);
+const STOPS = PLAN.stops.filter((s) => CAPTIONS.has(s.id)).map((s) => ({ ...s, caption: CAPTIONS.get(s.id)! }));
+type Stop = (typeof STOPS)[number];
+const station = (stop: Stop) => stop.camera.replace(/^cam_/, '');
 
 /** The arrival has landed and the tour's button has appeared. */
 async function arrived(page: Page) {
@@ -73,10 +79,10 @@ async function recordGlide(page: Page) {
 const glideFrames = (page: Page) => page.evaluate(() => (window as unknown as { glideFrames: GlideFrame[] }).glideFrames);
 
 /**
- * Catches a map that does not open, a stop that does not fly the camera there (or stands it as close as its node when
- * the stop asks for more room), a you-are-here mark that stays put, a played tour that stops at its stops (owner, round
- * 8: it glides), skips one, shows no caption or keeps the full panel over the frame, never returns to the desk, or runs
- * far from a minute, and an Escape that leaves the map open.
+ * Catches a map that does not open, a stop that does not fly the camera there, a you-are-here mark that stays put, a
+ * played tour that stops at its stops (owner, round 8: it glides), skips one, passes a projector, shows no caption or
+ * keeps the full panel over the frame, never returns to the desk, or runs far from a minute, and an Escape that leaves
+ * the map open.
  */
 test('the map opens, a stop flies the camera there, the tour glides through every stop with its caption and returns', async ({ page }) => {
   test.setTimeout(420_000);
@@ -86,19 +92,11 @@ test('the map opens, a stop flies the camera there, the tour glides through ever
   await open.click();
   await expect(map(page)).toBeVisible();
   await expect(stopButtons(page)).toHaveText(STOPS.map((s, i) => `${i + 1}${s.label}`));
+  // The projector left the room in round 8: no stop of the tour is it.
+  expect(STOPS.map((s) => s.id)).not.toContain('projector');
+  await expect(map(page)).not.toContainText(/projector/i);
   // The camera rests at the desk or its monitor, at the first stop: the map says so.
   await expect(stopButtons(page).first()).toHaveAttribute('aria-current', 'location');
-
-  // A stop authored too close stands further back along its own line of sight.
-  const far = STOPS.findIndex((s) => (s.distance ?? 1) > 1.2);
-  const reach = () => page.evaluate(() => Math.hypot(window.__room!.view.x - window.__room!.view.targetX, window.__room!.view.z - window.__room!.view.targetZ));
-  await stopButtons(page).nth(far).click();
-  await settledAt(page, station(STOPS[far]));
-  await expect(stopButtons(page).nth(far)).toHaveAttribute('aria-current', 'location');
-  const pulled = await reach();
-  await page.evaluate((s) => window.__room!.goto(s as never), station(STOPS[far]));
-  await page.waitForFunction((r) => !window.__room!.moving && Math.hypot(window.__room!.view.x - window.__room!.view.targetX, window.__room!.view.z - window.__room!.view.targetZ) < r - 0.05, pulled, { timeout: 30_000 });
-  expect(pulled / (await reach())).toBeCloseTo(STOPS[far].distance!, 1);
 
   const second = STOPS[1];
   await stopButtons(page).nth(1).click();
@@ -138,8 +136,8 @@ test('the map opens, a stop flies the camera there, the tour glides through ever
   expect(still.map((f) => ((f.t - gliding[0].t) / 1000).toFixed(2)), 'frames the camera stood still').toEqual([]);
   // The path's clock never stops either, so the glide never dwells at a stop.
   expect(gliding.every((f, i) => i === 0 || f.glide!.time > gliding[i - 1].glide!.time || f.t === gliding[i - 1].t)).toBe(true);
-  // Each stop's caption shows at full strength while the camera passes it, in the order the tour plays them (no film
-  // stop is passed, since the projector plays his film by itself), then the way home.
+  // Each stop's caption shows at full strength while the camera passes it, in the order the tour plays them, then the
+  // way home.
   // (The map's "You are here" line is still fading out in the glide's first frames.)
   const shown = gliding
     .filter((f) => f.opacity > 0.98 && !f.caption.startsWith('You are here'))
@@ -224,9 +222,7 @@ test('with reduced motion, Play visits the stops one by one, each with its capti
   await expect(caption).toHaveText('Back at the desk.', { timeout: 120_000 });
   await settledAt(page, 'desk');
   const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
-  // The reduced-motion room shows the projector's poster, not his film running, so its stop is passed.
-  const played = STOPS.filter((s) => s.when !== 'film');
-  expect(seen.slice(seen.indexOf(station(played[0])))).toEqual([...played.map(station), 'desk']);
+  expect(seen.slice(seen.indexOf(station(STOPS[0])))).toEqual([...STOPS.map(station), 'desk']);
   await page.close();
 });
 
