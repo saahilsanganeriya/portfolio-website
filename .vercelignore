@@ -1,6 +1,10 @@
-# blender/ holds the room sources (Git LFS); only the asset register is read by the build (/credits).
+# blender/ holds the room sources (Git LFS); the build reads only the asset register (/credits) and the CRT badge's
+# art, which the drawn monitor's nameplate imports (MonitorFrame.astro).
 blender/*
 !blender/ASSETS.md
+!blender/props
+blender/props/*
+!blender/props/art
 /docs/
 tests/
 test-results/
