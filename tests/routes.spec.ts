@@ -88,6 +88,6 @@ test('the shelf and credits lists are served as JSON, empty or full', async ({ r
   expect(credits.sections.map((section: { title: string }) => section.title)).toContain('Images');
   const wallpaper = credits.sections
     .flatMap((section: { rows: { sourceUrl: string | null; licence: string }[] }) => section.rows)
-    .find((row: { sourceUrl: string | null }) => row.sourceUrl === 'https://esawebb.org/images/weic2216a/');
+    .find((row: { sourceUrl: string | null }) => row.sourceUrl === 'https://esawebb.org/images/weic2216b/');
   expect(wallpaper.licence).toMatch(/^CC BY 4\.0/);
 });
