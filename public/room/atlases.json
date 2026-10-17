@@ -1,0 +1,73 @@
+[
+  {
+    "name": "desk",
+    "materials": [
+      "crt_glow",
+      "lamp_bulb",
+      "nas_led",
+      "room_desk",
+      "sticky_note_0",
+      "sticky_note_1",
+      "sticky_note_2"
+    ],
+    "low": {
+      "uri": "room.glb",
+      "image": 1,
+      "px": 1024,
+      "bytes": 205994
+    }
+  },
+  {
+    "name": "art",
+    "materials": [
+      "poster_art_0",
+      "poster_art_1",
+      "poster_art_2",
+      "poster_art_3",
+      "print_pale_blue_dot",
+      "room_art"
+    ],
+    "low": {
+      "uri": "room.glb",
+      "image": 3,
+      "px": 1024,
+      "bytes": 205690
+    }
+  },
+  {
+    "name": "props",
+    "materials": [
+      "lava_lamp_glass",
+      "oven_glow",
+      "plant_sway",
+      "record_sleeve_0",
+      "record_sleeve_1",
+      "record_sleeve_2",
+      "record_sleeve_3",
+      "record_sleeve_4",
+      "record_sleeve_5",
+      "room_props",
+      "room_props_leaves"
+    ],
+    "low": {
+      "uri": "room.glb",
+      "image": 0,
+      "px": 1024,
+      "bytes": 218040
+    }
+  },
+  {
+    "name": "env",
+    "materials": [
+      "room_env",
+      "wall_back",
+      "wall_left"
+    ],
+    "low": {
+      "uri": "room.glb",
+      "image": 2,
+      "px": 1024,
+      "bytes": 135482
+    }
+  }
+]

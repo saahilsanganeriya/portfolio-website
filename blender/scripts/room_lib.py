@@ -5,20 +5,51 @@ from pathlib import Path
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
-# ---- Room dimensions (metres, Blender Z up; the viewer stands at -Y looking toward +Y) ----
-# Three walls: the back wall, the left wall and a short return on the right (its front end at RETURN_Y), under a
-# ceiling band that runs along all three; the front and the rest of the right side are open.
-X_LEFT, X_RIGHT = -3.30, 3.10  # left wall inner face, right return wall inner face
-Y_FRONT, Y_BACK = -4.00, 0.42  # open front edge, back wall inner face
-RETURN_Y = -2.00  # front end of the right return wall
-WALL_T, WALL_H, FLOOR_T = 0.12, 2.85, 0.06
+# ---- Set dimensions (metres, Blender Z up; the viewer stands at -Y looking toward +Y) ----
+# A corner in a void: the back wall and the left wall meet at a plain corner and carry the wall art; both rise and
+# fade into the void toward their tops and toward their free ends, and the floor fades out all round, so no edge of
+# the set shows from any side.
+X_LEFT, Y_BACK = -3.15, 0.42  # left wall inner face, back wall inner face (they meet at the corner)
+BACK_X1 = 3.45  # where the back wall ends on the right, faded out
+LEFT_Y0 = -3.90  # where the left wall ends at the front, faded out
+WALL_T, WALL_H, FLOOR_T = 0.12, 3.40, 0.06
 WIN_X0, WIN_X1, WIN_Z0, WIN_Z1 = 1.10, 2.60, 0.86, 2.30
 DADO_Z = 0.88
-# Doorway in the left wall near the back corner (clear opening along y), and the ceiling band's depth from the walls.
-DOOR_Y0, DOOR_Y1, DOOR_H = -0.52, 0.30, 2.08
-BAND_D, BAND_T = 0.42, 0.14
+# The void: one colour (sRGB) for the site's clear colour, the walls' fade and the floor's fade. The fades are baked
+# into the atlases (bake.py): a texel blends toward VOID_HEX by void_fade() of its world position.
+VOID_HEX = "#14110F"
+FADE_Z = (2.45, 3.30)  # the walls fade out between these heights
+FADE_BACK_X = (2.98, 3.42)  # the back wall's free end fades out across these x
+FADE_LEFT_Y = (-3.42, -3.86)  # the left wall's free end fades out across these y
+# The floor: a rounded disc under the set (superellipse about FLOOR_CENTRE with half-axes FLOOR_AXES), solid out to
+# FLOOR_SOLID and faded to the void at FLOOR_EDGE (in units of the half-axes).
+FLOOR_CENTRE, FLOOR_AXES, FLOOR_POWER = (0.05, -1.40), (3.70, 2.30), 4.0
+FLOOR_SOLID, FLOOR_EDGE = 0.92, 1.30
+
+
+def smoothstep(a, b, x):
+    t = np.clip((np.asarray(x, dtype=np.float64) - a) / (b - a), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def floor_metric(x, y):
+    """The floor's superellipse distance (scalars or arrays): 1 on the curve through FLOOR_AXES."""
+    (cx, cy), (ax, ay) = FLOOR_CENTRE, FLOOR_AXES
+    return (np.abs((np.asarray(x) - cx) / ax) ** FLOOR_POWER + np.abs((np.asarray(y) - cy) / ay) ** FLOOR_POWER) \
+        ** (1 / FLOOR_POWER)
+
+
+def void_fade(x, y, z, floor=False):
+    """How far a surface point has faded into the void, 0 solid to 1 gone (scalars or arrays): the walls' tops and
+    free ends, and on the floor its rounded outer edge."""
+    x, y, z = (np.asarray(v, dtype=np.float64) for v in (x, y, z))
+    walls = smoothstep(*FADE_Z, z)
+    walls = np.maximum(walls, np.where(y > Y_BACK - 0.6, smoothstep(*FADE_BACK_X, x), 0.0))
+    walls = np.maximum(walls, np.where(x < X_LEFT + 0.6, smoothstep(-FADE_LEFT_Y[0], -FADE_LEFT_Y[1], -y), 0.0))
+    return np.where(floor, smoothstep(FLOOR_SOLID, FLOOR_EDGE, floor_metric(x, y)), walls)
 
 
 # ---- Small helpers ----

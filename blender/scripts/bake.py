@@ -1,24 +1,32 @@
-"""Bake the room's lighting (Cycles, CPU) into its atlases, and the window view by day and by night; save
+"""Bake the set's lighting (Cycles, CPU) into its four atlases, and the window view's two halves by day; save
 room.blend with the bake UVs.
 
-    blender -b blender/room.blend -P blender/scripts/bake.py                     # final: full size, 160 samples
-    blender -b blender/room.blend -P blender/scripts/bake.py -- --scale 0.25 --samples 32 --atlas desk   # test
-    blender -b blender/room.blend -P blender/scripts/bake.py -- --atlas window_sf,window_delhi            # view only
+    blender -b blender/room.blend -P blender/scripts/bake.py -t 16                # final: full size, 256 samples
+    blender -b blender/room.blend -P blender/scripts/bake.py -- --scale 0.25 --samples 32   # quick look
+    blender -b blender/room.blend -P blender/scripts/bake.py -- --atlas desk      # one atlas (the desk, last)
+    blender -b blender/room.blend -P blender/scripts/bake.py -- --atlas window_sf,window_delhi   # view only
 
-Each atlas gets a second UV map "bake" (an object's own clean UVs or a smart projection, scaled by area and
-packed together with an 6-16 px margin at the final size), one Combined bake (diffuse and glossy, direct and
-indirect, emission; AO comes from the global illumination), then OIDN denoising and the scene's AgX view transform,
-so the PNG in blender/.cache/bake/<atlas>.png already looks like the Cycles render and is shown unlit on the site.
+Each atlas gets a second UV map "bake" (an object's own clean UVs or a smart projection, scaled by its area times
+its "texel" weight, so the density is uniform within an object, and packed together with a margin of 16 px at the
+shipped size). Then one Combined bake of the view-independent light only (diffuse, direct and indirect, and
+emission; the site adds the shine of the surfaces tagged "gloss" live, since a glossy bake is right from one viewpoint
+only), with metals and glass baked as diffuse in their own colour so they do not come out black, a diffuse-colour
+and a normal bake that guide OIDN's denoising, the scene's AgX view transform, and the void fade: each texel blends toward
+the void colour by room_lib.void_fade() of the surface point it shows (read from a bake of world positions), so the
+walls' tops and free ends and the floor's rim meet the site's clear colour with no edge. The PNG in
+blender/.cache/bake/<atlas>.png already looks like the Cycles render and is shown unlit on the site.
 
-The room atlases bake without the window view (the camera-invisible env_sky card lights the room through the
-window). The view's halves (window_sf, window_delhi) bake alone, once per state, into <atlas>_<state>.png plus a
-linear <atlas>_<state>.exr that export.py shows in the stills.
+The atlases bake larger than they ship (export.py resamples them), so each shipped texel averages several baked
+ones. The set bakes without the window view (the camera-invisible env_sky card lights the set through the window);
+the view's halves (window_sf, window_delhi) bake alone into <atlas>_day.png plus a linear <atlas>_day.exr that
+export.py shows in the stills.
 """
 
 import argparse
 import math
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import bpy
@@ -26,21 +34,22 @@ import numpy as np
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import room_lib  # noqa: E402
 import window_view  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 BAKE_DIR = REPO / "blender" / ".cache" / "bake"
 BLEND = REPO / "blender" / "room.blend"
 
-# Round 7 bakes the desk and props atlases at 6144 (round two: 4096) and ships them resampled smaller (export.py),
-# so every shipped texel averages several baked ones: sharper type and edges, less noise.
-ATLAS_SIZES = {"env": 4096, "desk": 6144, "props": 6144, "window_sf": 1280, "window_delhi": 1280}
-# Island margin in pixels at the bake size; at least 6 px survive the resampling to the shipped size (the plan's
-# floor is 8 px at the bake). The props atlas holds thousands of islands from its scanned and modelled props.
-MARGIN_PX = {"env": 16, "desk": 20, "props": 12, "window_sf": 6, "window_delhi": 6}
-STATES = ("day", "night")
-# The world seen through the open front of the view while it bakes: a pale sky by day, a dark one by night.
-VIEW_WORLD = {"day": ((0.62, 0.70, 0.82, 1.0), 0.35), "night": ((0.010, 0.012, 0.022, 1.0), 0.35)}
+# The four atlases bake at 1.5x the 4096 px they ship at (export.py resamples them), so every shipped texel averages
+# a couple of baked ones: sharper type and edges, less noise. The view's halves ship at their bake size.
+ATLAS_SIZES = {"desk": 6144, "art": 6144, "props": 6144, "env": 6144, "window_sf": 1280, "window_delhi": 1280}
+SHIP_PX = 4096
+# Island margin: 16 px at the shipped 4096 (CRAFT-R8 4), so 24 px at the 6144 bake; the view keeps 6 px.
+MARGIN_PX = {"desk": 24, "art": 24, "props": 24, "env": 24, "window_sf": 6, "window_delhi": 6}
+# The world seen through the open front of the view while it bakes: a pale day sky.
+VIEW_WORLD = ((0.62, 0.70, 0.82, 1.0), 0.35)
+GUIDE_SAMPLES = 16  # the albedo and normal guides for OIDN, and the world-position map for the void fade
 
 MAX_THREADS = 16  # the devbox is shared: the coordinator caps Blender at 16 threads
 TARGET_NODE = "bake_target"
@@ -50,9 +59,8 @@ def parse_args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(prog="bake.py")
     parser.add_argument("--atlas", default=",".join(ATLAS_SIZES), help="comma-separated atlas names")
-    parser.add_argument("--states", default=",".join(STATES), help="view states to bake (window atlases)")
     parser.add_argument("--scale", type=float, default=1.0, help="fraction of the final atlas size (tests)")
-    parser.add_argument("--samples", type=int, default=160)
+    parser.add_argument("--samples", type=int, default=256)
     parser.add_argument("--threads", type=int, default=MAX_THREADS)
     parser.add_argument("--no-save", action="store_true", help="do not write room.blend")
     return parser.parse_args(argv)
@@ -235,9 +243,80 @@ def push_pull(rgb, known):
     return np.where(known[..., None], rgb, colour)
 
 
-def denoise_and_save(image, path: Path, exr: Path | None = None):
-    """OIDN-denoise a float bake through the compositor and write it with the scene's view transform (and, when
-    asked, the same denoised result as linear half-float EXR)."""
+def float_image(name: str, size: int) -> bpy.types.Image:
+    if name in bpy.data.images:
+        bpy.data.images.remove(bpy.data.images[name])
+    image = bpy.data.images.new(name, size, size, float_buffer=True, alpha=True)
+    image.colorspace_settings.name = "Non-Color" if name.endswith(("_normal", "_position")) else "Linear Rec.709"
+    image.pixels.foreach_set(np.zeros(size * size * 4, dtype=np.float32))
+    return image
+
+
+def pixels(image) -> np.ndarray:
+    w, h = image.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    image.pixels.foreach_get(px)
+    return px.reshape(h, w, 4)
+
+
+def bake_pass(objs, image, kind, samples, margin, **extra):
+    """One Cycles bake of objs into image (their materials' active bake_target node points at it)."""
+    attach_target(objs, image)
+    select_only(objs)
+    bpy.context.scene.cycles.samples = samples
+    bpy.ops.object.bake(type=kind, margin=margin, margin_type="EXTEND", use_clear=False, target="IMAGE_TEXTURES",
+                        uv_layer="bake", **extra)
+    fill_gaps(image)
+
+
+def bake_positions(objs, size, margin) -> np.ndarray:
+    """World position (x, y, z) per texel, from an emission bake through one probe material; floor objects emit z
+    pushed down by FLOOR_FLAG so void_fade can tell the floor's rim from the walls' tops."""
+    image = float_image("bake_position", size)
+    probes = {}
+    for floor in (False, True):
+        mat = bpy.data.materials.new(f"position_probe_{int(floor)}")
+        nt = mat.node_tree
+        nt.nodes.clear()
+        geo = nt.nodes.new("ShaderNodeNewGeometry")
+        out = nt.nodes.new("ShaderNodeOutputMaterial")
+        emit = nt.nodes.new("ShaderNodeEmission")
+        shift = nt.nodes.new("ShaderNodeVectorMath")
+        shift.operation = "ADD"
+        shift.inputs[1].default_value = (0.0, 0.0, -FLOOR_FLAG if floor else 0.0)
+        nt.links.new(geo.outputs["Position"], shift.inputs[0])
+        nt.links.new(shift.outputs["Vector"], emit.inputs["Color"])
+        nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+        probes[floor] = mat
+    saved = {o.name: [slot.material for slot in o.material_slots] for o in objs}
+    try:
+        for o in objs:
+            for slot in o.material_slots:
+                slot.material = probes[o.name.startswith("floor")]
+        bake_pass(objs, image, "EMIT", 1, margin)
+    finally:
+        for o in objs:
+            for slot, mat in zip(o.material_slots, saved[o.name]):
+                slot.material = mat
+        for mat in probes.values():
+            bpy.data.materials.remove(mat)
+    pos = pixels(image)[..., :3].astype(np.float64)
+    bpy.data.images.remove(image)
+    return pos
+
+
+FLOOR_FLAG = 100.0
+
+
+def void_fade_map(pos: np.ndarray) -> np.ndarray:
+    floor = pos[..., 2] < -FLOOR_FLAG / 2
+    z = np.where(floor, pos[..., 2] + FLOOR_FLAG, pos[..., 2])
+    return room_lib.void_fade(pos[..., 0], pos[..., 1], z, floor=floor)
+
+
+def denoise_and_save(image, path: Path, albedo=None, normal=None, exr: Path | None = None):
+    """OIDN-denoise a float bake through the compositor (guided by its albedo and normal bakes when given) and write
+    it with the scene's view transform (and, when asked, the same denoised result as linear half-float EXR)."""
     scene = bpy.context.scene
     saved = (scene.render.engine, scene.render.resolution_x, scene.render.resolution_y,
              scene.render.resolution_percentage, scene.render.filepath, scene.render.film_transparent,
@@ -249,6 +328,11 @@ def denoise_and_save(image, path: Path, exr: Path | None = None):
     denoise = tree.nodes.new("CompositorNodeDenoise")
     out = tree.nodes.new("NodeGroupOutput")
     tree.links.new(src.outputs["Image"], denoise.inputs["Image"])
+    for guide, socket_name in ((albedo, "Albedo"), (normal, "Normal")):
+        if guide is not None:
+            node = tree.nodes.new("CompositorNodeImage")
+            node.image = guide
+            tree.links.new(node.outputs["Image"], denoise.inputs[socket_name])
     tree.links.new(denoise.outputs["Image"], out.inputs[0])
     empty_cam = bpy.data.objects.new("bake_cam", bpy.data.cameras.new("bake_cam"))
     scene.collection.objects.link(empty_cam)
@@ -286,6 +370,25 @@ def denoise_and_save(image, path: Path, exr: Path | None = None):
         bpy.data.node_groups.remove(tree)
 
 
+def apply_void_fade(path: Path, fade: np.ndarray):
+    """Blend the saved display-ready PNG toward the void colour by fade (both in display values), with a triangular
+    dither of one 8-bit step so the long dark ramps do not band once shipped at 8 bits."""
+    image = bpy.data.images.load(str(path), check_existing=False)
+    px = pixels(image)
+    void = np.array([int(room_lib.VOID_HEX[i:i + 2], 16) / 255 for i in (1, 3, 5)], dtype=np.float32)
+    f = fade.astype(np.float32)[..., None]
+    rng = np.random.default_rng(20261017)
+    dither = (rng.random(px.shape[:2] + (1,), dtype=np.float32) - rng.random(px.shape[:2] + (1,), dtype=np.float32))
+    ramp = (f > 0.002) & (f < 0.998)
+    rgb = px[..., :3] * (1 - f) + void * f + np.where(ramp, dither / 255.0, 0.0)
+    px[..., :3] = np.clip(rgb, 0.0, 1.0)
+    image.pixels.foreach_set(px.ravel())
+    image.filepath_raw = str(path)
+    image.file_format = "PNG"
+    image.save()
+    bpy.data.images.remove(image)
+
+
 def bake_atlas(atlas: str, size: int, samples: int, out_name: str | None = None, make_uvs=True, exr=False):
     objs = atlas_objects(atlas)
     if not objs:
@@ -296,37 +399,65 @@ def bake_atlas(atlas: str, size: int, samples: int, out_name: str | None = None,
     if make_uvs or any("bake" not in o.data.uv_layers for o in objs):
         make_bake_uvs(objs, ATLAS_SIZES[atlas], MARGIN_PX[atlas])
     t_uv = time.monotonic()
-    name = f"bake_{out_name}"
-    if name in bpy.data.images:
-        bpy.data.images.remove(bpy.data.images[name])
-    image = bpy.data.images.new(name, size, size, float_buffer=True, alpha=True)
-    image.colorspace_settings.name = "Linear Rec.709"
-    image.pixels.foreach_set(np.zeros(size * size * 4, dtype=np.float32))
-    attach_target(objs, image)
-    select_only(objs)
     scene = bpy.context.scene
-    scene.cycles.samples = samples
     scene.cycles.use_denoising = False
     # Cycles bakes object by object and dilates each one on its own, so its margin must stay under half the gap
     # between islands or it paints over a neighbour; fill_gaps() fills the rest of the atlas afterwards.
     margin = max(1, MARGIN_PX[atlas] * size // ATLAS_SIZES[atlas] // 2)
-    bake = scene.render.bake
-    bake.margin, bake.margin_type, bake.use_clear = margin, "EXTEND", False
-    bpy.ops.object.bake(type="COMBINED", pass_filter={"EMIT", "DIRECT", "INDIRECT", "DIFFUSE", "GLOSSY"},
-                        margin=margin, margin_type="EXTEND", use_clear=False, target="IMAGE_TEXTURES",
-                        uv_layer="bake")
-    fill_gaps(image)
+    scene.render.bake.margin, scene.render.bake.margin_type, scene.render.bake.use_clear = margin, "EXTEND", False
+    image = float_image(f"bake_{out_name}", size)
+    # The set bakes its view-independent light; the window's view, seen only from in front, keeps its sheen.
+    light = {"EMIT", "DIRECT", "INDIRECT", "DIFFUSE"} | ({"GLOSSY"} if atlas.startswith("window_") else set())
+    bake_pass(objs, image, "COMBINED", samples, margin, pass_filter=light)
     t_bake = time.monotonic()
+    albedo = float_image(f"bake_{out_name}_albedo", size)
+    bake_pass(objs, albedo, "DIFFUSE", GUIDE_SAMPLES, margin, pass_filter={"COLOR"})
+    normal = float_image(f"bake_{out_name}_normal", size)
+    bake_pass(objs, normal, "NORMAL", GUIDE_SAMPLES, margin, normal_space="OBJECT")
+    n = pixels(normal)
+    n[..., :3] = n[..., :3] * 2.0 - 1.0  # the bake stores (n + 1) / 2; OIDN wants n
+    normal.pixels.foreach_set(n.ravel())
+    fade = None if atlas.startswith("window_") else void_fade_map(bake_positions(objs, size, margin))
+    t_guides = time.monotonic()
     BAKE_DIR.mkdir(parents=True, exist_ok=True)
     out = BAKE_DIR / f"{out_name}.png"
-    denoise_and_save(image, out, BAKE_DIR / f"{out_name}.exr" if exr else None)
-    # Swap the float buffer for the saved, display-ready PNG so room.blend references the file.
-    bpy.data.images.remove(image)
+    denoise_and_save(image, out, albedo, normal, BAKE_DIR / f"{out_name}.exr" if exr else None)
+    if fade is not None:
+        apply_void_fade(out, fade)
+    for img in (image, albedo, normal):
+        bpy.data.images.remove(img)
+    # Point the materials at the saved, display-ready PNG so room.blend references the file.
     saved_image = bpy.data.images.load(str(out), check_existing=False)
-    saved_image.name = name
+    saved_image.name = f"bake_{out_name}"
     attach_target(objs, saved_image)
     print(f"bake: {out_name} {size}px {samples} spp {len(objs)} objects in {time.monotonic() - started:.0f} s "
-          f"(uv {t_uv - started:.0f} s, bake {t_bake - t_uv:.0f} s) -> {out}")
+          f"(uv {t_uv - started:.0f} s, bake {t_bake - t_uv:.0f} s, guides and fade {t_guides - t_bake:.0f} s) -> {out}")
+
+
+@contextmanager
+def view_independent():
+    """While the set bakes, every Principled BSDF is a dielectric without transmission (Metallic and Transmission
+    Weight unlinked and 0), so metal and glass bake their colour as diffuse light; restored afterwards."""
+    saved = []
+    for mat in bpy.data.materials:
+        if not mat.node_tree:
+            continue
+        for node in mat.node_tree.nodes:
+            if node.bl_idname != "ShaderNodeBsdfPrincipled":
+                continue
+            for name in ("Metallic", "Transmission Weight"):
+                sock = node.inputs[name]
+                saved.append((mat, sock, sock.default_value, [link.from_socket for link in sock.links]))
+                for link in list(sock.links):
+                    mat.node_tree.links.remove(link)
+                sock.default_value = 0.0
+    try:
+        yield
+    finally:
+        for mat, sock, value, sources in saved:
+            sock.default_value = value
+            for src in sources:
+                mat.node_tree.links.new(src, sock)
 
 
 def is_view(obj) -> bool:
@@ -347,17 +478,17 @@ def bake_room(atlases, scale, samples):
         o.hide_render = True
     set_light_probes(1.0)
     try:
-        for atlas in atlases:
-            bake_atlas(atlas, max(256, int(ATLAS_SIZES[atlas] * scale)), samples)
+        with view_independent():
+            for atlas in atlases:
+                bake_atlas(atlas, max(256, int(ATLAS_SIZES[atlas] * scale)), samples)
     finally:
         set_light_probes(0.0)
         for o in hidden:
             o.hide_render = False
 
 
-def bake_view(atlases, states, scale, samples):
-    """Bake the window view alone: everything else and every room light hidden, the view's own lights for the
-    state on, its materials switched by window_view.set_night."""
+def bake_view(atlases, scale, samples):
+    """Bake the window view alone, by day: everything else and every room light hidden, the view's day lights on."""
     scene = bpy.context.scene
     view_lights = set(bpy.data.collections["window_lights"].objects)
     others = [o for o in scene.objects if not is_view(o) and o not in view_lights and not o.hide_render]
@@ -366,16 +497,13 @@ def bake_view(atlases, states, scale, samples):
     for o in others:
         o.hide_render = True
     try:
-        for i, state in enumerate(states):
-            window_view.set_night(1.0 if state == "night" else 0.0)
-            for light in view_lights:
-                light.hide_render = light["window_mode"] != state
-            bg.inputs["Color"].default_value, bg.inputs["Strength"].default_value = VIEW_WORLD[state]
-            for atlas in atlases:
-                bake_atlas(atlas, max(128, int(ATLAS_SIZES[atlas] * scale)), samples, out_name=f"{atlas}_{state}",
-                           make_uvs=i == 0, exr=True)
-    finally:
         window_view.set_night(0.0)
+        for light in view_lights:
+            light.hide_render = light["window_mode"] != "day"
+        bg.inputs["Color"].default_value, bg.inputs["Strength"].default_value = VIEW_WORLD
+        for atlas in atlases:
+            bake_atlas(atlas, max(128, int(ATLAS_SIZES[atlas] * scale)), samples, out_name=f"{atlas}_day", exr=True)
+    finally:
         for light in view_lights:
             light.hide_render = True
         bg.inputs["Color"].default_value, bg.inputs["Strength"].default_value = saved_bg
@@ -397,7 +525,7 @@ def main():
     if room:
         bake_room(room, args.scale, args.samples)
     if view:
-        bake_view(view, args.states.split(","), args.scale, args.samples)
+        bake_view(view, args.scale, args.samples)
     scene.cycles.samples, scene.cycles.use_denoising, scene.render.threads = saved
     if not args.no_save:
         for img in bpy.data.images:

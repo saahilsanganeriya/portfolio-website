@@ -1,10 +1,15 @@
 """The view from the window: San Francisco on the left and Delhi on the right, joined by the Golden Gate across an
 imagined bay (Delhi has no coast), built as a small diorama behind the back wall.
 
-Every part is its own object in atlas window_sf or window_delhi (the seam is the plane x = SEAM_X, behind the
-window's central glazing bar); export.py joins each atlas into one mesh, window_view_sf and window_view_delhi.
-bake.py bakes each half twice, by day and by night: the materials read the value WINDOW_NIGHT, and the lights in
-the collection window_lights carry the state they belong to.
+Every part of the land, water and landmarks is its own object in atlas window_sf or window_delhi (the seam is the
+plane x = SEAM_X, behind the middle of the window's one pane); export.py joins each atlas into one mesh,
+window_view_sf and window_view_delhi. bake.py bakes each half by day only (both cities are always by day): the
+materials read the value WINDOW_NIGHT, held at 0, and only the lights in window_lights marked "day" switch on.
+
+The sky is one object across both cities, window_sky, which the site draws at runtime (one continuous gradient from
+San Francisco's day sky to Delhi's), so it is never baked: its emission only lights the diorama while the halves bake.
+The markers window_sky_centre (the dome's centre) and window_sky_eye (the window framing's eye) place that runtime sky
+and the blend between the cities.
 
 The diorama stays inside an envelope that no framing can see except through the window: a sky dome whose every
 point is hidden behind the wall from each camera (and the idle sway), checked by check_hidden().
@@ -54,7 +59,7 @@ WIN_X0, WIN_Z0 = to_diorama((room.WIN_X0, 0, room.WIN_Z0)).xz
 WIN_X1, WIN_Z1 = to_diorama((room.WIN_X1, 0, room.WIN_Z1)).xz
 Y_BACK = WALL_BACK - room.WALL_T / VIEW_SCALE
 WALL_LEFT_END = to_diorama((room.X_LEFT - room.WALL_T, 0, 0)).x
-WALL_RIGHT_END = to_diorama((room.X_RIGHT + room.WALL_T, 0, 0)).x
+WALL_RIGHT_END = to_diorama((room.BACK_X1, 0, 0)).x
 WALL_TOP = to_diorama((0, 0, room.WALL_H)).z
 DOME_CENTRE = Vector((SEAM_X, WALL_BACK + 0.06, WATER_Z))
 DOME_AXES = (2.2, 1.75, 1.5, 1.25)  # left, back, up, right reach in metres before the envelope trims it
@@ -286,42 +291,18 @@ def lit_windows(k, color, n, scale=(180.0, 180.0, 260.0), share=0.45, warm=(1.0,
 
 
 def sky_material(side):
-    """The painted sky: a day gradient with soft clouds, a night gradient with stars, city glow on the horizon and,
-    over Delhi, the moon. Emission only, so the bake keeps it exactly."""
+    """The sky's light on the diorama while the halves bake: a day gradient, a touch warmer over Delhi. Emission only;
+    the site draws the sky itself (window_sky), so nothing here is seen."""
     mat, k = pl.new_material(f"view_sky_{side}")
-    n = k.node("ShaderNodeGroup", node_tree=night_value()).outputs[0]
     geo = k.node("ShaderNodeNewGeometry")
-    rel = k.node("ShaderNodeVectorMath", operation="SUBTRACT", inputs={0: geo.outputs["Position"],
-                                                                        1: tuple(DIORAMA_TO_ROOM @ DOME_CENTRE)})
+    rel = k.node("ShaderNodeVectorMath", operation="SUBTRACT", inputs={0: geo.outputs["Position"], 1: tuple(DOME_CENTRE)})
     d = k.node("ShaderNodeVectorMath", operation="NORMALIZE", inputs={0: rel.outputs[0]})
     sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": d.outputs[0]})
     up = k.math("MAXIMUM", sep.outputs["Z"], 0.0)
-    h = k.math("POWER", up, 0.55)
     warm = 1.0 if side == "delhi" else 0.0
     day_hz = (0.74 + 0.10 * warm, 0.74 - 0.02 * warm, 0.72 - 0.16 * warm, 1.0)
-    day_zen = (0.13, 0.30, 0.62, 1.0)
-    day = k.mix_color(h, day_hz, day_zen)
-    clouds = k.map_range(k.noise(k.node("ShaderNodeMapping", inputs={"Vector": d.outputs[0], "Scale": (3.0, 3.0, 9.0)}).outputs[0],
-                                 1.0, detail=4.0, roughness=0.55), 0.52, 0.68)
-    clouds = k.math("MULTIPLY", clouds, k.map_range(up, 0.05, 0.35))
-    day = k.mix_color(k.math("MULTIPLY", clouds, 0.55), day, (0.97, 0.93, 0.88, 1.0))
-    night_hz = (0.050, 0.045, 0.075, 1.0) if side == "sf" else (0.075, 0.048, 0.040, 1.0)
-    night = k.mix_color(k.math("POWER", up, 0.30), night_hz, (0.004, 0.007, 0.022, 1.0))
-    stars = k.node("ShaderNodeTexVoronoi", inputs={"Vector": d.outputs[0], "Scale": 160.0}, feature="F1")
-    star = k.math("MULTIPLY", k.map_range(stars.outputs["Distance"], 0.06, 0.0),
-                  k.map_range(stars.outputs["Color"], 0.75, 0.78, smooth=False))
-    star = k.math("MULTIPLY", star, k.map_range(up, 0.12, 0.45))
-    night = k.mix_color(k.math("MULTIPLY", star, 0.9), night, (0.9, 0.9, 1.0, 1.0))
-    if side == "delhi":
-        moon_dir = Vector((0.55, 0.62, 0.56)).normalized()
-        dot = k.node("ShaderNodeVectorMath", operation="DOT_PRODUCT", inputs={0: d.outputs[0], 1: tuple(moon_dir)})
-        disc = k.map_range(dot.outputs["Value"], 0.99935, 0.99955)
-        halo = k.math("MULTIPLY", k.map_range(dot.outputs["Value"], 0.985, 0.9994), 0.25)
-        night = k.mix_color(halo, night, (0.45, 0.47, 0.55, 1.0))
-        night = k.mix_color(disc, night, (0.95, 0.93, 0.85, 1.0))
-    color = k.mix_color(n, day, night)
-    strength = k.mix_float(n, 0.34, 0.6)
-    emit = k.node("ShaderNodeEmission", inputs={"Color": color, "Strength": strength})
+    day = k.mix_color(k.math("POWER", up, 0.55), day_hz, (0.13, 0.30, 0.62, 1.0))
+    emit = k.node("ShaderNodeEmission", inputs={"Color": day, "Strength": 0.34})
     k.set(k.node("ShaderNodeOutputMaterial"), "Surface", emit.outputs[0])
     return mat
 
@@ -1132,14 +1113,6 @@ def build_window_view(framings):
     mats = build_materials()
     parts = Parts()
 
-    sky = pl.Builder("sky")
-    sky_faces = dome(sky, None)
-    sf_sky, delhi_sky = sky_material("sf"), sky_material("delhi")
-    sky.materials = [sf_sky, delhi_sky]
-    for f in sky_faces:
-        f.material_index = 0 if f.calc_center_median().x < SEAM_X else 1
-    parts.add("sky", sky, texel=0.12, split=True)
-
     water = pl.Builder("water")
     water_plane(water, mats["water"])
     parts.add("water", water, texel=0.35, split=True)
@@ -1201,12 +1174,45 @@ def build_window_view(framings):
     red_fort(monuments, mats)
     parts.add("monuments", monuments, texel=2.6, side="delhi")
 
-    objs = parts.build()
+    objs = parts.build() + [build_sky()]
     check_hidden(objs)
     build_lights()
     place_in_room(objs)
+    build_sky_markers(framings)
     set_night(0.0)
     return objs
+
+
+def build_sky():
+    """The sky dome as one object across both cities, window_sky (atlas window_sky, which bake.py never bakes)."""
+    sky = pl.Builder("sky")
+    faces = dome(sky, None)
+    sky.materials = [sky_material("sf"), sky_material("delhi")]
+    for f in faces:
+        f.material_index = 0 if f.calc_center_median().x < SEAM_X else 1
+    me = bpy.data.meshes.new("window_sky")
+    sky.bm.normal_update()
+    sky.bm.to_mesh(me)
+    sky.bm.free()
+    for m in sky.materials:
+        me.materials.append(m)
+    obj = bpy.data.objects.new("window_sky", me)
+    collection("window_view").objects.link(obj)
+    me.shade_smooth()
+    cull_unseen(obj)
+    obj["atlas"] = "window_sky"
+    return obj
+
+
+def build_sky_markers(framings):
+    """window_sky_centre: the dome's centre in the room (sky directions start there), and window_sky_eye: the window
+    framing's eye, from which both the sky and the city line blend from one city to the other across the window."""
+    for name, location in (("window_sky_centre", DIORAMA_TO_ROOM @ DOME_CENTRE),
+                           ("window_sky_eye", Vector(framings["cam_window"][0]))):
+        empty = bpy.data.objects.new(name, None)
+        empty.empty_display_type, empty.empty_display_size = "PLAIN_AXES", 0.08
+        empty.location = location
+        collection("markers").objects.link(empty)
 
 
 def place_in_room(objs):
