@@ -1,7 +1,7 @@
 # blender/ holds the room sources (Git LFS); only the asset register is read by the build (/credits).
 blender/*
 !blender/ASSETS.md
-docs/
+/docs/
 tests/
 test-results/
 playwright-report/
