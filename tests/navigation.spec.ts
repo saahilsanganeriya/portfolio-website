@@ -298,6 +298,25 @@ test('the monitor is left by the back control or a drag, not by the pointer slip
 });
 
 /**
+ * Catches the glass sliding under a resting pointer while the camera flies elsewhere and pulling it back into the
+ * monitor (it sent the camera bound for the photo board back to the screen).
+ */
+test('a pointer resting beside the glass does not pull a passing camera into the monitor', async ({ page }) => {
+  await page.goto('/');
+  await settledAt(page, 'monitor', 120_000);
+  await page.keyboard.press('Escape');
+  await settledAt(page, 'desk');
+  const note = await page.evaluate(() => window.__room!.point('hit_sticky_note_0'));
+  await page.mouse.move(note!.x, note!.y);
+  await page.waitForTimeout(600);
+  await watchDestinations(page);
+  await page.evaluate(() => window.__room!.goto('idle'));
+  await settledAt(page, 'idle');
+  await page.waitForTimeout(1000);
+  expect(await destinations(page)).toEqual(['idle']);
+});
+
+/**
  * Catches a corner label without his name, title or the visitor's time (hh:mm), one that sits over the monitor, or one
  * a screen reader hears every minute.
  */

@@ -2,6 +2,9 @@
 
 Saahil Sanganeriya's personal site, at https://saahilsanganeriya.com. On a desktop, it opens on a vintage room built in
 Blender: the camera glides to the desk and into the CRT, which runs SaahilOS, a small retro desktop, with About open.
+A drag turns the whole set round (a wall turns see-through while the camera is behind it), the wheel or a pinch zooms
+in and out, arrow keys turn it and + and - zoom; at the monitor the wheel scrolls the window under the pointer, and
+Escape, a drag or "Back to the room" leaves. The top left carries his name, Software Engineer and the visitor's time.
 "Take the tour" shows a map of the room, and its "Play the tour" glides through every stop in one slow camera move. Every post, project and app has its own address, and
 opening one loads the room straight at the monitor with that window open; there are no plain pages. Phones get the room at a lighter tier; a browser without
 WebGL gets SaahilOS on a drawn monitor. The site is built with Astro, MDX content collections, React (SaahilOS) and
@@ -289,8 +292,8 @@ Résumé window and the About window's Résumé button use it too.
 ## Design
 
 Warm light in a dark room, and one thread. Colours: ink `#14110F` (background), walnut `#3B2A1E`, paper `#EDE4D3`
-(text), dust `#A89F91` (secondary text), thread `#B4442C` (the one accent; never for text), projector `#9DB4C0` (the beam
-and the CRT only). Type: Newsreader for headings and essays, IBM Plex Sans for the interface, IBM Plex Mono for code.
+(text), dust `#A89F91` (secondary text), thread `#B4442C` (the one accent; never for text), projector `#9DB4C0` (the CRT
+and the NAS lights only). Type: Newsreader for headings and essays, IBM Plex Sans for the interface, IBM Plex Mono for code.
 Reading windows have no effects over the text.
 
 ## Credits
