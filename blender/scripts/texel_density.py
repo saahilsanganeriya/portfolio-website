@@ -20,17 +20,18 @@ import bake  # noqa: E402
 import export  # noqa: E402
 
 # Surfaces worth naming in the report (whichever exist in this version of the room).
-WATCH = ("env_wall_back", "env_wall_left", "env_wall_right", "env_floor", "env_ceiling", "desk_desk", "desk_crt",
-         "desk_computer", "crt_glow", "desk_keyboard", "props_mango_plant", "espresso_machine", "countertop_oven",
-         "props_bookshelf", "bookshelf", "photo_board", "roller_screen_housing", "record_player", "platter", "tonearm",
-         "record_crate", "props_bakery_board", "props_cinnamon_rolls", "props_pour_over", "book_spine_kitchen",
-         "voyager_record", "print_japanese_lit", "pennant_gatech")
+WATCH = ("wall_back", "wall_left", "floor", "floor_fade", "desk_desk_top", "desk_crt_front", "desk_computer_front",
+         "keyboard", "mouse", "coffee_mug", "crt_badge", "sticky_note_0", "desk_desk", "desk_crt", "crt_glow",
+         "props_nas_4bay", "env_window_frame", "voyager_record", "props_frame_pale_blue_dot", "pennant_gatech",
+         "print_japanese_lit", "darkroom_line_1", "poster_plaque", "props_mango_plant", "espresso_machine",
+         "countertop_oven", "croissant", "bookshelf", "book_spine_kitchen", "record_player", "platter",
+         "props_lounge_chair", "kitchen_counter", "env_credenza", "props_bakery_board", "lava_lamp")
 
 
 def shipped_size(atlas: str) -> int:
     if atlas.startswith("window_"):
         return bake.ATLAS_SIZES[atlas]  # the view ships at its bake size
-    return export.EXPORT_SIZES[atlas]
+    return export.FULL_PX
 
 
 def object_density(obj, size):
