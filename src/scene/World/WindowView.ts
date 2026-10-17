@@ -183,8 +183,9 @@ const MOTIF_PX = 2048;
 const FLIGHT_S = 48;
 const GROUND_S = 5;
 const PARKED_AT = 0.62;
-const INK = '#fbf6ec';
-const SHADOW = 'rgba(18, 28, 44, 0.38)';
+// Dark slate, as a plane and pencil marks read against a day sky, with a faint pale halo where the sky is deep blue.
+const INK = '#1f2b3a';
+const HALO = 'rgba(255, 255, 255, 0.4)';
 
 function arcPoint(s: number, w: number, h: number): [number, number] {
   const [a, b, c] = ARC;
@@ -272,9 +273,8 @@ class Motif {
     arc.height = this.canvasH;
     const ctx = arc.getContext('2d')!;
     const [w, h] = [arc.width, arc.height];
-    ctx.shadowColor = SHADOW;
-    ctx.shadowBlur = 7;
-    ctx.shadowOffsetY = 1.5;
+    ctx.shadowColor = HALO;
+    ctx.shadowBlur = 6;
     ctx.fillStyle = INK;
     ctx.strokeStyle = INK;
     // Dots every GAP px along the arc, measured along its length, clear of the end markers.
@@ -297,7 +297,7 @@ class Motif {
       if (travelled >= next && travelled <= length - GAP * 2.2) {
         ctx.beginPath();
         ctx.arc(x, y, w * 0.0017, 0, Math.PI * 2);
-        ctx.globalAlpha = 0.92;
+        ctx.globalAlpha = 0.85;
         ctx.fill();
         next += GAP;
       }
@@ -314,11 +314,11 @@ class Motif {
       ctx.arc(x, y, w * 0.0017, 0, Math.PI * 2);
       ctx.fill();
       writeHand(ctx, name, x, y + h * 0.17, {
-        size: w * 0.027,
+        size: w * 0.033,
         slant: 0.06,
         turn: s === 0 ? -0.025 : 0.02,
         colour: INK,
-        weight: 0.03,
+        weight: 0.045,
         maxWidth: w * 0.24,
         maxLines: 1,
         lineHeight: 1.1,
@@ -328,9 +328,8 @@ class Motif {
     const planeCanvas = document.createElement('canvas');
     planeCanvas.width = planeCanvas.height = 160;
     const pctx = planeCanvas.getContext('2d')!;
-    pctx.shadowColor = SHADOW;
-    pctx.shadowBlur = 5;
-    pctx.shadowOffsetY = 1;
+    pctx.shadowColor = HALO;
+    pctx.shadowBlur = 4;
     pctx.fillStyle = INK;
     drawPlane(pctx, 160);
     this.arc.material.map = canvasTexture(arc);
