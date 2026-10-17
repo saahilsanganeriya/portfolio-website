@@ -95,10 +95,12 @@ CAMERAS = {
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
     "cam_window": ((1.85, -1.75, 1.55), (1.85, 1.40, 1.50)),
-    "cam_shelf": ((2.30, -2.15, 1.05), (2.90, -0.82, 0.55)),
+    # Beside the lounge chair (not over it) and short of the lantern: the six spines and the print on top, unblocked.
+    "cam_shelf": ((2.60, -2.68, 1.32), (2.85, -0.80, 0.94)),
     "cam_photos": ((-0.75, -0.95, 1.62), (-3.15, -0.95, 1.58)),
     "cam_record_player": ((2.05, -3.35, 1.45), (2.72, -2.18, 0.62)),
-    "cam_espresso": ((-2.30, -2.50, 1.36), (-3.10, -2.62, 1.10)),
+    # The lever machine in the middle (the roll rack stands on its drip tray), its cup below the rack.
+    "cam_espresso": ((-1.78, -2.06, 1.44), (-2.82, -2.40, 1.21)),
     "cam_oven": ((-2.26, -2.94, 1.26), (-3.08, -3.02, 0.98)),
     # Arrival: from the loading framing past the window and the mango plant onto the desk (the site glides
     # cam_loading -> arrival_0..2 -> cam_desk).
