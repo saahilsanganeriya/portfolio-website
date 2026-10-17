@@ -15,15 +15,15 @@ Project page: [entity resolution and anonymization](/projects/entity-resolution-
 
 - Designed and built entity resolution, which links every name, email and handle to the real person behind
   it, plus its eval suite. Accuracy on the labeled eval set rose from 85% to 95%.
-- Made matching blockwise, with agreeing votes so one bad verdict cannot join two people. B-cubed F1 rose
-  from 0.34 to 0.84.
+- Lifted B-cubed F1 from 0.34 to 0.84 by making matching blockwise, with agreeing votes so one bad verdict
+  cannot join two people.
 - Rebuilt it as a bounded-memory Go service on Temporal across GKE and EKS. One run resolved 88M mentions,
   and tuning its LLM judges halved wall time, from 4h13m to 2h11m.
 - Cut LLM provider failures 22x (24.6 to 1.1 a minute) over ~3M LLM calls per run with an adaptive (AIMD)
   concurrency controller.
 - Built the fake-identity generator (90+ PII types; experts kept 95% of its replacements on 675 documents)
   and a synthetic-data engine whose 1.6M labeled mentions became the team's benchmark.
-- Redesigned code anonymization to rewrite git histories; it runs ~200 repos at once and cut a
+- Redesigned code anonymization to rewrite git histories. Running ~200 repos at once, it cut a
   55k-commit repo from 3+ hours to 19 minutes.
 
 **Amazon** · Data Engineer Intern · Seattle · May – Aug 2025
@@ -32,17 +32,20 @@ Project page: [real-time streaming pipeline](/projects/real-time-streaming)
 
 - Built an Apache Flink pipeline in Java to replace an hourly batch job, landing cross-region events in
   600–900 ms against a 120 s target.
-- Compared Firehose, OpenSearch Ingestion, Data Prepper and direct Lambda against Flink, then built 5 custom
-  OpenSearch sinks with IAM SigV4 auth and scripts that reject out-of-order events.
+- Chose Flink over Firehose, OpenSearch Ingestion, Data Prepper and direct Lambda on latency, exactly-once
+  guarantees and cost, then built 5 custom OpenSearch sinks with IAM SigV4 auth and scripts that reject
+  out-of-order events.
 
 **The Coca-Cola Company** · Data Engineer Co-op · Atlanta · May 2023 – Aug 2024
 
 Project page: [chatbot and CPS Analytics API](/projects/coca-cola-chatbot-and-cps-api)
 
-- Built an internal chatbot in Haystack with hybrid retrieval (BM25 over Elasticsearch plus a RoBERTa
-  reader), and Django REST APIs over 300+ supply-chain datasets.
-- Rebuilt a Python CRUD library and monitoring platform, cutting support tickets by 63% and ETL runtime
-  from 9 to 6.5 hours.
+- Built a Haystack chatbot that answers employees' questions from internal docs (BM25 over Elasticsearch,
+  RoBERTa reader).
+- Architected Django REST APIs over 300+ global supply-chain datasets, replacing manual data requests with
+  BI self-service.
+- Cut support tickets 63% and ETL runtime from 9 to 6.5 hours by rebuilding a Python CRUD library and its
+  monitoring platform.
 
 ## Research
 
@@ -55,7 +58,8 @@ Project page: [SAMCell](/projects/samcell)
   [PLOS ONE, 2025](https://doi.org/10.1371/journal.pone.0319532).
 - Proposed SAMCell's distance-map regression with watershed post-processing and trained it: 0.77 vs 0.68
   OP-CSB against Cellpose on LIVECell, and 0.60 vs 0.32 zero-shot on an unseen microscope.
-- Built two cross-microscope benchmark datasets and the open-source napari plugin.
+- Created two cross-microscope benchmark datasets and an open-source napari plugin that biologists run
+  without ML expertise.
 
 ## Projects
 
@@ -67,8 +71,18 @@ Project page: [swe-sim](/projects/swe-sim) · [code](https://github.com/saahilsa
   the agent can question.
 - Graded each patch offline, dropping edits to protected tests and paying out only when four records of the
   hidden-test run agree.
-- Ran it on Temporal, Modal and Cloud Run. The first hosted task (29 trials, $3.01) exposed a defect in the
-  task itself, which a new approval gate now rejects.
+- Ran it on Temporal, Modal and Cloud Run. The first hosted task (29 trials, $3.01) exposed a task defect
+  that a new gate now rejects.
+
+**travel-agent-gym** · an RL environment for a travel agent · Aug 2026
+
+Project page: [travel-agent-gym](/projects/travel-agent-gym) ·
+[code](https://github.com/saahilsanganeriya/travel-agent-gym)
+
+- Built a Gymnasium environment where an agent interviews a client with hidden needs, books a trip, then
+  rides out its delays.
+- Made illegal bookings impossible (action masks, integer-cent ledger) and exposed the action set to LLM
+  agents as tool calls.
 
 **Reinforcement learning skill discovery for Atari games** · Jan – May 2025
 
