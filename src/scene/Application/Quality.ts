@@ -138,8 +138,8 @@ export class Quality {
    * Picks the tier the arrival starts at, before anyone sees the room: the ladder only ever steps down, so it must not
    * start a machine at a tier it cannot hold. `first` is the room's first frame, timed until the GPU finished it (its
    * textures upload with it, so it can keep the top tier but never drop it); `frame` draws one more at the current tier
-   * and returns the same time. Steps down as the ladder does while a frame takes over twice the target's interval; one
-   * under CERTAIN_MS is looked at twice. Returns the frames it timed.
+   * and returns the same time. Steps down as the ladder does while a frame takes over twice the target's interval; a
+   * frame over that but under CERTAIN_MS is timed twice and the faster counts. Returns the frames it timed.
    */
   async calibrate(first: number, frame: () => Promise<number>) {
     const timed: { tier: number; ms: number }[] = [];
