@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { devices, expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
@@ -343,6 +344,8 @@ test('the HUD shows his name, Software Engineer and the local time, and keeps of
   const glass = (await page.evaluate(() => window.__room!.monitorRect()))!;
   const meets = label.x < glass.right && label.x + label.width > glass.left && label.y < glass.bottom && label.y + label.height > glass.top;
   expect(meets, 'the label and the glass do not meet at the desk').toBe(false);
+  const { violations } = await new AxeBuilder({ page }).include('[data-room-hud]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'best-practice']).analyze();
+  expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([]);
 });
 
 test.describe('on a phone', () => {

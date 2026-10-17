@@ -7,6 +7,8 @@ type Segment = [[number, number], [number, number]];
 export interface FloorPlan {
   /** The floor; its sides without a wall are the room's open front. */
   outline: [number, number][];
+  /** The corner set's floor fading into the void beyond its solid edge. */
+  fadeOutline?: [number, number][];
   /** The two walls of the corner set as one line: the left wall's free end, the corner, the back wall's free end. */
   corner?: [number, number][];
   walls?: Segment[];

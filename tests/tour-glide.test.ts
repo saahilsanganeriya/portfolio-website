@@ -9,6 +9,7 @@ const glb = readFileSync(new URL('../public/room/room.glb', import.meta.url));
 const gltf = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString()) as { nodes: { name: string; translation?: number[]; extras?: { fov_deg?: number } }[] };
 const floorplan = JSON.parse(readFileSync(new URL('../public/room/floorplan.json', import.meta.url), 'utf8')) as {
   outline: [number, number][];
+  fadeOutline?: [number, number][];
   walls: [number, number][][];
   stops: { id: string; camera: string }[];
 };
@@ -46,8 +47,10 @@ function landsInRoom(eye: number[], dir: number[]) {
   if (dir[1] >= 0) return false;
   const t = -eye[1] / dir[1];
   const [x, z] = [eye[0] + t * dir[0], eye[2] + t * dir[2]];
-  const xs = floorplan.outline.map(([px]) => px);
-  const zs = floorplan.outline.map(([, pz]) => pz);
+  // The corner set's floor fades into the void beyond its solid edge: that ring is still floor to look at.
+  const floor = floorplan.fadeOutline ?? floorplan.outline;
+  const xs = floor.map(([px]) => px);
+  const zs = floor.map(([, pz]) => pz);
   return x >= Math.min(...xs) && x <= Math.max(...xs) && z >= Math.min(...zs) && z <= Math.max(...zs);
 }
 

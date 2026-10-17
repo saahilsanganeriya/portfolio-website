@@ -46,6 +46,8 @@ const LEG_SAMPLES = 24;
 /** The room in plan (metres): the floor's outline and the walls, as public/room/floorplan.json gives them. */
 export interface RoomPlan {
   outline: readonly (readonly [number, number])[];
+  /** The corner set's floor fading out into the void beyond its solid edge: still floor to look at. */
+  fadeOutline?: readonly (readonly [number, number])[];
   walls?: readonly (readonly (readonly [number, number])[])[];
 }
 
@@ -62,8 +64,9 @@ export function seesRoom(room: RoomPlan, eye: ArrayLike<number>, dir: ArrayLike<
   if (dir[1] >= 0) return false;
   const t = -eye[1] / dir[1];
   const [x, z] = [eye[0] + t * dir[0], eye[2] + t * dir[2]];
-  const xs = room.outline.map(([px]) => px);
-  const zs = room.outline.map(([, pz]) => pz);
+  const floor = room.fadeOutline ?? room.outline;
+  const xs = floor.map(([px]) => px);
+  const zs = floor.map(([, pz]) => pz);
   return x >= Math.min(...xs) && x <= Math.max(...xs) && z >= Math.min(...zs) && z <= Math.max(...zs);
 }
 const EASE_S = 3;
