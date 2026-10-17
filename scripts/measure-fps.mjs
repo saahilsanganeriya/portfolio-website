@@ -1,17 +1,18 @@
 // Frame rate of the room on the "2020 laptop" profile (PLAN 3.9): Playwright Chromium at 1440x900, device scale 2,
 // software WebGL (SwiftShader) standing in for a 2020 integrated GPU. Counts requestAnimationFrame frames during the
 // arrival glide on / (no input), then for 10 s in each phase: every framing the room has (the desk, the monitor and the
-// tour's stops among them), a hovered prop, across camera moves, the tour's map open while the camera flies to a stop
-// (when the room has a floor plan), and the photo album open with a page turning every 1.2 s; passes when every
-// phase's median is at least 50 fps. By default everything moves at once after the arrival (PLAN 11.3, 12.3,
-// PLAN-ROUND-7 §4): the lava lamp changing colour, an espresso shot pouring again and again with its steam, and the
-// projector running in view or not; --calm leaves the room as a visitor finds it. --phone measures the light tier on an
-// emulated iPhone 13 instead: the arrival, the glide into the monitor until SaahilOS takes over, the wide view, the
-// desk and moves. The film column is the share of frames in which the projector was playing. The light tier has no
-// projector film. --record <id> puts a record from the crate on after the arrival (a key press first, the gesture sound
-// needs) and keeps it playing through every phase; the rec column says whether it was still playing at the end.
+// tour's stops among them), a hovered prop, across camera moves, and the tour's map open while the camera flies to a
+// stop (when the room has a floor plan); passes when every phase's median is at least 50 fps. After the arrival it
+// waits for the full-quality atlases to stream in (window.__roomStats; --low measures the first-frame set instead), so
+// the phases run at full quality. By default everything moves at once after the arrival (PLAN 11.3, 12.3,
+// PLAN-ROUND-7 §4): the lava lamp changing colour, an espresso shot pouring again and again with its steam; --calm
+// leaves the room as a visitor finds it. --phone measures the light tier on an emulated iPhone 13 instead: the arrival,
+// the glide into the monitor until SaahilOS takes over, the wide view, the desk and moves. --record <id> puts a record
+// from the crate on after the arrival (a key press first, the gesture sound needs) and keeps it playing through every
+// phase; the rec column says whether it was still playing at the end. The tier column is where the quality ladder
+// stood at the end of the phase; the summary gives the pixel ratio and the GPU memory the room held.
 //
-//   node scripts/measure-fps.mjs [--no-build] [--url https://…] [--seconds 10] [--phone] [--calm] [--record <id>]
+//   node scripts/measure-fps.mjs [--no-build] [--url https://…] [--seconds 10] [--phone] [--calm] [--low] [--record <id>]
 import { cpus, loadavg } from 'node:os';
 import { chromium, devices } from 'playwright';
 import { serveBuild } from './lib/serve-build.mjs';
@@ -42,36 +43,23 @@ try {
 
   const everything = !phone && !flag('--calm');
 
-  /** Frame times for `ms`; 'move' keeps the camera gliding between the desk and the wide view, 'album' turns pages. */
+  /** Frame times for `ms`; 'move' keeps the camera gliding between the desk and the wide view. */
   const countFrames = (ms, mode = 'still') =>
     page.evaluate(
       ([ms, mode]) =>
         new Promise((resolve) => {
           const times = [];
-          let filmFrames = 0;
           const start = performance.now();
           let next = 'desk';
-          let lastTurn = start;
-          let forward = true;
           const frame = (t) => {
             times.push(t);
-            const projector = window.__room.world?.projector;
-            if (projector?.state === 'playing') filmFrames++;
-            if (mode === 'arrival' && !window.__room.moving) return resolve({ times, tier: window.__room.tier, film: filmFrames / times.length });
+            if (mode === 'arrival' && !window.__room.moving) return resolve({ times, tier: window.__room.tier });
             if (mode === 'move' && !window.__room.moving) {
               window.__room.goto(next);
               next = next === 'desk' ? 'idle' : 'desk';
             }
-            if (mode === 'album' && t - lastTurn > 1200) {
-              // Through the album and back, with its own keys.
-              const album = window.__room.world.album;
-              if (album.spread >= album.spreads - 1) forward = false;
-              if (album.spread <= 0) forward = true;
-              window.dispatchEvent(new KeyboardEvent('keydown', { key: forward ? 'ArrowRight' : 'ArrowLeft' }));
-              lastTurn = t;
-            }
             if (t - start < ms) requestAnimationFrame(frame);
-            else resolve({ times, tier: window.__room.tier, film: filmFrames / times.length });
+            else resolve({ times, tier: window.__room.tier });
           };
           requestAnimationFrame(frame);
         }),
@@ -96,7 +84,7 @@ try {
   };
 
   const rows = [];
-  const record = (phase, { times, tier, film, onRecord }) => {
+  const record = (phase, { times, tier, onRecord }) => {
     const fps = times
       .slice(1)
       .map((t, i) => 1000 / (t - times[i]))
@@ -109,7 +97,6 @@ try {
       median: pick(0.5).toFixed(1),
       p5: pick(0.05).toFixed(1),
       tier,
-      film: `${Math.round(film * 100)}%`,
       rec: onRecord === undefined ? '-' : onRecord ? 'yes' : 'no',
       pass: pick(0.5) >= MIN_FPS,
     };
@@ -120,6 +107,9 @@ try {
   // The arrival glide on /, from the boot framing to the desk, measured while nothing touches the page.
   record('arrival', await count(30_000, 'arrival'));
   await settle('desk');
+  // The full-quality atlases stream in after the arrival; the phases measure the room with them.
+  if (!flag('--low')) await page.waitForFunction(() => !window.__roomStats || window.__roomStats.done || window.__roomStats.skipped, null, { timeout: 300_000 });
+  const streaming = await page.evaluate(() => window.__roomStats && { skipped: window.__roomStats.skipped, atlases: window.__roomStats.atlases.map((a) => `${a.name} ${a.state} ${a.px}px`) });
 
   if (phone) {
     // The phone holds the desk briefly, then glides into the monitor by itself: measure that glide first.
@@ -144,11 +134,7 @@ try {
   } else {
     await page.evaluate(() => window.__room.goto('idle'));
     await settle('idle');
-    if (everything) {
-      await page.evaluate(() => window.__room.forceEverything(true));
-      // The film loads on its first run: measure once it plays.
-      await page.waitForFunction(() => !window.__room.world.projector || window.__room.world.projector.state === 'playing', null, { timeout: 60_000 });
-    }
+    if (everything) await page.evaluate(() => window.__room.forceEverything(true));
     const stations = await page.evaluate(() => window.__room.stations);
     for (const station of ['idle', ...stations.filter((s) => s !== 'idle')]) {
       await page.evaluate((s) => window.__room.goto(s), station);
@@ -177,15 +163,8 @@ try {
       record('map', await flying);
       await page.keyboard.press('Escape');
     }
-    // The album open in front of the desk framing, turning a page every 1.2 s.
-    await page.evaluate(() => window.__room.goto('idle'));
-    await settle('idle');
-    const album = await page.evaluate(() => window.__room.point('hit_album'));
-    await page.mouse.click(album.x, album.y);
-    await page.waitForFunction(() => window.__room.world.album?.state === 'open', null, { timeout: 30_000 });
-    await settle();
-    record('album', await count(seconds * 1000, 'album'));
   }
+  const held = await page.evaluate(() => ({ pixelRatio: window.__roomDebug?.pixelRatio ?? null, gpu: window.__roomStats?.gpu ?? null }));
 
   console.log(`renderer: ${gpu}`);
   // SwiftShader runs on the CPU, so other work on the machine lowers these numbers; the load is printed with them.
@@ -193,13 +172,16 @@ try {
   console.log(
     phone
       ? `iPhone 13 (390x664 @3x), light tier, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps`
-      : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${everything ? ', everything moving after the arrival (lava lamp changing, espresso pouring with its steam, projector forced on)' : ''}`,
+      : `viewport 1440x900 @2x, ${seconds} s per phase, pass = median >= ${MIN_FPS} fps${everything ? ', everything moving after the arrival (lava lamp changing, espresso pouring with its steam)' : ''}`,
   );
+  if (streaming) console.log(`atlases: ${streaming.skipped ? `first-frame set only (${streaming.skipped})` : streaming.atlases.join('; ')}`);
+  if (held.pixelRatio !== null) console.log(`pixel ratio at the end: ${held.pixelRatio}`);
+  if (held.gpu) console.log(`GPU memory (estimate): textures ${held.gpu.textureBytes} B, render targets ${held.gpu.targetBytes} B, total ${held.gpu.totalBytes} B`);
   if (recordId) console.log(`record: ${recordId} playing from the end of the arrival (rec = still playing as the phase ended)`);
-  console.log('phase      frames  mean   median  p5     tier  film  rec  pass');
+  console.log('phase      frames  mean   median  p5     tier  rec  pass');
   for (const r of rows) {
     console.log(
-      `${r.phase.padEnd(10)} ${String(r.frames).padStart(6)}  ${r.mean.padStart(5)}  ${r.median.padStart(6)}  ${r.p5.padStart(5)}  ${String(r.tier).padStart(4)}  ${r.film.padStart(4)}  ${r.rec.padStart(3)}  ${r.pass}`,
+      `${r.phase.padEnd(10)} ${String(r.frames).padStart(6)}  ${r.mean.padStart(5)}  ${r.median.padStart(6)}  ${r.p5.padStart(5)}  ${String(r.tier).padStart(4)}  ${r.rec.padStart(3)}  ${r.pass}`,
     );
   }
   console.log(failed ? 'fps: FAIL' : 'fps: pass');
