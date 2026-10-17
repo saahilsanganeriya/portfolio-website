@@ -149,8 +149,8 @@ export class RoomRenderer {
     this.tier = tier;
     this.finish.setSamples(this.switches.samples ?? tier.msaa);
     // The dither places the shades between two 8-bit levels. The vignette and the bloom make them in the pass; a tier
-    // with neither (the lowest desktop tiers, phones) keeps the scene's own in a half-float target (T73b A/B).
-    this.finish.setHalfFloat(this.switches.halfFloat ?? !(tier.bloom || tier.film));
+    // that dithers with neither (a phone's top tier) keeps the scene's own in a half-float target (T73b A/B).
+    this.finish.setHalfFloat(this.switches.halfFloat ?? (tier.dither && !(tier.bloom || tier.film)));
     // A tier with another number of anisotropic taps filters what is already loaded again (one upload per texture).
     if (this.lastScene && anisotropy !== this.anisotropy()) this.prepareTextures(this.lastScene);
   }
@@ -224,9 +224,9 @@ export class RoomRenderer {
     const s = this.switches;
     const parts: Parts = { grade: s.grade ?? tier.grade, bloom: s.bloom ?? tier.bloom, film: tier.film, ...this.probe.force };
     const vignette = s.vignette ?? this.finish.settings.vignette;
-    const frame: FinishFrame = { ...parts, film: parts.film && vignette > 0, vignette, dither: s.dither ?? this.finish.settings.dither };
+    const frame: FinishFrame = { ...parts, film: parts.film && vignette > 0, vignette, dither: s.dither ?? (tier.dither ? this.finish.settings.dither : 0) };
     const antialiased = (s.samples ?? tier.msaa) > 0;
-    // The dither is on every tier, so every tier finishes through the pass.
+    // A tier that dithers finishes through the pass; one without antialiasing, bloom, vignette or dither draws straight on.
     if (antialiased || parts.grade || parts.bloom || frame.film || frame.dither > 0) this.finish.render(scene, camera, frame);
     else {
       this.gl.setRenderTarget(null);

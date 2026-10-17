@@ -18,6 +18,11 @@ export interface QualityTier {
    * angles. The top two tiers only: a machine below them is short of time, and a software GPU pays for the taps.
    */
   anisotropy: number;
+  /**
+   * The output dither that keeps dark gradients from banding (T73b). Off on the tiers a machine reaches only under fps
+   * pressure, where the pass it needs costs a frame interval on a software GPU; phones keep it on their top tier.
+   */
+  dither: boolean;
 }
 
 export interface QualityLadder {
@@ -29,13 +34,13 @@ export interface QualityLadder {
 
 export const FULL: QualityLadder = {
   tiers: [
-    { resolution: 1, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 8 },
-    { resolution: 0.8, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 8 },
-    { resolution: 0.62, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 1 },
-    { resolution: 0.5, msaa: 4, grade: false, bloom: false, film: true, halos: false, shine: true, anisotropy: 1 },
-    { resolution: 0.4, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1 },
+    { resolution: 1, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 8, dither: true },
+    { resolution: 0.8, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 8, dither: true },
+    { resolution: 0.62, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 1, dither: true },
+    { resolution: 0.5, msaa: 4, grade: false, bloom: false, film: true, halos: false, shine: true, anisotropy: 1, dither: true },
+    { resolution: 0.4, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1, dither: false },
     // At the DPR cap of 2 this is the old bottom tier's 0.6 device pixels per CSS pixel.
-    { resolution: 0.3, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1 },
+    { resolution: 0.3, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1, dither: false },
   ],
   dprCap: 2,
 };
@@ -43,9 +48,9 @@ export const FULL: QualityLadder = {
 /** Phones and small windows: one CSS pixel per pixel at most, no halos, no bloom or vignette. */
 export const LIGHT: QualityLadder = {
   tiers: [
-    { resolution: 1, msaa: 4, grade: false, bloom: false, film: false, halos: false, shine: true, anisotropy: 8 },
-    { resolution: 0.8, msaa: 4, grade: false, bloom: false, film: false, halos: false, shine: true, anisotropy: 8 },
-    { resolution: 0.62, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1 },
+    { resolution: 1, msaa: 4, grade: false, bloom: false, film: false, halos: false, shine: true, anisotropy: 8, dither: true },
+    { resolution: 0.8, msaa: 4, grade: false, bloom: false, film: false, halos: false, shine: true, anisotropy: 8, dither: false },
+    { resolution: 0.62, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1, dither: false },
   ],
   dprCap: 1,
 };

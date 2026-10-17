@@ -101,18 +101,20 @@ test('the top tier draws antialiased edges', async ({ page }) => {
 });
 
 /**
- * Catches banding coming back in the room's dark gradients: the output dither missing, too weak to break the flat
- * steps, or left with nothing to place on a tier with no vignette or bloom (an 8-bit scene target, or the room drawn
- * straight onto the canvas, as tiers 4–5 and phones were); and a dither that moves from frame to frame, which would
- * crawl while the camera drifts. On the darkest smooth gradient of the wide view, the flat steps shrink, and two
- * redraws of the still room differ no more with the dither than without it.
+ * Catches banding coming back in the room's dark gradients on the tiers that dither: the output dither missing or too
+ * weak to break the flat steps; a dither that moves from frame to frame, which would crawl while the camera drifts;
+ * and a tier the ladder reaches only under fps pressure paying for the dither pass again (one frame interval at tier 5
+ * on SwiftShader, T78's A/B). On the darkest smooth gradient of the wide view, the flat steps shrink where the tier
+ * dithers and the frame is unchanged where it does not, and two redraws of the still room differ no more with the
+ * dither than without it.
  */
 for (const { tier, shrink } of [
   { tier: 0, shrink: 0.5 },
-  // Tier 4 draws 0.4 device px per CSS px, so the dither's grain is upscaled too: steps shrink by about 45%, not 85%.
-  { tier: 4, shrink: 0.75 },
+  // Tier 3 draws 0.5 device px per CSS px, so the dither's grain is upscaled too: steps shrink less than at tier 0.
+  { tier: 3, shrink: 0.75 },
+  { tier: 4, shrink: null },
 ]) {
-  test(`dark gradients are dithered with a pattern that never moves (tier ${tier})`, async ({ page }) => {
+  test(`dark gradients are dithered with a pattern that never moves, on the tiers that dither (tier ${tier})`, async ({ page }) => {
     await page.addInitScript((t) => ((window as unknown as { __roomTier: number }).__roomTier = t), tier);
     await page.goto('/');
     await page.waitForFunction(() => window.__room?.landedAt != null && !window.__room.moving, null, { timeout: 180_000 });
@@ -136,6 +138,11 @@ for (const { tier, shrink } of [
 
     const before = bandingOf(plainRgb, 1440, 900, rect, 1);
     const after = bandingOf(await decode(dithered), 1440, 900, rect, 1);
+    if (shrink === null) {
+      // No dither pass: the flat steps stay as wide as with the dither switched off.
+      expect(after.run, `flat steps ${before.run} → ${after.run} CSS px: this tier draws without the dither`).toBeGreaterThan(before.run * 0.9);
+      return;
+    }
     expect(after.run, `flat steps ${before.run} → ${after.run} CSS px`).toBeLessThan(before.run * shrink);
     const roomNoise = await difference(await crop(plain), await crop(plainAgain));
     expect(await difference(await crop(dithered), await crop(ditheredAgain)), 'the dither is the same every frame').toBeLessThanOrEqual(roomNoise + 0.02);
