@@ -98,32 +98,24 @@ Each step answers one question and hands a table to the next.
 table, a range of bytes in a document, a region of an image. Text found inside a picture joins the same
 pass as everything else, so a name in a screenshot can be linked to the same name in an email.
 
-**Who is who.** The default resolver is deterministic: the same input gives the same answer, and it
-makes no model calls. It treats two kinds of clue differently. An email address, a phone number or a
+**Who is who.** The resolver treats two kinds of clue differently. An email address, a phone number or a
 username can match exactly. A name cannot, because it comes with spellings, initials and typos.
 
-The rule that matters most is that evidence has a direction. `Jordan Lee <jordan.lee@example.com>` in an
-email header ties that name to that address. Two strings that only sit in the same message are tied
-weakly, and no amount of weak evidence merges anyone, because recipient lists would chain strangers
-together. Things that many people use are identities of their own: a team inbox, or an address that
-several people sign for, never becomes a bridge between two people. Anything linked to too many others
-does not merge on its own.
+A merge needs strong evidence; lots of weak evidence merges nobody.
 
-For the close calls there is a slower path. It groups likely matches into small blocks, asks a model to
-sort each block, and only merges on agreeing votes. It is off by default, because it is slower and costs
-money on every run.
+Matching works in small blocks instead of comparing everything with everything. Likely matches are grouped
+together, a model sorts each block, and a merge needs agreeing votes, so one bad verdict cannot join two
+people.
 
 **One fake per person.** Every mention of a person takes its fake from that person's one identity, in the
 same format and of the same length. An email address still looks like an email address, and a name on a
-form still fits its box. The table that pairs each real value with its fake is the key that undoes
-everything, so it never leaves with the data.
+form still fits its box.
 
 **Writing it back.** Each fake goes back to the place the reader recorded, never by searching for the
-original text. Pictures get no fake: faces, logos, codes and personal text in an image are masked, and
-an image the pipeline cannot read is not shipped as it was.
+original text.
 
-The whole pipeline runs on Temporal across GKE and EKS, and resolution is a Go service that keeps its
-memory bounded however much data comes in.
+Resolution runs as a Go service on Temporal across GKE and EKS, and keeps its memory bounded however much
+data comes in.
 
 ## What it gives up
 
@@ -135,10 +127,6 @@ A split leaves one person with two fakes, which reads a little oddly. A merge pi
 words and details on someone else, and that cannot be undone once the data has left. So every close call
 should split.
 
-The deterministic default gives up the matches that only a careful reader of the context would see. In
-return it gives the same answer twice, and every merge can be traced to the evidence behind it. It also
-adds no model bill to a run.
-
 Writing back by position is harder to build than search, because every step has to carry the locations
 along. Search would be simpler, and it would also change every innocent copy of the same string.
 
@@ -147,9 +135,6 @@ along. Search would be simpler, and it would also change every innocent copy of 
 With the eval suite I built alongside the resolver, accuracy on a labeled set went from 85% to 95%. That
 says the resolver is right more often. It does not say which way the remaining mistakes lean, split or
 merge, and that is what decides whether anyone gets hurt.
-
-Every change to the resolver now shows its score against the main branch, next to the spread between two
-runs of the same build. A change smaller than that spread is not a finding.
 
 ## What I took from it
 

@@ -1,7 +1,7 @@
 ---
 title: "The same-person problem"
 date: 2026-10-12
-summary: "“Is this the same person?” takes a human a second and a program a long time. Why it is the hardest easy problem in data, and the two ways every answer goes wrong."
+summary: "“Is this the same person?” takes a human a second and a program a long time. Why, and the two ways every answer goes wrong."
 tags: ["data", "identity resolution", "engineering", "essays"]
 draft: false
 ---
@@ -46,7 +46,7 @@ Linking has a trap built into it. If A is the same person as B, and B is the sam
 <figcaption>An invented example of a wrong link spreading: both people once wrote from the same support address, so linking each of them to it joins all five mentions into one person.</figcaption>
 </figure>
 
-I have watched one noisy match pull strangers into one cluster, and it is the failure I worry about most. So a merge should need strong evidence, not a lot of weak evidence. In the pipeline I work on, a name joins an address on evidence that points one way, like an email header that gives the name and then the address. Sitting in the same message, however often, joins nobody. And an address that many people use, like support@, becomes an identity of its own instead of a bridge between people.
+I have watched one noisy match pull strangers into one cluster, and it is the failure I worry about most. So a merge should need strong evidence, not a lot of weak evidence.
 
 ## Which mistake can you live with?
 
@@ -60,7 +60,7 @@ Decide which mistake you can live with before you write any code. Every threshol
 
 Since comparing everything is out, you group likely matches first and compare only inside the groups. I did not invent the trick. Search engines worked it out in the 1990s: MinHash was published in 1997 and first used at AltaVista to find duplicate web pages. Records that share enough pieces tend to land in the same bucket, and nobody compares the rest.
 
-Inside a group you can afford a closer look, even a language model that reads each candidate in context. A model costs money on every run and may not give the same answer twice. So in the pipeline I work on, the model is an option for the close calls, and the default decides from the evidence alone.
+Inside a group you can afford a closer look, even a language model that reads each candidate in context. A model can be wrong too, and one wrong verdict is all it takes to join two groups. So in the pipeline I work on, a merge needs agreeing votes.
 
 This costs true matches. Two mentions that never land in the same group can never be linked, however obvious the link would be to a person. Asking for strong evidence costs some too, because a real match with only weak evidence stays split. Both costs land on the side I chose to err on.
 
@@ -68,7 +68,7 @@ This costs true matches. Two mentions that never land in the same group can neve
 
 Measuring this is its own trap. Put every mention in one giant cluster and you have found every true match. Put every mention alone and you have made no wrong merge. Both answers are useless, and some popular scores rate one of them well. A number that cannot fail tells you nothing.
 
-There is a second trap: the score moves on its own. Two evals of the same build over the same data do not agree exactly, so a small gain may be nothing. Where I work, every change to the resolver shows its score next to that spread, and a change inside it is not a finding. Even a real gain says nothing about which way the remaining mistakes lean, split or merge, and that is the thing that decides whether anyone gets hurt.
+There is a second trap: the score moves on its own. Two evals of the same build over the same data do not agree exactly, so a small gain may be nothing. Even a real gain says nothing about which way the remaining mistakes lean, split or merge, and that is the thing that decides whether anyone gets hurt.
 
 ## What I would do first next time
 
