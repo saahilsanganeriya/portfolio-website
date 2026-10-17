@@ -17,6 +17,7 @@ import type { AppId, OsApi, OsIndex } from './types';
 import { DesktopIcons } from './wm/Desktop';
 import { Shutdown } from './wm/Shutdown';
 import { Taskbar, useClock } from './wm/Taskbar';
+import { Wallpaper } from './wm/Wallpaper';
 import { Window, windowDomId } from './wm/Window';
 import { initialWindows, topWindow, windowsReducer } from './wm/windows';
 
@@ -83,8 +84,19 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
     });
   }, []);
 
+  // Read through a ref so the OsApi object stays the same while windows open and close.
+  const closeRef = useRef<(id: string) => void>(() => {});
   const os: OsApi = useMemo(
-    () => ({ index, embedded, phone, open: (target) => open(target) }),
+    () => ({
+      index,
+      embedded,
+      phone,
+      open: (target) => open(target),
+      close: (target) => {
+        const route = parseTarget(target);
+        if (route) closeRef.current(windowIdFor(route));
+      },
+    }),
     [index, embedded, phone, open],
   );
 
@@ -169,6 +181,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
     if (next)
       requestAnimationFrame(() => document.getElementById(windowDomId(next.id))?.focus({ preventScroll: true }));
   };
+  closeRef.current = close;
 
   const shutDown = () => {
     dispatch({ type: 'reset' });
@@ -187,10 +200,7 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
         <div className="os" data-embedded={embedded || undefined} onClick={onClick}>
           {power === 'on' ? (
             <>
-              <picture className="os-wallpaper">
-                <source type="image/avif" srcSet={index.wallpaper.avif} sizes="100vw" />
-                <img src={index.wallpaper.src} srcSet={index.wallpaper.webp} sizes="100vw" alt="" decoding="async" />
-              </picture>
+              <Wallpaper wallpaper={index.wallpaper} />
               <header className="os-phonebar">
                 <p>SaahilOS</p>
                 <p>
@@ -212,14 +222,10 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
                   onOpen={(id, from) => open(id, true, from)}
                 />
                 <div className="os-desktop-foot">
-                  <p className="os-desktop-hint">
-                    {phone ? 'Tap an app to open it.' : 'Double-click an icon to open it.'}
-                  </p>
-                  {/* ESA/Webb's licence (CC BY 4.0) asks for the full credit line, visible beside the picture. */}
+                  {/* ESA/Webb's terms (CC BY 4.0) ask for the full credit line, unaltered, visible and linked. */}
                   <p className="os-wallpaper-credit">
-                    Wallpaper:{' '}
-                    <a href="https://esawebb.org/images/weic2216a/">Pillars of Creation, James Webb Space Telescope</a>.
-                    NASA, ESA, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan (STScI). CC BY 4.0.
+                    <a href="https://esawebb.org/images/weic2216b/">Pillars of Creation, James Webb Space Telescope</a>:
+                    NASA, ESA, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan (STScI). CC BY 4.0
                   </p>
                 </div>
                 {phone ? (

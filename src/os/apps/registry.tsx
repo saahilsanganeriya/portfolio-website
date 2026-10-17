@@ -6,7 +6,6 @@ import type { AppId, OsApi, OsIndex, Route } from '../types';
 import { AboutApp } from './AboutApp';
 import { parseCodeSlug } from './code/model';
 import { BlogApp, ProjectsApp } from './Lists';
-import { OvenApp } from './OvenApp';
 import { PostReader, ProjectReader, ThreadLoader } from './Reader';
 import { ResumeApp } from './SmallApps';
 
@@ -15,7 +14,6 @@ export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   about: { label: 'About', icon: 'about' },
   projects: { label: 'Projects', icon: 'projects' },
   code: { label: 'Code', icon: 'code' },
-  oven: { label: 'On the bench', icon: 'bench' },
   blog: { label: 'Writing', icon: 'page' },
   photography: { label: 'A Narrative in a Frame', icon: 'camera' },
   films: { label: 'Films', icon: 'films' },
@@ -24,6 +22,7 @@ export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   voyager: { label: 'Voyager Golden Record', icon: 'voyager' },
   terminal: { label: 'Terminal', icon: 'terminal' },
   resume: { label: 'Résumé', icon: 'resume' },
+  contact: { label: 'Contact', icon: 'contact' },
   credits: { label: 'Credits', icon: 'credits' },
   browser: { label: 'Browser', icon: 'browser' },
 };
@@ -34,6 +33,7 @@ const FilmsApp = lazy(() => import('./FilmsApp').then((m) => ({ default: m.Films
 const PhotographyApp = lazy(() => import('./photography/PhotographyApp').then((m) => ({ default: m.PhotographyApp })));
 const TerminalApp = lazy(() => import('./TerminalApp').then((m) => ({ default: m.TerminalApp })));
 const BrowserApp = lazy(() => import('./BrowserApp').then((m) => ({ default: m.BrowserApp })));
+const ContactApp = lazy(() => import('./ContactApp').then((m) => ({ default: m.ContactApp })));
 const CreditsApp = lazy(() => import('./CreditsApp').then((m) => ({ default: m.CreditsApp })));
 const BooksApp = lazy(() => import('./ShelfApps').then((m) => ({ default: m.BooksApp })));
 const RecipesApp = lazy(() => import('./ShelfApps').then((m) => ({ default: m.RecipesApp })));
@@ -90,7 +90,6 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     photography: plural(index.photography.length, 'photograph'),
     projects: plural(index.projects.length, 'project'),
     code: '',
-    oven: `${plural(index.oven.items.length, 'thing')} on the bench`,
     blog: plural(index.posts.length, 'post'),
     films: 'Films from the Letterboxd diary',
     books: '',
@@ -99,6 +98,7 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     terminal: 'Type help for the commands',
     about: '',
     resume: '',
+    contact: '',
     credits: 'Every file is used under the licence shown',
     browser: '',
   };
@@ -119,8 +119,6 @@ function AppContent({ route, os }: { route: Route; os: OsApi }): ReactNode {
       return <PhotographyApp slug={route.slug} os={os} />;
     case 'projects':
       return route.slug ? <ProjectReader slug={route.slug} os={os} /> : <ProjectsApp os={os} />;
-    case 'oven':
-      return <OvenApp os={os} />;
     case 'blog':
       return route.slug ? <PostReader slug={route.slug} os={os} /> : <BlogApp os={os} />;
     case 'films':
@@ -137,6 +135,8 @@ function AppContent({ route, os }: { route: Route; os: OsApi }): ReactNode {
       return <AboutApp os={os} />;
     case 'resume':
       return <ResumeApp os={os} />;
+    case 'contact':
+      return <ContactApp />;
     case 'credits':
       return <CreditsApp />;
     case 'code':

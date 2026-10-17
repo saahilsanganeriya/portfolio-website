@@ -94,19 +94,6 @@ export interface OsFavourite {
   poster: string | null;
 }
 
-export interface OvenItem {
-  title: string;
-  note: string;
-  link?: string;
-}
-
-/** What is being built right now (src/content/oven.json). */
-export interface OvenList {
-  items: OvenItem[];
-  /** Calendar day, YYYY-MM-DD. */
-  updated: string;
-}
-
 /** One of the books on the shelf (src/content/books.json, served at /content/books.json). */
 export interface OsBook {
   title: string;
@@ -135,9 +122,14 @@ export interface OsRecipe {
 }
 
 export interface OsWallpaper {
+  /** One small picture (960 px) for the room's first load: its URLs as one-entry source sets, and the fallback src. */
+  preview: { avif: string; webp: string; src: string };
+  /** Source sets of every full width, for once the room has arrived. */
   avif: string;
   webp: string;
-  src: string;
+  /** The largest picture's size. */
+  width: number;
+  height: number;
 }
 
 /** Everything the desktop lists, built at build time by src/pages/os.astro. Window bodies load lazily. */
@@ -147,7 +139,6 @@ export interface OsIndex {
   pages: OsPage[];
   films: FilmsData;
   favourites: OsFavourite[];
-  oven: OvenList;
   wallpaper: OsWallpaper;
   /** The About window's portrait (his professional headshot); the photos beside its text come with the page body. */
   me: { portrait: OsImage };
@@ -159,7 +150,6 @@ export const APP_IDS = [
   'about',
   'projects',
   'code',
-  'oven',
   'blog',
   'photography',
   'films',
@@ -168,13 +158,14 @@ export const APP_IDS = [
   'voyager',
   'terminal',
   'resume',
+  'contact',
   'credits',
   'browser',
 ] as const;
 export type AppId = (typeof APP_IDS)[number];
 
 /** The desktop's left side, most important first: the work, then the machine. */
-export const WORK_APPS: readonly AppId[] = ['about', 'projects', 'blog', 'code', 'resume', 'oven', 'terminal', 'credits'];
+export const WORK_APPS: readonly AppId[] = ['about', 'projects', 'blog', 'code', 'resume', 'contact', 'terminal', 'credits'];
 /** The desktop's right side, the rest of his life; the room's props open each of these directly too. */
 export const PERSONAL_APPS: readonly AppId[] = ['films', 'photography', 'books', 'recipes', 'voyager'];
 /** Every app a visitor reaches from the desktop, in reading and Tab order; the phone's home screen is this one grid. */
@@ -191,4 +182,6 @@ export interface OsApi {
   embedded: boolean;
   phone: boolean;
   open: (target: string) => void;
+  /** Closes the window an address names (the Terminal's `exit`); on a phone this is Back. */
+  close: (target: string) => void;
 }
