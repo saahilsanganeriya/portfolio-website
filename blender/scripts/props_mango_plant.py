@@ -134,8 +134,8 @@ def main():
     bark_mat = pl.surface("mango_bark", (0.085, 0.07, 0.05), 0.75, micro_bump=(500, 0.6), color_var=0.25,
                           grime=0.4)
     stem_mat = pl.surface("mango_stem", (0.075, 0.06, 0.03), 0.55, micro_bump=(600, 0.3), color_var=0.25)
-    leaf_mat = leaf_material("mango_leaf", (0.022, 0.058, 0.015), (0.16, 0.20, 0.06), 0.50)
-    young_mat = leaf_material("mango_leaf_young", (0.12, 0.035, 0.018), (0.22, 0.12, 0.06), 0.5)
+    leaf_mat = leaf_material("mango_leaf", (0.016, 0.060, 0.010), (0.14, 0.21, 0.05), 0.40)
+    young_mat = leaf_material("mango_leaf_young", (0.13, 0.034, 0.016), (0.24, 0.12, 0.06), 0.42)
     dry_mat = leaf_material("mango_leaf_dry", (0.16, 0.09, 0.035), (0.24, 0.16, 0.07), 0.8)
 
     plant = pl.Builder(f"{NAME}_leaves")
@@ -176,7 +176,7 @@ def main():
         tip = path[-1]
         # The flush at the tip: a whorl of long lance-shaped leaves, the upper ones rising, the lower drooping.
         young = idx == YOUNG_BRANCH
-        count = 6 if young else 10
+        count = 6 if young else 12
         for n in range(count):
             az += math.degrees(GOLDEN) + rng.uniform(-10, 10)
             h = rng.uniform(-0.03, 0.0)
@@ -186,8 +186,9 @@ def main():
                          rng.uniform(0.010, 0.013), 0.25, young_mat, stem_mat, rng, fold=0.3, twist_deg=rng.uniform(-20, 20),
                          hang=True, petiole=0.014)
             else:
-                add_leaf(plant, leaf_uv, pos, az, rng.uniform(-6, 36), rng.uniform(0.13, 0.18),
-                         rng.uniform(0.022, 0.027), rng.uniform(0.35, 0.55), leaf_mat, stem_mat, rng,
+                length = rng.uniform(0.09, 0.19)
+                add_leaf(plant, leaf_uv, pos, az, rng.uniform(-22, 42), length,
+                         length * rng.uniform(0.15, 0.19), rng.uniform(0.30, 0.65), leaf_mat, stem_mat, rng,
                          fold=rng.uniform(0.25, 0.4), twist_deg=rng.uniform(-25, 25), petiole=rng.uniform(0.018, 0.03))
         # An older flush lower on the branch fills the crown.
         for n in range(4):
@@ -314,8 +315,8 @@ def leaf_material(name, base, vein_color, roughness):
     geo = k.node("ShaderNodeNewGeometry")
     rand = geo.outputs["Random Per Island"]
     hsv = k.node("ShaderNodeHueSaturation", inputs={"Color": base + (1.0,),
-                                                     "Hue": k.map_range(rand, 0, 1, 0.47, 0.53, smooth=False),
-                                                     "Value": k.map_range(rand, 0, 1, 0.75, 1.25, smooth=False)})
+                                                     "Hue": k.map_range(rand, 0, 1, 0.46, 0.54, smooth=False),
+                                                     "Value": k.map_range(rand, 0, 1, 0.7, 1.35, smooth=False)})
     color = hsv.outputs["Color"]
     color = k.mix_color(k.math("MAXIMUM", k.math("MULTIPLY", midrib, 0.8), veins), color, vein_color + (1.0,))
     tip = k.math("MULTIPLY", k.map_range(v, 0.86, 0.99),
@@ -326,13 +327,13 @@ def leaf_material(name, base, vein_color, roughness):
     color = k.mix_color(edge, color, (0.16, 0.17, 0.05, 1.0))
     bump = k.node("ShaderNodeBump", inputs={"Strength": 0.25, "Distance": 0.0004,
                                            "Height": k.math("ADD", k.math("MULTIPLY", midrib, -1.0), veins)})
+    # Principled only (the room bakes it): a small waxy highlight instead of a broad grey sheen, and a little
+    # subsurface so a leaf against the window glows green rather than going pale.
     bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": roughness,
-                                                      "Normal": bump.outputs["Normal"], "Coat Weight": 0.06,
-                                                      "Coat Roughness": 0.35, "Specular IOR Level": 0.32})
-    trans = k.node("ShaderNodeBsdfTranslucent", inputs={"Color": k.mix_color(0.6, color, (0.25, 0.4, 0.05, 1.0))})
-    mix = k.node("ShaderNodeMixShader", inputs={"Fac": 0.12, "Shader": bsdf.outputs["BSDF"],
-                                               "Shader_001": trans.outputs["BSDF"]})
-    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", mix.outputs["Shader"])
+                                                      "Normal": bump.outputs["Normal"], "Specular IOR Level": 0.2,
+                                                      "Subsurface Weight": 0.18, "Subsurface Scale": 0.004,
+                                                      "Subsurface Radius": (0.6, 1.0, 0.25)})
+    k.set(k.node("ShaderNodeOutputMaterial"), "Surface", bsdf.outputs["BSDF"])
     return mat
 
 

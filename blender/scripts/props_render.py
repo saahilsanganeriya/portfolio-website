@@ -173,7 +173,8 @@ def main():
     scene.render.film_transparent = False
 
     objs = [o for o in scene.objects if o.type == "MESH" and o.visible_get()]
-    lo, hi, corners = bounds(objs)
+    # A cable that runs off the desk's edge is rendered but left out of the framing.
+    lo, hi, corners = bounds([o for o in objs if not o.name.endswith("_cable")])
     rig = build_studio(scene, lo, hi)
     cam = bpy.data.cameras.new("cam")
     cam.lens = 80

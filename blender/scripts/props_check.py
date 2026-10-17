@@ -28,6 +28,12 @@ REQUIRED = {
     "lava_lamp": ["lava_lamp", "lava_lamp_glass", "lava_lamp_light"],
     "espresso_machine": ["espresso_machine", "espresso_cup", "espresso_coffee", "espresso_spout", "espresso_steam"],
     "countertop_oven": ["countertop_oven", "oven_door", "oven_glow", "croissant"],
+    "keyboard": ["keyboard", "keyboard_cable", "keyboard_cable_drop"],
+    "mouse": ["mouse", "mouse_cable", "mouse_cable_drop"],
+    "coffee_mug": ["coffee_mug", "coffee_mug_coffee", "coffee_steam"],
+    "croissant": ["croissant"],
+    "pennant_gatech": ["pennant_gatech"],
+    "crt_badge": ["crt_badge"],
 }
 PROP_BUDGETS = {"countertop_oven": 18000}  # the oven carries its door, cavity and the croissant
 HANGING = set()  # props whose origin is a mount point on top (none since the ceiling fan left the room)
@@ -41,7 +47,7 @@ tris = 0
 for o in meshes:
     o.data.calc_loop_triangles(); tris += len(o.data.loop_triangles)
 roots = [c.name for c in bpy.context.scene.collection.children]
-min_z = min((o.matrix_world @ v.co).z for o in meshes for v in o.data.vertices)
+min_z = min((o.matrix_world @ v.co).z for o in meshes if not o.name.endswith('_cable') for v in o.data.vertices)
 max_z = max((o.matrix_world @ v.co).z for o in meshes for v in o.data.vertices)
 no_uv = [o.name for o in meshes if 'UVMap' not in o.data.uv_layers]
 collapsed = {}
