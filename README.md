@@ -205,7 +205,54 @@ review that names one of those people.
 | `GH_TOKEN=$(gh auth token --user saahilsanganeriya) REPOS_WITHHOLD='<pattern>' npm run repos [-- <repo> ...]` | Refreshes the Code window's snapshot of the public repositories (local only: it needs a token, and refuses to run on Vercel). Email addresses are removed; any file, doc or commit line matching `REPOS_WITHHOLD` (the trace-scan pattern and anything kept off the site, held outside this repo) is left out and counted. Commit the result. |
 | `node scripts/posters/glyphs.mjs` | Writes `src/lib/poster-glyphs.ts`, the glyph outlines `renderPoster` uses. Run it again only when the fonts or the character sets change. |
 | `node scripts/media/build-audio.mjs`, `node scripts/media/build-records.mjs` | Rebuild the room's sounds and the record crate from their recorded sources (listed in `blender/ASSETS.md`). |
-| `npm run measure:payload`, `npm run measure:fps` | Measure the room's payload (the initial load until the room is interactive, and what a visit loads on demand) and its frame rate in each framing. |
+| `npm run measure:payload`, `npm run measure:fps` | Measure the room's payload (the first room frame: everything until the room is interactive, budget 6,000,000 B; `-- --full` also waits for the streamed atlases and checks the full room, budget 25,000,000 B) and its frame rate in each framing with the full atlases loaded (2020-laptop profile; run it only when the machine's 1-minute load is under 16). |
+| `node scripts/capture-crawl.mjs`, `node scripts/capture-sheet.mjs` | The crawl check and the side-by-side sheet against Henry's live site; see "Measure the render". |
+
+## Measure the render
+
+The room draws into a multisampled target (MSAA ×4) at up to 2 device pixels per CSS pixel, and the finishing pass
+resolves it onto the canvas. The quality ladder (`src/scene/Application/Quality.ts`) starts at the top tier and steps
+down only when the measured frame rate stays under 50 fps.
+
+**Crawl check.** `node scripts/capture-crawl.mjs --out <dir> [--viewports 1440x900@1,1280x720@2] [--seconds 5]
+[--video] [--variants file.json]` drives the room to the wide view with page time under the script's control
+(Playwright's clock, `Math.random` seeded, the tier pinned), so two builds draw the same moments of the idle drift.
+`WxH@d` is CSS pixels at a device pixel ratio: `1280x720@2` is a 2560×1440 frame. Four crops (the desk's front edge,
+the monitor, the window frame, the wall art) are placed from the room's own anchors. Per crop, on luma 0–255:
+
+| Number | Formula | Reads as |
+|---|---|---|
+| motion | mean \|Y(t) − Y(t−1)\| on edge pixels | how far the edges move (the drift itself) |
+| crawl | mean \|Y(t+1) − 2·Y(t) + Y(t−1)\| / 2 on edge pixels | what does not move smoothly: an aliased edge stepping from pixel to pixel, grain, flicker. A clean edge drifting at an even speed scores about 0 |
+| flat | the crawl formula on the other pixels | grain and flicker on flat surfaces |
+
+Edge pixels are those whose gradient in the capture's mean image is at least 10 levels per pixel. Out come
+`crawl.json`, the first frame, the crops, eight-frame strips of each crop (×3, nearest) and, with `--video`, an MP4.
+A variants file maps names to render switches (below), one capture each.
+
+**Texel density.** Add `?debug=texels` to any room address (or run `window.__roomDebug.texels(true)`): each baked
+surface is drawn in the band of texels per screen pixel it gets, from the UV derivatives × the atlas size: red < 1
+(the bake is magnified, soft), green 1–2, blue > 2. `window.__roomDebug.texelStats()` returns, per mesh, its pixels,
+median, 10th percentile and share below 1.
+
+**Side-by-side sheet.** `node scripts/capture-sheet.mjs --out <dir> [--label "ours (main)"]` screenshots our wide
+and desk views and Henry Heffernan's live site (landing and monitor views) at the same viewports and composes a
+labelled sheet with 1:1 crops of the desk edge, keyboard, monitor bezel and wall. `--gl swiftshader|egl|default`
+picks Chromium's WebGL switches; the sheet records the renderer the page got (on the devbox, every mode is
+SwiftShader).
+
+**Switches and stats in the page.** `window.__roomDebug.set({ samples, dprCap, anisotropy, grade, bloom, vignette, halos,
+motes })` overrides the tier for an A/B; `reset()` returns to it; `setClock(s)` sets the ambient
+clock. `window.__roomStats` reports the streamed atlases (`skipped`, `done`, `atlases[]`) and the GPU memory the room
+holds (`gpu`: each texture's size and format, render targets, total).
+
+**Streamed atlases.** `room.glb` embeds a small first-frame set. Once the room is interactive, the runtime reads
+`public/room/atlases.json` (`[{ name, materials[], low: {uri, px, bytes}, full: {uri, px, bytes, format}, hero? }]`),
+loads each full atlas one at a time (`hero: true` first, then file order; KTX2 through the Basis transcoder, AVIF,
+WebP or JPEG through `createImageBitmap`), uploads it, and swaps it in for every material and uniform that showed the
+small one on the next frame; the small texture is then freed. Phones (the light tier) keep the first-frame set
+(Save-Data visitors get the drawn monitor, never the 3D room). The clear colour behind the set is `voidColor` in
+`public/room/floorplan.json`.
 
 ## Deploy
 
