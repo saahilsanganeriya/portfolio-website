@@ -1,7 +1,7 @@
 // Builds every sound the room plays into public/audio/, from real recordings only (no synthesis), each listed with
 // its source, author and licence in blender/ASSETS.md:
-//   room/   Henry Heffernan's room tone, computer, startup, keys and mouse (MIT, used with his permission) and one CC0
-//           Super 8 projector: the loops and clicks heard since the room got its sound.
+//   room/   Henry Heffernan's room tone, computer, startup, keys and mouse (MIT, used with his permission): the loops
+//           and clicks heard since the room got its sound.
 //   music/  three stems of one lo-fi piece by holizna (CC0), cut to the same 16 bars so they loop together.
 //   sfx/    one-shots for the props (CC0 field and foley recordings).
 //   city/   the window's beds and events for San Francisco and Delhi (CC0 field recordings).
@@ -22,11 +22,10 @@ const FREESOUND = 'https://cdn.freesound.org/previews/';
 // ---- room: unchanged since the room first got real sound ----
 
 // Times in seconds within each source. The loop length moves by up to ±0.25 s to the point where the tail lines up
-// best with the head, so a hum or a shutter's rhythm does not flam through the crossfade.
+// best with the head, so a hum's rhythm does not flam through the crossfade.
 const ROOM_LOOPS = [
   { name: 'atmosphere', url: `${HENRY}atmosphere/office.ogg`, start: 1, length: 16, crossfade: 1.5 },
   { name: 'computer', url: `${HENRY}computer/idle.wav`, start: 1, length: 14, crossfade: 1.5 },
-  { name: 'projector', url: `${FREESOUND}241/241886_1130120-hq.ogg`, start: 40, length: 12, crossfade: 1 },
 ];
 const STARTUP = { name: 'startup', url: `${HENRY}startup/startup.mp3`, length: 9, fadeOut: 1.5 };
 const CLICKS = [
@@ -45,7 +44,6 @@ const MUSIC_BARS = 16;
 
 // ---- sfx: [start, length] excerpts, peak-normalised; the runtime sets each one's level under the music ----
 const SFX = [
-  { name: 'projector-clack', url: `${FREESOUND}613/613832_1130120-hq.mp3`, start: 2.7, length: 3.5, fadeOut: 1.2 },
   { name: 'espresso-brew', url: `${FREESOUND}402/402845_824371-hq.mp3`, start: 22, length: 7, fadeIn: 1, fadeOut: 1.5 },
   // The pour the espresso machine plays as it pulls a shot: the vibratory pump coming on, then the shot running.
   { name: 'espresso-pour', url: `${FREESOUND}628/628845_13885154-hq.mp3`, start: 1.25, length: 9, fadeIn: 0.05, fadeOut: 2 },

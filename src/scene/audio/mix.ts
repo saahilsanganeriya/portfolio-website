@@ -4,25 +4,21 @@ import sounds from './sounds.json';
 import { FILTER_FADE_S, logCurve, MUSIC_MIX, powerCurve, STATE_FADE_S, STEMS, type AudioState, type Stem } from './state';
 
 // The room's sound is recorded, not synthesised (scripts/media/build-audio.mjs; sources in blender/ASSETS.md): Henry
-// Heffernan's room tone, computer, keyboard, mouse and startup, one CC0 Super 8 projector, a CC0 lo-fi piece in three
+// Heffernan's room tone, computer, keyboard, mouse and startup, a CC0 lo-fi piece in three
 // stems, CC0 prop and city recordings. Henry's mapping from camera distance to a low-pass filter stays: the room tone
 // muffles as you lean into the monitor, and each machine is clearer the closer you are. Props and the window are
 // placed with PannerNodes, so each is louder near its source and sits under the music.
 
-export const LOOPS = ['atmosphere', 'computer', 'projector'] as const;
+export const LOOPS = ['atmosphere', 'computer'] as const;
 export const KEYS = ['key-1', 'key-2', 'key-3', 'key-4', 'key-5', 'key-6'] as const;
 export const SHOTS = ['startup', ...KEYS, 'mouse-down', 'mouse-up'] as const;
 export type LoopName = (typeof LOOPS)[number];
 export type ClickKind = 'key' | 'mouse-down' | 'mouse-up';
 export type BedName = 'sf' | 'delhi-day' | 'delhi-night';
 
-// Linear gains on the -23 LUFS files: the ambience sits near -30 dBFS RMS, clicks at their recorded level, and the
-// projector runs only while its film does, heard up close (it falls off with the square of distance) or, while it
-// runs, with Films as the front window.
+// Linear gains on the -23 LUFS files: the ambience sits near -30 dBFS RMS, clicks at their recorded level.
 const ROOM_TONE = 0.4;
 const COMPUTER = 0.35;
-const PROJECTOR_NEAR = 0.7;
-const PROJECTOR_FILMS = 0.45;
 const STARTUP = 0.45;
 const CLICK = 0.8;
 // The visitor's first click, tap or key starts everything, and it all comes up together in about a second.
@@ -49,7 +45,6 @@ const pad = sounds.padSeconds;
 /** Where the sound comes from (world units) and where Henry's room tone is measured from. */
 export interface SoundPositions {
   crt: THREE.Vector3;
-  projector: THREE.Vector3 | null;
   desk: THREE.Vector3;
 }
 
@@ -98,7 +93,6 @@ export class RoomMix {
   readonly output: GainNode;
   private readonly room: { filter: BiquadFilterNode; gain: GainNode };
   private readonly computer: Source;
-  private readonly projector: Source | null;
   private readonly desk: Source;
   private readonly music: {
     bus: GainNode;
@@ -117,7 +111,6 @@ export class RoomMix {
   readonly crackleInput: GainNode;
   private readonly spatial: GainNode;
   private readonly beds = new Map<BedName, GainNode>();
-  private projectorRunning = false;
   private readonly local = new THREE.Vector3();
   private readonly lastListener = new THREE.Vector3(NaN, NaN, NaN);
   private readonly forward = new THREE.Vector3();
@@ -138,7 +131,6 @@ export class RoomMix {
     filter.connect(gain).connect(this.output);
     this.room = { filter, gain };
     this.computer = this.source(positions.crt, 0.5, COMPUTER, 1);
-    this.projector = positions.projector ? this.source(positions.projector, 0.6, PROJECTOR_NEAR, 2) : null;
     this.desk = this.source(positions.desk, 0.6, CLICK, 1);
 
     const musicFilter = ctx.createBiquadFilter();
@@ -174,14 +166,8 @@ export class RoomMix {
     this.spatial.connect(this.output);
   }
 
-  /** The projector's motor and shutter sound plays only while its film runs; the next update() glides it in or out. */
-  setProjectorRunning(running: boolean) {
-    this.projectorRunning = running;
-  }
-
   loop(name: LoopName, buffer: AudioBuffer, when = this.ctx.currentTime) {
-    const input = { atmosphere: this.room.filter, computer: this.computer.filter, projector: this.projector?.filter }[name];
-    if (!input) return;
+    const input = { atmosphere: this.room.filter, computer: this.computer.filter }[name];
     const fade = this.ctx.createGain();
     fade.gain.setValueAtTime(0, when);
     fade.gain.setValueCurveAtTime(powerCurve(0, 1), when, LOOP_FADE_S);
@@ -303,7 +289,7 @@ export class RoomMix {
    * Re-maps filters and gains from the listener and moves the context's listener to it (metres); `immediate` jumps
    * instead of gliding (offline renders). Returns how far the listener moved since the last call, in metres.
    */
-  update(listener: Listener, filmsOpen: boolean, immediate = false): number {
+  update(listener: Listener, immediate = false): number {
     const t = this.ctx.currentTime;
     const set = (param: AudioParam, value: number) =>
       immediate ? param.setValueAtTime(value, t) : param.setTargetAtTime(value, t, 0.15);
@@ -313,16 +299,10 @@ export class RoomMix {
     set(this.room.filter.frequency, clamp(map(d, 0, 2.7, 100, 22000) - 3000, 120, 20000));
     set(this.room.gain.gain, (ROOM_TONE * clamp(map(d, 0.32, 2.7, 0, 0.2), 0.05, 0.1)) / 0.1);
 
-    for (const s of [this.computer, this.projector, this.desk]) {
-      if (!s) continue;
+    for (const s of [this.computer, this.desk]) {
       const distance = Math.max(0.05, listener.position.distanceTo(s.position) / WORLD_SCALE);
-      let cutoff = clamp(18000 * Math.pow(s.near / distance, 1.6), 180, 18000);
-      let gain = s.volume * Math.pow(Math.min(1, s.near / distance), s.rolloff);
-      if (s === this.projector && filmsOpen) {
-        gain = Math.max(gain, PROJECTOR_FILMS);
-        cutoff = Math.max(cutoff, 6000);
-      }
-      if (s === this.projector && !this.projectorRunning) gain = 0;
+      const cutoff = clamp(18000 * Math.pow(s.near / distance, 1.6), 180, 18000);
+      const gain = s.volume * Math.pow(Math.min(1, s.near / distance), s.rolloff);
       set(s.filter.frequency, cutoff);
       set(s.gain.gain, gain);
       this.local.copy(s.position).applyMatrix4(listener.matrixWorldInverse);

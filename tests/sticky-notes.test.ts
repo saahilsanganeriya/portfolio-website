@@ -1,5 +1,6 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { parseEquation } from '../src/scene/World/StickyNotes';
+import { clearOf, parseEquation } from '../src/scene/World/StickyNotes';
 import { NOTE_SLOTS, readNotes, STICKY_NOTES } from '../src/scene/World/stickyContent';
 
 describe('the sticky notes on the monitor', () => {
@@ -28,5 +29,20 @@ describe('the sticky notes on the monitor', () => {
       { kind: 'fraction', numerator: 'P(B|A) P(A)', denominator: 'P(B)' },
     ]);
     expect(parseEquation('s² = (ct)² − x²')).toEqual([{ kind: 'text', text: 's² = (ct)² − x²' }]);
+  });
+});
+
+describe('a sticky note next to the CRT badge', () => {
+  const box = (x0: number, y0: number, x1: number, y1: number) => new THREE.Box3(new THREE.Vector3(x0, y0, 0), new THREE.Vector3(x1, y1, 4));
+
+  // Catches a note stuck over the "Sanganeriya" badge on the bezel (brief §5: the notes must not cover it).
+  it('slides the shorter way out until the badge shows, with a gap', () => {
+    const badge = box(0, 0, 40, 10);
+    expect(clearOf(box(30, -20, 106, 6), badge, 6).toArray()).toEqual([0, -12, 0]);
+    expect(clearOf(box(44, -2, 120, 74), badge, 6).toArray()).toEqual([2, 0, 0]);
+  });
+
+  it('leaves a note that does not touch it where it is', () => {
+    expect(clearOf(box(60, -40, 136, 36), box(0, 0, 40, 10), 6).lengthSq()).toBe(0);
   });
 });

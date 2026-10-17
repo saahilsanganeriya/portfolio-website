@@ -75,18 +75,6 @@ export interface OvenNodes {
   body: THREE.Vector3;
 }
 
-export interface ProjectorNodes {
-  /** The plane the film lands on (the roller screen's face when it is down, else the wall), and its size (world units). */
-  surface: THREE.Mesh;
-  width: number;
-  height: number;
-  lens: THREE.Vector3 | null;
-  /** The reels turn while the film runs. */
-  reels: PivotNode[];
-  /** The pull-down roller screen, modelled down; rolled up when the projector rests. Null: the film lands on the wall. */
-  roller: THREE.Object3D | null;
-}
-
 export interface WorldNodes {
   windowViews: WindowViewNode[];
   windowSky: WindowSkyNode | null;
@@ -103,10 +91,30 @@ export interface WorldNodes {
   /** The cup's steam, also when the room has no coffee to pour. */
   steam: THREE.Vector3 | null;
   oven: OvenNodes | null;
-  projector: ProjectorNodes | null;
-  album: { closed: THREE.Object3D | null; anchor: THREE.Vector3; width: number; height: number } | null;
-  /** The program dial's pivot, and the angle (degrees about its axis) that points the knob at each program's mark. */
-  dial: { knob: THREE.Object3D; axis: THREE.Vector3; anglesDeg: Record<string, number> } | null;
+}
+
+// Props the round-8 set no longer has (PLAN-ROUND-8 §4): the first room still carries them, so the room hides them and
+// drops their hotspot boxes. The corner set has none of these names.
+const RETIRED_MESHES = [
+  'projector',
+  'projector_dial',
+  'projector_reel_front',
+  'projector_reel_rear',
+  'props_projector_dial_plate',
+  'roller_screen',
+  'roller_screen_housing',
+  'projection_surface',
+  'photo_album',
+];
+const RETIRED_PROXIES = new Set(['hit_projector', 'hit_projector_dial', 'hit_projection', 'hit_album', 'hit_photo_board', 'hit_photo_wall']);
+
+/** Hides the retired props and drops their boxes from the room's hotspots. */
+function retire(root: THREE.Object3D, proxies: THREE.Mesh[]) {
+  for (const name of RETIRED_MESHES) {
+    const node = root.getObjectByName(name);
+    if (node) node.visible = false;
+  }
+  for (let i = proxies.length - 1; i >= 0; i--) if (RETIRED_PROXIES.has(proxies[i].name)) proxies.splice(i, 1);
 }
 
 const AXES: Record<string, THREE.Vector3> = {
@@ -118,7 +126,7 @@ const AXES: Record<string, THREE.Vector3> = {
   '-Z': new THREE.Vector3(0, 0, -1),
 };
 
-// A proxy nested in a larger one (the dial in the projector's box, the croissant in the oven's) is grown this far out
+// A proxy nested in a larger one (the croissant in the oven's box) is grown this far out
 // of it, through the faces it nearly shares with it (or else its nearest face), so a ray reaches it before the larger box.
 const NESTED_REACH_M = 0.015;
 const FLUSH_M = 0.02;
@@ -160,32 +168,6 @@ function exposeNestedProxies(root: THREE.Object3D, proxies: THREE.Mesh[]) {
     proxies[i] = proxy;
   }
 }
-
-// A small part's proxy is its own bounds plus this much: the room's proxy for the dial (2 cm of padding round the
-// knob and its plate) covered the middle of the projector's face, so a click meant for the projector turned the dial;
-// 1.5 cm round the knob alone keeps the projector's middle its own and leaves the knob about 10 px wide from the wide
-// view, the only framing that sees it.
-const PART_PAD_M = 0.015;
-
-/** Replaces the named proxy with a box round `part` (its meshes' bounds), a little padded. */
-function shrinkToPart(root: THREE.Object3D, proxies: THREE.Mesh[], name: string, part: THREE.Object3D | null) {
-  const i = proxies.findIndex((p) => p.name === name);
-  if (i < 0 || !part) return;
-  const box = new THREE.Box3().setFromObject(part).expandByScalar(PART_PAD_M * WORLD_SCALE);
-  if (box.isEmpty()) return;
-  const size = box.getSize(new THREE.Vector3()).divideScalar(WORLD_SCALE);
-  const proxy = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z));
-  proxy.name = name;
-  proxy.position.copy(root.worldToLocal(box.getCenter(new THREE.Vector3())));
-  proxy.visible = false;
-  root.add(proxy);
-  proxy.updateMatrixWorld();
-  proxies[i].name = `${name}_padded`;
-  proxies[i] = proxy;
-}
-
-// Where the knob points for each program when the room does not say (the room's marks; it rests on Photographs).
-const DIAL_ANGLES_DEG: Record<string, number> = { reel: 50, photographs: 0, short_films: -50 };
 
 const axisOf = (node: THREE.Object3D, fallback = '+Y') =>
   (AXES[String(node.userData.turn_axis ?? fallback).toUpperCase()] ?? AXES[fallback]).clone();
@@ -337,7 +319,7 @@ export function readWorld(room: RoomNodes): WorldNodes {
     }
   });
 
-  shrinkToPart(root, room.proxies, 'hit_projector_dial', byName.get('projector_dial') ?? null);
+  retire(root, room.proxies);
   exposeNestedProxies(root, room.proxies);
 
   const windowViews: WindowViewNode[] = [];
@@ -384,20 +366,12 @@ export function readWorld(room: RoomNodes): WorldNodes {
     return { slot: n, mesh: note, aspect: faceAspect(note), paper: new THREE.Color(paper) };
   });
 
-  // The picture on the wall answers a click too: from the projector's framing the projector is behind the camera.
-  const roller = find('roller_screen');
-  const surface = mesh('projection_surface') ?? (roller instanceof THREE.Mesh ? roller : null);
-  if (surface) room.proxies.push(proxyInFront(root, surface, 'hit_projection', 0.02));
-
   const glass = mesh('lava_lamp_glass');
   const lightNode = find('lava_lamp_light');
   const steam = find('espresso_steam');
   const coffee = mesh('espresso_coffee');
   const spout = find('espresso_spout');
-  const anchor = find('album_open_anchor');
-  const dial = find('projector_dial');
   const oven = find('countertop_oven');
-  const lens = find('projector_lens');
 
   const proxyNamed = (name: string) => room.proxies.find((proxy) => proxy.name === name) ?? null;
 
@@ -431,27 +405,6 @@ export function readWorld(room: RoomNodes): WorldNodes {
           ovenProxy: proxyNamed('hit_oven'),
           body: centre(oven),
         }
-      : null,
-    projector: surface
-      ? {
-          surface,
-          width: (Number(surface.userData.width_m) || 1) * WORLD_SCALE,
-          height: (Number(surface.userData.height_m) || 0.5625) * WORLD_SCALE,
-          lens: lens ? worldPosition(lens) : null,
-          reels: ['projector_reel_front', 'projector_reel_rear'].flatMap((name) => pivotOf(find(name), 0, '+Z') ?? []),
-          roller,
-        }
-      : null,
-    album: anchor
-      ? {
-          closed: find('photo_album'),
-          anchor: worldPosition(anchor),
-          width: (Number(anchor.userData.width_m) || 0.46) * WORLD_SCALE,
-          height: (Number(anchor.userData.height_m) || 0.31) * WORLD_SCALE,
-        }
-      : null,
-    dial: dial
-      ? { knob: dial, axis: axisOf(dial), anglesDeg: { ...DIAL_ANGLES_DEG, ...(dial.userData.program_angles_deg as Record<string, number> | undefined) } }
       : null,
   };
 }

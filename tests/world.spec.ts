@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
-// The living room (PLAN 11.1, 12.1): the album, the on-demand media, and what every hotspot does (the window has its
-// own spec, window.spec.ts). Props are clicked where the room projects them on screen.
+// The living room (PLAN 11.1, 12.1): the on-demand media, and what every hotspot does (the window has its own spec,
+// window.spec.ts). Props are clicked where the room projects them on screen.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
 test.describe.configure({ timeout: 240_000 });
@@ -43,55 +43,9 @@ async function backToIdle(page: Page) {
   await settledAt(page, 'idle');
 }
 
-/** Catches an album that does not open from the desk, does not page in both directions, or traps the visitor. */
-test('the photo album opens from the desk, pages both ways, and closes with Escape or a click beside it', async ({ page }) => {
-  await inRoom(page);
-  await clickProp(page, 'hit_album');
-  await page.waitForFunction(() => window.__room!.world.album?.state === 'open', null, { timeout: 30_000 });
-  await settledAt(page, 'desk');
-  let album = (await world(page)).album!;
-  expect(album).toMatchObject({ spread: 0, left: 'endpaper', right: 'A Narrative in a Frame' });
-  // The whole collection is in it, section by section: favourites first.
-  expect(album.pages).toBeGreaterThan(20);
-  await expect(page.locator('.room-label')).toBeHidden();
-
-  await clickProp(page, 'album_right');
-  await page.waitForFunction(() => window.__room!.world.album?.state === 'turning', null, { timeout: 5_000 });
-  await page.waitForFunction(() => window.__room!.world.album?.state === 'open', null, { timeout: 10_000 });
-  album = (await world(page)).album!;
-  expect(album).toMatchObject({ spread: 1, left: 'Favourites' });
-  await page.keyboard.press('ArrowRight');
-  await page.waitForFunction(() => window.__room!.world.album?.spread === 2 && window.__room!.world.album.state === 'open', null, { timeout: 10_000 });
-  await clickProp(page, 'album_left');
-  await page.waitForFunction(() => window.__room!.world.album?.spread === 1 && window.__room!.world.album.state === 'open', null, { timeout: 10_000 });
-  // Pages far from the open spread are let go: memory stays bounded however long the album is.
-  expect((await world(page)).album!.cached).toBeLessThanOrEqual(8);
-
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(() => window.__room!.world.album?.state === 'closed', null, { timeout: 15_000 });
-  // Esc closed the album; the camera stays at the desk and the room takes clicks again.
-  expect(await page.evaluate(() => window.__room!.phase)).toBe('desk');
-
-  await backToIdle(page);
-  await clickProp(page, 'hit_album');
-  await page.waitForFunction(() => window.__room!.world.album?.state === 'open', null, { timeout: 30_000 });
-  await page.mouse.click(40, 450);
-  await page.waitForFunction(() => window.__room!.world.album?.state === 'closed', null, { timeout: 15_000 });
-});
-
-/** Catches page turns that still animate for a visitor who asked for reduced motion. */
-test('with reduced motion the album’s pages cut instead of turning', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await inRoom(page);
-  await clickProp(page, 'hit_album');
-  await page.waitForFunction(() => window.__room!.world.album?.state === 'open', null, { timeout: 30_000 });
-  await page.keyboard.press('ArrowRight');
-  expect(await page.evaluate(() => window.__room!.world.album)).toMatchObject({ state: 'open', spread: 1 });
-});
-
 /**
  * Catches a prop that does nothing when clicked or opens the wrong window (PLAN 11.1, 12.1). The props that act in the
- * room (espresso, oven, lava lamp, projector) are interactions.spec.ts's.
+ * room (espresso, oven, lava lamp) are interactions.spec.ts's.
  */
 test('every new hotspot does what it says', async ({ page }) => {
   test.setTimeout(420_000);
@@ -119,7 +73,8 @@ test('every new hotspot does what it says', async ({ page }) => {
   for (const [proxy, window] of [
     ['hit_plaque', 'Films'],
     ['hit_poster_0', 'Films'],
-    ['hit_nas', 'Terminal'],
+    // The NAS runs projectionist: it opens that project, not the Terminal.
+    ['hit_nas', /^projectionist/],
   ] as const) {
     await backToIdle(page);
     await clickProp(page, proxy);
@@ -131,7 +86,7 @@ test('every new hotspot does what it says', async ({ page }) => {
 });
 
 /**
- * Catches on-demand media (prints, photographs, album pages, the Pale Blue Dot's picture) creeping into the room's
+ * Catches on-demand media (prints, photographs, the Pale Blue Dot's picture) creeping into the room's
  * initial load, and a Pale Blue Dot print left as the bare white paper the room bakes under it.
  */
 test('the prints and the photographs load only after the room is interactive', async ({ page }) => {

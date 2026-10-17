@@ -2,6 +2,13 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
+declare global {
+  interface Window {
+    /** The quality tier a test starts the room on (Quality.ts reads it). */
+    __roomTier?: number;
+  }
+}
+
 // Headless Chromium only has WebGL through SwiftShader; the room needs it.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });

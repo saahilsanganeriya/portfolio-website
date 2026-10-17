@@ -40,7 +40,6 @@ interface Effect {
 }
 
 const EFFECTS = {
-  'projector-clack': { files: ['projector-clack'], dir: 'sfx', level: 0.45, anchors: ['projector_lens', 'hit_projector'] },
   'espresso-brew': { files: ['espresso-brew'], dir: 'sfx', level: 0.22, anchors: ['espresso_machine'] },
   'espresso-pour': { files: ['espresso-pour'], dir: 'sfx', level: 0.4, anchors: ['espresso_cup', 'espresso_machine'] },
   'oven-open': { files: ['oven-open'], dir: 'sfx', level: 0.5, anchors: ['oven_door', 'countertop_oven'] },
@@ -59,7 +58,7 @@ const EFFECTS = {
 export type SfxName = keyof typeof EFFECTS;
 
 /**
- * The sound a click on each prop makes (by its proxy in room.glb). The espresso machine, the oven and the projector are
+ * The sound a click on each prop makes (by its proxy in room.glb). The espresso machine and the oven are
  * not here: the room plays their recordings when they act, once the camera has flown to them (src/scene/World/).
  */
 const HOTSPOT_SFX: Record<string, SfxName> = {
@@ -95,8 +94,6 @@ export interface AudioHandle {
   setState(state: AudioState): void;
   /** Plays a prop's recording at `position` (world units), or at the prop it belongs to. */
   sfx(name: SfxName, position?: THREE.Vector3): void;
-  /** The projector's running sound plays only while its film runs. */
-  setProjectorRunning(running: boolean): void;
   /**
    * The room's music: a record from the crate (streamed when chosen; the needle meets the groove `cue` seconds from
    * now) or null for the adaptive lo-fi bed. A record that ends by itself hands back to the bed (subscribers hear it).
@@ -113,7 +110,6 @@ export interface AudioHandle {
 
 export interface OfflineOptions {
   state?: AudioState;
-  filmsOpen?: boolean;
   /** Henry's startup at 0 s, as heard when the sound first starts. */
   startup?: boolean;
   /** The music bus's fade-in from 0 s (the first seconds after the sound starts). */
@@ -122,8 +118,6 @@ export interface OfflineOptions {
   effects?: { at: number; name: SfxName }[];
   /** The moment the cities' day and night are read at. */
   date?: Date;
-  /** The projector's film running (its sound on). */
-  projector?: boolean;
   /** A record playing from 0 s instead of the lo-fi bed (decoded from its shipped file). */
   record?: RecordId;
 }
@@ -145,7 +139,6 @@ export class RoomAudio implements AudioHandle {
   private current: AudioState = 'room';
   private derived: AudioState | null = null;
   private isMuted = false;
-  private projectorRunning = false;
   private source: RecordId | null = null;
   private deck: Promise<RecordDeck | null> | null = null;
   private deckReady: RecordDeck | null = null;
@@ -201,7 +194,6 @@ export class RoomAudio implements AudioHandle {
     this.master.connect(ctx.destination);
     const mix = new RoomMix(ctx, this.positions);
     mix.output.connect(this.master);
-    mix.setProjectorRunning(this.projectorRunning);
     this.mix = mix;
     mix.setState(this.current, (bed) => this.bedLevel(bed), true);
     document.addEventListener('visibilitychange', this.onVisibility);
@@ -291,13 +283,6 @@ export class RoomAudio implements AudioHandle {
     return this.deck;
   }
 
-  setProjectorRunning(running: boolean) {
-    if (running === this.projectorRunning) return;
-    this.projectorRunning = running;
-    this.mix?.setProjectorRunning(running);
-    this.notify();
-  }
-
   /** A prop's or city's recording at `gain` times its own level. */
   private play(name: SfxName, position: THREE.Vector3 | undefined, gain: number) {
     const ctx = this.ctx;
@@ -338,7 +323,7 @@ export class RoomAudio implements AudioHandle {
     if (!this.mix || !this.ctx || now - this.lastUpdate < UPDATE_MS) return;
     const dt = this.lastUpdate ? (now - this.lastUpdate) / 1000 : 0;
     this.lastUpdate = now;
-    const moved = this.mix.update(listener, frontWindow.startsWith('films'));
+    const moved = this.mix.update(listener);
 
     const derived = stateFor(station, frontWindow);
     if (derived !== this.derived) {
@@ -395,7 +380,6 @@ export class RoomAudio implements AudioHandle {
       state: this.current,
       muted: this.isMuted,
       volume: this.level,
-      projectorRunning: this.projectorRunning,
       musicSource: this.source,
       /** The turntable's stream: which record, the needle, whether the music itself plays, its position. */
       deck: this.deckReady?.state ?? null,
@@ -414,12 +398,11 @@ export class RoomAudio implements AudioHandle {
   async renderOffline(seconds: number, listener: Listener, options: OfflineOptions = {}): Promise<Float32Array[]> {
     if (!this.loaded) throw new Error('room audio: no gesture has unlocked sound yet');
     await this.loaded;
-    const { state = 'room', filmsOpen = false, startup = false, fadeIn = false, clicks = [], effects = [], date = new Date(), projector = false } = options;
+    const { state = 'room', startup = false, fadeIn = false, clicks = [], effects = [], date = new Date() } = options;
     const ctx = new OfflineAudioContext(2, Math.round(seconds * OFFLINE_RATE), OFFLINE_RATE);
     const mix = new RoomMix(ctx, this.positions);
     mix.output.connect(ctx.destination);
-    mix.setProjectorRunning(projector);
-    mix.update(listener, filmsOpen, true);
+    mix.update(listener, true);
     const bedLevel = (bed: BedName) => this.bedLevel(bed, state, date);
     for (const name of LOOPS) {
       const buffer = this.buffers.get(`room/${name}`);

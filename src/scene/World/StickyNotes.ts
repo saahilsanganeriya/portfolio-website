@@ -23,6 +23,8 @@ const NOTE_EDGE_M = 0.076;
 const SLIDE_SHARE = 0.25;
 const STAND_OFF_M = 0.004;
 const PROXY_REACH_M = 0.004;
+// The bezel's badge (T72's "Sanganeriya" mark) stays in sight: a note that would cover it slides clear by this much more.
+const BADGE_GAP_M = 0.006;
 const SERIF_FAMILY = '"Newsreader Variable"';
 const SERIF = `${SERIF_FAMILY}, Georgia, "Times New Roman", serif`;
 // Stuck on by hand: each note turns a few degrees about its face.
@@ -52,13 +54,20 @@ export const paperFor = (kind: StickyKind) => new THREE.Color(PAPER[kind]);
 export class StickyNotes {
   private readonly notes: { note: PlacedNote; node: StickyNode; surface: ArtSurface }[];
 
-  constructor(nodes: StickyNode[], lamp: LampUniforms, proxies: THREE.Object3D[], monitor: THREE.Vector3) {
+  constructor(nodes: StickyNode[], lamp: LampUniforms, proxies: THREE.Object3D[], monitor: THREE.Vector3, badge: THREE.Object3D | null = null) {
+    const badgeBox = badge ? new THREE.Box3().setFromObject(badge) : null;
     this.notes = STICKY_NOTES.flatMap((note) => {
       const node = nodes.find((n) => n.slot === note.slot);
       if (!node) return [];
       const random = seeded(seedOf(`note-${node.slot}`));
       node.mesh.rotateZ(THREE.MathUtils.degToRad((random() * 2 - 1) * MAX_TURN_DEG));
-      growNote(node, proxies.find((p) => p.name === `hit_sticky_note_${node.slot}`), monitor);
+      const proxy = proxies.find((p) => p.name === `hit_sticky_note_${node.slot}`);
+      growNote(node, proxy, monitor);
+      const shift = badgeBox ? clearOf(new THREE.Box3().setFromObject(node.mesh), badgeBox, BADGE_GAP_M * WORLD_SCALE) : null;
+      if (shift && shift.lengthSq() > 0) {
+        moveBy(node.mesh, shift);
+        if (proxy) moveBy(proxy, shift);
+      }
       node.paper.copy(paperFor(note.kind));
       return [{ note, node, surface: new ArtSurface(node, lamp, { ambient: 0.55, top: 0.5, lightAbove: 0.2, fall: 0.4 }, node.paper) }];
     });
@@ -123,6 +132,20 @@ function fitProxy(proxy: THREE.Mesh, note: THREE.Mesh, depthAxis: 'x' | 'z', fro
   proxy.scale.set(1, 1, 1);
   proxy.position.copy(parent.worldToLocal(box.getCenter(new THREE.Vector3())));
   proxy.updateMatrixWorld(true);
+}
+
+/**
+ * How far to slide a note (its box) so it leaves `badge` uncovered with `gap` to spare, across the bezel (world x or y,
+ * whichever is the shorter way out); zero when they do not meet.
+ */
+export function clearOf(note: THREE.Box3, badge: THREE.Box3, gap: number): THREE.Vector3 {
+  const grown = badge.clone().expandByScalar(gap);
+  if (!grown.intersectsBox(note)) return new THREE.Vector3();
+  const noteCentre = note.getCenter(new THREE.Vector3());
+  const badgeCentre = badge.getCenter(new THREE.Vector3());
+  const way = (axis: 'x' | 'y') => (noteCentre[axis] >= badgeCentre[axis] ? grown.max[axis] - note.min[axis] : grown.min[axis] - note.max[axis]);
+  const [x, y] = [way('x'), way('y')];
+  return Math.abs(x) <= Math.abs(y) ? new THREE.Vector3(x, 0, 0) : new THREE.Vector3(0, y, 0);
 }
 
 /** Moves an object by a world-space offset, whatever its parent's transform. */

@@ -2,19 +2,15 @@ import * as THREE from 'three';
 import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { AudioHandle, SfxName } from '../audio/RoomAudio';
 import { HOTSPOTS, type Hotspot } from '../hotspots';
-import type { Effects } from '../Application/Effects';
 import type { QualityTier } from '../Application/Quality';
 import type { RoomNodes, StationName } from '../Application/RoomModel';
 import { WORLD_SCALE } from '../Application/RoomModel';
-import { Album } from './Album';
 import { ArtSurface, lampUniforms, Posters } from './art';
 import { Espresso } from './Espresso';
 import { Darkroom } from './Darkroom';
-import { FILM } from './film';
 import { LavaLamp } from './LavaLamp';
 import { readWorld, type WorldNodes } from './nodes';
 import type { Photograph } from './photographs';
-import { Projector } from './Projector';
 import { Oven, Steam } from './props';
 import type { RecordPlayer } from './RecordPlayer';
 import { CoffeeSteam } from './Steam';
@@ -25,8 +21,8 @@ import { WindowView } from './WindowView';
 
 // Everything in the room that lives and reacts (PLAN 11.1, 12.1, PLAN-ROUND-7 §3–§4 and §7): the window's two cities
 // by day with the flight between them, the coffee's steam, the breeze in the plants, the lava lamp and its light, the
-// espresso machine's pour and the cup's steam, the oven's door
-// and glow, the projector on the wall, the favourite posters, the darkroom line, the sticky notes and the photo album.
+// espresso machine's pour and the cup's steam, the oven's door and glow, the favourite posters, the darkroom line
+// and the sticky notes.
 // It carries out every hotspot's room action, with the recordings its actions make. A click that comes from across
 // the room takes the camera to the prop first, and the prop acts once the camera has landed. What the visitor first
 // sees loads with the room; everything else waits until the room is interactive, then loads when it comes into view
@@ -40,15 +36,9 @@ export interface WorldHost {
   openWindow(target: string): void;
   /** The audio layer's recorded one-shot (`audio.sfx`). */
   sfx(name: SfxName, at?: THREE.Vector3): void;
-  /** The projector's running sound (`audio.setProjectorRunning`). */
-  setProjectorRunning?(running: boolean): void;
   /** The room's sound, for the record player: which music plays (the lo-fi bed or a record) and whether sound is off. */
   readonly audio?: Pick<AudioHandle, 'setMusicSource' | 'musicSource' | 'subscribe' | 'muted'>;
-  /** While the album is open the monitor's frame must not take the pointer (it lies behind the book). */
-  setMonitorBlocked(blocked: boolean): void;
   readonly reducedMotion: boolean;
-  /** The phone tier keeps the projector wall's baked light (no film to download and decode). */
-  readonly light: boolean;
 }
 
 export interface WorldFrame {
@@ -56,7 +46,7 @@ export interface WorldFrame {
   /** Ambient seconds (frozen while motion is paused) and this frame's share of them. */
   clock: number;
   dt: number;
-  /** Real seconds since the last frame, for motion the visitor started (a pour, a door, the album). */
+  /** Real seconds since the last frame, for motion the visitor started (a pour, a door). */
   realDt: number;
   /** The room has started and motion is not paused. */
   running: boolean;
@@ -98,8 +88,6 @@ export class World {
   private readonly espresso: Espresso | null;
   private readonly steam: Steam | null;
   private readonly oven: Oven | null;
-  readonly projector: Projector | null;
-  private readonly album: Album | null;
   private readonly status: HTMLElement;
   private readonly frustum = new THREE.Frustum();
   private readonly viewProjection = new THREE.Matrix4();
@@ -122,7 +110,6 @@ export class World {
     scene: THREE.Scene,
     private readonly container: HTMLElement,
     ktx2: KTX2Loader,
-    private readonly effects: Effects,
     private readonly host: WorldHost,
   ) {
     this.nodes = readWorld(room);
@@ -133,7 +120,9 @@ export class World {
     this.paleBlueDot = n.paleBlueDot
       ? new ArtSurface(n.paleBlueDot.node, this.lamp, { ambient: 0.55, top: 0.6, lightAbove: 0.3, fall: 0.45 })
       : null;
-    this.stickies = n.stickies.length ? new StickyNotes(n.stickies, this.lamp, room.proxies, room.monitor.position) : null;
+    this.stickies = n.stickies.length
+      ? new StickyNotes(n.stickies, this.lamp, room.proxies, room.monitor.position, room.root.getObjectByName('crt_badge') ?? null)
+      : null;
     this.windowView = n.windowViews.length
       ? new WindowView(n.windowViews, n.windowSky, n.windowMotif, this.textures, { reducedMotion: still })
       : null;
@@ -147,33 +136,11 @@ export class World {
     this.espresso = n.espresso ? new Espresso(n.espresso, scene) : null;
     this.steam = n.steam ? new Steam(n.steam, scene) : null;
     this.oven = n.oven ? new Oven(n.oven, scene) : null;
-    this.projector =
-      n.projector && !host.light
-        ? new Projector(n.projector, FILM, this.textures, () => this.collection(), n.dial, this.lamp, still, {
-            setRunning: (running) => host.setProjectorRunning?.(running),
-          })
-        : null;
-    if (n.projector && room.projector) {
-      // The beam fans out to the picture on the wall; its far end is square to the beam, so the picture's height
-      // shortens by the beam's tilt.
-      const dir = room.projector.screenCenter.clone().sub(room.projector.lens).normalize();
-      effects.fitBeam(n.projector.width / 2, (n.projector.height / 2) * Math.sqrt(1 - dir.y * dir.y));
-    }
 
     this.status = document.createElement('p');
     this.status.className = 'visually-hidden';
     this.status.setAttribute('role', 'status');
     container.appendChild(this.status);
-
-    this.album = n.album
-      ? new Album(n.album, room.framings.desk.position, room.framings.desk.fov, scene, container, {
-          collection: () => this.collection().then((photos) => import('./photographs').then((m) => m.sections(photos))),
-          textures: this.textures,
-          reducedMotion: still,
-          announce: (text) => this.announce(text),
-          setCapturing: (capturing) => host.setMonitorBlocked(capturing),
-        })
-      : null;
     this.refreshLabels();
   }
 
@@ -187,7 +154,6 @@ export class World {
     if (this.interactive) return;
     this.timer = window.setTimeout(() => {
       this.interactive = true;
-      this.projector?.allowOnDemand();
       this.loadPaleBlueDot();
       if (this.darkroom) {
         this.printsWanted = true;
@@ -200,22 +166,9 @@ export class World {
     return this.interactive;
   }
 
-  /** Whether the album holds the stage's input (no hover labels, no glides from a click). */
-  get capturing() {
-    return this.album?.isOpen ?? false;
-  }
-
   /** Something the visitor started is still moving: frames must be drawn even while motion is paused. */
   get animating() {
-    return Boolean(
-      this.album?.animating ||
-        this.espresso?.busy ||
-        this.oven?.moving ||
-        this.lava?.changing ||
-        this.projector?.animating ||
-        this.records?.animating ||
-        this.landing,
-    );
+    return Boolean(this.espresso?.busy || this.oven?.moving || this.lava?.changing || this.records?.animating || this.landing);
   }
 
   /**
@@ -226,20 +179,6 @@ export class World {
     const here = this.host.station();
     const still = this.host.reducedMotion;
     switch (hotspot.action) {
-      case 'album':
-        this.host.fly('desk');
-        void this.album?.open();
-        return true;
-      case 'dial': {
-        const projector = this.projector;
-        if (!projector) return false;
-        this.host.sfx('projector-clack', this.positionOf(hotspot));
-        projector.next();
-        this.refreshLabels();
-        if (here !== 'projector') this.host.fly('projector');
-        this.announce(`The projector now shows ${projector.label}.`);
-        return true;
-      }
       case 'lava': {
         const lava = this.lava;
         if (!lava) return false;
@@ -264,19 +203,6 @@ export class World {
           const open = oven.toggle(still);
           this.host.sfx(open ? 'oven-open' : 'oven-close');
           this.announce(open ? 'The oven door opens on a croissant. Click it for the recipes.' : 'The oven door closes.');
-        });
-        return true;
-      }
-      case 'projector': {
-        const projector = this.projector;
-        if (!projector) return false;
-        const arriving = here !== 'projector';
-        this.whenLanded('projector', () => {
-          const was = projector.wanted;
-          if (arriving) projector.play();
-          else projector.toggle();
-          if (projector.wanted !== was) this.host.sfx('projector-clack');
-          this.announce(projector.wanted ? `The projector plays ${projector.label.toLowerCase()}.` : 'The projector stops.');
         });
         return true;
       }
@@ -331,14 +257,6 @@ export class World {
     this.oven?.update(ambient, realDt, still);
     this.records?.update(realDt, running);
 
-    const projector = this.projector;
-    if (projector) {
-      projector.update(camera, running, realDt);
-      this.effects.setProjector(projector.beam, projector.running && running && !still);
-    }
-    this.album?.update(realDt, camera);
-    if (this.album?.isOpen && this.host.station() !== 'desk') this.album.close();
-
     // The darkroom's prints draw once the line is in view, at the density the view asks for.
     const darkroom = this.darkroom;
     if (darkroom?.isHung) {
@@ -357,10 +275,9 @@ export class World {
     if (this.sinceLabels >= LABELS_EVERY_S) this.refreshLabels();
   }
 
-  /** Measurement hook: the lava lamp cycling, the steam up, a shot pouring again and again and the projector running. */
+  /** Measurement hook: the lava lamp cycling, the steam up and a shot pouring again and again. */
   forceEverything(on: boolean) {
     this.everything = on;
-    this.projector?.force(on);
   }
 
   setTier(tier: QualityTier) {
@@ -368,9 +285,8 @@ export class World {
     this.oven?.setHalos(tier.halos);
   }
 
-  /** Screen point of a world feature by name (album pages), for tests. */
+  /** Screen point of a world feature by name (the steam's plume, the window's motif), for tests. */
   point(name: string, rect: DOMRect) {
-    if (name === 'album_left' || name === 'album_right') return this.album?.point(name, rect) ?? null;
     if (name === 'coffee_steam_plume' || name === 'window_motif') {
       const node = name === 'window_motif' ? this.nodes.windowMotif?.anchor : this.coffeeSteam?.mesh;
       if (!node || !this.camera) return null;
@@ -395,10 +311,8 @@ export class World {
       espresso: this.espresso?.probe() ?? null,
       steam: this.steam ? { brewing: this.steam.brewing > 0 } : null,
       oven: this.oven?.probe() ?? null,
-      projector: this.projector?.state ?? null,
       landing: this.landing?.station ?? null,
       records: this.records?.probe() ?? null,
-      album: this.album?.probe() ?? null,
       labels: Object.fromEntries(HOTSPOTS.map((h) => [h.proxies[0], h.label])),
     };
   }
@@ -416,8 +330,6 @@ export class World {
     this.espresso?.dispose();
     this.steam?.dispose();
     this.oven?.dispose();
-    this.projector?.dispose();
-    this.album?.dispose();
     this.records?.dispose();
     this.textures.dispose();
     this.status.remove();
@@ -488,8 +400,6 @@ export class World {
       this.steamAt = STEAM_AFTER_S;
     }
     if (this.lava && !this.lava.changing) this.lava.next(false);
-    // The film plays once; the worst case keeps it running.
-    if (this.projector && !this.projector.running) this.projector.play();
   }
 
   /** The owner's photography: a chunk of its own, imported once and only when something needs it. */
@@ -502,18 +412,11 @@ export class World {
     this.status.textContent = text;
   }
 
-  private positionOf(hotspot: Hotspot) {
-    const proxy = this.room.proxies.find((p) => hotspot.proxies.includes(p.name));
-    return proxy ? new THREE.Box3().setFromObject(proxy).getCenter(new THREE.Vector3()) : undefined;
-  }
-
-  /** Labels that change with the room: the window's two cities, and the projector's next program on its dial. */
+  /** Labels that change with the room: the window's two cities. */
   private refreshLabels() {
     this.sinceLabels = 0;
     for (const hotspot of HOTSPOTS) {
       if (hotspot.action === 'window' && this.windowView) hotspot.label = this.windowView.label();
-      if (hotspot.action === 'dial' && this.projector) hotspot.label = `Next: ${this.projector.nextLabel}`;
-      if (hotspot.proxies.includes('hit_projection') && this.projector) hotspot.label = this.projector.label;
     }
   }
 }

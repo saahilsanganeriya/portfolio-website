@@ -15,8 +15,9 @@ const SET = readdirSync(PHOTOS_DIR)
   .sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug));
 
 // The props a visitor clicks in room v3 (BRIEF-ROUND-7 §4): the espresso machine pours a cup, the oven opens on a
-// croissant, the lava lamp changes colour, the projector runs on the wall; the sticky notes carry his phrases and the
-// darkroom line his photographs. Each describe loads the room once and its tests run in order on that page. Props are
+// croissant, the lava lamp changes colour; the sticky notes carry his phrases and the darkroom line his photographs; the
+// projector and the photo album are gone (PLAN-ROUND-8 rulings 4 and 5). Each describe loads the room once and its
+// tests run in order on that page. Props are
 // clicked where the room projects them on screen.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS } });
@@ -126,28 +127,23 @@ test.describe('room v3 interactions', () => {
     expect(await sounds(page)).toContain('lava');
   });
 
-  /** Catches a projector that only flies there, plays nothing, plays silently, or cannot be stopped. */
-  test('the projector runs the film on the wall with its sound, and a click on the picture stops it', async () => {
-    await fromIdle(page);
-    await clickProp(page, 'hit_projector');
-    await settledAt(page, 'projector');
-    await expect.poll(async () => (await world(page)).projector, { timeout: 15_000 }).toMatchObject({ program: 'story', state: 'playing', running: true, inView: true });
-    const t0 = (await world(page)).projector!.time;
-    await expect.poll(async () => (await world(page)).projector!.time, { timeout: 5_000 }).toBeGreaterThan(t0);
-    expect(await page.evaluate(() => window.__room!.audio.graph().projectorRunning)).toBe(true);
-    expect(await sounds(page)).toContain('projector-clack');
-    // From its framing the projector is behind the camera: a click on the picture stops it.
-    await clickProp(page, 'hit_projection');
-    await expect.poll(async () => (await world(page)).projector?.running, { timeout: 5_000 }).toBe(false);
-    await expect.poll(() => page.evaluate(() => window.__room!.audio.graph().projectorRunning)).toBe(false);
-  });
-
-  /** Catches the dial losing the Photographs program, or turning to it without running it. */
-  test('the projector’s dial turns to his photographs and runs them', async () => {
-    await fromIdle(page);
-    await clickProp(page, 'hit_projector_dial');
-    await expect.poll(async () => (await world(page)).projector, { timeout: 15_000 }).toMatchObject({ program: 'photographs', running: true });
-    expect((await world(page)).projector!.photo).toBe('diner');
+  /** Catches the projector, its film or the photo album coming back to the room after round 8 took them out. */
+  test('the projector, its film and the photo album are gone: nothing to click, nothing to hear', async () => {
+    const gone = await page.evaluate(() => {
+      const room = window.__room!;
+      return {
+        world: Object.keys(room.world),
+        hits: ['hit_projector', 'hit_projector_dial', 'hit_projection', 'hit_album', 'hit_photo_board'].filter((n) => room.point(n) !== null),
+        loops: room.audio.graph().loaded.filter((name: string) => /projector/.test(name)),
+        film: performance.getEntriesByType('resource').filter((r) => /story-film/.test(r.name)).length,
+      };
+    });
+    expect(gone.world).not.toContain('projector');
+    expect(gone.world).not.toContain('album');
+    expect(gone.hits).toEqual([]);
+    expect(gone.loops).toEqual([]);
+    expect(gone.film).toBe(0);
+    expect((await world(page)).labels).not.toHaveProperty('hit_projector');
   });
 
   /**
@@ -249,11 +245,4 @@ test.describe('room v3 interactions with reduced motion', () => {
     expect(darkroom.swaying).toBe(false);
   });
 
-  /** Catches the film refusing to run when a reduced-motion visitor asks for it. */
-  test('the projector still runs the film the visitor asked for', async () => {
-    await fromIdle(page);
-    await clickProp(page, 'hit_projector');
-    await settledAt(page, 'projector');
-    await expect.poll(async () => (await world(page)).projector, { timeout: 15_000 }).toMatchObject({ state: 'playing', running: true });
-  });
 });

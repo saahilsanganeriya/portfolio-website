@@ -6,7 +6,7 @@ export const WORLD_SCALE = 1000;
 
 const REQUIRED_FRAMINGS = ['loading', 'idle', 'desk', 'monitor'] as const;
 // Close-ups and stops the room may add (PLAN-ROUND-7 §3); the camera skips any the room lacks.
-const OPTIONAL_FRAMINGS = ['window', 'projector', 'shelf', 'photos', 'espresso', 'oven', 'record_player'] as const;
+const OPTIONAL_FRAMINGS = ['window', 'shelf', 'photos', 'espresso', 'oven', 'record_player'] as const;
 const TOUR_FRAMING = /^tour_(\d+)$/;
 const ARRIVAL_FRAMING = /^arrival_(\d+)$/;
 /** A framing the camera can rest at: every framing but the boot one, the tour's stops (`tour_<n>`) included. */
@@ -26,11 +26,6 @@ export interface MonitorPose {
   height: number;
 }
 
-export interface ProjectorPose {
-  lens: THREE.Vector3;
-  screenCenter: THREE.Vector3;
-}
-
 export interface RoomNodes {
   root: THREE.Object3D;
   framings: Record<(typeof REQUIRED_FRAMINGS)[number], Framing> & Partial<Record<StationName, Framing>>;
@@ -39,7 +34,6 @@ export interface RoomNodes {
   /** The waypoints the arrival on `/` passes between the boot framing and the desk (`cam_arrival_<n>`), in order. */
   arrival: Framing[];
   monitor: MonitorPose;
-  projector: ProjectorPose | null;
   proxies: THREE.Mesh[];
   leds: THREE.Mesh[];
   crtGlow: THREE.Mesh | null;
@@ -109,10 +103,6 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
     height: height * WORLD_SCALE,
   };
 
-  const lens = find('projector_lens');
-  const screenCenter = find('projector_screen_center');
-  const projector = lens && screenCenter ? { lens: worldPosition(lens), screenCenter: worldPosition(screenCenter) } : null;
-
   const proxies: THREE.Mesh[] = [];
   const leds: THREE.Mesh[] = [];
   root.traverse((node) => {
@@ -150,7 +140,6 @@ export function readRoom(root: THREE.Object3D): RoomNodes {
     tour,
     arrival,
     monitor,
-    projector,
     proxies,
     leds,
     crtGlow: mesh('crt_glow'),
