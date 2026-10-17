@@ -154,6 +154,10 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
   await inRoom(page);
   const sectors = new Set<number>();
   const walls: Record<string, number[]> = {};
+  const shownOutside: Record<string, number[]> = {};
+  // From the front, the window's city view shows; it is checked hidden from every side the camera turns to below.
+  const front = await page.evaluate(() => window.__room!.walls);
+  for (const wall of front) expect(wall.outside.every((o) => o.shown), `the ${wall.name} wall's outside from the front`).toBe(true);
   let unwrapped = 0;
   let last: number | null = null;
   // Into the orbit, then twelve turns of 30°, one way: the camera passes every side of the set.
@@ -166,7 +170,12 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
     if (last !== null) unwrapped += azimuth - last;
     last = azimuth;
     sectors.add(Math.floor((((azimuth % TURN) + TURN) % TURN) / (TURN / 8)));
-    for (const wall of await page.evaluate(() => window.__room!.walls)) (walls[wall.name] ??= []).push(wall.opacity);
+    for (const wall of await page.evaluate(() => window.__room!.walls)) {
+      (walls[wall.name] ??= []).push(wall.opacity);
+      // What lies outside a wall (the window's city view and sky) never shows while that wall is faded at all.
+      if (wall.opacity < 1) expect(wall.outside.filter((o) => o.shown).map((o) => o.name), `outside the faded ${wall.name} wall`).toEqual([]);
+      (shownOutside[wall.name] ??= []).push(wall.outside.filter((o) => o.shown).length);
+    }
     // From a wall's outside, its hotspots are not in the way of the pointer.
     const faded = (await page.evaluate(() => window.__room!.walls)).filter((w) => w.opacity < 0.5);
     for (const wall of faded) {
@@ -182,6 +191,12 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
   for (const [name, opacities] of Object.entries(walls)) {
     expect(Math.min(...opacities), `the ${name} wall from behind`).toBeLessThan(0.05);
     expect(Math.max(...opacities), `the ${name} wall from the front`).toBe(1);
+  }
+  // From the side, past a wall's free end, its outside is hidden even while the wall itself stands whole.
+  const outsideAt = Object.entries(shownOutside).filter(([name]) => front.find((w) => w.name === name)!.outside.length > 0);
+  for (const [name, counts] of outsideAt) {
+    const sideways = counts.filter((n, k) => n === 0 && walls[name][k] === 1).length;
+    expect(sideways, `turns where the ${name} wall stood whole with its outside hidden`).toBeGreaterThan(0);
   }
 });
 
@@ -314,7 +329,8 @@ test('a pointer resting beside the glass does not pull a passing camera into the
   await page.evaluate(() => window.__room!.goto('idle'));
   await settledAt(page, 'idle');
   await page.waitForTimeout(1000);
-  expect(await destinations(page)).toEqual(['idle']);
+  // From the desk straight to the wide view: never by way of the monitor.
+  expect(await destinations(page)).toEqual(['desk', 'idle']);
 });
 
 /**
