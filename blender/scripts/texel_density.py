@@ -4,7 +4,8 @@ object's 'bake' UV map and the atlas size export.py ships.
     blender -b blender/room.blend -P blender/scripts/texel_density.py [-- --json out.json]
 
 Density of an object = sqrt(UV area share x shipped pixels^2 / world surface area). The atlas line gives the
-area-weighted mean over its objects and the 10th / 50th / 90th percentiles by area.
+area-weighted mean over its objects, the 10th / 50th / 90th percentiles by area, and the fill (the share of the
+atlas its islands cover; islands never overlap).
 """
 
 import json
@@ -49,7 +50,7 @@ def object_density(obj, size):
         uv_area += abs(sum(a.x * b.y - b.x * a.y for a, b in zip(uv, uv[1:] + uv[:1]))) / 2
     if world_area <= 0 or uv_area <= 0:
         return None
-    return world_area, math.sqrt(uv_area * size * size / world_area)
+    return world_area, math.sqrt(uv_area * size * size / world_area), uv_area
 
 
 def percentile(rows, q):
@@ -65,7 +66,7 @@ def percentile(rows, q):
 def main():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     out = Path(argv[argv.index("--json") + 1]) if "--json" in argv else None
-    by_atlas, named = {}, {}
+    by_atlas, named, named_all = {}, {}, {}
     for obj in bpy.context.scene.objects:
         atlas = obj.get("atlas")
         if obj.type != "MESH" or not atlas:
@@ -75,22 +76,29 @@ def main():
         if found is None:
             continue
         by_atlas.setdefault(atlas, []).append(found)
+        named_all[obj.name] = (atlas, round(found[1]))
         if obj.name in WATCH:
             named[obj.name] = round(found[1])
     report = {}
-    for atlas, rows in sorted(by_atlas.items()):
+    for atlas, found in sorted(by_atlas.items()):
+        rows = [(a, d) for a, d, _ in found]
         area = sum(a for a, _ in rows)
         mean = sum(a * d for a, d in rows) / area
+        fill = sum(u for _, _, u in found)
         report[atlas] = {"shipped_px": shipped_size(atlas), "objects": len(rows), "area_m2": round(area, 2),
                          "mean_texels_per_m": round(mean), "p10": round(percentile(rows, 0.1)),
-                         "p50": round(percentile(rows, 0.5)), "p90": round(percentile(rows, 0.9))}
+                         "p50": round(percentile(rows, 0.5)), "p90": round(percentile(rows, 0.9)),
+                         "fill": round(fill, 3)}
         r = report[atlas]
         print(f"TEXEL {atlas:13s} {r['shipped_px']:5d} px  {r['objects']:4d} objects  {r['area_m2']:7.2f} m2  "
-              f"mean {r['mean_texels_per_m']:5d} px/m  p10 {r['p10']:5d}  p50 {r['p50']:5d}  p90 {r['p90']:5d}")
+              f"mean {r['mean_texels_per_m']:5d} px/m  p10 {r['p10']:5d}  p50 {r['p50']:5d}  p90 {r['p90']:5d}  "
+              f"fill {r['fill']:.0%}")
     for name, density in sorted(named.items()):
         print(f"TEXEL   {name:24s} {density:5d} px/m")
     if out:
-        out.write_text(json.dumps({"atlases": report, "named": named}, indent=2))
+        out.write_text(json.dumps({"atlases": report, "named": named,
+                                   "objects": {k: {"atlas": a, "texels_per_m": d} for k, (a, d) in sorted(named_all.items())}},
+                                  indent=2))
 
 
 if __name__ == "__main__":

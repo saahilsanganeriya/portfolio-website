@@ -43,7 +43,7 @@ from room_lib import collection  # noqa: E402
 SEAM_X = 1.33
 WALL_BACK = room.Y_BACK + room.WALL_T
 WATER_Z = 0.95
-VIEW_SCALE = 1.45
+VIEW_SCALE = 1.75  # round 8: closer to round six's big landmarks, through the one big pane
 ROOM_SEAM = Vector(((room.WIN_X0 + room.WIN_X1) / 2, WALL_BACK, room.WIN_Z0 + 0.04))
 DIORAMA_SEAM = Vector((SEAM_X, WALL_BACK, WATER_Z))
 DIORAMA_TO_ROOM = (Matrix.Translation(ROOM_SEAM) @ Matrix.Diagonal((VIEW_SCALE,) * 3 + (1.0,))
@@ -117,7 +117,7 @@ LOTUS, INDIA_GATE, QUTUB = (1.56, 0.86), (1.72, 1.04), (1.80, 1.20)
 TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (1.10, 1.70), (0.99, 1.76), (0.70, 1.03), (1.17, 1.57)
 DOWNTOWN = ((0.90, 1.24), (1.63, 1.86), (1.06, 1.75))  # x range, y range, densest point (behind the bridge)
 HUMAYUN, JAMA_MASJID, RED_FORT_Y = (1.88, 1.42), (1.60, 1.72), 1.96
-HAZE_NEAR, HAZE_FAR, HAZE_MAX = 1.05, 2.35, 0.5
+HAZE_NEAR, HAZE_FAR, HAZE_MAX = 1.05, 2.35, 0.25
 
 
 def sf_coast(y):
@@ -1260,7 +1260,7 @@ def main():
         obj.hide_render = obj["window_mode"] != mode
     scene = bpy.context.scene
     scene.cycles.samples = 64
-    scene.render.threads = 24
+    scene.render.threads_mode, scene.render.threads = "FIXED", 16
     scene.render.resolution_x, scene.render.resolution_y = 1200, 750
     scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.0
     tris = sum(len(o.data.polygons) for o in objs)

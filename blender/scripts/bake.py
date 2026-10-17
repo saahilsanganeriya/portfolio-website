@@ -5,6 +5,7 @@ room.blend with the bake UVs.
     blender -b blender/room.blend -P blender/scripts/bake.py -- --scale 0.25 --samples 32   # quick look
     blender -b blender/room.blend -P blender/scripts/bake.py -- --atlas desk      # one atlas (the desk, last)
     blender -b blender/room.blend -P blender/scripts/bake.py -- --atlas window_sf,window_delhi   # view only
+    blender -b blender/room.blend -P blender/scripts/bake.py -- --regrade env   # new exposure, no re-bake
 
 Each atlas gets a second UV map "bake" (an object's own clean UVs or a smart projection, scaled by its area times
 its "texel" weight, so the density is uniform within an object, and packed together with a margin of 16 px at the
@@ -19,7 +20,8 @@ blender/.cache/bake/<atlas>.png already looks like the Cycles render and is show
 The atlases bake larger than they ship (export.py resamples them), so each shipped texel averages several baked
 ones. The set bakes without the window view (the camera-invisible env_sky card lights the set through the window);
 the view's halves (window_sf, window_delhi) bake alone into <atlas>_day.png plus a linear <atlas>_day.exr that
-export.py shows in the stills.
+export.py shows in the stills. Every atlas also keeps its denoised linear light (<atlas>_linear.exr) and its void
+fade (<atlas>_fade.npy), so --regrade can redo the view transform and the fade after an exposure change in minutes.
 """
 
 import argparse
@@ -49,7 +51,7 @@ SHIP_PX = 4096
 MARGIN_PX = {"desk": 24, "art": 24, "props": 24, "env": 24, "window_sf": 6, "window_delhi": 6}
 # The world seen through the open front of the view while it bakes: a pale day sky.
 VIEW_WORLD = ((0.62, 0.70, 0.82, 1.0), 0.35)
-GUIDE_SAMPLES = 16  # the albedo and normal guides for OIDN, and the world-position map for the void fade
+GUIDE_SAMPLES = 4  # the albedo and normal guides for OIDN (they barely change within a texel)
 
 MAX_THREADS = 16  # the devbox is shared: the coordinator caps Blender at 16 threads
 TARGET_NODE = "bake_target"
@@ -63,6 +65,7 @@ def parse_args():
     parser.add_argument("--samples", type=int, default=256)
     parser.add_argument("--threads", type=int, default=MAX_THREADS)
     parser.add_argument("--no-save", action="store_true", help="do not write room.blend")
+    parser.add_argument("--regrade", default="", help="atlases to re-grade from their saved light, without baking")
     return parser.parse_args(argv)
 
 
@@ -314,9 +317,10 @@ def void_fade_map(pos: np.ndarray) -> np.ndarray:
     return room_lib.void_fade(pos[..., 0], pos[..., 1], z, floor=floor)
 
 
-def denoise_and_save(image, path: Path, albedo=None, normal=None, exr: Path | None = None):
+def denoise_and_save(image, path: Path, albedo=None, normal=None, exr: Path | None = None, denoise=True):
     """OIDN-denoise a float bake through the compositor (guided by its albedo and normal bakes when given) and write
-    it with the scene's view transform (and, when asked, the same denoised result as linear half-float EXR)."""
+    it with the scene's view transform (and, when asked, the same denoised result as linear half-float EXR).
+    denoise=False only applies the view transform (a re-grade of light already denoised)."""
     scene = bpy.context.scene
     saved = (scene.render.engine, scene.render.resolution_x, scene.render.resolution_y,
              scene.render.resolution_percentage, scene.render.filepath, scene.render.film_transparent,
@@ -333,7 +337,7 @@ def denoise_and_save(image, path: Path, albedo=None, normal=None, exr: Path | No
             node = tree.nodes.new("CompositorNodeImage")
             node.image = guide
             tree.links.new(node.outputs["Image"], denoise.inputs[socket_name])
-    tree.links.new(denoise.outputs["Image"], out.inputs[0])
+    tree.links.new((denoise if denoise else src).outputs["Image"], out.inputs[0])
     empty_cam = bpy.data.objects.new("bake_cam", bpy.data.cameras.new("bake_cam"))
     scene.collection.objects.link(empty_cam)
     try:
@@ -421,8 +425,10 @@ def bake_atlas(atlas: str, size: int, samples: int, out_name: str | None = None,
     t_guides = time.monotonic()
     BAKE_DIR.mkdir(parents=True, exist_ok=True)
     out = BAKE_DIR / f"{out_name}.png"
-    denoise_and_save(image, out, albedo, normal, BAKE_DIR / f"{out_name}.exr" if exr else None)
+    linear = BAKE_DIR / (f"{out_name}.exr" if exr else f"{out_name}_linear.exr")
+    denoise_and_save(image, out, albedo, normal, linear)
     if fade is not None:
+        np.save(BAKE_DIR / f"{out_name}_fade.npy", fade.astype(np.float16))
         apply_void_fade(out, fade)
     for img in (image, albedo, normal):
         bpy.data.images.remove(img)
@@ -472,15 +478,26 @@ def set_light_probes(value: float):
             mat.node_tree.nodes["light_probe"].outputs[0].default_value = value
 
 
-def bake_room(atlases, scale, samples):
+def save_blend():
+    """Write room.blend with the bake UVs and images so far (after every atlas: a long bake keeps what it finished)."""
+    for img in bpy.data.images:
+        if img.filepath and not img.packed_file:
+            img.filepath = bpy.path.relpath(img.filepath, start=str(BLEND.parent))
+    bpy.ops.wm.save_as_mainfile(filepath=str(BLEND), compress=True, relative_remap=True)
+    print(f"bake: saved {BLEND}")
+
+
+def bake_room(atlases, scale, samples, save=True):
     hidden = [o for o in bpy.context.scene.objects if is_view(o) and not o.hide_render]
     for o in hidden:
         o.hide_render = True
     set_light_probes(1.0)
     try:
-        with view_independent():
-            for atlas in atlases:
+        for atlas in atlases:
+            with view_independent():
                 bake_atlas(atlas, max(256, int(ATLAS_SIZES[atlas] * scale)), samples)
+            if save:
+                save_blend()
     finally:
         set_light_probes(0.0)
         for o in hidden:
@@ -511,8 +528,26 @@ def bake_view(atlases, scale, samples):
             o.hide_render = False
 
 
+def regrade(atlas: str):
+    """Redo an atlas's PNG from its saved denoised light and void fade with the scene's current view transform."""
+    linear = bpy.data.images.load(str(BAKE_DIR / f"{atlas}_linear.exr"), check_existing=False)
+    linear.colorspace_settings.name = "Linear Rec.709"
+    out = BAKE_DIR / f"{atlas}.png"
+    denoise_and_save(linear, out, denoise=False)
+    apply_void_fade(out, np.load(BAKE_DIR / f"{atlas}_fade.npy").astype(np.float32))
+    bpy.data.images.remove(linear)
+    image = bpy.data.images.get(f"bake_{atlas}")
+    if image is not None:
+        image.reload()
+    print(f"bake: regraded {atlas} -> {out}")
+
+
 def main():
     args = parse_args()
+    if args.regrade:
+        for atlas in args.regrade.split(","):
+            regrade(atlas)
+        return
     scene = bpy.context.scene
     saved = (scene.cycles.samples, scene.cycles.use_denoising, scene.render.threads)
     scene.render.engine = "CYCLES"
@@ -523,16 +558,12 @@ def main():
     room = [a for a in atlases if not a.startswith("window_")]
     view = [a for a in atlases if a.startswith("window_")]
     if room:
-        bake_room(room, args.scale, args.samples)
+        bake_room(room, args.scale, args.samples, save=not args.no_save)
     if view:
         bake_view(view, args.scale, args.samples)
     scene.cycles.samples, scene.cycles.use_denoising, scene.render.threads = saved
     if not args.no_save:
-        for img in bpy.data.images:
-            if img.filepath and not img.packed_file:
-                img.filepath = bpy.path.relpath(img.filepath, start=str(BLEND.parent))
-        bpy.ops.wm.save_as_mainfile(filepath=str(BLEND), compress=True, relative_remap=True)
-        print(f"bake: saved {BLEND}")
+        save_blend()
 
 
 if __name__ == "__main__":
