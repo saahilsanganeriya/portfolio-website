@@ -242,7 +242,28 @@ def night_value():
 
 
 def set_night(value: float):
+    """The view's day or night (bake.py and the previews call this before they render it)."""
     night_value().nodes["night"].outputs[0].default_value = value
+    keep_suns_off_water()
+
+
+SUNLESS = "window_sunless"
+
+
+def keep_suns_off_water():
+    """Light-link the day suns away from the bay water. The bake hides the room's wall, so the sun reached the water
+    just behind the window through the dome's open front and baked it white where the halves meet; the land keeps its
+    sun."""
+    water = [o for o in bpy.data.objects if o.get("atlas") in ("window_sf", "window_delhi") and o.name.endswith("_water")]
+    sunless = bpy.data.collections.get(SUNLESS) or bpy.data.collections.new(SUNLESS)
+    for o in water:
+        if o.name not in sunless.objects:
+            sunless.objects.link(o)
+    for entry in sunless.collection_objects:
+        entry.light_linking.link_state = "EXCLUDE"
+    for light in bpy.data.collections["window_lights"].objects if "window_lights" in bpy.data.collections else []:
+        if light.get("window_mode") == "day" and light.data.type == "SUN":
+            light.light_linking.receiver_collection = sunless
 
 
 def view_material(name, day, night=None, rough=0.85, emit_night=None, emit_strength=0.0, kit=None, metal=0.0):
@@ -579,12 +600,31 @@ def water_plane(b, mat):
                 bm.faces.new((a[i], c[i], c[i + 1], a[i + 1]))
             except ValueError:
                 pass
+    extend_water_to_wall(bm)
     faces = [f for f in bm.faces if f not in before]
     for f in faces:
         f.normal_update()
         if f.normal.z < 0:
             f.normal_flip()
     return b._wrap(before, None, mat)
+
+
+def extend_water_to_wall(bm):
+    """The fan's front edge lies at the dome centre's depth, 6 cm (10.5 cm in the room) behind the wall: through the
+    bottom of the window that strip showed the void under the land. Extrude that edge forward to the wall."""
+    front = [e for e in bm.edges if e.is_boundary and all(
+        abs(v.co.y - DOME_CENTRE.y) < 1e-5 and abs(v.co.z - WATER_Z) < 1e-5 for v in e.verts)]
+    if not front:
+        return
+    made = bmesh.ops.extrude_edge_only(bm, edges=front)["geom"]
+    for v in made:
+        if isinstance(v, bmesh.types.BMVert):
+            v.co.y = WALL_BACK + 0.004
+    for f in made:
+        if isinstance(f, bmesh.types.BMFace):
+            f.normal_update()
+            if f.normal.z < 0:
+                f.normal_flip()
 
 
 def sf_height(x, y):

@@ -116,9 +116,9 @@ prints the glb's bytes, draw calls, triangles and textures.
 | `crt_glow`, `lamp_bulb`, `lava_lamp_glass`, `oven_glow`, `nas_led_0..3` | runtime meshes, each with its own unlit material (`nas_led` is shared by the four LEDs) so the site can tint, flicker or replace them |
 | `plant_sway_0..2` | the swaying leaves of the mango plant, the syngonium and the pothos, one material `plant_sway` (double-sided, props atlas), with a vertex colour (COLOR_0) whose red is the sway weight: 0 where a leaf joins its stem (the pothos: at the pot), 1 at the tips |
 | `window_glass` | the window's one pane, 0-1 UVs, its own material, clear (white at zero opacity, blended); extras `width_m`, `height_m`, `gloss` |
-| `window_view_sf`, `window_view_delhi` | the view's halves: land, water and landmarks by day (the seam runs at x = 1.85 m, behind the middle of the pane); material = that half's day texture by URI; extras `texture_day` |
+| `window_view_sf`, `window_view_delhi` | the view's halves: land, water and landmarks by day (the seam runs at x = 1.85 m, behind the middle of the pane; the water reaches back to the wall); material = that half's day texture by URI; extras `texture_day` |
 | `window_sky`, `window_sky_centre`, `window_sky_eye` | the sky over both cities, one mesh with a plain unlit material (the site draws one continuous gradient on it); the dome's centre, where sky directions start; and the window framing's eye, from which the sky and the city line blend from one city to the other |
-| `window_view_mask` | an open-fronted box of panels in the void colour round the city diorama behind the window (left, right, top, back), facing out: from the side or above, the orbit sees the void instead of the diorama past the walls; the window still shows it. Unlit, `baseColorFactor` = the void colour; never seen by Blender's rays |
+| `window_view_mask` | an open-fronted box of panels in the void colour round the city diorama behind the window (left, right, top, back), facing out: from the side or above, the orbit sees the void instead of the diorama past the walls; the window still shows it. While this box holds the whole view, the site shows the view whenever the back wall is whole (`src/scene/World/Diorama.ts`). Unlit, `baseColorFactor` = the void colour; never seen by Blender's rays |
 | `window_motif` | an empty spanning the sky just behind the glass, local +Z toward the room; extras `width_m`, `height_m`, `from_city` (delhi, right), `to_city` (sf, left): where the site draws the small plane on its dotted arc |
 | `darkroom_line_0..2` | the three strings with their pegs and screw eyes on the left wall (baked) |
 | `darkroom_clip_<line>_<k>` | an empty per peg at the middle of its print's top edge; local +Z out of the wall, +Y up; extras `maxW_m`, `maxH_m` (the print's largest size), `tiltDeg` (its turn about the wall's normal, already in the empty's rotation), `hero` on the one hero print; the site hangs each print below its empty |
@@ -166,7 +166,9 @@ lava lamp's glow on the posters, the kitchen pendant and the light bar under the
 CRT glass, the brass picture light over the desk wall (the pennant, the Voyager record and the Pale Blue Dot), and the
 paper lantern beside the record cabinet (kept below the desk lamp and the CRT). There is no ceiling
 light and no ceiling: light falls off into the void. The view has its own day lights (sun and sky) in
-`window_lights`, switched on only while its halves bake.
+`window_lights`, switched on only while its halves bake. The suns do not light the bay water (light linking,
+`window_view.keep_suns_off_water`): the view bakes without the room's wall, so the sun made the water behind the window
+white.
 
 ## Budget
 
