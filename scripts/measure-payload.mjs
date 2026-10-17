@@ -151,7 +151,23 @@ try {
   const initial = rows.filter((r) => r.initial);
   const onDemand = rows.filter((r) => !r.initial);
   const streamed = rows.filter((r) => r.streamed);
-  const board = sum(rows.filter((r) => !r.initial && r.step === 'photos' && /\.(webp|avif|jpe?g|png)$/.test(r.pathname)));
+  const kindOf = (r) => {
+    const p = r.pathname;
+    if (p.startsWith('/room/atlas/') || p === '/room/atlases.json') return 'atlases, streamed';
+    if (p.startsWith('/audio/music/')) return 'music';
+    if (p.startsWith('/audio/city/')) return 'city sound';
+    if (p.startsWith('/audio/sfx/')) return 'sound effects';
+    if (p.startsWith('/audio/')) return 'room sound';
+    if (/^\/room\/window_.*\.ktx2$/.test(p)) return 'window, other pictures';
+    if (p === '/api/films.json') return 'live diary';
+    if (r.type === 'font') return 'fonts';
+    if (/\.(webp|avif|jpe?g|png)$/.test(p) || /\/photographs\.[^/]*\.js$/.test(p)) {
+      return r.step === 'photos' ? 'photographs' : 'photos, other';
+    }
+    return 'other';
+  };
+  // The prints' cap counts the photographs kind only: atlases still streaming during the photos step are not prints.
+  const board = sum(onDemand.filter((r) => kindOf(r) === 'photographs'));
   const biggestSfx = Math.max(0, ...rows.filter((r) => r.pathname.startsWith('/audio/sfx/')).map((r) => r.bytes));
   const music = sum(rows.filter((r) => r.pathname.startsWith('/audio/music/')));
   const textFirst = fcpEpoch < firstModelEnd;
@@ -174,21 +190,6 @@ try {
     console.log(`${String(size).padStart(9)}  (not needed in this visit; file size)  /room/${name}`);
   }
 
-  const kindOf = (r) => {
-    const p = r.pathname;
-    if (p.startsWith('/room/atlas/') || p === '/room/atlases.json') return 'atlases, streamed';
-    if (p.startsWith('/audio/music/')) return 'music';
-    if (p.startsWith('/audio/city/')) return 'city sound';
-    if (p.startsWith('/audio/sfx/')) return 'sound effects';
-    if (p.startsWith('/audio/')) return 'room sound';
-    if (/^\/room\/window_.*\.ktx2$/.test(p)) return 'window, other pictures';
-    if (p === '/api/films.json') return 'live diary';
-    if (r.type === 'font') return 'fonts';
-    if (/\.(webp|avif|jpe?g|png)$/.test(p) || /\/photographs\.[^/]*\.js$/.test(p)) {
-      return r.step === 'photos' ? 'photographs' : 'photos, other';
-    }
-    return 'other';
-  };
   const caps = { music: MUSIC_CAP, photographs: BOARD_CAP };
   const kinds = new Map();
   for (const r of rows.filter((x) => !x.initial)) {
