@@ -26,7 +26,7 @@ export function TerminalApp({ os }: { os: OsApi }) {
   const historyAt = useRef(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Lines waiting to print one at a time (the boot log, a paced reply); a keystroke prints the boot log's rest at once.
+  // Lines waiting to print one at a time (the boot log, a paced reply); a keystroke prints the rest at once.
   const pending = useRef<{ flush: () => void } | null>(null);
   const shell = useMemo<Shell>(
     () => ({ index: os.index, root: buildTree(os.index), cwd: HOME, previousCwd: HOME, history: [], open: os.open }),
@@ -36,8 +36,7 @@ export function TerminalApp({ os }: { os: OsApi }) {
 
   const append = (more: TermLine[]) => setLines((prev) => [...prev, ...more].slice(-MAX_LINES));
 
-  const desktop = () => rootRef.current?.closest('.os');
-  const setWiped = (wiped: boolean) => desktop()?.toggleAttribute('data-wiped', wiped);
+  const setWiped = (wiped: boolean) => rootRef.current?.closest('.os')?.toggleAttribute('data-wiped', wiped);
 
   /** Prints a reply, a line at a time when it asks for that; resolves when the last line is out. */
   const print = (result: TermResult) =>
