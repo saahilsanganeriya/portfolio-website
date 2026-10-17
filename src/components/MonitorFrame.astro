@@ -3,6 +3,8 @@
 // load): SaahilOS still runs on the screen of the cream CRT on the walnut desk. The page script puts the OS's iframe
 // into the glass only in this mode; nothing is drawn over the screen, so the OS reads as it does on the 3D monitor.
 // On the phone's light tier the same monitor takes over once the 3D camera reaches the glass, with a way back.
+// The chin carries the 3D bezel's nameplate, drawn from the same artwork.
+import Badge from '../../blender/props/art/crt_badge.svg';
 ---
 
 <div class="monitor-frame" data-monitor-frame>
@@ -11,7 +13,7 @@
       <noscript><p class="monitor-off">SaahilOS runs on JavaScript, which this browser has turned off.</p></noscript>
     </div>
     <div class="monitor-chin">
-      <span class="monitor-badge" aria-hidden="true">Saahil</span>
+      <span class="monitor-badge" aria-hidden="true"><Badge /></span>
       <button type="button" class="monitor-back" data-monitor-back>Back to the room</button>
       <span class="monitor-led" aria-hidden="true"></span>
     </div>
@@ -94,14 +96,24 @@
     padding-inline: clamp(0.25rem, 1.5vmin, 1rem);
   }
 
-  /* The maker's name, printed in dark grey on the plastic as monitor logos were. */
+  /* A satin aluminium plate, lit and shaded along its edges like the case around it. */
   .monitor-badge {
-    color: #5c5244;
-    font-family: var(--font-serif);
-    font-size: clamp(0.8rem, 2.2vmin, 1.15rem);
-    font-style: italic;
-    letter-spacing: 0.04em;
-    text-shadow: 0 1px 0 var(--plastic-lit);
+    display: block;
+    height: clamp(1rem, 2.6vmin, 1.4rem);
+    aspect-ratio: 2048 / 320;
+    padding: 0.1rem 0.3rem;
+    border-radius: 2px;
+    background: #cbc8c2;
+    box-shadow:
+      inset 1px 1px 0 #e6e3dd,
+      inset -1px -1px 0 #98948b,
+      0 1px 0 var(--plastic-lit);
+  }
+
+  .monitor-badge :global(svg) {
+    display: block;
+    width: 100%;
+    height: 100%;
   }
 
   /* Only on the light tier, while SaahilOS is up: a moulded push button on the chin. */
