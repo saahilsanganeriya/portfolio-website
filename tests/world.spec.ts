@@ -38,6 +38,17 @@ async function clickProp(page: Page, name: string) {
   await page.mouse.click(point!.x, point!.y);
 }
 
+/** Rests the pointer on a prop (following it while the view leans toward the pointer). */
+async function hoverProp(page: Page, name: string) {
+  for (let i = 0; i < 4; i++) {
+    const at = await page.evaluate((n) => window.__room!.point(n), name);
+    if (!at) break;
+    await page.mouse.move(at.x, at.y);
+    await page.waitForTimeout(400);
+    if ((await page.evaluate(({ x, y }) => window.__room!.hit(x, y), at)) === name) return;
+  }
+}
+
 async function backToIdle(page: Page) {
   await page.evaluate(() => window.__room!.goto('idle'));
   await settledAt(page, 'idle');
@@ -51,7 +62,7 @@ test('every new hotspot does what it says', async ({ page }) => {
   test.setTimeout(420_000);
   await inRoom(page);
 
-  // Props that take the camera to their framing.
+  // The window takes the camera to its framing first; so does the darkroom line (T75).
   for (const [proxy, framing] of [
     ['hit_window', 'window'],
     ['hit_darkroom', 'photos'],
@@ -68,6 +79,23 @@ test('every new hotspot does what it says', async ({ page }) => {
   await clickProp(page, 'hit_darkroom_print_0');
   await settledAt(page, 'monitor');
   await expect(os(page).getByRole('dialog', { name: 'A Narrative in a Frame' })).toBeVisible();
+
+  // Round 8's labels: the NAS is the NAS (not a Terminal), the pennant says Georgia Tech, the CRT's badge explains itself.
+  await backToIdle(page);
+  for (const [proxy, label] of [
+    ['hit_nas', 'The NAS'],
+    ['hit_pennant', 'Georgia Tech'],
+  ] as const) {
+    await hoverProp(page, proxy);
+    await expect(page.locator('.room-label'), `${proxy}'s label`).toHaveText(label);
+  }
+  await page.evaluate(() => window.__room!.goto('desk'));
+  await settledAt(page, 'desk');
+  await hoverProp(page, 'hit_crt_badge');
+  await expect(page.locator('.room-label')).toHaveText('My family name and a thread spool, for my father’s spinning mill');
+  await clickProp(page, 'hit_crt_badge');
+  await settledAt(page, 'monitor');
+  await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
 
   // Props whose content lives in a SaahilOS window.
   for (const [proxy, window] of [
