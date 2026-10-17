@@ -221,7 +221,8 @@ export class Diorama {
     let changed = false;
     const show = opacity >= 1 && this.covers(wall, camera);
     for (const o of wall.outside) {
-      if (!show && !o.hidden && o.node.visible) {
+      // Re-hidden if the room showed it again meanwhile; only what this hid is shown again.
+      if (!show && o.node.visible) {
         o.node.visible = false;
         o.hidden = true;
         changed = true;

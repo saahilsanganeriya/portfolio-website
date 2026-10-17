@@ -770,6 +770,8 @@ export class Application implements RoomHandle {
       lift: (proxy) => this.hover.liftOf(proxy),
       point(name) {
         const rect = app.container.getBoundingClientRect();
+        const feature = app.world.point(name, rect);
+        if (feature !== undefined) return feature;
         let world: THREE.Vector3;
         if (name === 'monitor') world = app.nodes.monitor.position.clone();
         else {
