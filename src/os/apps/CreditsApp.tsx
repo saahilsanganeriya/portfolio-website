@@ -14,7 +14,11 @@ const sentence = (text: string) => (text.startsWith('`') ? text : text.charAt(0)
 export function CreditsApp() {
   const credits = useJson<{ sections: AssetSection[] }>('/content/credits.json');
   const henry = 'https://github.com/henryjeff/portfolio-inner-site';
+  const steam = 'https://github.com/henryjeff/portfolio-website/blob/master/src/Application/World/CoffeeSteam.ts';
+  const wind = 'https://github.com/brunosimon/folio-2025';
   const alana = 'https://github.com/alanagoyal/alanagoyal';
+  const webb = 'https://esawebb.org/images/weic2216b/';
+  const ccBy = 'https://creativecommons.org/licenses/by/4.0/';
   return (
     <article className="os-reader os-credits">
       <header className="os-reader-head">
@@ -23,11 +27,30 @@ export function CreditsApp() {
           <a href={henry} {...linkAttributes(henry)}>
             Based on Henry Heffernan's portfolio, heavily edited.
           </a>{' '}
-          Window addresses and the phone layout follow ideas from{' '}
+          The steam over the coffee follows his{' '}
+          <a href={steam} {...linkAttributes(steam)}>
+            CoffeeSteam
+          </a>{' '}
+          (MIT). The breeze in the room's plants follows{' '}
+          <a href={wind} {...linkAttributes(wind)}>
+            Bruno Simon's wind in folio-2025
+          </a>{' '}
+          (MIT). Window addresses and the phone layout follow ideas from{' '}
           <a href={alana} {...linkAttributes(alana)}>
             Alana Goyal's site
           </a>{' '}
           (MIT).
+        </p>
+        {/* ESA/Webb's terms: the full credit line, unaltered, visible and linked. */}
+        <p className="os-reader-meta">
+          Wallpaper:{' '}
+          <a href={webb} {...linkAttributes(webb)}>
+            Pillars of Creation, James Webb Space Telescope
+          </a>
+          . NASA, ESA, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan (STScI).{' '}
+          <a href={ccBy} {...linkAttributes(ccBy)}>
+            CC BY 4.0
+          </a>
         </p>
       </header>
       {credits.state === 'loading' && <ThreadLoader label="Loading the credits" />}

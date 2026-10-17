@@ -552,6 +552,18 @@ test.describe('desktop', () => {
     await expect(credit).toHaveCSS('background-color', 'rgb(59, 42, 30)');
   });
 
+  /** Catches a credit the licences ask for going missing from the Credits window: Henry, Bruno Simon, Alana, ESA/Webb. */
+  test('Credits names the code the site builds on and the wallpaper’s source', async ({ page }) => {
+    await page.goto('/os?embed=1#credits');
+    const credits = page.getByRole('dialog', { name: 'Credits' }).locator('.os-reader-head');
+    await expect(credits.getByRole('link', { name: "Based on Henry Heffernan's portfolio, heavily edited." })).toBeVisible();
+    await expect(credits.getByRole('link', { name: 'CoffeeSteam' })).toHaveAttribute('href', /henryjeff\/portfolio-website\/.*CoffeeSteam\.ts$/);
+    await expect(credits.getByRole('link', { name: "Bruno Simon's wind in folio-2025" })).toHaveAttribute('href', 'https://github.com/brunosimon/folio-2025');
+    await expect(credits.getByRole('link', { name: "Alana Goyal's site" })).toBeVisible();
+    await expect(credits).toContainText('NASA, ESA, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan (STScI). CC BY 4.0');
+    await expect(credits.getByRole('link', { name: 'Pillars of Creation, James Webb Space Telescope' })).toHaveAttribute('href', 'https://esawebb.org/images/weic2216b/');
+  });
+
   /** Catches the wallpaper's large sizes loading with the room's first frame instead of after its arrival. */
   test('inside the room, only the preview loads until the room has landed', async ({ page }) => {
     const asked: string[] = [];
