@@ -4,6 +4,7 @@ import { Navigation } from '../Camera/Navigation';
 import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
 import type { Hotspot } from '../hotspots';
 import { deferWindowPictures } from '../World/textures';
+import { Shine } from '../World/Shine';
 import { World } from '../World/World';
 import { Effects } from './Effects';
 import { HoverReactions } from './Hover';
@@ -170,6 +171,7 @@ export class Application implements RoomHandle {
   private monitor!: MonitorScreen;
   private effects!: Effects;
   private atlases!: AtlasStreamer;
+  private shine!: Shine;
   audio!: RoomAudio;
   private world!: World;
   private interactiveAt: number | null = null;
@@ -279,6 +281,8 @@ export class Application implements RoomHandle {
       light: this.light,
     });
     this.world.setTier(this.renderer.effective(this.quality.tier));
+    this.shine = new Shine(root, this.renderer.gl, this.nodes.crtGlow && { glass: this.nodes.crtGlow, pose: this.nodes.monitor }, () => (this.dirty = true));
+    this.shine.setTier(this.renderer.effective(this.quality.tier));
     this.hover = new HoverReactions(root, this.nodes.proxies, this.camera.instance, Boolean(this.options.reducedMotion));
     this.navigation = new Navigation(this.container, this.camera, this.nodes, {
       fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
@@ -325,6 +329,7 @@ export class Application implements RoomHandle {
       this.interactiveAt ??= performance.now();
       this.world.becomeInteractive();
       void this.atlases.start();
+      this.shine.start();
     };
     if (open === undefined) this.arrive(fast, endIntro);
     else if (this.light) this.toMonitor('fast', open || null, endIntro, true);
@@ -422,6 +427,7 @@ export class Application implements RoomHandle {
     this.audio?.dispose();
     this.world?.dispose();
     this.atlases?.dispose();
+    this.shine?.dispose();
     this.ktx2.dispose();
     this.effects?.dispose();
     this.renderer.dispose();
@@ -564,6 +570,7 @@ export class Application implements RoomHandle {
     this.renderer.setPixelRatio(this.pixelRatio(tier));
     this.effects.setTier(this.renderer.effective(tier));
     this.world.setTier(this.renderer.effective(tier));
+    this.shine.setTier(this.renderer.effective(tier));
     this.dirty = true;
   }
 
