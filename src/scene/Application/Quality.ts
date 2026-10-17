@@ -71,6 +71,10 @@ const WINDOW_MS = 500;
 // The arrival starts 0.4 s after the room has loaded, before a warm-up window and a measured one have passed: a machine
 // whose first frames run under half the target decides after this many, so the glide does not start at the top tier.
 const QUICK_FRAMES = 3;
+// Before the room starts, a frame timed until the GPU has finished it is far too slow over twice the target's interval;
+// one over CERTAIN_MS is the machine, not a stall (a garbage collection), so it is not looked at twice.
+const FAR_TOO_SLOW_MS = 2000 / TARGET_FPS;
+const CERTAIN_MS = 150;
 
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 
@@ -126,8 +130,43 @@ export class Quality {
     this.reset(now);
     this.warmingUp = false;
     if (!warmingUp) this.decided = true;
-    if (warmingUp || fps >= TARGET_FPS || this.index === this.ladder.tiers.length - 1) return;
+    if (warmingUp || fps >= TARGET_FPS || this.atBottom) return;
+    this.stepFor(fps);
+  }
 
+  /**
+   * Picks the tier the arrival starts at, before anyone sees the room: the ladder only ever steps down, so it must not
+   * start a machine at a tier it cannot hold. `first` is the room's first frame, timed until the GPU finished it (its
+   * textures upload with it, so it can keep the top tier but never drop it); `frame` draws one more at the current tier
+   * and returns the same time (`fresh`: a tier just applied, whose first frame it draws untimed first). Steps down as
+   * the ladder does while a frame takes over twice the target's interval; one under CERTAIN_MS is looked at twice.
+   * Returns the frames it timed.
+   */
+  async calibrate(first: number, frame: (fresh: boolean) => Promise<number>) {
+    const timed: { tier: number; ms: number }[] = [];
+    const time = async (fresh: boolean) => {
+      const ms = await frame(fresh);
+      timed.push({ tier: this.index, ms });
+      return ms;
+    };
+    if (this.pinned || first <= FAR_TOO_SLOW_MS) return timed;
+    let fresh = false;
+    while (!this.atBottom) {
+      let ms = await time(fresh);
+      if (ms > FAR_TOO_SLOW_MS && ms <= CERTAIN_MS) ms = Math.min(ms, await time(false));
+      if (ms <= FAR_TOO_SLOW_MS) break;
+      this.stepFor(1000 / ms);
+      fresh = true;
+    }
+    return timed;
+  }
+
+  private get atBottom() {
+    return this.index === this.ladder.tiers.length - 1;
+  }
+
+  /** Down to the tier a frame rate calls for, at least one. */
+  private stepFor(fps: number) {
     const wanted = this.tier.resolution * Math.sqrt(fps / TARGET_FPS);
     const fits = this.ladder.tiers.findIndex((tier, i) => i > this.index && tier.resolution <= wanted);
     this.index = fits < 0 ? this.ladder.tiers.length - 1 : Math.max(this.index + 1, fits);

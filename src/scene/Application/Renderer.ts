@@ -118,6 +118,7 @@ export class RoomRenderer {
   private readonly switches: Partial<RenderSwitches> = {};
   private lastScene: THREE.Scene | null = null;
   private lastCamera: THREE.Camera | null = null;
+  private readonly pixel = new Uint8Array(4);
   /** The application's side of the debug hook: set the clock, re-apply the tier (pixel ratio, halos), redraw. */
   hooks: { setClock(seconds: number): void; reapply(): void } = { setClock: () => {}, reapply: () => {} };
 
@@ -233,6 +234,16 @@ export class RoomRenderer {
       this.gl.render(scene, camera);
     }
     this.css.render(cssScene, camera);
+  }
+
+  /**
+   * Blocks until the GPU has finished every frame drawn so far, by reading one pixel of the canvas back: the browser
+   * queues frames for the GPU, so without this a frame's cost shows only once that queue has filled.
+   */
+  waitForGpu() {
+    this.gl.setRenderTarget(null);
+    const context = this.gl.getContext();
+    context.readPixels(0, 0, 1, 1, context.RGBA, context.UNSIGNED_BYTE, this.pixel);
   }
 
   /** GPU memory: every texture the scene's materials hold, and the render targets. */

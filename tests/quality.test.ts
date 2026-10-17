@@ -42,3 +42,71 @@ describe('the quality controller', () => {
     expect(quality.index).toBe(0);
   });
 });
+
+/**
+ * Calibrates on a fake clock: every frame at the top tier takes `topMs` (the first one, which uploads the textures,
+ * `firstMs`), a lower tier as much less as it has fewer pixels (MSAA counts four samples a pixel); timed frame number
+ * `stall` takes 80 ms more (a garbage collection); a new tier's first frame is drawn untimed. Returns the tier picked and
+ * how long it took.
+ */
+async function calibrate(topMs: number, { firstMs = topMs, stall = 0 } = {}) {
+  let clock = 0;
+  let frames = 0;
+  const quality = new Quality(FULL, () => {});
+  const cost = () => {
+    const tier = quality.tier;
+    const samples = (tier.resolution / FULL.tiers[0].resolution) ** 2 * (tier.msaa ? 1 : 0.25);
+    return topMs * samples + (++frames === stall ? 80 : 0);
+  };
+  const frame = async (fresh: boolean) => {
+    if (fresh) clock += cost();
+    const ms = cost();
+    clock += ms;
+    return ms;
+  };
+  clock += firstMs;
+  await quality.calibrate(firstMs, frame);
+  return { tier: quality.index, ms: clock };
+}
+
+describe('the calibration before the arrival', () => {
+  /**
+   * Catches a fast machine losing the top tier, or waiting for it: the ladder never climbs back, so a top tier lost
+   * before the glide is lost for the visit, and the glide may start at most 300 ms later than it did.
+   */
+  it('keeps a fast machine (16 ms frames) at the top tier within 300 ms', async () => {
+    expect(await calibrate(16)).toEqual({ tier: 0, ms: 16 });
+    // The first frame uploads the textures: slow on any machine, it only asks for a clean frame.
+    const uploading = await calibrate(16, { firstMs: 120 });
+    expect(uploading.tier).toBe(0);
+    expect(uploading.ms).toBeLessThanOrEqual(300);
+  });
+
+  /** Catches one stall (a garbage collection) during a fast machine's measured frame costing it the top tier. */
+  it('looks again at a frame between twice the target and certainly slow', async () => {
+    expect((await calibrate(16, { firstMs: 120, stall: 1 })).tier).toBe(0);
+  });
+
+  /**
+   * Catches the arrival starting at a tier the machine cannot hold (T78: tier 0 at 0.7–1.1 s a frame, the glide ran
+   * 12–33 frames): a machine whose top-tier frames take 100 ms starts lower, at a tier whose frames fit.
+   */
+  it('starts a slow machine (100 ms frames) at a lower tier', async () => {
+    const { tier } = await calibrate(100);
+    expect(tier).toBeGreaterThan(0);
+    const picked = FULL.tiers[tier];
+    expect(100 * picked.resolution ** 2 * (picked.msaa ? 1 : 0.25)).toBeLessThanOrEqual(40);
+  });
+
+  /** Catches a pinned tier (screenshots, captures) being moved by the calibration. */
+  it('leaves a pinned tier alone', async () => {
+    (globalThis as { __roomTier?: number }).__roomTier = 0;
+    try {
+      const quality = new Quality(FULL, () => {});
+      await quality.calibrate(900, async () => 900);
+      expect(quality.index).toBe(0);
+    } finally {
+      delete (globalThis as { __roomTier?: number }).__roomTier;
+    }
+  });
+});

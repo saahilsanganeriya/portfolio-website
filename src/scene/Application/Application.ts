@@ -167,6 +167,11 @@ export interface RoomProbe {
    */
   readonly startedAt: number | null;
   readonly landedAt: number | null;
+  /**
+   * The tier measured before the arrival: the room's first frame and the frames timed after it (ms, each until the GPU
+   * finished it), the time it took, and the tier picked (a pinned tier times the first frame only).
+   */
+  readonly calibration: Calibration | null;
   /** Whether the screen shows its still picture instead of the live OS (the wide view on the slowest tiers). */
   readonly monitorStill: boolean;
   /** The last frame's draw calls and triangles, and what the GPU holds. */
@@ -179,6 +184,13 @@ export interface RoomProbe {
   readonly audio: Pick<RoomAudio, 'graph' | 'setState' | 'sfx' | 'setMusicSource' | 'musicSource'>;
   /** Opens the record crate wherever the camera is (the room may have no player to click). */
   openRecords(): void;
+}
+
+export interface Calibration {
+  first: number;
+  frames: { tier: number; ms: number }[];
+  ms: number;
+  tier: number;
 }
 
 declare global {
@@ -205,6 +217,9 @@ export class Application implements RoomHandle {
   audio!: RoomAudio;
   private world!: World;
   private diorama!: Diorama;
+  /** The quality tier has been measured: until then nothing is drawn (see calibrate). */
+  private measured = false;
+  private calibration: Calibration | null = null;
   private interactiveAt: number | null = null;
   private startedAt: number | null = null;
   private landedAt: number | null = null;
@@ -338,14 +353,42 @@ export class Application implements RoomHandle {
     this.renderer.prepareTextures(this.scene);
     // Compile every shader and upload the textures now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
-    this.render();
+    // Before SaahilOS loads: its boot would share the main thread with the frames being timed.
+    await this.calibrate();
     report(0.9, 'shaders');
 
     await Promise.race([this.monitor.load(), new Promise((resolve) => setTimeout(resolve, OS_LOAD_TIMEOUT_MS))]);
     report(1, 'SaahilOS');
     this.installProbe();
-    // Frames drawn behind the boot screen calibrate the quality tier before anyone sees the room.
+    // Behind the boot screen until the room starts; the ladder measures on from here.
     this.loop();
+  }
+
+  /**
+   * The tier the arrival starts at, measured on frames of the room behind the boot screen, each timed until the GPU
+   * has finished it. The time between two animation frames is no measure here: the browser queues a dozen frames for
+   * the GPU before it holds the next one back, and the glide then waited for those queued top-tier frames (T82).
+   */
+  private async calibrate() {
+    const timeFrame = () => {
+      const start = performance.now();
+      this.render();
+      this.renderer.waitForGpu();
+      return performance.now() - start;
+    };
+    const begun = performance.now();
+    // The first frame also uploads the textures.
+    const first = timeFrame();
+    const frames = await this.quality.calibrate(first, async (fresh) => {
+      if (fresh) {
+        // A lower tier's own shaders and render targets, made before its frames are timed.
+        await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
+        timeFrame();
+      }
+      return timeFrame();
+    });
+    this.calibration = { first, frames, ms: performance.now() - begun, tier: this.quality.index };
+    this.measured = true;
   }
 
   start({ open, fast = false }: StartOptions = {}) {
@@ -723,6 +766,8 @@ export class Application implements RoomHandle {
       this.quality.reset(now);
       return;
     }
+    // Frames queued for the GPU while the room loads would only delay the calibration's.
+    if (!this.measured) return;
     this.render();
     if (frameMs > 0) this.quality.sample(now, frameMs);
   };
@@ -805,6 +850,9 @@ export class Application implements RoomHandle {
       },
       get startedAt() {
         return app.startedAt;
+      },
+      get calibration() {
+        return app.calibration;
       },
       get landedAt() {
         return app.landedAt;
