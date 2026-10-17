@@ -128,7 +128,7 @@ const SIZES: Record<AppId | 'reader', AppWindowSize> = {
   about: { width: 780, height: 700 },
   projects: LIST,
   blog: LIST,
-  contact: { width: 560, height: 600 },
+  contact: { width: 560, height: 660 },
   books: LIST,
   credits: LIST,
   reader: READER,

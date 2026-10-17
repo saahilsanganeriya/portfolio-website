@@ -72,7 +72,7 @@ export function plainText(html: string): string[] {
 
 async function readEntry(collection: string, slug: string, head: string[]): Promise<string[]> {
   const { html } = await loadContent<unknown>(collection, slug);
-  return [...head, '', ...plainText(html)];
+  return head.length ? [...head, '', ...plainText(html)] : plainText(html);
 }
 
 const photoName = (slug: string) => `${slug}.jpg`;

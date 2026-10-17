@@ -93,12 +93,6 @@ body.os-moving iframe {
   -webkit-box-decoration-break: clone;
 }
 
-.os-phonebar {
-  text-shadow:
-    1px 1px 0 var(--ink),
-    0 0 4px rgb(20 17 15 / 0.9);
-}
-
 /* Two sides, the work on the left and life off the clock on the right; sizes match iconGutter in wm/windows.ts. */
 .os-icon-group {
   position: absolute;
@@ -2172,12 +2166,14 @@ body.os-moving iframe {
     display: none;
   }
 
+  /* A phone's status bar: a strip of the desktop's walnut, so its text never sits on the photograph. */
   html:not([data-embedded]) .os-phonebar {
     display: flex;
     flex: none;
     justify-content: space-between;
     padding: 8px 16px;
     padding-top: max(8px, env(safe-area-inset-top));
+    background: var(--os-desk);
     color: var(--paper);
   }
 
