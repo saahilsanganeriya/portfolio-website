@@ -15,7 +15,7 @@ export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   projects: { label: 'Projects', icon: 'projects' },
   code: { label: 'Code', icon: 'code' },
   blog: { label: 'Writing', icon: 'page' },
-  photography: { label: 'A Narrative in a Frame', icon: 'camera' },
+  photography: { label: 'Photographs', icon: 'camera' },
   films: { label: 'Films', icon: 'films' },
   books: { label: 'Books', icon: 'books' },
   recipes: { label: 'Kitchen', icon: 'recipes' },

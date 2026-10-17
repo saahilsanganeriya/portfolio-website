@@ -78,7 +78,7 @@ test('every new hotspot does what it says', async ({ page }) => {
   await settledAt(page, 'photos');
   await clickProp(page, 'hit_darkroom_print_0');
   await settledAt(page, 'monitor');
-  await expect(os(page).getByRole('dialog', { name: 'A Narrative in a Frame' })).toBeVisible();
+  await expect(os(page).getByRole('dialog', { name: 'Photographs' })).toBeVisible();
 
   // Round 8's labels: the NAS is the NAS (not a Terminal), the pennant says Georgia Tech, the CRT's badge explains itself.
   await backToIdle(page);

@@ -7,7 +7,7 @@ import { devices, expect, test, type Locator, type Page } from '@playwright/test
 
 // The desktop's two sides: the work on the left, most important first, and the rest of his life on the right.
 const WORK = ['About', 'Projects', 'Writing', 'Code', 'Résumé', 'Contact', 'Terminal', 'Credits'];
-const PERSONAL = ['Films', 'A Narrative in a Frame', 'Books', 'Kitchen', 'Voyager Golden Record'];
+const PERSONAL = ['Films', 'Photographs', 'Books', 'Kitchen', 'Voyager Golden Record'];
 const REMOVED = ['Welcome', 'The Thread', 'Daily word', 'On the bench'];
 /** The first `## ` heading of a content entry, so these tests follow rewrites of the copy instead of pinning it. */
 const firstH2 = (collection: string, slug: string): string =>
@@ -456,9 +456,9 @@ test.describe('desktop', () => {
    * Catches the exhibit out of the set's order, a photograph's deep link opening the wrong one, and full-size files
    * loading before a photograph is opened.
    */
-  test('A Narrative in a Frame: thumbnails first, the full photograph on open', async ({ page }) => {
+  test('Photographs: thumbnails first, the full photograph on open', async ({ page }) => {
     await page.goto('/os?embed=1#photography');
-    const exhibit = page.getByRole('dialog', { name: 'A Narrative in a Frame' });
+    const exhibit = page.getByRole('dialog', { name: 'Photographs' });
     // The set's order, the darkroom line's too: its first photograph leads.
     await expect(exhibit.locator('.os-print-title').first()).toHaveText(PHOTO.title);
     const thumbs = exhibit.locator('.os-print img');
@@ -475,7 +475,7 @@ test.describe('desktop', () => {
     expect(await exhibit.locator('.os-print picture').evaluateAll(widestOffered)).toBeLessThanOrEqual(960);
 
     await page.goto(`/os?embed=1#photography/${PHOTO.slug}`);
-    const photo = page.getByRole('dialog', { name: 'A Narrative in a Frame' });
+    const photo = page.getByRole('dialog', { name: 'Photographs' });
     await expect(photo.getByRole('heading', { level: 2, name: PHOTO.title, exact: true })).toBeVisible();
     const full = photo.locator('.os-photo-figure img');
     await expect(full).toHaveAttribute('alt', PHOTO.caption);
@@ -749,8 +749,8 @@ test.describe('desktop at 1440 × 900', () => {
       ['terminal', 'Terminal', '.os-terminal-prompt input'],
       ['credits', 'Credits', '.os-credits-row'],
       ['films', 'Films', '#film-favourites'],
-      ['photography', 'A Narrative in a Frame', '.os-print'],
-      [`photography/${PHOTO.slug}`, 'A Narrative in a Frame', '.os-photo-figure'],
+      ['photography', 'Photographs', '.os-print'],
+      [`photography/${PHOTO.slug}`, 'Photographs', '.os-photo-figure'],
       ['books', 'Books', 'li'],
       ['recipes/sample-loaf', 'Kitchen', 'h2'],
       ['voyager', 'Voyager Golden Record', 'h2'],
@@ -776,7 +776,7 @@ test.describe('on the monitor’s screen', () => {
     await expect(page.getByRole('dialog', { name: 'About' })).toBeVisible();
     const personal = page.getByRole('list', { name: 'Off the clock' }).getByRole('button');
     const edge = Math.min(...(await personal.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().left))));
-    const apps = ['Projects', 'Writing', 'Code', 'Résumé', 'Contact', 'Terminal', 'Films', 'A Narrative in a Frame'];
+    const apps = ['Projects', 'Writing', 'Code', 'Résumé', 'Contact', 'Terminal', 'Films', 'Photographs'];
     for (const app of apps) await page.getByRole('navigation', { name: 'Apps' }).getByRole('button', { name: app, exact: true }).dblclick();
     for (const app of ['About', ...apps]) {
       const win = page.getByRole('dialog', { name: app });
@@ -868,8 +868,8 @@ test.describe('iPhone 13', () => {
       ['books', 'Books'],
       ['recipes/sample-loaf', 'Kitchen'],
       ['voyager', 'Voyager Golden Record'],
-      ['photography', 'A Narrative in a Frame'],
-      ['photography/cansupport', 'A Narrative in a Frame'],
+      ['photography', 'Photographs'],
+      ['photography/cansupport', 'Photographs'],
     ]) {
       await page.goto(`/os?embed=0#${hash}`);
       await page.reload();

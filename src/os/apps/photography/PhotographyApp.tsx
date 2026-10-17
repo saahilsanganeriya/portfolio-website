@@ -46,7 +46,7 @@ function Browse({ photos }: { photos: OsPhotograph[] }) {
   if (photos.length === 0) return <p className="os-note">No photographs are published yet.</p>;
   return (
     <div className="os-darkroom">
-      <p className="os-darkroom-intro">Photographs I have taken. Open one to see it large, with its title and a line about it.</p>
+      <p className="os-darkroom-intro">From my film and digital cameras.</p>
       <Prints photos={photos} large />
     </div>
   );
@@ -109,7 +109,7 @@ function Photograph({ photo, photos }: { photo: OsPhotograph; photos: OsPhotogra
   );
 }
 
-/** 'A Narrative in a Frame': his photographs in the set's order; `#photography/<slug>` opens one. */
+/** Photographs: his photographs in the set's order; `#photography/<slug>` opens one. */
 export function PhotographyApp({ slug, os }: { slug?: string; os: OsApi }) {
   const photos = os.index.photography;
   const photo = slug ? photos.find((p) => p.slug === slug) : undefined;
