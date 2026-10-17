@@ -10,7 +10,7 @@ import { HoverReactions } from './Hover';
 import { Interaction } from './Interaction';
 import { MonitorScreen } from './MonitorScreen';
 import { FULL, LIGHT, Quality, type QualityTier } from './Quality';
-import { createKtx2Loader, halveTextures, loadRoom, ROOM_URL, textureWidths, type ProgressReporter } from './Resources';
+import { AtlasStreamer, createKtx2Loader, halveTextures, loadRoom, loadVoidColor, ROOM_URL, textureWidths, type ProgressReporter } from './Resources';
 import { readRoom, WORLD_SCALE, type RoomNodes, type StationName } from './RoomModel';
 import { RoomRenderer } from './Renderer';
 
@@ -169,6 +169,7 @@ export class Application implements RoomHandle {
   private camera!: RoomCamera;
   private monitor!: MonitorScreen;
   private effects!: Effects;
+  private atlases!: AtlasStreamer;
   audio!: RoomAudio;
   private world!: World;
   private interactiveAt: number | null = null;
@@ -241,6 +242,11 @@ export class Application implements RoomHandle {
     if (this.light) halveTextures(root);
     this.nodes = readRoom(root);
     this.scene.add(root);
+    void loadVoidColor().then((color) => {
+      this.renderer.setVoidColor(color);
+      this.dirty = true;
+    });
+    this.atlases = new AtlasStreamer(this.scene, this.renderer, this.ktx2, { light: this.light, onSwap: () => (this.dirty = true) });
 
     this.camera = new RoomCamera(this.nodes, this.aspect());
     this.monitor = new MonitorScreen(
@@ -318,6 +324,7 @@ export class Application implements RoomHandle {
       // The visitor can act now: what was left for later may start loading.
       this.interactiveAt ??= performance.now();
       this.world.becomeInteractive();
+      void this.atlases.start();
     };
     if (open === undefined) this.arrive(fast, endIntro);
     else if (this.light) this.toMonitor('fast', open || null, endIntro, true);
@@ -414,6 +421,7 @@ export class Application implements RoomHandle {
     this.monitor?.dispose();
     this.audio?.dispose();
     this.world?.dispose();
+    this.atlases?.dispose();
     this.ktx2.dispose();
     this.effects?.dispose();
     this.renderer.dispose();
