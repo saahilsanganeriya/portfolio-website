@@ -3,8 +3,6 @@
     "name": "desk",
     "materials": [
       "crt_glow",
-      "lamp_bulb",
-      "nas_led",
       "room_desk",
       "sticky_note_0",
       "sticky_note_1",
@@ -14,7 +12,13 @@
       "uri": "room.glb",
       "image": 1,
       "px": 1024,
-      "bytes": 205994
+      "bytes": 206527
+    },
+    "full": {
+      "uri": "atlas/desk.ktx2",
+      "px": 4096,
+      "bytes": 8573662,
+      "format": "ktx2-uastc"
     }
   },
   {
@@ -31,13 +35,21 @@
       "uri": "room.glb",
       "image": 3,
       "px": 1024,
-      "bytes": 205690
+      "bytes": 208653
+    },
+    "full": {
+      "uri": "atlas/art.ktx2",
+      "px": 4096,
+      "bytes": 8161733,
+      "format": "ktx2-uastc"
     }
   },
   {
     "name": "props",
     "materials": [
+      "lamp_bulb",
       "lava_lamp_glass",
+      "nas_led",
       "oven_glow",
       "plant_sway",
       "record_sleeve_0",
@@ -53,7 +65,13 @@
       "uri": "room.glb",
       "image": 0,
       "px": 1024,
-      "bytes": 218040
+      "bytes": 237798
+    },
+    "full": {
+      "uri": "atlas/props.avif",
+      "px": 4096,
+      "bytes": 1252029,
+      "format": "avif"
     }
   },
   {
@@ -67,7 +85,13 @@
       "uri": "room.glb",
       "image": 2,
       "px": 1024,
-      "bytes": 135482
+      "bytes": 143160
+    },
+    "full": {
+      "uri": "atlas/env.avif",
+      "px": 3072,
+      "bytes": 283120,
+      "format": "avif"
     }
   }
 ]
