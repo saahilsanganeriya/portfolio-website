@@ -14,9 +14,6 @@ const FINISH: FinishSettings = {
   // Half an 8-bit level, static: dark gradients no longer band, and the drift's crawl does not rise (T73b A/B).
   dither: 0.5,
 };
-// Every atlas is filtered this anisotropically (or the GPU's maximum, if lower): the floor and the desk top are seen at
-// grazing angles, where plain trilinear filtering blurs them and steps between mip levels as the camera drifts.
-export const ANISOTROPY = 8;
 
 type Parts = Pick<FinishFrame, 'grade' | 'bloom' | 'film'>;
 
@@ -148,11 +145,14 @@ export class RoomRenderer {
   }
 
   setTier(tier: QualityTier) {
+    const anisotropy = this.tier && this.anisotropy();
     this.tier = tier;
     this.finish.setSamples(this.switches.samples ?? tier.msaa);
     // The dither places the shades between two 8-bit levels. The vignette and the bloom make them in the pass; a tier
     // with neither (the lowest desktop tiers, phones) keeps the scene's own in a half-float target (T73b A/B).
     this.finish.setHalfFloat(this.switches.halfFloat ?? !(tier.bloom || tier.film));
+    // A tier with another number of anisotropic taps filters what is already loaded again (one upload per texture).
+    if (this.lastScene && anisotropy !== this.anisotropy()) this.prepareTextures(this.lastScene);
   }
 
   /** The tier with the debug switches over it: what the effects and the world should draw. */
@@ -185,7 +185,7 @@ export class RoomRenderer {
     else this.gl.setClearColor(color, 1);
   }
 
-  /** Anisotropic filtering on every texture under `root` (atlases, the window, art), as many taps as the GPU allows. */
+  /** Anisotropic filtering on every texture under `root` (atlases, the window, art), as many taps as the tier asks. */
   prepareTextures(root: THREE.Object3D) {
     const anisotropy = this.anisotropy();
     root.traverse((node) => {
@@ -199,9 +199,9 @@ export class RoomRenderer {
     });
   }
 
-  /** The anisotropy textures get: the debug switch's, or ANISOTROPY, within what the GPU allows. */
+  /** The anisotropy textures get: the debug switch's, or the tier's, within what the GPU allows. */
   anisotropy() {
-    return Math.max(1, Math.min(this.switches.anisotropy ?? ANISOTROPY, this.gl.capabilities.getMaxAnisotropy()));
+    return Math.max(1, Math.min(this.switches.anisotropy ?? this.tier.anisotropy, this.gl.capabilities.getMaxAnisotropy()));
   }
 
   private filter(texture: THREE.Texture, anisotropy: number) {
