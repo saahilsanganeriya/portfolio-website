@@ -100,18 +100,18 @@ test('every new hotspot does what it says', async ({ page }) => {
   // Props that take the camera to their framing.
   for (const [proxy, framing] of [
     ['hit_window', 'window'],
-    ['hit_photo_board', 'photos'],
+    ['hit_darkroom', 'photos'],
   ] as const) {
     await backToIdle(page);
     await clickProp(page, proxy);
     await settledAt(page, framing);
   }
 
-  // At the photo board a print opens that photograph in SaahilOS.
+  // At the darkroom line a print opens that photograph in SaahilOS.
   await backToIdle(page);
-  await clickProp(page, 'hit_photo_board');
+  await clickProp(page, 'hit_darkroom');
   await settledAt(page, 'photos');
-  await clickProp(page, 'hit_photo_print_0');
+  await clickProp(page, 'hit_darkroom_print_0');
   await settledAt(page, 'monitor');
   await expect(os(page).getByRole('dialog', { name: 'A Narrative in a Frame' })).toBeVisible();
 
@@ -139,10 +139,10 @@ test('the prints and the photographs load only after the room is interactive', a
   page.on('request', (request) => started.push({ url: request.url(), at: Date.now() }));
   await inRoom(page);
   await page.evaluate(() => window.__room!.goto('photos'));
-  await page.waitForFunction(() => window.__room!.world.instax!.prints.every((p) => p.shown > 0), null, { timeout: 30_000 });
+  await page.waitForFunction(() => window.__room!.world.darkroom!.prints.every((p) => p.shown > 0), null, { timeout: 30_000 });
   const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
   await page.waitForFunction(() => window.__room!.world.paleBlueDot! > 0, null, { timeout: 30_000 });
-  const onDemand = started.filter(({ url }) => /\/480\.[^/]*\.webp|\/960\.[^/]*\.webp|photographs\.[^/]*\.js|api\/films\.json|pale-blue-dot\.ktx2/.test(url));
+  const onDemand = started.filter(({ url }) => /\/\d{3,4}\.[^/]*\.webp|photographs\.[^/]*\.js|api\/films\.json|pale-blue-dot\.ktx2/.test(url));
   expect(onDemand.length).toBeGreaterThan(3);
   expect(onDemand.filter(({ at }) => at < interactive).map(({ url }) => url)).toEqual([]);
   // The posters hang in the first view, so they are part of it.

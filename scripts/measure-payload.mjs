@@ -77,7 +77,7 @@ try {
   await step('board');
   await page.evaluate(() => window.__room.goto('photos'));
   await settle();
-  await room(() => !window.__room.world.instax || window.__room.world.instax.prints.every((p) => p.shown > 0));
+  await room(() => !window.__room.world.darkroom || window.__room.world.darkroom.prints.every((p) => p.shown > 0));
   await page.evaluate(() => window.__room.goto('idle'));
   await settle();
   await step('sound');

@@ -9,8 +9,8 @@ import { WORLD_SCALE } from '../Application/RoomModel';
 import { Album } from './Album';
 import { ArtSurface, lampUniforms, Posters } from './art';
 import { Espresso } from './Espresso';
+import { Darkroom } from './Darkroom';
 import { FILM } from './film';
-import { Instax } from './Instax';
 import { LavaLamp } from './LavaLamp';
 import { readWorld, type WorldNodes } from './nodes';
 import type { Photograph } from './photographs';
@@ -26,7 +26,7 @@ import { WindowView } from './WindowView';
 // Everything in the room that lives and reacts (PLAN 11.1, 12.1, PLAN-ROUND-7 §3–§4 and §7): the window's two cities
 // by day with the flight between them, the coffee's steam, the breeze in the plants, the lava lamp and its light, the
 // espresso machine's pour and the cup's steam, the oven's door
-// and glow, the projector on the wall, the favourite posters, the Instax board, the sticky notes and the photo album.
+// and glow, the projector on the wall, the favourite posters, the darkroom line, the sticky notes and the photo album.
 // It carries out every hotspot's room action, with the recordings its actions make. A click that comes from across
 // the room takes the camera to the prop first, and the prop acts once the camera has landed. What the visitor first
 // sees loads with the room; everything else waits until the room is interactive, then loads when it comes into view
@@ -88,7 +88,7 @@ export class World {
   private readonly lamp = lampUniforms();
   private readonly posters: Posters;
   private readonly paleBlueDot: ArtSurface | null;
-  readonly instax: Instax | null;
+  readonly darkroom: Darkroom | null;
   private readonly stickies: StickyNotes | null;
   private readonly windowView: WindowView | null;
   private readonly coffeeSteam: CoffeeSteam | null;
@@ -120,7 +120,7 @@ export class World {
   constructor(
     private readonly room: RoomNodes,
     scene: THREE.Scene,
-    container: HTMLElement,
+    private readonly container: HTMLElement,
     ktx2: KTX2Loader,
     private readonly effects: Effects,
     private readonly host: WorldHost,
@@ -133,7 +133,8 @@ export class World {
     this.paleBlueDot = n.paleBlueDot
       ? new ArtSurface(n.paleBlueDot.node, this.lamp, { ambient: 0.55, top: 0.6, lightAbove: 0.3, fall: 0.45 })
       : null;
-    this.instax = n.prints.length ? new Instax(n.prints, this.lamp, HOTSPOTS, n.printsAreInstax) : null;
+    const darkroom = new Darkroom(room.root, room.proxies, HOTSPOTS, this.lamp, null, still);
+    this.darkroom = darkroom.hasClips ? darkroom : null;
     this.stickies = n.stickies.length ? new StickyNotes(n.stickies, this.lamp) : null;
     this.windowView = n.windowViews.length
       ? new WindowView(n.windowViews, n.windowSky, n.windowMotif, this.textures, { reducedMotion: still })
@@ -187,9 +188,9 @@ export class World {
       this.interactive = true;
       this.projector?.allowOnDemand();
       this.loadPaleBlueDot();
-      if (this.instax) {
+      if (this.darkroom) {
         this.printsWanted = true;
-        void this.collection().then((photos) => this.instax?.hang(photos));
+        void this.collection().then((photos) => this.darkroom?.hang(photos));
       }
     }, ON_DEMAND_DELAY_MS);
   }
@@ -289,8 +290,8 @@ export class World {
         return true;
       }
       case 'print':
-        // From across the room a print (a few pixels wide there) takes the camera to the board first; at the board it
-        // opens its photograph in SaahilOS, the camera gliding to the desk and into the monitor.
+        // From across the room a print takes the camera to the darkroom line first; there it opens its photograph in
+        // SaahilOS, the camera gliding to the desk and into the monitor.
         if (here !== 'photos' && this.host.fly('photos')) return true;
         if (hotspot.target) this.host.openWindow(hotspot.target);
         return true;
@@ -308,7 +309,6 @@ export class World {
 
     this.posters.update(realDt);
     this.paleBlueDot?.update(realDt);
-    this.instax?.update(realDt);
     this.windowView?.update(realDt);
     this.coffeeSteam?.update(realDt);
     this.wind.update(realDt);
@@ -338,14 +338,18 @@ export class World {
     this.album?.update(realDt, camera);
     if (this.album?.isOpen && this.host.station() !== 'desk') this.album.close();
 
-    // The board's prints draw once it is in view.
-    if (this.printsWanted && this.instax?.isHung) {
-      this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-      this.frustum.setFromProjectionMatrix(this.viewProjection);
-      if (this.frustum.intersectsBox(this.instax.box)) {
-        this.printsWanted = false;
-        void this.instax.load(this.textures, still);
-      }
+    // The darkroom's prints draw once the line is in view, at the density the view asks for.
+    const darkroom = this.darkroom;
+    if (darkroom?.isHung) {
+      const viewportPx = this.container.clientHeight * pixelRatio;
+      if (this.printsWanted) {
+        this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        this.frustum.setFromProjectionMatrix(this.viewProjection);
+        if (this.frustum.intersectsBox(darkroom.box)) {
+          this.printsWanted = false;
+          void darkroom.load(this.textures, darkroom.densityFor(camera, viewportPx), still);
+        }
+      } else darkroom.update(realDt, camera, viewportPx, this.textures);
     }
 
     this.sinceLabels += realDt;
@@ -384,7 +388,7 @@ export class World {
       wind: this.wind.state(),
       posters: this.posters.loaded,
       paleBlueDot: this.paleBlueDot?.shown ?? null,
-      instax: this.instax?.probe() ?? null,
+      darkroom: this.darkroom?.probe() ?? null,
       stickies: this.stickies?.written ?? null,
       lava: this.lava?.probe() ?? null,
       espresso: this.espresso?.probe() ?? null,
@@ -402,7 +406,7 @@ export class World {
     clearTimeout(this.timer);
     this.posters.dispose();
     this.paleBlueDot?.dispose();
-    this.instax?.dispose();
+    this.darkroom?.dispose();
     this.stickies?.dispose();
     this.windowView?.dispose();
     this.coffeeSteam?.dispose();

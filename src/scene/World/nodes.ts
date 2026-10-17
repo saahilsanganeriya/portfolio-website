@@ -97,9 +97,6 @@ export interface WorldNodes {
   posters: ArtNode[];
   /** The Pale Blue Dot print on the space wall and its picture's file beside the room (public/room/). */
   paleBlueDot: { node: ArtNode; file: string } | null;
-  /** The Instax board's slots (`instax_slot_N`), or the framed prints (`photo_print_N`) of a room without the board. */
-  prints: ArtNode[];
-  printsAreInstax: boolean;
   stickies: StickyNode[];
   lava: { glass: THREE.Mesh; light: THREE.Vector3 } | null;
   espresso: EspressoNodes | null;
@@ -381,15 +378,6 @@ export function readWorld(room: RoomNodes): WorldNodes {
   const dotFile = dot?.userData.texture;
   const paleBlueDot = dot && typeof dotFile === 'string' ? { node: { slot: 0, mesh: dot, aspect: faceAspect(dot) }, file: dotFile } : null;
 
-  // The Instax board when the room has it, else the framed prints of the first v3 export.
-  const instax = numbered(byName, 'instax_slot');
-  const printMeshes = instax.length ? instax : numbered(byName, 'photo_print');
-  const prints: ArtNode[] = printMeshes.map(({ n, mesh: art }) => {
-    const slot = Number(art.userData.photo_slot ?? n);
-    room.proxies.push(proxyInFront(root, art, `hit_photo_print_${slot}`, instax.length ? 0.012 : 0.03));
-    return { slot, mesh: art, aspect: Number(art.userData.aspect) || faceAspect(art) };
-  });
-
   const stickies: StickyNode[] = numbered(byName, 'sticky_note').map(({ n, mesh: note }) => {
     room.proxies.push(proxyInFront(root, note, `hit_sticky_note_${n}`, 0.008));
     const paper = typeof note.userData.paper === 'string' ? note.userData.paper : '#E8C547';
@@ -421,8 +409,6 @@ export function readWorld(room: RoomNodes): WorldNodes {
     sway,
     posters,
     paleBlueDot,
-    prints,
-    printsAreInstax: instax.length > 0,
     stickies,
     lava: glass ? { glass, light: lightNode ? worldPosition(lightNode) : centre(glass) } : null,
     espresso:

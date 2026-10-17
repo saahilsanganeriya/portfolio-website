@@ -31,8 +31,8 @@ export interface Hotspot {
 }
 
 export const POSTER_SLOTS = 4;
-/** The Instax board's prints (instax_slot_0..19), or the framed prints of a room without the board. */
-export const PRINT_SLOTS = 20;
+/** The darkroom line's prints (Darkroom names their boxes `hit_darkroom_print_<n>`, 0 on the hero clip). */
+export const PRINT_SLOTS = 24;
 
 /** The posters hang in profile order: slot 0 is the first of the four favourites on Letterboxd. */
 const posters: Hotspot[] = favorites.films.slice(0, POSTER_SLOTS).map((film, slot) => ({
@@ -43,10 +43,10 @@ const posters: Hotspot[] = favorites.films.slice(0, POSTER_SLOTS).map((film, slo
   href: `/films#${film.slug}`,
 }));
 
-/** The board's prints; World swaps in each photograph's caption and window once it knows which hangs where. */
+/** The darkroom's prints; World swaps in each photograph's marker line and window once it knows which hangs where. */
 const prints: Hotspot[] = Array.from({ length: PRINT_SLOTS }, (_, slot) => ({
-  proxies: [`hit_photo_print_${slot}`],
-  prop: 'An Instax print',
+  proxies: [`hit_darkroom_print_${slot}`],
+  prop: 'A print',
   label: 'Photographs',
   target: 'photography',
   fly: 'photos',
@@ -89,7 +89,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
   { proxies: ['hit_projector_dial'], prop: 'The projector’s program dial', label: 'Next program', target: null, fly: 'projector', action: 'dial', href: '/' },
   ...posters,
   { proxies: ['hit_plaque'], prop: 'The plaque under the posters', label: 'Four favourites', target: 'films/favourites', href: '/films#favourites' },
-  { proxies: ['hit_photo_board', 'hit_photo_wall'], prop: 'The photo board', label: 'Photographs', target: 'photography', fly: 'photos', href: '/#photography' },
+  { proxies: ['hit_darkroom'], prop: 'The darkroom line', label: 'Photographs', target: 'photography', fly: 'photos', href: '/#photography' },
   ...prints,
   { proxies: ['hit_album'], prop: 'The photo album', label: 'The photo album', target: 'photography', fly: 'desk', action: 'album', href: '/#photography' },
   ...notes,

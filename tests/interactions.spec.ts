@@ -1,12 +1,22 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
 
 const phrases: string[] = JSON.parse(readFileSync(new URL('../src/content/sticky-notes.json', import.meta.url), 'utf8'));
+// The photography set in its order, read from its YAML so a new set moves the darkroom's test with it.
+const PHOTOS_DIR = new URL('../src/content/photography/', import.meta.url);
+const SET = readdirSync(PHOTOS_DIR)
+  .filter((file) => /^[^_].*\.ya?ml$/.test(file))
+  .map((file) => {
+    const yaml = readFileSync(new URL(file, PHOTOS_DIR), 'utf8');
+    const field = (key: string) => JSON.parse(yaml.match(new RegExp(`^${key}: (.*)$`, 'm'))?.[1] ?? 'null');
+    return { slug: file.replace(/\.ya?ml$/, ''), sharpie: String(field('sharpie')), order: Number(field('order') ?? 1e9) };
+  })
+  .sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug));
 
 // The props a visitor clicks in room v3 (BRIEF-ROUND-7 §4): the espresso machine pours a cup, the oven opens on a
 // croissant, the lava lamp changes colour, the projector runs on the wall; the sticky notes carry his phrases and the
-// Instax prints his photographs. Each describe loads the room once and its tests run in order on that page. Props are
+// darkroom line his photographs. Each describe loads the room once and its tests run in order on that page. Props are
 // clicked where the room projects them on screen.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS } });
@@ -156,19 +166,28 @@ test.describe('room v3 interactions', () => {
     await expect(page.locator('.room-label')).toHaveText(phrases[3]);
   });
 
-  /** Catches prints out of the board's order, captions not his, or a print that opens no photograph. */
-  test('the Instax prints hang in the board’s order with his marker captions, and a print opens its photograph', async () => {
+  /**
+   * Catches prints off the set's order or Chinatown off the hero clip, a hero no bigger than the rest, a hover label that
+   * is not his marker line, and a print that opens no photograph.
+   */
+  test('the darkroom hangs the set in its order with Chinatown biggest, and a print opens its photograph', async () => {
     await page.evaluate(() => window.__room!.goto('photos'));
     await settledAt(page, 'photos');
-    await expect.poll(async () => (await world(page)).instax!.prints.every((p) => p.shown === 1), { timeout: 30_000 }).toBe(true);
-    const prints = (await world(page)).instax!.prints;
-    expect(prints[0]).toMatchObject({ slug: 'diner', caption: 'diner, kodak gold 200' });
-    expect(prints[1]).toMatchObject({ slug: 'manhattan-bridge', caption: 'manhattan bridge' });
-    // The first export's framed prints run their UVs the reading way: nothing is mirrored.
-    expect(prints.map((p) => p.flip)).toEqual(prints.map(() => [0, 0]));
-    await clickProp(page, 'hit_photo_print_0');
+    await expect.poll(async () => (await world(page)).darkroom!.prints.every((p) => p.shown === 1), { timeout: 30_000 }).toBe(true);
+    const { prints, light } = (await world(page)).darkroom!;
+    expect(light).toBe('wall-bake');
+    expect(prints.map((p) => p.slug)).toEqual(SET.slice(0, prints.length).map((p) => p.slug));
+    expect(prints[0]).toMatchObject({ hero: true, slug: 'chinatown-bus', caption: SET[0].sharpie });
+    const area = ({ paper: [w, h] }: { paper: number[] }) => w * h;
+    expect(Math.max(...prints.slice(1).map(area))).toBeLessThan(area(prints[0]));
+    const point = await page.evaluate(() => window.__room!.point('hit_darkroom_print_3'));
+    await page.mouse.move(point!.x, point!.y);
+    await expect(page.locator('.room-label')).toHaveText(SET[3].sharpie);
+    await clickProp(page, 'hit_darkroom_print_0');
     await settledAt(page, 'monitor');
-    await expect.poll(() => page.evaluate(() => (document.querySelector('.room-monitor iframe') as HTMLIFrameElement).contentWindow!.location.hash)).toContain('photography/diner');
+    await expect
+      .poll(() => page.evaluate(() => (document.querySelector('.room-monitor iframe') as HTMLIFrameElement).contentWindow!.location.hash))
+      .toContain(`photography/${SET[0].slug}`);
   });
 
   /** Catches a room shader that fails to compile (the projector's picture went black on a redefined variable). */
@@ -210,6 +229,16 @@ test.describe('room v3 interactions with reduced motion', () => {
     await clickProp(page, 'hit_lava_lamp');
     await expect.poll(async () => (await world(page)).lava!.index, { timeout: 5_000 }).toBe(1);
     expect((await world(page)).lava!.blend).toBe(1);
+  });
+
+  /** Catches prints fading in (or swaying) for a reduced-motion visitor instead of hanging there, still, once drawn. */
+  test('the darkroom’s prints appear at once and hold still', async () => {
+    await page.evaluate(() => window.__room!.goto('photos'));
+    await settledAt(page, 'photos');
+    await expect.poll(async () => (await world(page)).darkroom!.prints.every((p) => p.size !== null), { timeout: 30_000 }).toBe(true);
+    const darkroom = (await world(page)).darkroom!;
+    expect(darkroom.prints.map((p) => p.shown)).toEqual(darkroom.prints.map(() => 1));
+    expect(darkroom.swaying).toBe(false);
   });
 
   /** Catches the film refusing to run when a reduced-motion visitor asks for it. */
