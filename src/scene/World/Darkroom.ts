@@ -177,6 +177,8 @@ interface Print {
   proxy: THREE.Mesh;
   texture: THREE.Texture | null;
   density: 'small' | 'large' | null;
+  /** The picture the print was last drawn from (its URL). */
+  picture: string | null;
 }
 
 /** The room's darkroom clips, read from their empties' names and extras. */
@@ -323,7 +325,12 @@ export class Darkroom {
           try {
             const source = pictureFor(print.photo, print.size.photoW * texelsPerM);
             // AVIF where the browser decodes it, else the WebP copy.
-            const bitmap = source.avif ? await textures.bitmap(source.avif).catch(() => textures.bitmap(source.src)) : await textures.bitmap(source.src);
+            let url = source.avif ?? source.src;
+            const bitmap = await textures.bitmap(url).catch(() => {
+              if (url === source.src) throw new Error(`${url} did not decode`);
+              url = source.src;
+              return textures.bitmap(url);
+            });
             if (this.wanted !== density) return bitmap.close();
             const canvas = drawPrint(print.photo, bitmap, print.size, texelsPerM);
             bitmap.close();
@@ -333,6 +340,7 @@ export class Darkroom {
             print.texture?.dispose();
             print.texture = texture;
             print.density = density;
+            print.picture = url;
             print.mesh.material.uniforms.uMap.value = texture;
             print.shadow.visible = true;
             if (instantly) print.mesh.material.uniforms.uShown.value = 1;
@@ -376,6 +384,7 @@ export class Darkroom {
         caption: sharpieOf(p.photo),
         shown: Number((p.mesh.material.uniforms.uShown.value as number).toFixed(2)),
         size: p.density,
+        picture: p.picture,
         paper: [round(p.size.paperW), round(p.size.paperH)],
         layer: round(p.mesh.position.z),
         proxy: p.proxy.name,
@@ -448,7 +457,7 @@ export class Darkroom {
     clip.anchor.add(proxy);
     proxy.updateMatrixWorld(true);
     this.proxies.push(proxy);
-    return { clip, index, photo, size, mesh, shadow, proxy, texture: null, density: null };
+    return { clip, index, photo, size, mesh, shadow, proxy, texture: null, density: null, picture: null };
   }
 
   /** Where a clip's print may hang: its box below the clip, in world units. */
