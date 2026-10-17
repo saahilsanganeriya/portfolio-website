@@ -50,3 +50,14 @@ export function parseAssetsRegister(markdown: string = register): AssetSection[]
   }
   return sections;
 }
+
+// A row whose use says the asset is not on the site (a prop kept in the Blender library, a review-render light)
+// stays in the register for the record and is left out of Credits.
+const NOT_SHIPPED = /\b(prop library only|not shipped)\b/i;
+
+/** The register as Credits shows it: only rows for assets the site ships, in sections that still have any. */
+export function creditSections(markdown: string = register): AssetSection[] {
+  return parseAssetsRegister(markdown)
+    .map((section) => ({ ...section, rows: section.rows.filter((row) => !NOT_SHIPPED.test(row.usedFor)) }))
+    .filter((section) => section.rows.length > 0);
+}
