@@ -5,14 +5,19 @@ import { WORLD_SCALE } from '../Application/RoomModel';
 // hangs on it, fades out while the camera stands behind it and comes back as the camera comes round to the front.
 // The corner set names its walls' groups (`wall_back_group`, `wall_left_group`, PLAN-ROUND-8 §4); the first room has
 // bare wall meshes (`env_wall_back`, `env_wall_left`, `env_wall_right`), so there a wall takes the thin things hung on
-// it. Either way, anything outside a wall (the window's view, a hallway) goes with it. A faded wall's hotspots stop
-// catching the pointer.
+// it. What lies outside a wall (the window's city view and sky, a hallway) is hidden outright whenever its wall is
+// faded at all or the camera is off to the side, where it would be seen past the wall's free end. A faded wall's
+// hotspots stop catching the pointer.
 
 const WALL_MESH = /^(?:env_)?wall_(back|left|right)$/;
+// The window's own parts behind the wall: its view, sky and motif (and anything the room hangs under them), and the pane.
+const OUTSIDE_NODE = /^window_(?:view_|sky|motif|glass)/;
 // Where the eye stands from the wall's plane (metres, positive behind it): still solid in front of this, gone past it.
 const FADE_FROM_M = -0.2;
 const FADE_TO_M = 0.9;
 const FADE_TAU_S = 0.18;
+// What is outside a wall shows only while the eye is within this angle of the wall's front, seen from it.
+const OUTSIDE_FRONT_COS = Math.cos(THREE.MathUtils.degToRad(55));
 // Below this opacity a wall's hotspots stop taking the pointer; below the second, its meshes are not drawn at all.
 const CLICKABLE_ABOVE = 0.5;
 const DRAWN_ABOVE = 0.004;
@@ -27,13 +32,26 @@ const SPAN_MARGIN_M = 0.3;
 /** Where a faded wall's hotspots go: a layer no raycaster in the room tests. */
 export const FADED_LAYER = 31;
 
+interface Outside {
+  node: THREE.Object3D;
+  /** Its middle (world units), where the angle to the eye is measured from. */
+  at: THREE.Vector3;
+  /** Whether this hid it (the room may hide some of its own). */
+  hidden: boolean;
+}
+
 interface Wall {
   name: string;
   /** A point on the wall's plane and its outward normal (away from the room, horizontal), world units. */
   point: THREE.Vector3;
   normal: THREE.Vector3;
+  group: THREE.Object3D | null;
   meshes: THREE.Mesh[];
   proxies: THREE.Object3D[];
+  outside: Outside[];
+  /** Whether a mesh or hotspot (by box) is hung on this wall, by the first room's test. */
+  mounted(box: THREE.Box3, thin: number): boolean;
+  behind(box: THREE.Box3): boolean;
   opacity: number;
   clickable: boolean;
 }
@@ -61,25 +79,28 @@ function patchShader(material: THREE.ShaderMaterial) {
   material.needsUpdate = true;
 }
 
+const isUnder = (node: THREE.Object3D, roots: readonly THREE.Object3D[]) => {
+  for (let n: THREE.Object3D | null = node; n; n = n.parent) if (roots.includes(n)) return true;
+  return false;
+};
+
 export class Diorama {
   readonly walls: Wall[] = [];
   private readonly faded = new Map<THREE.Mesh, Faded>();
   private readonly eye = new THREE.Vector3();
+  private readonly toEye = new THREE.Vector3();
 
   constructor(
-    root: THREE.Object3D,
-    proxies: readonly THREE.Object3D[],
+    private readonly root: THREE.Object3D,
+    private readonly proxies: readonly THREE.Object3D[],
     center: THREE.Vector3,
     private readonly still: boolean,
   ) {
     root.updateMatrixWorld(true);
-    const meshes: { mesh: THREE.Mesh; box: THREE.Box3 }[] = [];
     root.traverse((node) => {
-      if (node instanceof THREE.Mesh && !node.name.startsWith('hit_')) meshes.push({ mesh: node, box: new THREE.Box3().setFromObject(node) });
-    });
-    for (const { mesh, box } of meshes) {
-      const side = WALL_MESH.exec(mesh.name)?.[1];
-      if (!side || this.walls.some((w) => w.name === side)) continue;
+      const side = node instanceof THREE.Mesh ? WALL_MESH.exec(node.name)?.[1] : undefined;
+      if (!side || this.walls.some((w) => w.name === side)) return;
+      const box = new THREE.Box3().setFromObject(node);
       const size = box.getSize(new THREE.Vector3());
       const across: 'x' | 'z' = size.x < size.z ? 'x' : 'z';
       const along: 'x' | 'z' = across === 'x' ? 'z' : 'x';
@@ -90,30 +111,53 @@ export class Diorama {
       point[across] = normal[across] > 0 ? box.min[across] : box.max[across];
       const depth = (b: THREE.Box3) => (b.max[across] - b.min[across]) / WORLD_SCALE;
       const offset = (b: THREE.Box3) => ((b.getCenter(new THREE.Vector3())[across] - point[across]) * normal[across]) / WORLD_SCALE;
-      const back = (b: THREE.Box3) => offset(b) + depth(b) / 2;
       const margin = SPAN_MARGIN_M * WORLD_SCALE;
       const inSpan = (b: THREE.Box3) => b.max[along] >= box.min[along] - margin && b.min[along] <= box.max[along] + margin;
-      const mounted = (b: THREE.Box3, thin: number) => inSpan(b) && depth(b) <= thin && back(b) >= -TOUCH_M;
-      const behind = (b: THREE.Box3) => inSpan(b) && offset(b) > 0;
-      const group = root.getObjectByName(`wall_${side}_group`);
-      const members = new Set<THREE.Mesh>([mesh]);
-      if (group) group.traverse((node) => node instanceof THREE.Mesh && !node.name.startsWith('hit_') && members.add(node));
-      for (const { mesh: other, box: b } of meshes) {
-        if (behind(b) || (!group && mounted(b, MOUNT_DEPTH_M))) members.add(other);
-      }
-      const wallProxies = proxies.filter((p) => {
-        let inGroup = false;
-        group?.traverse((node) => (inGroup ||= node === p));
-        return inGroup || mounted(new THREE.Box3().setFromObject(p), PROXY_DEPTH_M) || behind(new THREE.Box3().setFromObject(p));
-      });
-      this.walls.push({ name: side, point, normal, meshes: [...members], proxies: wallProxies, opacity: 1, clickable: true });
-    }
-    // A mesh claimed by two walls (a corner's trim) fades with the first only.
-    const claimed = new Set<THREE.Mesh>();
-    for (const wall of this.walls) {
-      wall.meshes = wall.meshes.filter((m) => !claimed.has(m) && claimed.add(m));
-      for (const mesh of wall.meshes) if (mesh.material instanceof THREE.ShaderMaterial) patchShader(mesh.material);
-    }
+      const group = root.getObjectByName(`wall_${side}_group`) ?? null;
+      const wall: Wall = {
+        name: side,
+        point,
+        normal,
+        group,
+        meshes: [node as THREE.Mesh],
+        proxies: [],
+        outside: [],
+        mounted: (b, thin) => inSpan(b) && depth(b) <= thin && offset(b) + depth(b) / 2 >= -TOUCH_M,
+        behind: (b) => inSpan(b) && offset(b) > 0,
+        opacity: 1,
+        clickable: true,
+      };
+      this.walls.push(wall);
+    });
+    for (const wall of this.walls) this.collect(wall);
+  }
+
+  /**
+   * What fades with a wall, read again each time it starts to fade: the room hangs things on its walls after loading
+   * (prints on the darkroom lines, the window's motif), and those go with it too.
+   */
+  private collect(wall: Wall) {
+    const outsideRoots: THREE.Object3D[] = [];
+    wall.group?.traverse((node) => OUTSIDE_NODE.test(node.name) && !isUnder(node.parent!, outsideRoots) && outsideRoots.push(node));
+    const meshes = new Set<THREE.Mesh>(wall.meshes.slice(0, 1));
+    this.root.traverse((node) => {
+      if (!(node instanceof THREE.Mesh) || node.name.startsWith('hit_') || isUnder(node, outsideRoots)) return;
+      const inGroup = wall.group !== null && isUnder(node, [wall.group]);
+      const box = new THREE.Box3().setFromObject(node);
+      if (wall.behind(box) && !inGroup && !this.walls.some((w) => w !== wall && w.group && isUnder(node, [w.group]))) outsideRoots.push(node);
+      else if (inGroup || (!wall.group && wall.mounted(box, MOUNT_DEPTH_M))) meshes.add(node);
+    });
+    // A mesh another wall already fades (a corner's trim) stays with that one.
+    const others = new Set(this.walls.filter((w) => w !== wall).flatMap((w) => w.meshes));
+    wall.meshes = [...meshes].filter((m) => !others.has(m));
+    for (const mesh of wall.meshes) if (mesh.material instanceof THREE.ShaderMaterial) patchShader(mesh.material);
+    const known = new Map(wall.outside.map((o) => [o.node, o]));
+    wall.outside = outsideRoots.map((node) => known.get(node) ?? { node, at: new THREE.Box3().setFromObject(node).getCenter(node.getWorldPosition(new THREE.Vector3())), hidden: false });
+    for (const o of wall.outside) if (new THREE.Box3().setFromObject(o.node).isEmpty()) o.node.getWorldPosition(o.at);
+    wall.proxies = this.proxies.filter((p) => {
+      const box = new THREE.Box3().setFromObject(p);
+      return (wall.group !== null && isUnder(p, [wall.group])) || wall.mounted(box, PROXY_DEPTH_M) || wall.behind(box);
+    });
   }
 
   /** Fades each wall for the camera at `camera` (world units); true when anything drawn changed. */
@@ -124,6 +168,8 @@ export class Diorama {
       const goal = 1 - THREE.MathUtils.smoothstep(behindM, FADE_FROM_M, FADE_TO_M);
       const opacity = this.still || dt <= 0 ? goal : goal + (wall.opacity - goal) * Math.exp(-dt / FADE_TAU_S);
       const settled = Math.abs(opacity - goal) < 0.002 ? goal : opacity;
+      if (wall.opacity === 1 && settled < 1) this.collect(wall);
+      changed = this.showOutside(wall, camera, settled) || changed;
       // While faded at all, every frame: the room may swap a mesh's material meanwhile (a print loads, an atlas streams).
       if (settled === wall.opacity && settled === 1) continue;
       changed ||= settled !== wall.opacity;
@@ -133,6 +179,26 @@ export class Diorama {
       if (clickable !== wall.clickable) {
         wall.clickable = clickable;
         for (const proxy of wall.proxies) proxy.layers.set(clickable ? 0 : FADED_LAYER);
+      }
+    }
+    return changed;
+  }
+
+  /** What lies outside the wall shows only while the wall is whole and the eye is in front of it; true if any changed. */
+  private showOutside(wall: Wall, camera: THREE.Vector3, opacity: number) {
+    let changed = false;
+    for (const o of wall.outside) {
+      const toEye = this.toEye.copy(camera).sub(o.at).setY(0);
+      const facing = -toEye.dot(wall.normal) / Math.max(1e-6, toEye.length());
+      const show = opacity >= 1 && facing > OUTSIDE_FRONT_COS;
+      if (!show && !o.hidden && o.node.visible) {
+        o.node.visible = false;
+        o.hidden = true;
+        changed = true;
+      } else if (show && o.hidden) {
+        o.node.visible = true;
+        o.hidden = false;
+        changed = true;
       }
     }
     return changed;
@@ -182,18 +248,20 @@ export class Diorama {
     mesh.material = copy;
   }
 
-  /** Each wall's opacity, what fades with it and whether its hotspots take the pointer (tests). */
+  /** Each wall's opacity, what fades with it, what is hidden outside it, whether its hotspots take the pointer (tests). */
   probe() {
-    return this.walls.map(({ name, opacity, meshes, proxies, clickable }) => ({
+    return this.walls.map(({ name, opacity, meshes, proxies, outside, clickable }) => ({
       name,
       opacity,
       meshes: meshes.map((m) => m.name),
       proxies: proxies.map((p) => p.name),
+      outside: outside.map((o) => ({ name: o.node.name, shown: o.node.visible })),
       clickable,
     }));
   }
 
   dispose() {
+    for (const o of this.walls.flatMap((w) => w.outside)) if (o.hidden) o.node.visible = true;
     for (const [mesh, state] of this.faded) {
       if (state.copy && mesh.material === state.copy) mesh.material = state.source;
       state.copy?.dispose();
