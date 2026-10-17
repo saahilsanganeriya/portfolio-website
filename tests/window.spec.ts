@@ -14,16 +14,20 @@ test.describe.configure({ mode: 'serial', timeout: 300_000 });
 // with dawn in the other. Time no longer matters, so all three must look the same.
 const HOURS = ['2026-06-21T20:00:00Z', '2026-06-22T08:00:00Z', '2026-11-10T01:07:00Z'] as const;
 
-/** Mean brightness (0–255) of a strip of the shot, centred at (x, y). */
-function brightness(pixels: Buffer, width: number, x: number, y: number, w = 50, h = 24) {
-  let sum = 0;
+/** Mean colour (0–255 per channel) of a strip of the shot, centred at (x, y). */
+function colourAt(pixels: Buffer, width: number, x: number, y: number, w = 50, h = 24) {
+  const sum = [0, 0, 0];
   for (let row = y - h / 2; row < y + h / 2; row++)
     for (let col = x - w / 2; col < x + w / 2; col++) {
       const i = (row * width + col) * 3;
-      sum += pixels[i] + pixels[i + 1] + pixels[i + 2];
+      for (let c = 0; c < 3; c++) sum[c] += pixels[i + c];
     }
-  return sum / (w * h * 3);
+  return sum.map((v) => v / (w * h));
 }
+
+const brightness = (rgb: number[]) => (rgb[0] + rgb[1] + rgb[2]) / 3;
+/** The largest change of any channel between two colours: the cities' skies differ more in hue than in brightness. */
+const change = (a: number[], b: number[]) => Math.max(...a.map((v, c) => Math.abs(v - b[c])));
 
 /** Loads the room at `at`, logging every window picture it fetches, and settles at the window framing. */
 async function windowAt(page: Page, at: string) {
@@ -91,13 +95,14 @@ test.describe('under reduced motion (the plane holds still)', () => {
       const centre = (await page.evaluate(() => window.__room!.point('hit_window')))!;
       const cx = Math.round(centre.x);
       for (const y of [Math.round(centre.y) - 300, Math.round(centre.y) - 110]) {
-        const near = (dx: number, w = 30) => brightness(data, meta.width, cx + dx, y, w);
-        // A seam is a step between the cities bigger than the gradient on either side of it.
+        const near = (dx: number, w = 30) => colourAt(data, meta.width, cx + dx, y, w);
+        // A seam is a step between the cities bigger than the gradient on either side of it, in any channel.
         const [l1, l2, r1, r2] = [near(-105), near(-45), near(45), near(105)];
-        const slope = Math.max(Math.abs(l2 - l1), Math.abs(r2 - r1)) / 60;
-        const step = Math.abs(r1 - l2) / 90;
-        const [farLeft, farRight] = [near(-380, 50), near(380, 50)];
-        const row = `${at} row ${y}: far left ${farLeft.toFixed(0)}, by the middle ${l1.toFixed(0)} ${l2.toFixed(0)} | ${r1.toFixed(0)} ${r2.toFixed(0)}, far right ${farRight.toFixed(0)}`;
+        const slope = Math.max(change(l2, l1), change(r2, r1)) / 60;
+        const step = change(r1, l2) / 90;
+        const [farLeft, farRight] = [brightness(near(-380, 50)), brightness(near(380, 50))];
+        const show = (c: number[]) => c.map((v) => v.toFixed(0)).join('/');
+        const row = `${at} row ${y}: far left ${farLeft.toFixed(0)}, by the middle ${show(l1)} ${show(l2)} | ${show(r1)} ${show(r2)}, far right ${farRight.toFixed(0)}`;
         expect(step, row).toBeLessThan(2 * slope + 0.2);
         // Daylight on both sides.
         expect(Math.min(farLeft, farRight), row).toBeGreaterThan(110);
