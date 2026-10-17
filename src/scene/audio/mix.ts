@@ -14,7 +14,7 @@ export const KEYS = ['key-1', 'key-2', 'key-3', 'key-4', 'key-5', 'key-6'] as co
 export const SHOTS = ['startup', ...KEYS, 'mouse-down', 'mouse-up'] as const;
 export type LoopName = (typeof LOOPS)[number];
 export type ClickKind = 'key' | 'mouse-down' | 'mouse-up';
-export type BedName = 'sf' | 'delhi-day' | 'delhi-night';
+export type BedName = 'sf' | 'delhi-day';
 
 // Linear gains on the -23 LUFS files: the ambience sits near -30 dBFS RMS, clicks at their recorded level.
 const ROOM_TONE = 0.4;
@@ -36,7 +36,7 @@ const BED_IN_S = 2.8;
 const recordCutoff = (cutoff: number) => (cutoff >= 11000 ? 20000 : cutoff);
 const STEM_PAN: Record<Stem, number> = { keys: -0.15, melody: 0.2, beat: 0 };
 // Beds on -23 LUFS loops: each city is faint until the window comes forward.
-const BED_LEVEL: Record<BedName, number> = { sf: 0.3, 'delhi-day': 0.3, 'delhi-night': 0.35 };
+const BED_LEVEL: Record<BedName, number> = { sf: 0.3, 'delhi-day': 0.3 };
 const BED_FADE_S = 4;
 const CUT_M = 1.2;
 
@@ -244,13 +244,13 @@ export class RoomMix {
   }
 
   /** Crossfades the stems, the music's filter and level, and the window's beds to `state`. */
-  setState(state: AudioState, cityLevel: (bed: BedName) => number, immediate = false) {
+  setState(state: AudioState, immediate = false) {
     const target = MUSIC_MIX[state];
     for (const stem of STEMS) this.move(this.music.stems[stem].gain, target.stems[stem], immediate ? 0 : STATE_FADE_S);
     this.move(this.music.filter.frequency, target.cutoff, immediate ? 0 : FILTER_FADE_S, 'log');
     this.move(this.music.recordFilter.frequency, recordCutoff(target.cutoff), immediate ? 0 : FILTER_FADE_S, 'log');
     if (this.music.raised) this.move(this.music.bus.gain, MUSIC * target.level, immediate ? 0 : STATE_FADE_S);
-    for (const name of this.beds.keys()) this.setBed(name, cityLevel(name), immediate);
+    for (const name of this.beds.keys()) this.setBed(name, target.city, immediate);
   }
 
   /** A loop placed in the room; it fades in from silence and is then steered by setBed. */
@@ -265,7 +265,7 @@ export class RoomMix {
     this.setBed(name, level, immediate);
   }
 
-  setBed(name: BedName, level: number, immediate = false) {
+  private setBed(name: BedName, level: number, immediate = false) {
     const gain = this.beds.get(name);
     if (gain) this.move(gain.gain, BED_LEVEL[name] * level, immediate ? 0 : BED_FADE_S);
   }

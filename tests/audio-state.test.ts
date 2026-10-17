@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { cityDay, dayWeight, logCurve, powerCurve, readSettings, SETTINGS_KEY, stateFor, writeSettings } from '../src/scene/audio/state';
+import { logCurve, powerCurve, readSettings, SETTINGS_KEY, stateFor, writeSettings } from '../src/scene/audio/state';
 
 describe('the room sound state', () => {
   /** Catches a framing or SaahilOS window mapped to the wrong music (e.g. Films heard as the muffled OS). */
@@ -23,16 +23,6 @@ describe('the room sound state', () => {
     expect(readSettings(storage)).toEqual({ volume: 1, muted: false });
     store.set(SETTINGS_KEY, 'not json');
     expect(readSettings(storage)).toEqual({ volume: 1, muted: false });
-  });
-
-  /** Catches the cities read in the visitor's time zone instead of their own, and a hard switch at dawn. */
-  test('each city is day or night by its own clock, eased through twilight', () => {
-    const at = new Date('2026-10-12T20:00:00Z');
-    expect(cityDay('sf', at)).toBe(1);
-    expect(cityDay('delhi', at)).toBe(0);
-    expect(dayWeight(6)).toBeCloseTo(0.5, 5);
-    expect(dayWeight(5.5)).toBeGreaterThan(0);
-    expect(dayWeight(5.5)).toBeLessThan(0.5);
   });
 
   /** Catches a linear ramp or a fade that dips or bumps the summed power of a crossfade. */

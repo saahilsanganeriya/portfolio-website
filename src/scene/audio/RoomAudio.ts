@@ -4,7 +4,7 @@ import type { Hotspot } from '../hotspots';
 import type { RecordId } from './crate';
 import { KEYS, LOOPS, RoomMix, SHOTS, type BedName, type ClickKind, type Listener, type LoopName, type Placement, type SoundPositions } from './mix';
 import type { RecordDeck } from './RecordDeck';
-import { cityDay, MUSIC_MIX, powerCurve, stateFor, STEMS, volumeGain, type AudioState, type City, type Stem } from './state';
+import { MUSIC_MIX, powerCurve, stateFor, STEMS, volumeGain, type AudioState, type Stem } from './state';
 
 export type { ClickKind } from './mix';
 export type { RecordId } from './crate';
@@ -18,7 +18,6 @@ const FIRST_FADE_S = 1;
 // Without a tonearm to watch (reduced motion, or a room without the player), the needle meets the groove this soon.
 const QUICK_CUE_S = 0.3;
 const SUSPEND_AFTER_MUTE_MS = 400;
-const DAY_CHECK_MS = 60_000;
 // A glide is a move faster than this (m/s) after the camera has rested; a cut (reduced motion) moves further in one
 // update than any glide does and makes no sound.
 const WHOOSH_SPEED = 0.9;
@@ -27,7 +26,7 @@ const REST_S = 0.4;
 const CUT_M = 1.2;
 // Props and the window keep full level within 2.5 m, so a click from the wide view (6–7 m away) is heard under the music.
 const EFFECT_REF_M = 2.5;
-const BED_REF_M: Record<BedName, number> = { sf: 1.5, 'delhi-day': 1.5, 'delhi-night': 1.5 };
+const BED_REF_M: Record<BedName, number> = { sf: 1.5, 'delhi-day': 1.5 };
 
 /** A prop's sound: one of its recordings (picked at random), its level under the music, and where it sits. */
 interface Effect {
@@ -65,10 +64,10 @@ const HOTSPOT_SFX: Record<string, SfxName> = {
   hit_lava_lamp: 'lava',
 };
 
-// What each city does by day and by night, chosen at random every so often while its bed plays.
-const CITY_EVENTS: Record<City, { day: readonly SfxName[]; night: readonly SfxName[]; everyS: [number, number] }> = {
-  sf: { day: ['gulls', 'gulls', 'cable-car', 'cable-car', 'foghorn'], night: ['foghorn', 'foghorn', 'foghorn', 'gulls'], everyS: [20, 50] },
-  delhi: { day: ['temple-bell'], night: [], everyS: [35, 80] },
+// What each city does now and then while its bed plays, chosen at random. Both cities are always in daylight.
+const BED_EVENTS: Record<BedName, { events: readonly SfxName[]; everyS: [number, number] }> = {
+  sf: { events: ['gulls', 'gulls', 'cable-car', 'cable-car', 'foghorn'], everyS: [20, 50] },
+  'delhi-day': { events: ['temple-bell'], everyS: [35, 80] },
 };
 // Room murmurs that happen by themselves now and then, when the room has the prop.
 const AMBIENT: { name: SfxName; everyS: [number, number] }[] = [
@@ -79,9 +78,7 @@ const AMBIENT: { name: SfxName; everyS: [number, number] }[] = [
 const BED_ANCHORS: Record<BedName, readonly string[]> = {
   sf: ['window_view_sf'],
   'delhi-day': ['window_view_delhi'],
-  'delhi-night': ['window_view_delhi'],
 };
-const BED_DIR: Record<BedName, 'sfx' | 'city'> = { sf: 'city', 'delhi-day': 'city', 'delhi-night': 'city' };
 
 /** What the rest of the page holds of the room's sound. */
 export interface AudioHandle {
@@ -116,8 +113,6 @@ export interface OfflineOptions {
   fadeIn?: boolean;
   clicks?: { at: number; kind: ClickKind }[];
   effects?: { at: number; name: SfxName }[];
-  /** The moment the cities' day and night are read at. */
-  date?: Date;
   /** A record playing from 0 s instead of the lo-fi bed (decoded from its shipped file). */
   record?: RecordId;
 }
@@ -145,7 +140,6 @@ export class RoomAudio implements AudioHandle {
   private level = 1;
   private lastUpdate = 0;
   private resting = 0;
-  private lastDayCheck = 0;
   private readonly nextEvent = new Map<string, number>();
   private suspendTimer = 0;
 
@@ -195,7 +189,7 @@ export class RoomAudio implements AudioHandle {
     const mix = new RoomMix(ctx, this.positions);
     mix.output.connect(this.master);
     this.mix = mix;
-    mix.setState(this.current, (bed) => this.bedLevel(bed), true);
+    mix.setState(this.current, true);
     document.addEventListener('visibilitychange', this.onVisibility);
     this.loaded = this.load(ctx, mix);
     // A record chosen while the sound was off starts now.
@@ -229,7 +223,7 @@ export class RoomAudio implements AudioHandle {
   setState(state: AudioState) {
     if (state === this.current) return;
     this.current = state;
-    this.mix?.setState(state, (bed) => this.bedLevel(bed));
+    this.mix?.setState(state);
     this.notify();
   }
 
@@ -316,8 +310,8 @@ export class RoomAudio implements AudioHandle {
 
   /**
    * Every frame, at most 20 times a second: re-maps the room from the camera, follows the visitor into a state (the
-   * framing the camera rests at or flies to, and SaahilOS's front window), whooshes on glides, keeps the cities on
-   * their local day or night, and lets the props murmur now and then.
+   * framing the camera rests at or flies to, and SaahilOS's front window), whooshes on glides, and lets the cities and
+   * the props murmur now and then.
    */
   update(listener: Listener, now: number, station: string, frontWindow: string) {
     if (!this.mix || !this.ctx || now - this.lastUpdate < UPDATE_MS) return;
@@ -340,26 +334,17 @@ export class RoomAudio implements AudioHandle {
       else if (speed > WHOOSH_SPEED) this.resting = 0;
     }
 
-    if (now - this.lastDayCheck > DAY_CHECK_MS) {
-      this.lastDayCheck = now;
-      for (const bed of ['sf', 'delhi-day', 'delhi-night'] as const) {
-        if (this.mix.hasBed(bed)) this.mix.setBed(bed, this.bedLevel(bed));
-        else if (this.bedLevel(bed) > 0 && this.anchorOf(BED_ANCHORS[bed])) void this.startBed(this.ctx, this.mix, bed);
-      }
-    }
-
     const t = this.ctx.currentTime;
-    for (const city of ['sf', 'delhi'] as const) {
-      const playing = city === 'sf' ? this.mix.hasBed('sf') : this.mix.hasBed('delhi-day') || this.mix.hasBed('delhi-night');
-      if (!playing) continue;
-      const due = this.nextEvent.get(city);
-      if (due === undefined) this.nextEvent.set(city, t + between(CITY_EVENTS[city].everyS));
+    for (const bed of Object.keys(BED_EVENTS) as BedName[]) {
+      if (!this.mix.hasBed(bed)) continue;
+      const { events, everyS } = BED_EVENTS[bed];
+      const due = this.nextEvent.get(bed);
+      if (due === undefined) this.nextEvent.set(bed, t + between(everyS));
       else if (t >= due) {
-        this.nextEvent.set(city, t + between(CITY_EVENTS[city].everyS));
-        const choices = cityDay(city, new Date()) >= 0.5 ? CITY_EVENTS[city].day : CITY_EVENTS[city].night;
+        this.nextEvent.set(bed, t + between(everyS));
         // As far forward as the city's bed: faint from the room, full at the window.
         const level = MUSIC_MIX[this.current].city;
-        if (choices.length && level > 0.05) this.play(choices[Math.floor(Math.random() * choices.length)], undefined, level);
+        if (level > 0.05) this.play(events[Math.floor(Math.random() * events.length)], undefined, level);
       }
     }
     for (const { name, everyS } of AMBIENT) {
@@ -398,12 +383,11 @@ export class RoomAudio implements AudioHandle {
   async renderOffline(seconds: number, listener: Listener, options: OfflineOptions = {}): Promise<Float32Array[]> {
     if (!this.loaded) throw new Error('room audio: no gesture has unlocked sound yet');
     await this.loaded;
-    const { state = 'room', startup = false, fadeIn = false, clicks = [], effects = [], date = new Date() } = options;
+    const { state = 'room', startup = false, fadeIn = false, clicks = [], effects = [] } = options;
     const ctx = new OfflineAudioContext(2, Math.round(seconds * OFFLINE_RATE), OFFLINE_RATE);
     const mix = new RoomMix(ctx, this.positions);
     mix.output.connect(ctx.destination);
     mix.update(listener, true);
-    const bedLevel = (bed: BedName) => this.bedLevel(bed, state, date);
     for (const name of LOOPS) {
       const buffer = this.buffers.get(`room/${name}`);
       if (buffer) mix.loop(name, buffer, 0);
@@ -411,7 +395,7 @@ export class RoomAudio implements AudioHandle {
     const startupBuffer = this.buffers.get('room/startup');
     if (startup && startupBuffer) mix.startup(startupBuffer, 0);
     mix.startMusic(this.stems(), state, 0, fadeIn ? undefined : 0);
-    mix.setState(state, bedLevel, true);
+    mix.setState(state, true);
     if (options.record) {
       const buffer = await this.fetch(ctx, 'records', options.record);
       if (!buffer) throw new Error(`room audio: could not load the record ${options.record}`);
@@ -420,9 +404,9 @@ export class RoomAudio implements AudioHandle {
     }
     for (const bed of Object.keys(BED_ANCHORS) as BedName[]) {
       const at = this.anchorOf(BED_ANCHORS[bed]);
-      if (!at || bedLevel(bed) <= 0) continue;
-      const buffer = await this.fetch(ctx, BED_DIR[bed], bed);
-      if (buffer) mix.bed(bed, buffer, { position: at, ref: BED_REF_M[bed] }, bedLevel(bed), 0, true);
+      if (!at) continue;
+      const buffer = await this.fetch(ctx, 'city', bed);
+      if (buffer) mix.bed(bed, buffer, { position: at, ref: BED_REF_M[bed] }, MUSIC_MIX[state].city, 0, true);
     }
     for (const { at, kind } of clicks) {
       const buffer = this.clickBuffer(kind);
@@ -478,24 +462,14 @@ export class RoomAudio implements AudioHandle {
         .filter(([name, effect]) => effect.dir === 'sfx' && (name === 'whoosh' || name === 'crt' || this.anchorOf(effect.anchors)))
         .flatMap(([, effect]) => effect.files.map((file) => this.fetch(ctx, effect.dir, file))),
     );
-    const beds = Promise.all(
-      (Object.keys(BED_ANCHORS) as BedName[]).filter((bed) => this.bedLevel(bed) > 0 && this.anchorOf(BED_ANCHORS[bed])).map((bed) => this.startBed(ctx, mix, bed)),
-    );
+    const beds = Promise.all((Object.keys(BED_ANCHORS) as BedName[]).filter((bed) => this.anchorOf(BED_ANCHORS[bed])).map((bed) => this.startBed(ctx, mix, bed)));
     await Promise.all([room, music, effects, beds]);
   }
 
   private async startBed(ctx: BaseAudioContext, mix: RoomMix, bed: BedName) {
-    const buffer = await this.fetch(ctx, BED_DIR[bed], bed);
+    const buffer = await this.fetch(ctx, 'city', bed);
     const at = this.anchorOf(BED_ANCHORS[bed]);
-    if (buffer && at && this.mix === mix) mix.bed(bed, buffer, { position: at, ref: BED_REF_M[bed] }, this.bedLevel(bed));
-  }
-
-  /** How far forward a bed is: each city by the state and its local day or night. */
-  private bedLevel(bed: BedName, state = this.current, date = new Date()) {
-    const city = MUSIC_MIX[state].city;
-    if (bed === 'sf') return city * (0.75 + 0.25 * cityDay('sf', date));
-    const day = cityDay('delhi', date);
-    return city * (bed === 'delhi-day' ? day : 1 - day);
+    if (buffer && at && this.mix === mix) mix.bed(bed, buffer, { position: at, ref: BED_REF_M[bed] }, MUSIC_MIX[this.current].city);
   }
 
   private stems(): Partial<Record<Stem, AudioBuffer>> {

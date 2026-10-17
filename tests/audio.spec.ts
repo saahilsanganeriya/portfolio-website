@@ -173,3 +173,32 @@ test('the music follows the visitor: the monitor muffles it, Films trades the be
   expect(films.stems).toMatchObject({ melody: { to: 0.95 }, beat: { to: 0 }, keys: { to: 0.75 } });
   expect(films.cutoff!.to).toBe(11000);
 });
+
+/**
+ * Catches the window's city beds following a clock again: at San Francisco's noon (half past midnight in Delhi) and
+ * at its midnight (Delhi's midday) the room must load the same two day beds at the same levels, and no night bed.
+ */
+test('the window sounds the same at noon and at midnight: both cities by day', async ({ browser }) => {
+  // Two room loads in SwiftShader.
+  test.setTimeout(420_000);
+  const heard: { beds: Record<string, number>; files: string[] }[] = [];
+  for (const at of ['2026-06-21T19:00:00Z', '2026-06-22T07:00:00Z']) {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const files: string[] = [];
+    page.on('request', (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith('/audio/city/')) files.push(pathname);
+    });
+    await page.clock.setFixedTime(at);
+    await page.goto('/');
+    await arrived(page);
+    await page.keyboard.press('KeyA');
+    await page.waitForFunction(() => Object.keys(window.__room?.audio?.graph().beds ?? {}).length === 2, null, { timeout: 60_000 });
+    const { beds } = await graph(page);
+    heard.push({ beds: Object.fromEntries(Object.entries(beds!).map(([name, gain]) => [name, gain!.to])), files: files.sort() });
+    await page.close();
+  }
+  expect(Object.keys(heard[0].beds).sort()).toEqual(['delhi-day', 'sf']);
+  expect(heard[1]).toEqual(heard[0]);
+  expect(heard[0].files.filter((file) => file.includes('night'))).toEqual([]);
+});

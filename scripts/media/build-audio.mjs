@@ -54,7 +54,7 @@ const SFX = [
   { name: 'whoosh', url: `${FREESOUND}391/391448_7280678-hq.mp3`, start: 6.65, length: 0.95, fadeIn: 0.05, fadeOut: 0.3 },
 ];
 
-// ---- beds: loops at the window (one per city, two for Delhi's day and night) ----
+// ---- beds: loops at the window (one per city, both by day) ----
 const BEDS = [
   { name: 'sf', dir: 'city', parts: [{ url: `${FREESOUND}90/90636_1431924-hq.mp3`, start: 40 }], length: 22, crossfade: 2 },
   {
@@ -68,7 +68,6 @@ const BEDS = [
     length: 22,
     crossfade: 2,
   },
-  { name: 'delhi-night', dir: 'city', parts: [{ url: `${FREESOUND}482/482687_6996854-hq.mp3`, start: 10 }], length: 22, crossfade: 2 },
 ];
 
 const EVENTS = [

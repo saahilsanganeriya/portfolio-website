@@ -1,5 +1,5 @@
 // The adaptive part of the room's sound, as plain data and pure functions: which state the visitor is in, what the
-// music does in each, the two cities' local day and night, the remembered volume, and the shape of every fade.
+// music does in each, the remembered volume, and the shape of every fade.
 
 /** What the visitor is doing, as far as the sound cares. */
 export type AudioState = 'room' | 'projector' | 'os' | 'window';
@@ -44,32 +44,6 @@ export const MUSIC_MIX: Record<AudioState, MusicMix> = {
 /** Seconds a state change takes; filters move a little faster than levels. */
 export const STATE_FADE_S = 2.8;
 export const FILTER_FADE_S = 1.6;
-
-// ---- the two cities outside the window ----
-
-export type City = 'sf' | 'delhi';
-const CITY_ZONES: Record<City, string> = { sf: 'America/Los_Angeles', delhi: 'Asia/Kolkata' };
-const DAWN_H = 6;
-const DUSK_H = 19;
-const TWILIGHT_H = 0.75;
-
-/** The hour of day (0–24, fractional) in a time zone. */
-function localHour(timeZone: string, date: Date): number {
-  const parts = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
-  const value = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-  return value('hour') + value('minute') / 60;
-}
-
-/** 1 by day, 0 by night, eased across 45 minutes either side of 06:00 and 19:00 local time. */
-export function dayWeight(hour: number): number {
-  const ramp = (centre: number) => {
-    const t = Math.min(1, Math.max(0, (hour - (centre - TWILIGHT_H)) / (2 * TWILIGHT_H)));
-    return 0.5 - 0.5 * Math.cos(Math.PI * t);
-  };
-  return ramp(DAWN_H) * (1 - ramp(DUSK_H));
-}
-
-export const cityDay = (city: City, date: Date) => dayWeight(localHour(CITY_ZONES[city], date));
 
 // ---- the visitor's remembered volume ----
 
