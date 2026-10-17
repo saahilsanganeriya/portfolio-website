@@ -81,7 +81,8 @@ try {
   const step = async (name) => steps.push({ name, at: await now() });
 
   await page.goto(new URL('/', server.url).href);
-  await page.waitForFunction(() => window.__room && window.__room.phase === 'desk' && !window.__room.moving, null, { timeout: 180_000 });
+  // Set as the arrival lands at the desk and kept: the desk's one-second hold itself is easy to miss on a slow frame.
+  await page.waitForFunction(() => window.__room?.interactiveAt != null, null, { timeout: 180_000 });
   const { origin, interactiveAt } = await page.evaluate(() => ({ origin: performance.timeOrigin, interactiveAt: window.__room.interactiveAt }));
   const interactiveEpoch = origin + interactiveAt;
   steps.push({ name: 'by itself', at: interactiveEpoch });
