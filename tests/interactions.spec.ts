@@ -196,7 +196,7 @@ test.describe('room v3 interactions', () => {
       .toContain(`photography/${SET[0].slug}`);
   });
 
-  /** Catches a room shader that fails to compile (the projector's picture went black on a redefined variable). */
+  /** Catches a room shader that fails to compile (a picture once went black on a redefined variable); the walls' fade patches shaders too. */
   test('every shader the interactions used compiled', async () => {
     expect(shaderErrors.get(page)).toEqual([]);
   });
