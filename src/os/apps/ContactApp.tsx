@@ -1,9 +1,11 @@
-import { useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode, type SubmitEvent } from 'react';
+import { useId, useRef, useState, type ChangeEvent, type ReactNode, type SubmitEvent } from 'react';
+import { SITE } from '../../site';
+import { linkAttributes } from './content';
 
 const ENDPOINT = 'https://api.web3forms.com/submit';
 // Web3Forms' access key is public by design (it only names the inbox to forward to). It comes from the build's
-// environment, never from git. A build without it shows a mailto link instead, read from the site's config only then,
-// so the owner's address is in neither this window nor its code when the form works.
+// environment, never from git. A build without it points to GitHub and LinkedIn: the owner's address is never on the
+// site, so there is no mailto to fall back to.
 const ACCESS_KEY: string | undefined = import.meta.env.PUBLIC_WEB3FORMS_ACCESS_KEY || undefined;
 const SEND_TIMEOUT_MS = 15_000;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -164,22 +166,13 @@ export function ContactApp() {
           )}
         </form>
       ) : (
-        <MailtoFallback />
+        <p className="os-note">
+          The form is not set up on this copy of the site. Find me on{' '}
+          <a href={SITE.github} {...linkAttributes(SITE.github)}>GitHub</a> or{' '}
+          <a href={SITE.linkedin} {...linkAttributes(SITE.linkedin)}>LinkedIn</a> instead.
+        </p>
       )}
     </article>
-  );
-}
-
-function MailtoFallback() {
-  const [mailto, setMailto] = useState<string | null>(null);
-  useEffect(() => {
-    void import('../../site').then(({ SITE }) => setMailto(`mailto:${SITE.email}`));
-  }, []);
-  return (
-    <p className="os-note">
-      The form is not set up on this copy of the site.{' '}
-      {mailto ? <a href={mailto}>Email me instead</a> : 'Email me instead'}.
-    </p>
   );
 }
 

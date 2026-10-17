@@ -1,5 +1,4 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
-import { SITE } from '../src/site';
 
 // The Contact window posts to Web3Forms; every test here answers for api.web3forms.com, so no run sends mail. The test
 // build carries a stand-in access key (playwright.config.ts), never the real one.
@@ -51,9 +50,6 @@ test('a message goes to Web3Forms with the honeypot field, and the window says i
     botcheck: false,
     subject: `Message from ${VISITOR.name} on saahilsanganeriya.com`,
   });
-  // The owner's address is nowhere in the window, nor in what it sent.
-  await expect(contact).not.toContainText(SITE.email);
-  expect(JSON.stringify(bodies[0])).not.toContain(SITE.email);
 });
 
 /** Catches a refused or failed send that loses the visitor's message or says nothing. */
