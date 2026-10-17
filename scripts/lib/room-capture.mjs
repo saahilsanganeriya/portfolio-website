@@ -1,8 +1,9 @@
 // Shared by the capture scripts: a WebGL-capable Chromium, viewports, a page whose time only moves when the script
 // says (Playwright's clock: Date, timers, requestAnimationFrame, performance), a seeded Math.random, and an optional
 // mock of the streamed atlases (public/room/atlases.json and the files it lists) served from a local folder.
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright';
 
@@ -67,15 +68,17 @@ export async function openPage(browser, viewport, { tier = 0, seed = 7, mock = n
   return page;
 }
 
-/** Serves room.glb, atlases.json and atlas/* from a mock folder (tools/T73/make-mock.mjs) instead of the build. */
+/**
+ * Serves the room's files from a mock folder instead of the build: room.glb from `room-low.glb`, and any other
+ * /room/ path (atlases.json, atlas/*, window pictures, floorplan.json) the folder has; the rest from the build.
+ */
 export async function routeMock(page, dir) {
-  const serve = (file, contentType) => async (route) => route.fulfill({ body: await readFile(join(dir, file)), contentType });
-  await page.route('**/room/room.glb', serve('room-low.glb', 'model/gltf-binary'));
-  await page.route('**/room/atlases.json', serve('atlases.json', 'application/json'));
-  await page.route('**/room/atlas/**', async (route) => {
-    const name = new URL(route.request().url()).pathname.split('/room/atlas/')[1];
-    const type = name.endsWith('.avif') ? 'image/avif' : name.endsWith('.webp') ? 'image/webp' : name.endsWith('.jpg') ? 'image/jpeg' : 'image/ktx2';
-    await route.fulfill({ body: await readFile(join(dir, 'atlas', name)), contentType: type });
+  const TYPES = { '.glb': 'model/gltf-binary', '.json': 'application/json', '.avif': 'image/avif', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.ktx2': 'image/ktx2', '.png': 'image/png', '.hdr': 'image/vnd.radiance' };
+  await page.route('**/room/**', async (route) => {
+    const path = decodeURIComponent(new URL(route.request().url()).pathname).replace(/^\/room\//, '');
+    const file = join(dir, path === 'room.glb' ? 'room-low.glb' : path);
+    if (path.includes('..') || !existsSync(file)) return route.continue();
+    await route.fulfill({ body: await readFile(file), contentType: TYPES[extname(file)] ?? 'application/octet-stream' });
   });
 }
 
