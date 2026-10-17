@@ -245,8 +245,10 @@ export class AtlasStreamer {
         byLow.set(low, texture);
       }
       // Upload now; the swap waits for the next frame, so the frame that shows it does not also pay for the upload.
+      if (this.abort.signal.aborted) return full.dispose();
       this.renderer.gl.initTexture(full);
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (this.abort.signal.aborted) return full.dispose();
       this.swap(byLow);
       for (const low of lows) low.dispose();
       const image = full instanceof THREE.CompressedTexture ? full.mipmaps[0] : (full.image as { width: number });
