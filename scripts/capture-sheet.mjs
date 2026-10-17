@@ -13,8 +13,8 @@
 //
 //   node scripts/capture-sheet.mjs [--url http://… | --no-build] [--out dir] [--viewports 1440x900@1,1280x720@2]
 //     [--henry https://henryheffernan.com] [--gl swiftshader|egl|default] [--label "ours (main)"] [--mock dir]
-//     [--tier 0] [--no-henry]
-import { mkdir, writeFile } from 'node:fs/promises';
+//     [--tier 0] [--no-henry] [--from dir]   --from recomposes the sheets from an earlier run's shots/ and sheet.json
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { driveTo, glRenderer, launch, openPage, parseViewports, stepUntil, tick } from './lib/room-capture.mjs';
@@ -41,10 +41,10 @@ const REGIONS = {
     wall: ['desk', -1.5, -0.35],
   },
   henry: {
-    'desk edge': ['close', -2.6, 2.3],
-    keyboard: ['close', 0.45, 1.75],
+    'desk edge': ['close', -1.44, 2.32],
+    keyboard: ['close', 0.5, 2.07],
     'monitor bezel': ['desk', -0.04, 0.6],
-    wall: ['close', -5, -2],
+    wall: ['close', -1.44, 0.8],
   },
 };
 
@@ -170,6 +170,19 @@ async function compose(viewport, renderers) {
 
 await mkdir(join(out, 'shots'), { recursive: true });
 await mkdir(join(out, 'crops'), { recursive: true });
+if (option('--from')) {
+  const from = option('--from');
+  const earlier = JSON.parse(await readFile(join(from, 'sheet.json'), 'utf8'));
+  for (const [key, screen] of Object.entries(earlier.screens)) {
+    const [site, view, device] = key.split('/');
+    shots[key] = { png: await readFile(join(from, 'shots', `${site}-${view}-${device}.png`)), screen };
+  }
+  for (const viewport of viewports) {
+    const renderers = earlier.viewports.find((v) => v.device === viewport.label)?.renderers ?? { ours: 'unknown' };
+    console.log(`${viewport.label}: ${await compose(viewport, renderers)} (recomposed from ${from})`);
+  }
+  process.exit(0);
+}
 const server = option('--url') ? { url: option('--url'), close: async () => {} } : await serveBuild({ build: !flag('--no-build') });
 const browser = await launch(glMode);
 try {
