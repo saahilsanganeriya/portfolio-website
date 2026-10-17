@@ -46,8 +46,7 @@ describe('the quality controller', () => {
 /**
  * Calibrates on a fake clock: every frame at the top tier takes `topMs` (the first one, which uploads the textures,
  * `firstMs`), a lower tier as much less as it has fewer pixels (MSAA counts four samples a pixel); timed frame number
- * `stall` takes 80 ms more (a garbage collection); a new tier's first frame is drawn untimed. Returns the tier picked and
- * how long it took.
+ * `stall` takes 80 ms more (a garbage collection). Returns the tier picked and how long it took.
  */
 async function calibrate(topMs: number, { firstMs = topMs, stall = 0 } = {}) {
   let clock = 0;
@@ -58,8 +57,7 @@ async function calibrate(topMs: number, { firstMs = topMs, stall = 0 } = {}) {
     const samples = (tier.resolution / FULL.tiers[0].resolution) ** 2 * (tier.msaa ? 1 : 0.25);
     return topMs * samples + (++frames === stall ? 80 : 0);
   };
-  const frame = async (fresh: boolean) => {
-    if (fresh) clock += cost();
+  const frame = async () => {
     const ms = cost();
     clock += ms;
     return ms;

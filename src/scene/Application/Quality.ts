@@ -138,25 +138,22 @@ export class Quality {
    * Picks the tier the arrival starts at, before anyone sees the room: the ladder only ever steps down, so it must not
    * start a machine at a tier it cannot hold. `first` is the room's first frame, timed until the GPU finished it (its
    * textures upload with it, so it can keep the top tier but never drop it); `frame` draws one more at the current tier
-   * and returns the same time (`fresh`: a tier just applied, whose first frame it draws untimed first). Steps down as
-   * the ladder does while a frame takes over twice the target's interval; one under CERTAIN_MS is looked at twice.
-   * Returns the frames it timed.
+   * and returns the same time. Steps down as the ladder does while a frame takes over twice the target's interval; one
+   * under CERTAIN_MS is looked at twice. Returns the frames it timed.
    */
-  async calibrate(first: number, frame: (fresh: boolean) => Promise<number>) {
+  async calibrate(first: number, frame: () => Promise<number>) {
     const timed: { tier: number; ms: number }[] = [];
-    const time = async (fresh: boolean) => {
-      const ms = await frame(fresh);
+    const time = async () => {
+      const ms = await frame();
       timed.push({ tier: this.index, ms });
       return ms;
     };
     if (this.pinned || first <= FAR_TOO_SLOW_MS) return timed;
-    let fresh = false;
     while (!this.atBottom) {
-      let ms = await time(fresh);
-      if (ms > FAR_TOO_SLOW_MS && ms <= CERTAIN_MS) ms = Math.min(ms, await time(false));
+      let ms = await time();
+      if (ms > FAR_TOO_SLOW_MS && ms <= CERTAIN_MS) ms = Math.min(ms, await time());
       if (ms <= FAR_TOO_SLOW_MS) break;
       this.stepFor(1000 / ms);
-      fresh = true;
     }
     return timed;
   }

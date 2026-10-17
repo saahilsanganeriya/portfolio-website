@@ -379,14 +379,20 @@ export class Application implements RoomHandle {
     const begun = performance.now();
     // The first frame also uploads the textures.
     const first = timeFrame();
-    const frames = await this.quality.calibrate(first, async (fresh) => {
-      if (fresh) {
-        // A lower tier's own shaders and render targets, made before its frames are timed.
-        await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
-        timeFrame();
-      }
+    // A lower tier's shaders, render targets and texture filtering (a fresh upload of every texture), made in a frame of
+    // their own: before its frames are timed, and for the last tier before the room starts, not in the glide.
+    let drawnAt = this.quality.index;
+    const prepare = async () => {
+      if (drawnAt === this.quality.index) return;
+      drawnAt = this.quality.index;
+      await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
+      timeFrame();
+    };
+    const frames = await this.quality.calibrate(first, async () => {
+      await prepare();
       return timeFrame();
     });
+    await prepare();
     this.calibration = { first, frames, ms: performance.now() - begun, tier: this.quality.index };
     this.measured = true;
   }
