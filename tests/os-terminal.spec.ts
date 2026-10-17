@@ -4,9 +4,9 @@ import { devices, expect, test, type Page } from '@playwright/test';
 // The SaahilOS Terminal, one test per command. Commands are typed with the page's keyboard, never filled into the
 // field, so every test also proves the prompt holds the keyboard the way a visitor's typing reaches it.
 
-const SWE_SIM = (() => {
+const HINTED_REPO = (() => {
   const snapshot = JSON.parse(
-    readFileSync(new URL('../src/os/apps/code/snapshot/repos/saahilsanganeriya--swe-sim.json', import.meta.url), 'utf8'),
+    readFileSync(new URL('../src/os/apps/code/snapshot/repos/saahilsanganeriya--travel-agent-gym.json', import.meta.url), 'utf8'),
   ) as { commits: { sha: string; message: string }[] };
   const [latest] = snapshot.commits;
   return { sha: latest!.sha.slice(0, 7), subject: latest!.message.split('\n')[0]! };
@@ -89,7 +89,7 @@ test.describe('Terminal', () => {
     await expect(log).toContainText('cat: projects: Is a directory');
   });
 
-  /** Catches open reaching no window for an app, a file or a slug. */
+  /** Catches open reaching no window for an app, a file or a slug, or echoing what was typed instead of the window's title. */
   test('open shows an app, a file or a project in its window', async ({ page }) => {
     const { log, run } = await openTerminal(page);
     await run(`open projects/${PROJECT.slug}.md`);
@@ -97,6 +97,11 @@ test.describe('Terminal', () => {
     await page.getByRole('dialog', { name: 'Terminal' }).locator('.os-titlebar-text').click();
     await run('open contact');
     await expect(page.getByRole('dialog', { name: 'Contact' })).toBeVisible();
+    await expect(log).toContainText('opening Contact');
+    await page.getByRole('dialog', { name: 'Terminal' }).locator('.os-titlebar-text').click();
+    await run('open resume');
+    await expect(page.getByRole('dialog', { name: 'Résumé' })).toBeVisible();
+    await expect(log).toContainText('opening Résumé');
     await page.getByRole('dialog', { name: 'Terminal' }).locator('.os-titlebar-text').click();
     await run('open nothing-here');
     await expect(log).toContainText('open: nothing-here: nothing by that name. Try ls.');
@@ -133,15 +138,19 @@ test.describe('Terminal', () => {
     await expect(log.locator('p')).toHaveCount(0);
   });
 
-  /** Catches git log outside a repository pretending to work, or inside one not reading the snapshot's commits. */
-  test('git log reads a repository in ~/code, and refuses outside one', async ({ page }) => {
+  /**
+   * Catches git log outside a repository pretending to work, a hint that names a path cd cannot reach, and git log
+   * inside a repository not reading the snapshot's commits.
+   */
+  test('git log refuses outside a repository, and the hinted repository reads its log', async ({ page }) => {
     const { log, run } = await openTerminal(page);
     await run('git log');
     await expect(log).toContainText('fatal: not a git repository');
-    await run('cd code/swe-sim');
+    await expect(log).toContainText('Try: cd ~/code/travel-agent-gym, then git log');
+    await run('cd ~/code/travel-agent-gym');
     await run('git log');
-    await expect(log).toContainText(`${SWE_SIM.sha}  `);
-    await expect(log).toContainText(SWE_SIM.subject);
+    await expect(log).toContainText(`${HINTED_REPO.sha}  `);
+    await expect(log).toContainText(HINTED_REPO.subject);
   });
 
   /** Catches Tab finishing nothing, or finishing a folder without its slash. */

@@ -1,5 +1,6 @@
 import { parseTarget } from '../../routes';
 import type { OsIndex } from '../../types';
+import { APPS } from '../registry';
 import { HOME, displayPath, lookup, resolvePath, type DirNode, type VNode } from './fs';
 
 export type Tone = 'plain' | 'muted' | 'warn' | 'echo';
@@ -132,9 +133,8 @@ async function findWindow(shell: Shell, name: string): Promise<{ target: string;
   if (node?.open) return { target: node.open, title: node.title ?? node.name };
   const route = parseTarget(name);
   if (route) {
-    const entry = route.slug
-      ? (shell.index.projects.find((p) => p.slug === route.slug) ?? shell.index.posts.find((p) => p.slug === route.slug))
-      : null;
+    if (!route.slug) return { target: name, title: APPS[route.app].label };
+    const entry = shell.index.projects.find((p) => p.slug === route.slug) ?? shell.index.posts.find((p) => p.slug === route.slug);
     return { target: name, title: entry?.title ?? name };
   }
   const project = shell.index.projects.find((p) => p.slug === name);
@@ -163,7 +163,7 @@ async function git(shell: Shell, args: string[]): Promise<TermResult> {
     return {
       lines: [
         line('fatal: not a git repository (or any of the parent directories): .git', 'warn'),
-        line('Try: cd ~/code/swe-sim, then git log', 'muted'),
+        line('Try: cd ~/code/travel-agent-gym, then git log', 'muted'),
       ],
     };
   }
