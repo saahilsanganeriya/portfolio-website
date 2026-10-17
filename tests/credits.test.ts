@@ -19,9 +19,10 @@ const REGISTER = `
 
 /**
  * Catches Credits listing assets the site does not ship (a prop kept only in the Blender library, a light for review
- * renders) or keeping a section with nothing left in it, and a register whose wording no longer matches the filter.
+ * renders, the projector, Delhi's night) or keeping a section with nothing left in it, a register whose wording no
+ * longer matches the filter, and planning labels ("round eight", "v4", task ids) on the public list.
  */
-test('Credits lists only what ships; the register keeps every row', () => {
+test('Credits lists only what ships, without planning labels; the register keeps every row', () => {
   expect(creditSections(REGISTER)).toEqual([{ title: '3D models', rows: [expect.objectContaining({ asset: 'Lamp' })] }]);
   expect(parseAssetsRegister(REGISTER).flatMap((s) => s.rows)).toHaveLength(3);
 
@@ -30,4 +31,6 @@ test('Credits lists only what ships; the register keeps every row', () => {
   const kept = parseAssetsRegister(real).flatMap((s) => s.rows);
   expect(shown.length).toBeLessThan(kept.length);
   expect(shown.filter((row) => /prop library|not shipped/i.test(row.usedFor))).toEqual([]);
+  const visible = shown.map((row) => [row.asset, row.usedFor, row.author, row.licence].join(' | '));
+  expect(visible.filter((text) => /\bround (one|two|three|four|five|six|seven|eight)\b|\bv4\b|\bT\d{2}\b|projector|delhi-night/i.test(text))).toEqual([]);
 });
