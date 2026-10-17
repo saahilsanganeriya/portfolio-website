@@ -59,12 +59,17 @@ const STALL_MS = 250;
 const SLOW_RUN = 3;
 // Half a second per window: the arrival glides for under five, none of them at a tier the machine cannot hold.
 const WINDOW_MS = 500;
+// The arrival starts 0.4 s after the room has loaded, before a warm-up window and a measured one have passed: a machine
+// whose first frames run under half the target decides after this many, so the glide does not start at the top tier.
+const QUICK_FRAMES = 3;
+
+const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 
 /**
  * Adaptive quality: each half second, if the median frame rate of that window is under 50 fps, drop to the tier the
  * rate calls for (fill cost goes with the pixel count, so the resolution scales with the square root of the shortfall),
  * at least one. It never climbs back, so the level settles instead of oscillating; the first window after a change
- * only warms up.
+ * only warms up, except at the start on a machine far too slow for the top tier (QUICK_FRAMES).
  */
 export class Quality {
   index = 0;
@@ -72,6 +77,8 @@ export class Quality {
   private windowStart = 0;
   private warmingUp = true;
   private longFrames = 0;
+  /** A window has been measured (not only warmed up) since the room started. */
+  private decided = false;
   /** Screenshot runs set `window.__roomTier` before the page loads, so every shot is drawn at the same tier. */
   private readonly pinned: boolean;
 
@@ -102,13 +109,14 @@ export class Quality {
     this.longFrames = frameMs > STALL_MS ? this.longFrames + 1 : 0;
     if (this.longFrames > 0 && this.longFrames < SLOW_RUN) return;
     this.samples.push(frameMs);
-    if (now - this.windowStart < WINDOW_MS) return;
+    const quick = !this.decided && this.samples.length >= QUICK_FRAMES && median(this.samples) > 2000 / TARGET_FPS;
+    if (!quick && now - this.windowStart < WINDOW_MS) return;
 
-    const sorted = [...this.samples].sort((a, b) => a - b);
-    const fps = 1000 / sorted[Math.floor(sorted.length / 2)];
-    const warmingUp = this.warmingUp;
+    const fps = 1000 / median(this.samples);
+    const warmingUp = this.warmingUp && !quick;
     this.reset(now);
     this.warmingUp = false;
+    if (!warmingUp) this.decided = true;
     if (warmingUp || fps >= TARGET_FPS || this.index === this.ladder.tiers.length - 1) return;
 
     const wanted = this.tier.resolution * Math.sqrt(fps / TARGET_FPS);

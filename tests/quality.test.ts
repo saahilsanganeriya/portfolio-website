@@ -19,6 +19,18 @@ describe('the quality controller', () => {
     expect(settle(300, 40)).toBe(FULL.tiers.length - 1);
   });
 
+  /**
+   * Catches the arrival starting at the top tier on a machine far too slow for it: the glide begins 0.4 s after the
+   * room loads, and a warm-up window plus a measured one take a second, so its first frames came far apart
+   * (room.spec's waypoint pass missed cam_arrival_0 by 1.15 m once MSAA made the top tier heavier).
+   */
+  it('leaves the top tier within the first frames when they run under half the target', () => {
+    const quality = new Quality(FULL, () => {});
+    let now = 1000;
+    for (let i = 0; i < 4; i++) quality.sample((now += 100), 100);
+    expect(quality.index).toBeGreaterThan(0);
+  });
+
   /** Catches a one-off stall (a shader compile) costing a tier. */
   it('ignores a single long frame among fast ones', () => {
     const quality = new Quality(FULL, () => {});
