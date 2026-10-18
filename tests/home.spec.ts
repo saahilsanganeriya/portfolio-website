@@ -109,7 +109,7 @@ test('Home sits beside Take the tour, answers Tab, Enter and H, and leaves the m
   await expect(home).toBeFocused();
   await page.keyboard.press('Enter');
   await settledAt(page, 'idle');
-  await expect(page.getByRole('button', { name: 'Back to the room' })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'To the desk' })).toBeHidden();
   await expect(home, 'focus stays on Home').toBeFocused();
   const pose = poseOf(await room(page));
 

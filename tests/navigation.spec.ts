@@ -300,7 +300,7 @@ test('the monitor is left by the back control or a drag, not by the pointer slip
   await page.mouse.move(25, 450);
   await page.waitForTimeout(1200);
   expect(await room(page)).toMatchObject({ destination: 'monitor' });
-  const back = page.getByRole('button', { name: 'Back to the room' });
+  const back = page.getByRole('button', { name: 'To the desk' });
   await expect(back).toBeVisible();
   await back.click();
   await settledAt(page, 'desk');

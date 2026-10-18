@@ -273,7 +273,7 @@ test('the keyboard reaches the tour, walks its stops, flies to one and closes th
   await expect(page.getByRole('link', { name: 'Open SaahilOS' })).toBeFocused();
   // The arrival ends at the monitor, where the HUD's way back out comes first.
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Back to the room' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'To the desk' })).toBeFocused();
   await page.keyboard.press('Tab');
   const open = page.getByRole('button', { name: 'Take the tour' });
   await expect(open).toBeFocused();
