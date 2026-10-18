@@ -123,7 +123,7 @@ TOWER_TOP = WATER_Z + 0.32
 MARIN = (1.25, 1.52, 0.07, 0.10)  # centre, radius across and in depth
 # Delhi's Signature Bridge over the Yamuna, in front of the Golden Gate's depth: from a sandbar near the seam to the
 # right bank; one inclined white pylon near the bank, bent at its top, with fans of stays to both spans.
-SIG_Y, SIG_X, SIG_PYLON = 1.30, (1.41, 1.77), 1.665
+SIG_Y, SIG_X, SIG_PYLON = 1.30, (1.41, 1.84), 1.665  # the deck runs on along the bank, where the back stays hold
 SIG_DECK = WATER_Z + 0.055
 SANDBAR = (1.43, 1.29, 0.055, 0.11)
 # The Painted Ladies: seven houses from LADIES_X along the row at depth LADIES_Y, facing the window, stepping up the
@@ -138,6 +138,14 @@ TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (1.10, 1.70), (0.99, 1.76), (0.70, 1.
 DOWNTOWN = ((0.90, 1.24), (1.63, 1.86), (1.06, 1.75))  # x range, y range, densest point (behind the bridge)
 HUMAYUN, JAMA_MASJID, RED_FORT_Y = (1.88, 1.42), (1.60, 1.72), 1.96
 HAZE_NEAR, HAZE_FAR, HAZE_MAX = 1.05, 2.35, 0.25
+# The window's fixed moment (owner): San Francisco at 7 PM, the sun setting into the fog; New Delhi at 7:30 AM, the same
+# moment, the sun rising through a pale gold haze. Each city hazes toward its own light, the two blended across the
+# seam (HAZE_BLEND either side of it) so the halves meet without a step.
+HAZE_SF, HAZE_DELHI, HAZE_BLEND = (0.80, 0.60, 0.56), (0.88, 0.79, 0.58), 0.08
+HAZE_MAX_DELHI = 0.32
+# The bake's sky glow, horizon to zenith, per city: dusk's amber to violet-blue; morning's pale gold to pale blue.
+GLOW_SF = ((0.95, 0.60, 0.42), (0.22, 0.22, 0.46))
+GLOW_DELHI = ((0.92, 0.84, 0.62), (0.38, 0.54, 0.76))
 
 
 def sf_coast(y):
@@ -292,21 +300,22 @@ def keep_suns_off_water():
             light.light_linking.receiver_collection = sunless
 
 
-SF_LIT = "window_sf_lit"
+LIT = {"sf": "window_sf_lit", "delhi": "window_delhi_lit"}
 
 
-def light_sf_only(objs):
-    """San Francisco's late sun reaches only its own half (land, city, the row, the bridge; not the water), so its
-    facades facing the window catch the light while Delhi's half bakes as it did."""
-    lit = bpy.data.collections.get(SF_LIT) or bpy.data.collections.new(SF_LIT)
-    for o in objs:
-        if o.get("view_side") == "sf" and not o.name.endswith("_water") and o.name not in lit.objects:
-            lit.objects.link(o)
-    for entry in lit.collection_objects:
-        entry.light_linking.link_state = "INCLUDE"
-    for light in bpy.data.collections["window_lights"].objects:
-        if light.get("window_receivers") == "sf":
-            light.light_linking.receiver_collection = lit
+def light_each_city(objs):
+    """Each city's own sun and sky reach only its own half (land, city, landmarks, its bridge; not the water, which
+    stays sunless): San Francisco's sunset from the front left, Delhi's sunrise from the front right."""
+    for side, name in LIT.items():
+        lit = bpy.data.collections.get(name) or bpy.data.collections.new(name)
+        for o in objs:
+            if o.get("view_side") == side and not o.name.endswith("_water") and o.name not in lit.objects:
+                lit.objects.link(o)
+        for entry in lit.collection_objects:
+            entry.light_linking.link_state = "INCLUDE"
+        for light in bpy.data.collections["window_lights"].objects:
+            if light.get("window_receivers") == side:
+                light.light_linking.receiver_collection = lit
 
 
 def view_material(name, day, night=None, rough=0.85, emit_night=None, emit_strength=0.0, kit=None, metal=0.0):
@@ -319,11 +328,13 @@ def view_material(name, day, night=None, rough=0.85, emit_night=None, emit_stren
         color = kit(k, color, n)
         if isinstance(color, tuple):
             color, glow = color
-    # Aerial perspective: the further back (object y, the diorama's depth), the more the colour fades into the haze
-    # on the horizon, pale by day and blue-black by night.
-    depth = k.map_range(k.node("ShaderNodeSeparateXYZ", inputs={"Vector": k.coords("Object")}).outputs["Y"], HAZE_NEAR,
-                        HAZE_FAR, 0.0, HAZE_MAX)
-    haze = k.mix_color(n, (0.66, 0.72, 0.80, 1.0), (0.030, 0.034, 0.055, 1.0))
+    # Aerial perspective: the further back (object y, the diorama's depth), the more the colour fades into its city's
+    # haze (object x, across the seam): San Francisco's dusk, Delhi's morning; blue-black by night.
+    obj = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": k.coords("Object")})
+    delhi = k.map_range(obj.outputs["X"], SEAM_X - HAZE_BLEND, SEAM_X + HAZE_BLEND)
+    depth = k.math("MULTIPLY", k.map_range(obj.outputs["Y"], HAZE_NEAR, HAZE_FAR),
+                   k.math("ADD", HAZE_MAX, k.math("MULTIPLY", delhi, HAZE_MAX_DELHI - HAZE_MAX)))
+    haze = k.mix_color(n, k.mix_color(delhi, HAZE_SF + (1.0,), HAZE_DELHI + (1.0,)), (0.030, 0.034, 0.055, 1.0))
     color = k.mix_color(depth, color, haze)
     bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": rough, "Metallic": metal})
     if emit_night is not None:
@@ -355,17 +366,19 @@ def lit_windows(k, color, n, scale=(180.0, 180.0, 260.0), share=0.45, warm=(1.0,
 
 
 def sky_material(side):
-    """The sky's light on the diorama while the halves bake: one day gradient over both cities. Emission only; the site
-    draws the sky itself (window_sky), so nothing here is seen."""
+    """The sky's light on the diorama while the halves bake: San Francisco's dusk on the left turning, by direction,
+    into Delhi's morning on the right, the same function on both halves of the dome, so their water still meets at the
+    seam in one colour. Emission only; the site draws the sky itself (window_sky), so nothing here is seen."""
     mat, k = pl.new_material(f"view_sky_{side}")
     geo = k.node("ShaderNodeNewGeometry")
     rel = k.node("ShaderNodeVectorMath", operation="SUBTRACT", inputs={0: geo.outputs["Position"], 1: tuple(DOME_CENTRE)})
     d = k.node("ShaderNodeVectorMath", operation="NORMALIZE", inputs={0: rel.outputs[0]})
     sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": d.outputs[0]})
-    up = k.math("MAXIMUM", sep.outputs["Z"], 0.0)
-    day_hz = (0.78, 0.73, 0.66, 1.0)  # one glow for both halves: their water then meets at the seam in one colour
-    day = k.mix_color(k.math("POWER", up, 0.55), day_hz, (0.13, 0.30, 0.62, 1.0))
-    emit = k.node("ShaderNodeEmission", inputs={"Color": day, "Strength": 0.34})
+    up = k.math("POWER", k.math("MAXIMUM", sep.outputs["Z"], 0.0), 0.55)
+    east = k.map_range(sep.outputs["X"], -0.25, 0.25)
+    glow = k.mix_color(east, k.mix_color(up, GLOW_SF[0] + (1.0,), GLOW_SF[1] + (1.0,)),
+                       k.mix_color(up, GLOW_DELHI[0] + (1.0,), GLOW_DELHI[1] + (1.0,)))
+    emit = k.node("ShaderNodeEmission", inputs={"Color": glow, "Strength": 0.34})
     k.set(k.node("ShaderNodeOutputMaterial"), "Surface", emit.outputs[0])
     return mat
 
@@ -481,6 +494,7 @@ def build_materials():
     m["gallery"] = view_material("view_gallery", (0.18, 0.26, 0.32), (0.04, 0.05, 0.07), rough=0.25,
                                  emit_night=(0.9, 0.85, 0.7), emit_strength=2.0)
     m["sand"] = view_material("view_sand", (0.62, 0.50, 0.32), (0.04, 0.035, 0.025), rough=0.95)
+    m["fog"] = view_material("view_fog", (0.90, 0.70, 0.64), (0.12, 0.09, 0.10), rough=1.0)
     return m
 
 
@@ -786,9 +800,10 @@ def golden_gate(b, mats):
 
 
 def signature_bridge(b, mats):
-    """Delhi's Signature Bridge over the Yamuna: a deck on piers from the sandbar to the right bank, and one white
-    steel pylon near the bank whose two legs straddle the deck, join, lean back over the bank and bend forward at the
-    top, where the viewing gallery is; fans of stays run from its upper shaft to the main span and back to the bank."""
+    """Delhi's Signature Bridge over the Yamuna, a cantilever-spar cable-stayed bridge: a deck on piers from the sandbar
+    to the right bank, and one white steel pylon near the bank, two columns straddling the deck that lean back over the
+    bank at about 63°, bend upright and meet in the glass-walled head; fifteen pairs of stays run from its upper part to
+    the main span and four pairs back to the short span on the bank."""
     x0, x1 = SIG_X
     y, z = SIG_Y, SIG_DECK
     half_w = 0.024
@@ -797,38 +812,35 @@ def signature_bridge(b, mats):
     b.box((x1 - x0, 2 * half_w - 0.012, 0.004), loc=((x0 + x1) / 2, y, z - 0.0045), mat=mats["deck_under"])
     for side in (-1, 1):
         b.box((x1 - x0, 0.0016, 0.004), loc=((x0 + x1) / 2, y + side * (half_w - 0.0008), z + 0.006), mat=steel)
-    for xp in (x0 + 0.015, x0 + 0.11, SIG_PYLON + 0.055, x1 - 0.012):
+    for xp in (x0 + 0.015, x0 + 0.11, SIG_PYLON + 0.055, SIG_PYLON + 0.12, x1 - 0.012):
         b.box((0.012, 0.03, z - WATER_Z + 0.012), loc=(xp, y, (z + WATER_Z - 0.012) / 2), mat=mats["concrete"])
     b.box((0.05, 0.085, 0.022), loc=(SIG_PYLON + 0.01, y, WATER_Z + 0.004), mat=mats["concrete"])
-    # The pylon, in the bridge's plane (x along the deck, the main span toward the seam): legs, then the bent shaft.
-    knot = Vector((SIG_PYLON + 0.022, y, z + 0.115))
+    # The pylon, in the bridge's plane (x along the deck; the main span lies toward the seam, the bank behind it).
+    lean = 1 / math.tan(math.radians(63))
+    bend_z, head_z = z + 0.175, z + 0.262
+    bend_x = SIG_PYLON + lean * (bend_z - z)
+    head = Vector((bend_x + 0.014, y, head_z))
     for side in (-1, 1):
-        foot = Vector((SIG_PYLON - 0.004, y + side * (half_w + 0.011), z - 0.012))
-        bend = foot.lerp(knot, 0.55) + Vector((0.002, -side * 0.004, 0))
-        b.tube([foot, bend, knot], 0.0098, sides=8, mat=steel, radius_fn=lambda t: 0.0105 - 0.0025 * t)
-    shaft = [knot - Vector((0.002, 0, 0.014)), knot, Vector((SIG_PYLON + 0.038, y, z + 0.17)),
-             Vector((SIG_PYLON + 0.048, y, z + 0.222)), Vector((SIG_PYLON + 0.049, y, z + 0.262)),
-             Vector((SIG_PYLON + 0.043, y, z + 0.292))]
-    b.tube(shaft, 0.0092, sides=10, mat=steel, radius_fn=lambda t: 0.0098 - 0.0042 * t)
-    gallery = shaft[-1] + Vector((-0.002, 0, 0.004))
-    b.box((0.014, 0.011, 0.008), loc=tuple(gallery), rot=(0, -18, 0), mat=mats["gallery"])
+        foot = Vector((SIG_PYLON, y + side * (half_w + 0.010), z - 0.012))
+        bend = Vector((bend_x, y + side * half_w * 0.55, bend_z))
+        b.tube([foot, foot.lerp(bend, 0.5), bend, bend.lerp(head, 0.6) + Vector((0, side * 0.002, 0)), head + Vector((0, side * 0.003, 0))],
+               0.0085, sides=8, mat=steel, radius_fn=lambda t: 0.0092 - 0.0034 * t)
+    b.box((0.017, 0.016, 0.011), loc=tuple(head + Vector((0.001, 0, 0.007))), rot=(0, -12, 0), mat=mats["gallery"])
 
-    def along(t):
-        """A point on the upper shaft, t 0 at the knot's top to 1 under the bend."""
-        pts = shaft[2:5]
-        seg = min(int(t * (len(pts) - 1)), len(pts) - 2)
-        return pts[seg].lerp(pts[seg + 1], t * (len(pts) - 1) - seg)
+    def anchor(t):
+        """A point on the pylon's upper part, t 0 at the bend to 1 under the head, between the two columns."""
+        return Vector((bend_x, y, bend_z)).lerp(head, t) - Vector((0, 0, 0.02 * (1 - t)))
 
     for side in (-1, 1):
         ys = y + side * (half_w - 0.003)
-        for k in range(11):
-            top = along(0.08 + 0.9 * k / 10)
-            foot = Vector((SIG_PYLON - 0.025 - 0.205 * (k + 1) / 11, ys, z + 0.004))
-            b.tube([Vector((top.x, ys * 0.15 + y * 0.85, top.z)), foot], 0.00065, sides=3, mat=cable, cap=False)
-        for k in range(6):
-            top = along(0.25 + 0.75 * k / 5)
-            foot = Vector((SIG_PYLON + 0.05 + 0.045 * (k + 1) / 6, ys, z + 0.004))
-            b.tube([Vector((top.x, ys * 0.15 + y * 0.85, top.z)), foot], 0.00065, sides=3, mat=cable, cap=False)
+        for k in range(15):
+            top = anchor(0.05 + 0.9 * k / 14)
+            foot = Vector((SIG_PYLON - 0.02 - 0.215 * (k + 1) / 15, ys, z + 0.004))
+            b.tube([Vector((top.x, y + side * 0.004, top.z)), foot], 0.0006, sides=3, mat=cable, cap=False)
+        for k in range(4):
+            top = anchor(0.3 + 0.6 * k / 3)
+            foot = Vector((bend_x + 0.022 + 0.016 * k, ys, z + 0.004))
+            b.tube([Vector((top.x, y + side * 0.004, top.z)), foot], 0.0007, sides=3, mat=cable, cap=False)
 
 
 def facing_quad(b, x, y, z0, z1, width, mat):
@@ -1287,6 +1299,36 @@ def far_ridge(b, mats, az_from=0.0, az_to=70.0, mat="ridge", phase=1.0):
     return b._wrap(before, None, mats[mat])
 
 
+def sunset_fog(b, mats):
+    """The fog the sun is setting into: a low bank on San Francisco's far horizon, just behind its far ridge, lumpy along
+    its top and rounded over, warm in the last light; it peeks over the hills, it does not lie on them."""
+    bm = b.bm
+    before = set(bm.faces)
+    n = 30
+    rows = []
+    for i in range(n + 1):
+        az = math.radians(112 + 66 * i / n)
+        d = Vector((math.cos(az), math.sin(az), 0.0))
+        r = dome_radius(Vector((d.x, d.y, 0.03)).normalized()) * 0.975
+        lump = 0.5 + 0.3 * math.sin(i * 0.8 + 0.4) + 0.2 * math.sin(i * 2.1)
+        top = WATER_Z + 0.045 + 0.05 * lump * (0.35 + 0.65 * i / n)
+        ring = []
+        for frac, lift in ((1.0, WATER_Z - 0.01), (0.996, None), (0.985, None)):
+            z = lift if lift is not None else (top if frac == 0.996 else top - 0.012)
+            p = DOME_CENTRE + d * (r * frac)
+            ring.append(bm.verts.new((p.x, p.y, z)))
+        rows.append(ring)
+    for a, c in zip(rows, rows[1:]):
+        for j in range(2):
+            bm.faces.new((a[j], c[j], c[j + 1], a[j + 1]))
+    faces = [f for f in bm.faces if f not in before]
+    for f in faces:
+        f.normal_update()
+        if f.normal.dot(DOME_CENTRE - f.calc_center_median()) < 0:
+            f.normal_flip()
+    return b._wrap(before, None, mats["fog"])
+
+
 # ---- lights ----
 
 def build_lights():
@@ -1315,13 +1357,17 @@ def build_lights():
         obj.hide_render = True
         return obj
 
-    # The sun and the sky's fill shine straight down: every bake so far was lit so (their aims never reached the lights
-    # until place_in_room updated the scene first), and that is the light Delhi is liked in.
-    add("sun", "SUN", (0.0, 0.8, 3.0), (1.0, 0.92, 0.80), 2.6, "day", aim=(0.0, 0.8, 0.0), size=2.0)
-    add("sky_fill", "SUN", (2.0, 0.6, 3.0), (0.55, 0.68, 0.95), 0.6, "day", aim=(2.0, 0.6, 0.0), size=30.0)
-    # San Francisco's own late sun: low and warm from the front left, raking across the Painted Ladies and the hills.
-    sf_sun = add("sun_sf", "SUN", (-0.6, -0.4, 1.7), (1.0, 0.86, 0.68), 0.8, "day", aim=(1.0, 1.2, WATER_Z), size=3.0)
-    sf_sun["window_receivers"] = "sf"
+    # A soft light from straight above for both, lower than the full sun every bake had before (their aims never reached
+    # the lights until place_in_room updated the scene first): it keeps both cities lit at dusk and at dawn.
+    add("sun", "SUN", (0.0, 0.8, 3.0), (1.0, 0.94, 0.86), 1.5, "day", aim=(0.0, 0.8, 0.0), size=2.0)
+    add("sky_fill", "SUN", (2.0, 0.6, 3.0), (0.62, 0.66, 0.85), 0.5, "day", aim=(2.0, 0.6, 0.0), size=30.0)
+    # Each city's own light: San Francisco's sun low and amber from the front left, setting, with a rose sky; Delhi's
+    # low and pale gold from the front right, rising.
+    for name, loc, aim, color, energy, side, size in (
+            ("sun_sf", (-0.9, 0.6, 1.25), (1.0, 1.3, WATER_Z), (1.0, 0.62, 0.44), 1.7, "sf", 3.0),
+            ("sky_sf", (0.4, -0.6, 3.0), (0.7, 1.4, WATER_Z), (0.86, 0.56, 0.62), 0.45, "sf", 25.0),
+            ("sun_delhi", (3.6, 0.6, 1.25), (1.6, 1.3, WATER_Z), (1.0, 0.84, 0.58), 1.3, "delhi", 3.0)):
+        add(name, "SUN", loc, color, energy, "day", aim=aim, size=size)["window_receivers"] = side
     add("moon", "SUN", (2.5, 0.8, 3.0), (0.55, 0.65, 1.0), 0.12, "night", aim=(0.8, 1.5, WATER_Z), size=3.0)
     for name, target, color, energy, offset in (
             ("india_gate", INDIA_GATE, (1.0, 0.68, 0.35), 2.2, (-0.10, -0.12, 0.02)),
@@ -1391,6 +1437,10 @@ def build_window_view(framings):
     far_ridge(sf_ridge, mats, 112.0, 180.0, "ridge_sf", phase=2.4)
     parts.add("ridge", sf_ridge, texel=0.25, side="sf")
 
+    fog = pl.Builder("fog")
+    sunset_fog(fog, mats)
+    parts.add("fog", fog, texel=0.35, side="sf", smooth=True)
+
     bridge = pl.Builder("bridge")
     golden_gate(bridge, mats)
     parts.add("bridge", bridge, texel=2.2, side="sf")
@@ -1430,7 +1480,7 @@ def build_window_view(framings):
     objs = parts.build() + [build_sky()]
     check_hidden(objs)
     build_lights()
-    light_sf_only(objs)
+    light_each_city(objs)
     place_in_room(objs)
     build_sky_markers(framings)
     set_night(0.0)
