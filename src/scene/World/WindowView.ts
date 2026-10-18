@@ -10,7 +10,8 @@ import trailFrag from '../shaders/window_trail.frag.glsl?raw';
 import trailVert from '../shaders/window_trail.vert.glsl?raw';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import { CITIES, type CityId } from './daylight';
-import { loadHand, seedOf, writeHand } from './handwriting';
+import stampFont from '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2?url';
+import { seeded, seedOf } from './handwriting';
 import { BLEND_HALF_WIDTH_M, completeDome, horizons, skyColour, type SkyFrame } from './sky';
 import type { WindowMotifNode, WindowSkyNode, WindowViewNode } from './nodes';
 import type { TextureStore } from './textures';
@@ -219,9 +220,29 @@ const MOTIF_PX = 2048;
 // Dark slate, as pencil marks read against a day sky, with a faint pale halo where the sky is deep blue.
 const INK = '#1f2b3a';
 const HALO = 'rgba(255, 255, 255, 0.4)';
-// The names sit under the arc's ends: their box's centre below each end and its half-size (fractions of the width).
-const LABEL_DROP = 0.17;
-const LABEL_HALF = [0.12, 0.02] as const;
+// Under each end of the arc, a passport stamp in its own ink (owner): a double ring with the city and its airport round
+// it and a plane in the middle, leaving Delhi and landing in San Francisco, turned a little and unevenly inked. Its
+// centre lies STAMP_DROP of the motif's height below the end, its radius STAMP_RADIUS of its width.
+const STAMP_DROP = 0.2;
+const STAMP_RADIUS = 0.046;
+const STAMPS: Record<CityId, { ring: string; ink: string; turn: number; departs: boolean }> = {
+  delhi: { ring: 'NEW DELHI · DEL · ', ink: '#1f5c45', turn: -0.16, departs: true },
+  sf: { ring: 'SAN FRANCISCO · SFO · ', ink: '#3a3a8c', turn: 0.12, departs: false },
+};
+const STAMP_FAMILY = 'Room Stamp';
+let stampFontLoading: Promise<void> | null = null;
+
+/** Loads IBM Plex Mono SemiBold once for the stamps; on failure they are set in the browser's monospace. */
+function loadStampFont() {
+  stampFontLoading ??= (async () => {
+    try {
+      document.fonts.add(await new FontFace(STAMP_FAMILY, `url(${stampFont}) format("woff2")`).load());
+    } catch (error) {
+      console.warn('room: the stamp font did not load; setting the stamps in monospace', error);
+    }
+  })();
+  return stampFontLoading;
+}
 
 // The flight: the plane takes off a little past New Delhi's ring and lands short of San Francisco's (ROUTE), crossing in
 // FLIGHT_S at an even pace that eases at both ends, fading in and out over FADE of the time; then GROUND_S off the arc
@@ -235,7 +256,7 @@ const PARKED_AT = 0.62;
 // The plane: an airliner LENGTH_M long for the room's 1.24 m motif (the round-8 silhouette was 0.041 m), standing
 // LIFT_M in front of the arc; it turns from heading a little toward the room to a little away (YAW_DEG) and banks into
 // that turn (BANK_DEG at mid-route).
-export const PLANE_LENGTH_M = 0.086;
+export const PLANE_LENGTH_M = 0.11;
 const MOTIF_WIDTH_M = 1.24;
 const LIFT_M = 0.02;
 const YAW_DEG = 16;
@@ -246,7 +267,7 @@ const LIVERY = { white: '#f3f1ec', belly: '#d6d8db', red: '#b3222c', wing: '#c5c
 const SUN = new THREE.Vector3(-0.45, 0.85, 0.35).normalize();
 // The trail: TRAIL_ROUTE of the route long, TRAIL_WIDTH_M wide at the plane and at its end, at TRAIL_OPACITY.
 const TRAIL_ROUTE = 0.24;
-const TRAIL_WIDTH_M = [0.0014, 0.0042] as const;
+const TRAIL_WIDTH_M = [0.0016, 0.0048] as const;
 const TRAIL_OPACITY = 0.5;
 const TRAIL_LIFT_M = 0.0015;
 
@@ -256,7 +277,7 @@ function arcPoint(s: number, w: number, h: number): [number, number] {
   return [(u * u * a[0] + 2 * u * s * b[0] + s * s * c[0]) * w, (u * u * a[1] + 2 * u * s * b[1] + s * s * c[1]) * h];
 }
 
-/** The arc on the motif's plane (metres, +y up) by route fraction, and the boxes of the two names under its ends. */
+/** The arc on the motif's plane (metres, +y up) by route fraction, and the circles of the two stamps under its ends. */
 export function flightPath(width: number, height: number) {
   const at = (s: number) => {
     const [x, y] = arcPoint(s, 1, 1);
@@ -275,13 +296,8 @@ export function flightPath(width: number, height: number) {
   };
   const point = (u: number) => at(curveAt(u));
   const heading = (u: number) => at(Math.min(curveAt(u) + 1e-3, 1)).sub(at(Math.max(curveAt(u) - 1e-3, 0))).normalize();
-  const labels = [0, 1].map((s) => {
-    const end = at(s);
-    const centre = new THREE.Vector2(end.x, end.y - LABEL_DROP * height);
-    const half = new THREE.Vector2(LABEL_HALF[0] * width, LABEL_HALF[1] * width);
-    return new THREE.Box2(centre.clone().sub(half), centre.clone().add(half));
-  });
-  return { length: total, point, heading, labels };
+  const stamps = [0, 1].map((s) => ({ centre: at(s).sub(new THREE.Vector2(0, STAMP_DROP * height)), radius: STAMP_RADIUS * width }));
+  return { length: total, point, heading, stamps };
 }
 
 /** Where the plane is along the route `k` of the way through its flight time: even in the middle, easing at the ends. */
@@ -473,6 +489,73 @@ function trailRibbon(path: ReturnType<typeof flightPath>) {
   return geometry;
 }
 
+/** A passport stamp of radius `r` px centred at (x, y): the double ring, the ring's text, a plane, the worn ink. */
+function drawStamp(ctx: CanvasRenderingContext2D, stamp: (typeof STAMPS)[CityId], x: number, y: number, r: number) {
+  const random = seeded(seedOf(stamp.ring));
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(stamp.turn);
+  ctx.shadowColor = 'transparent';
+  ctx.globalAlpha = 0.88;
+  ctx.strokeStyle = ctx.fillStyle = stamp.ink;
+  for (const [radius, width] of [[0.94, 0.075], [0.6, 0.03]] as const) {
+    ctx.lineWidth = r * width;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // The ring's letters, upright to the ring, evenly round it, starting at the top left.
+  ctx.font = `${Math.round(r * 0.21)}px "${STAMP_FAMILY}", ui-monospace, monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const letters = [...stamp.ring];
+  letters.forEach((letter, i) => {
+    const a = -Math.PI / 2 - Math.PI * 0.62 + (2 * Math.PI * i) / letters.length;
+    ctx.save();
+    ctx.rotate(a + Math.PI / 2);
+    ctx.fillText(letter, 0, -r * 0.775);
+    ctx.restore();
+  });
+  // The plane in the middle, climbing out of Delhi, descending into San Francisco, over a short runway.
+  ctx.save();
+  ctx.translate(0, -r * 0.04);
+  ctx.rotate(stamp.departs ? -0.45 : 0.45);
+  const s = r * 0.0068;
+  ctx.beginPath();
+  ctx.moveTo(40 * s, 0);
+  ctx.quadraticCurveTo(38 * s, -4.5 * s, 30 * s, -4.5 * s);
+  for (const [px, py] of [[6, -4.5], [-6, -30], [-14, -30], [-7, -4.5], [-27, -4.5], [-33, -15], [-38, -15], [-35, -3], [-38, 0]])
+    ctx.lineTo(px * s, py * s);
+  for (const [px, py] of [[-35, 3], [-38, 15], [-33, 15], [-27, 4.5], [-7, 4.5], [-14, 30], [-6, 30], [6, 4.5], [30, 4.5]])
+    ctx.lineTo(px * s, py * s);
+  ctx.quadraticCurveTo(38 * s, 4.5 * s, 40 * s, 0);
+  ctx.fill();
+  ctx.restore();
+  ctx.lineWidth = r * 0.035;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.3, r * 0.34);
+  ctx.lineTo(r * 0.3, r * 0.34);
+  ctx.stroke();
+  // Worn ink: specks and a few thin breaks where the stamp did not take.
+  ctx.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 260; i++) {
+    const [a, d] = [random() * Math.PI * 2, Math.sqrt(random()) * r];
+    ctx.globalAlpha = 0.35 + 0.65 * random();
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * d, Math.sin(a) * d, r * (0.006 + 0.02 * random() ** 3), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 0.8;
+  ctx.lineWidth = r * 0.03;
+  for (let i = 0; i < 4; i++) {
+    const a = random() * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * (0.62 + 0.32 * random()), a, a + 0.12 + 0.25 * random());
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 class Motif {
   private readonly arc: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private readonly plane: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
@@ -536,7 +619,7 @@ class Motif {
   }
 
   async draw() {
-    await loadHand();
+    await loadStampFont();
     const arc = document.createElement('canvas');
     arc.width = MOTIF_PX;
     arc.height = this.canvasH;
@@ -572,8 +655,7 @@ class Motif {
       }
     }
     ctx.globalAlpha = 1;
-    const names: [string, number][] = [[CITIES.delhi.name, 0], [CITIES.sf.name, 1]];
-    for (const [name, s] of names) {
+    for (const [city, s] of [['delhi', 0], ['sf', 1]] as const) {
       const [x, y] = arcPoint(s, w, h);
       ctx.lineWidth = w * 0.0017;
       ctx.beginPath();
@@ -582,17 +664,7 @@ class Motif {
       ctx.beginPath();
       ctx.arc(x, y, w * 0.0017, 0, Math.PI * 2);
       ctx.fill();
-      writeHand(ctx, name, x, y + h * LABEL_DROP, {
-        size: w * 0.033,
-        slant: 0.06,
-        turn: s === 0 ? -0.025 : 0.02,
-        colour: INK,
-        weight: 0.045,
-        maxWidth: w * LABEL_HALF[0] * 2,
-        maxLines: 1,
-        lineHeight: 1.1,
-        seed: seedOf(name),
-      });
+      drawStamp(ctx, STAMPS[city], x, y + h * STAMP_DROP, w * STAMP_RADIUS);
     }
     this.arc.material.map = canvasTexture(arc);
     this.arc.material.opacity = 1;

@@ -8,15 +8,16 @@ const HEIGHT = 0.48;
 
 describe('the plane over the window', () => {
   /**
-   * Catches a name moved up under the arc (LABEL_DROP 0.07 instead of 0.17 puts New Delhi under the take-off), or a
-   * plane or flight changed until it covers a name: the plane's footprint (a circle 0.6 of its length across its
-   * centre, which holds it at any heading) stays off both names' boxes all along the flight.
+   * Catches a stamp moved up under the arc (STAMP_DROP 0.1 instead of 0.2 puts New Delhi's under the take-off), or a
+   * plane or flight changed until it covers a stamp: the plane's footprint (a circle 0.6 of its length across its
+   * centre, which holds it at any heading) stays off both stamps all along the flight.
    */
-  it('stays clear of both names all along its flight', () => {
+  it('stays clear of both stamps all along its flight', () => {
     const path = flightPath(WIDTH, HEIGHT);
     for (let k = 0; k <= 1; k += 0.002) {
       const at = path.point(routeAt(k));
-      for (const box of path.labels) expect(box.distanceToPoint(at), `k ${k.toFixed(3)}`).toBeGreaterThan(0.6 * PLANE_LENGTH_M);
+      for (const stamp of path.stamps)
+        expect(at.distanceTo(stamp.centre) - stamp.radius, `k ${k.toFixed(3)}`).toBeGreaterThan(0.6 * PLANE_LENGTH_M);
     }
   });
 
