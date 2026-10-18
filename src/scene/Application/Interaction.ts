@@ -16,6 +16,8 @@ export interface InteractionHandlers {
   canHover(): boolean;
   /** Whether this click ends a drag of the view, which must not also click what is under it. */
   endedDrag(): boolean;
+  /** Whether this object's card is showing: its hover label then stays quiet (the card names it). */
+  carded(hotspot: Hotspot): boolean;
 }
 
 // A pointer that only crosses the monitor on its way somewhere should not pull the camera in.
@@ -122,9 +124,9 @@ export class Interaction {
     if (hit !== this.hovered) {
       this.hovered = hit;
       this.stage.style.cursor = hit ? 'pointer' : '';
-      this.label.hidden = !hit;
       if (hit) this.label.textContent = hit.label;
     }
+    this.label.hidden = !hit || this.handlers.carded(hit);
     if (hit) this.label.style.transform = `translate(${this.clientPointer.x + 16}px, ${this.clientPointer.y + 12}px)`;
   }
 

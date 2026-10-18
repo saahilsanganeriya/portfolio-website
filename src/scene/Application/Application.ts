@@ -381,6 +381,7 @@ export class Application implements RoomHandle {
       },
       canHover: () => this.started && this.camera.destination !== 'monitor' && !this.handedOver,
       endedDrag: () => this.navigation.endedDrag(),
+      carded: (hotspot) => this.focus?.hotspot === hotspot && this.card() !== null,
     });
     this.resize();
     this.observe();
