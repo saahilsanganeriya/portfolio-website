@@ -13,7 +13,8 @@ const overlaps = (a: DOMRect, b: ScreenRect) => a.left < b.right && a.right > b.
 
 /**
  * The corner label: the clock (it changes once a minute, on the minute, and is never announced), hidden while the
- * camera is at the monitor or the glass lies under it, with the way back shown at the monitor instead.
+ * camera is at the monitor or the glass lies under it, with the way back shown at the monitor instead. Home, beside
+ * the tour's button, appears with it.
  */
 export function mountHud(hud: HTMLElement, back: HTMLButtonElement, room: RoomHandle, stage: HTMLElement) {
   const time = hud.querySelector<HTMLTimeElement>('[data-room-hud-time]')!;
@@ -39,6 +40,13 @@ export function mountHud(hud: HTMLElement, back: HTMLButtonElement, room: RoomHa
     back.hidden = true;
     stage.focus({ preventScroll: true });
   });
+
+  // Focus stays on Home: a keyboard visitor can press it again, or Tab on to the tour.
+  const home = stage.querySelector<HTMLButtonElement>('[data-room-home]');
+  if (home) {
+    home.hidden = false;
+    home.addEventListener('click', () => room.home());
+  }
 
   return () => {
     clearTimeout(tick);

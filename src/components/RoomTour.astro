@@ -4,18 +4,29 @@
 // tour", one slow glide through the room during which the map shrinks to a small inset and each stop's caption fades
 // in and out. Never the default: the button waits in the bottom-left corner, away from the monitor, drawn like the
 // Sound control across the room. Its glyph is the corner set seen from above, the two walls and the map's red
-// you-are-here dot, which breathes twice when the button first appears. Behaviour is in RoomTourMap.ts.
+// you-are-here dot, which breathes twice when the button first appears. Behaviour is in RoomTourMap.ts. Beside it,
+// Home: the way back to the wide view every visit starts from, for a visitor who has turned the set somewhere strange
+// (its key, H, in the same second field as the tour's length). RoomHud.ts wires it.
 ---
 
-<button type="button" class="room-tour-open" aria-expanded="false" aria-controls="room-tour" data-room-ui data-tour-open hidden>
-  <svg class="room-tour-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-    <path class="room-tour-glyph-plan" d="M2.5 14V2.5H14"></path>
-    <path class="room-tour-glyph-floor" d="M2.5 14H14V2.5"></path>
-    <circle class="room-tour-glyph-here" cx="9.4" cy="9.4" r="1.5"></circle>
-  </svg>
-  <span>Take the tour</span>
-  <span class="room-tour-length" aria-hidden="true">1 min</span>
-</button>
+<div class="room-ways">
+  <button type="button" class="room-tour-open" aria-expanded="false" aria-controls="room-tour" data-room-ui data-tour-open hidden>
+    <svg class="room-tour-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path class="room-tour-glyph-plan" d="M2.5 14V2.5H14"></path>
+      <path class="room-tour-glyph-floor" d="M2.5 14H14V2.5"></path>
+      <circle class="room-tour-glyph-here" cx="9.4" cy="9.4" r="1.5"></circle>
+    </svg>
+    <span>Take the tour</span>
+    <span class="room-tour-length" aria-hidden="true">1 min</span>
+  </button>
+  <button type="button" class="room-home" aria-keyshortcuts="H" data-room-ui data-room-home hidden>
+    <svg class="room-home-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2 8.4 8 2.8l6 5.6M4 7v6.5h8V7"></path>
+    </svg>
+    <span class="room-home-label">Home</span>
+    <kbd class="room-tour-length" aria-hidden="true">H</kbd>
+  </button>
+</div>
 
 <section id="room-tour" class="room-tour" aria-labelledby="room-tour-title" data-room-ui data-tour hidden>
   <header class="room-tour-head">
@@ -44,7 +55,7 @@
 </section>
 
 <style>
-  .room-tour-open,
+  .room-ways,
   .room-tour {
     position: absolute;
     left: var(--space-3);
@@ -54,12 +65,24 @@
     color: var(--paper);
   }
 
+  /* The two ways on, side by side in the bottom-left corner; the row itself never takes the pointer. */
+  .room-ways {
+    bottom: var(--space-3);
+    display: flex;
+    gap: var(--space-2);
+    pointer-events: none;
+  }
+
   /* Shown once the camera has landed at the desk and the floor plan has loaded; never over SaahilOS on a phone. Its
      box matches the Sound control's; under the pointer or the keyboard it warms to walnut, and open it inverts, as a
-     pressed room control does. */
-  .room-tour-open {
-    bottom: var(--space-3);
+     pressed room control does. Home is drawn the same way. */
+  .room-tour-open,
+  .room-home {
     display: none;
+    pointer-events: auto;
+    font: inherit;
+    line-height: normal;
+    color: inherit;
     align-items: center;
     gap: 0.5rem;
     padding: 0.3rem 0.4rem 0.3rem 0.55rem;
@@ -86,8 +109,41 @@
     transition: color 0.2s ease;
   }
 
-  :global(html.room.room-landed:not(.room-os)) .room-tour-open:not([hidden]) {
+  :global(html.room.room-landed:not(.room-os)) .room-tour-open:not([hidden]),
+  :global(html.room.room-landed:not(.room-os)) .room-home:not([hidden]) {
     display: inline-flex;
+  }
+
+  /* A house in the tour glyph's line: the roof and the walls, square-ended. */
+  .room-home-glyph {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+  }
+
+  /* On a phone there is no H key, and the corner is shared with the Sound controls: the house alone says Home. */
+  @media (max-width: 767.98px), (pointer: coarse) {
+    .room-home {
+      padding-right: 0.55rem;
+    }
+
+    .room-home .room-home-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .room-home kbd {
+      display: none;
+    }
   }
 
   .room-tour-glyph {
@@ -134,18 +190,23 @@
   }
 
   .room-tour-open:hover,
-  .room-tour-open:focus-visible {
+  .room-tour-open:focus-visible,
+  .room-home:hover,
+  .room-home:focus-visible {
     border-color: var(--paper);
     background: var(--walnut);
   }
 
-  .room-tour-open:focus-visible {
+  .room-tour-open:focus-visible,
+  .room-home:focus-visible {
     outline: 2px solid var(--paper);
     outline-offset: 2px;
   }
 
   .room-tour-open:hover .room-tour-length,
-  .room-tour-open:focus-visible .room-tour-length {
+  .room-tour-open:focus-visible .room-tour-length,
+  .room-home:hover .room-tour-length,
+  .room-home:focus-visible .room-tour-length {
     color: var(--paper);
   }
 
@@ -171,6 +232,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .room-tour-open,
+    .room-home,
     .room-tour-length,
     .room-tour-glyph-here {
       transition: none;

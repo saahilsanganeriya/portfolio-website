@@ -1,3 +1,4 @@
+import { HOME_EVENT } from '../scene/Camera/events';
 import type { RoomHandle, StationName } from '../scene/main';
 import tour from '../scene/tour.json';
 
@@ -348,6 +349,17 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   };
   open.addEventListener('click', () => setOpen(open.getAttribute('aria-expanded') !== 'true'));
   q<HTMLButtonElement>('[data-tour-close]').addEventListener('click', () => setOpen(false));
+  // Home: the visit starts over from the wide view, so the map closes and a played tour ends (Home has already taken
+  // the camera off the glide). Focus moves only if it was inside the map.
+  document.addEventListener(HOME_EVENT, () => {
+    if (panel.hidden) return;
+    const hadFocus = panel.contains(document.activeElement);
+    stopPlaying();
+    panel.hidden = true;
+    open.setAttribute('aria-expanded', 'false');
+    cancelAnimationFrame(frame);
+    if (hadFocus) open.focus();
+  });
 
   // Arrow keys move between the stops (Tab does too); the room must not also take them as a step.
   list.addEventListener('keydown', (event) => {
