@@ -31,6 +31,18 @@ describe('the quality controller', () => {
     expect(quality.index).toBeGreaterThan(0);
   });
 
+  /**
+   * Catches the slowest desktop tier with nowhere left to go: on the 2020-laptop profile round 9's wide view held
+   * 30 fps at 0.6 device pixels per CSS pixel (the bottom tier then) at load 10-19, where round 8's held 60 (T9H).
+   */
+  it('steps a room at 0.6 device pixels per CSS pixel that drops to 30 fps down to 0.4', () => {
+    const quality = new Quality(FULL, () => {});
+    quality.index = FULL.tiers.findIndex((tier) => tier.resolution * FULL.dprCap === 0.6);
+    let now = 1000;
+    for (let i = 0; i < 60; i++) quality.sample((now += 33.3), 33.3);
+    expect(quality.tier.resolution * FULL.dprCap).toBeCloseTo(0.4);
+  });
+
   /** Catches a one-off stall (a shader compile) costing a tier. */
   it('ignores a single long frame among fast ones', () => {
     const quality = new Quality(FULL, () => {});
@@ -94,6 +106,16 @@ describe('the calibration before the arrival', () => {
     expect(tier).toBeGreaterThan(0);
     const picked = FULL.tiers[tier];
     expect(100 * picked.resolution ** 2 * (picked.msaa ? 1 : 0.25)).toBeLessThanOrEqual(40);
+  });
+
+  /**
+   * Catches a software renderer's arrival starting at a tier the room after it cannot hold: SwiftShader's top-tier
+   * frame takes ~350 ms (T82), and at 0.6 device pixels per CSS pixel round 9's wide view ran at 30 fps (T9H); it
+   * starts at 0.4, so the ladder never has to step down after the room is shown.
+   */
+  it('starts a software-rendered machine (350 ms top-tier frames) at 0.4 device pixels per CSS pixel', async () => {
+    const { tier } = await calibrate(350);
+    expect(FULL.tiers[tier].resolution * FULL.dprCap).toBeCloseTo(0.4);
   });
 
   /** Catches a pinned tier (screenshots, captures) being moved by the calibration. */
