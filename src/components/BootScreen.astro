@@ -73,7 +73,6 @@
     /* The room's Sound and Pause controls sit over the bottom edge; the footer's lines stay above them. */
     padding-bottom: max(clamp(1.5rem, 5vw, 3.5rem), calc(var(--space-3) + 3rem));
     animation: gate-weave 0.5s steps(1) infinite;
-    will-change: transform;
   }
 
   /* Film gate weave: the frame never sits quite still in the projector. Only here, never over reading text. */
@@ -165,8 +164,7 @@
     text-align: right;
   }
 
-  .boot-log :global(.state),
-  .boot-log :global(.state-done) {
+  .boot-log :global(.state) {
     color: var(--projector);
   }
 
