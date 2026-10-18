@@ -63,7 +63,9 @@ DARKROOM_PRINTS = [
      (0.735, 0.33, 0.25, -3.0), (0.905, 0.35, 0.27, 2.0)],
 ]
 DARKROOM_HERO = (1, 2)  # (line, print)
-DARKROOM_LIGHT_Z = 2.34
+# Picture lights along the top of the lines, like the posters' and the pennant's (one strip over the middle left the
+# end prints dim): how many, their height, how far off the wall, and each hood's length.
+DARKROOM_LAMPS, DARKROOM_LAMP_Z, DARKROOM_LAMP_OUT, DARKROOM_LAMP_LEN = 5, 2.40, 0.30, 0.22
 
 # The space prints over the desk on the back wall (each built facing -Y, the room) and the Georgia Tech pennant
 # pinned over them: the Voyager record's shadow box and the Pale Blue Dot, side by side, centred over the desk.
@@ -560,7 +562,7 @@ def string_point(line, t):
 
 def build_darkroom(mats):
     """The darkroom lines: three cotton strings on brass screw eyes along the left wall with a wooden peg per print
-    (darkroom_line_<n>, baked), a brass strip light over them (env_darkroom_light) and an empty per peg,
+    (darkroom_line_<n>, baked), brass picture lights over them (env_darkroom_light) and an empty per peg,
     darkroom_clip_<line>_<k>, at the middle of the print's top edge where the peg grips it. Each empty faces the room
     (glTF local +Z out of the wall, +Y up) and carries the print's largest size (maxW_m, maxH_m) and its turn about
     the wall's normal (tiltDeg); the site draws each print hanging below its empty."""
@@ -605,23 +607,25 @@ def build_darkroom(mats):
         obj["texel"] = 1.5
         lines.append(obj)
 
-    # The strip light over the top string: a slim brass bar on two arms, lighting the prints from above.
-    u0 = min(l[0] for l in DARKROOM_LINES) + 0.06
-    u1 = max(l[1] for l in DARKROOM_LINES) - 0.06
-    p = left_wall((u0 + u1) / 2, DARKROOM_LIGHT_Z, 0.12)
+    # The picture lights over the top string, evenly along the lines: a short brass hood on an arm from a wall plate.
+    u0 = min(l[0] for l in DARKROOM_LINES)
+    u1 = max(l[1] for l in DARKROOM_LINES)
+    lamps = [left_wall(u0 + (u1 - u0) * (k + 0.5) / DARKROOM_LAMPS, DARKROOM_LAMP_Z, DARKROOM_LAMP_OUT)
+             for k in range(DARKROOM_LAMPS)]
     bm = bmesh.new()
-    add_cylinder(bm, 0.018, u1 - u0, p, segments=20, axis="Y")
-    add_box(bm, (0.012, u1 - u0 - 0.02, 0.012), p + Vector((-0.01, 0, -0.022)))
-    for du in (-(u1 - u0) * 0.3, (u1 - u0) * 0.3):
-        add_box(bm, (0.12, 0.012, 0.012), Vector((X_LEFT + 0.06, p.y + du, p.z + 0.03)), bevel=0.003)
-        add_cylinder(bm, 0.03, 0.012, Vector((X_LEFT + 0.006, p.y + du, p.z + 0.03)), segments=24, axis="X")
+    for p in lamps:
+        add_cylinder(bm, 0.016, DARKROOM_LAMP_LEN, p, segments=20, axis="Y")
+        add_box(bm, (0.010, DARKROOM_LAMP_LEN - 0.02, 0.010), p + Vector((-0.009, 0, -0.019)))
+        add_box(bm, (DARKROOM_LAMP_OUT, 0.010, 0.010), Vector((X_LEFT + DARKROOM_LAMP_OUT / 2, p.y, p.z + 0.026)),
+                bevel=0.003)
+        add_cylinder(bm, 0.024, 0.010, Vector((X_LEFT + 0.005, p.y, p.z + 0.026)), segments=24, axis="X")
     light = new_object("env_darkroom_light", bm, "env", "art", [brass])
     smooth_by_angle(light, 50)
 
     bpy.context.view_layer.update()
     lo = Vector((X_LEFT, min(l[0] for l in DARKROOM_LINES) - 0.08, 0.86))
     hi = Vector((X_LEFT + 0.12, max(l[1] for l in DARKROOM_LINES) + 0.08, max(l[2] for l in DARKROOM_LINES) + 0.03))
-    return {"darkroom_lines": lines, "darkroom_clips": clips, "darkroom_light": p, "darkroom_light_len": u1 - u0,
+    return {"darkroom_lines": lines, "darkroom_clips": clips, "darkroom_lamps": lamps, "darkroom_span": (u0, u1),
             "darkroom_bounds": (lo, hi)}
 
 

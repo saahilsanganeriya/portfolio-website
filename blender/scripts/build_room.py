@@ -1259,6 +1259,21 @@ def build_lights(mats):
     lights.objects.link(obj)
 
 
+# The darkroom lines' lights (room_dressing places the fixtures): each picture light's watts and how far below it it
+# aims on the wall; the fill's watts, height, distance from the wall and aim height. Measured from cam_photos the way
+# the site lights a print (the wall's bake there over the bake under the lamps): every print at 0.82-0.96, where round
+# eight's one strip gave 0.28-0.87, and the brightest point as bright as round eight's.
+DARKROOM_LAMP_W, DARKROOM_AIM_DROP = 3.0, 1.6
+DARKROOM_FILL_W, DARKROOM_FILL_Z, DARKROOM_FILL_OUT, DARKROOM_FILL_AIM_Z = 4.8, 0.95, 0.55, 1.4
+DARKROOM_FILL_EXTRA, DARKROOM_FILL_SPREAD = 0.6, 120
+
+
+def along_wall(aim: Vector):
+    """An area light's rotation that aims it along `aim` with its long side (local X) along the left wall: tracking
+    with local X as the up axis stood round eight's strip on end, so it lit a narrow upright band of the prints."""
+    return aim.normalized().to_track_quat("-Z", "Y")
+
+
 def build_practical_lights(dressing):
     """The lights that come with the room's things, each with its source in view or just out of it."""
     lights = collection("lights")
@@ -1292,11 +1307,17 @@ def build_practical_lights(dressing):
     lo, hi = world_bounds([oven])
     add("oven_glow", "POINT", Vector((hi.x + 0.04, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2)), (1.0, 0.42, 0.12), 2.5,
         size=0.05)
-    # The darkroom lines' brass strip light on the left wall: a long soft warm wash down over the prints.
-    p = dressing["darkroom_light"]
-    aim = Vector((X_LEFT, p.y, p.z - 0.9)) - p
-    add("darkroom_light", "AREA", p + Vector((0.0, 0.0, -0.022)), (1.0, 0.64, 0.36), 16.0,
-        size=(dressing["darkroom_light_len"], 0.05), rot=aim.normalized().to_track_quat("-Z", "X"), spread=120)
+    # The darkroom lines' picture lights on the left wall, each washing down over the prints below it, and a soft
+    # fill from below (the floor's bounce, strengthened) so the lowest string reads like the top one.
+    for k, p in enumerate(dressing["darkroom_lamps"]):
+        aim = Vector((X_LEFT, p.y, p.z - DARKROOM_AIM_DROP)) - p
+        add(f"darkroom_light_{k}", "AREA", p + Vector((0.0, 0.0, -0.02)), (1.0, 0.64, 0.36), DARKROOM_LAMP_W,
+            size=(room_dressing.DARKROOM_LAMP_LEN, 0.04), rot=along_wall(aim), spread=130)
+    u0, u1 = dressing["darkroom_span"]
+    fill = Vector((X_LEFT + DARKROOM_FILL_OUT, (u0 + u1) / 2, DARKROOM_FILL_Z))
+    aim = Vector((X_LEFT, fill.y, DARKROOM_FILL_AIM_Z)) - fill
+    add("darkroom_fill", "AREA", fill, (1.0, 0.80, 0.62), DARKROOM_FILL_W, size=(u1 - u0 + DARKROOM_FILL_EXTRA, 0.30),
+        rot=along_wall(aim), spread=DARKROOM_FILL_SPREAD)
     # Paper lantern between the armchair and the record cabinet: a warm bulb inside the globe, kept below the desk
     # lamp and the CRT so the eye goes to the desk first.
     add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 2.2, size=0.12)
@@ -1471,6 +1492,9 @@ def split_by_faces(obj, keep, name):
     return part
 
 
+CRT_PARTING_Y = -0.0715  # the CRT case's parting groove (props_crt_shell.py: y -0.072), just behind it
+
+
 def split_desk_heroes():
     """The desk view sees the desk's top, the CRT's and the computer's fronts and tops: those faces get the desk
     atlas's density, the rest of each (legs, sides, backs) the props atlas's."""
@@ -1496,9 +1520,6 @@ def split_desk_heroes():
 DESK_TOP_CELL = 0.03
 DESK_TOP_FRAME_PX = 2880
 DESK_TOP_ORBIT_DIST = 4.5
-CRT_PARTING_Y = -0.0715  # the CRT case's parting groove (props_crt_shell.py: y -0.072), just behind it
-
-
 DESK_TOP_TIERS = (("desk_desk_top", 2200.0), ("desk_desk_top_mid", 900.0), ("desk_desk_top_rest", 0.0))
 
 

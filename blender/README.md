@@ -175,7 +175,8 @@ footprints), `stops` (id, label, camera node, position), the `orbit` and the `pr
 
 Each light has a source in the set: the desk lamp (tungsten, about 2700 K, its shadows softened to the shade's mouth),
 daylight through the window (a camera-invisible emissive card behind it and a pane-sized soft area light; both
-cities are by day), the brass picture light over the posters, the darkroom's brass strip light over the strings, the
+cities are by day), the brass picture light over the posters, five small brass picture lights along the darkroom's strings with a soft fill
+from below (each light's long side along the wall), the
 lava lamp's glow on the posters, the kitchen pendant and the light bar under the kitchen shelf, the oven's elements, the
 CRT glass, the brass picture light over the desk wall (the pennant, the Voyager record and the Pale Blue Dot), and the
 paper lantern beside the record cabinet (kept below the desk lamp and the CRT). There is no ceiling
