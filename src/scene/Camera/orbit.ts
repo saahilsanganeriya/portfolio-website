@@ -22,12 +22,15 @@ export interface OrbitLimits {
 export interface OrbitSettings {
   center: THREE.Vector3;
   limits: OrbitLimits;
+  /** The wide view's azimuth about the centre (radians): a coast eases to rest by COAST_EDGE_RAD either side of it. */
+  front?: number;
 }
 
 // A set without an orbit_center empty (the first corner-less room): turn about the floor's middle at desk height.
 const FALLBACK = { heightM: 1, minDist: 3, maxDist: 10, minPolarDeg: 50, maxPolarDeg: 84 };
-// A drag the height of the stage turns the camera this far (OrbitControls' default is a full turn, 2π).
-const TURN_PER_STAGE_HEIGHT = Math.PI * 1.6;
+// A drag the height of the stage turns the camera this far (OrbitControls' default is a full turn, 2π): about 200°, so a
+// drag across a MacBook's stage turns it 300° and the set never spins faster than the hand reads it.
+const TURN_PER_STAGE_HEIGHT = Math.PI * 1.1;
 // The view follows the goal with this time constant: long enough to even out 60 Hz pointer events on a 120 Hz screen,
 // short enough (three frames at 60 fps) that a drag never feels late.
 const FOLLOW_TAU_S = 0.05;
@@ -37,8 +40,11 @@ const INERTIA_TAU_S = 0.35;
 // A coast below this speed stops (about a degree a second), and so does a view this close behind its goal.
 const REST_RAD_S = 0.02;
 // Any real flick on a trackpad or a mouse is faster than this, so this sets the longest coast: 80°, enough to show a
-// side of the set, never enough to spin the visitor round behind the walls.
+// side of the set.
 const MAX_TURN_RAD_S = 4;
+// A coast eases to rest by the side walls' edge, this far either side of the wide view, so a throw never carries the
+// visitor round behind the walls (T98: one flick turned the set 209°). A drag goes on anywhere: the owner's 360°.
+const COAST_EDGE_RAD = THREE.MathUtils.degToRad(95);
 // The speed a drag hands to the inertia: an average over its last few moves, forgotten if the pointer rested.
 const VELOCITY_WINDOW_MS = 80;
 // The radius follows its goal this fast (in log space, so every step in or out takes the same time); the pivot too.
@@ -296,7 +302,20 @@ export class Orbit {
     // The smaller of the two in size, in the pointer's direction (zero when the view lags the other way).
     const speed = (pointer: number, view: number) =>
       Math.sign(pointer) === Math.sign(view) ? Math.sign(pointer) * Math.min(Math.abs(pointer), Math.abs(view), MAX_TURN_RAD_S) : 0;
-    this.velocity = { azimuth: speed(sum.azimuth / span, azimuth), polar: speed(sum.polar / span, polar) };
+    this.velocity = { azimuth: this.toEdge(speed(sum.azimuth / span, azimuth)), polar: speed(sum.polar / span, polar) };
+  }
+
+  /**
+   * The coast's speed held so it comes to rest by the side walls' edge: the goal coasts v·τ in all, so from inside the
+   * edges it is cut to reach the edge and no further; past an edge (a drag took it there) it may only coast back in.
+   */
+  private toEdge(velocity: number) {
+    const { front } = this.settings;
+    if (front === undefined || velocity === 0) return velocity;
+    const turned = wrapAngle(this.azimuthGoal - front);
+    if (Math.abs(turned) > COAST_EDGE_RAD) return Math.sign(velocity) === Math.sign(turned) ? 0 : velocity;
+    const rest = THREE.MathUtils.clamp(turned + velocity * INERTIA_TAU_S, -COAST_EDGE_RAD, COAST_EDGE_RAD);
+    return (rest - turned) / INERTIA_TAU_S;
   }
 
   /** A press on the set: any coast stops where the view is. */

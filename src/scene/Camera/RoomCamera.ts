@@ -141,7 +141,8 @@ export class RoomCamera {
     /** Reduced motion: no inertia, no glides, no sway and no lean (each move lands at once). */
     private readonly still = false,
   ) {
-    this.orbitSettings = readOrbit(nodes.root);
+    const orbit = readOrbit(nodes.root);
+    this.orbitSettings = { ...orbit, front: toSpherical(nodes.framings.idle.position.clone().sub(orbit.center)).azimuth };
     this.framings = nodes.framings;
     this.monitorCenter = nodes.monitor.position.clone();
     this.monitorNormal = new THREE.Vector3(0, 0, 1).applyQuaternion(nodes.monitor.quaternion);
