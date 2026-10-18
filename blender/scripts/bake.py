@@ -77,7 +77,28 @@ def parse_args():
     parser.add_argument("--guide-workers", type=int, default=GUIDE_WORKERS,
                         help="processes for the guide passes (1: in this process)")
     parser.add_argument("--guide-worker", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--gpu", action="store_true", help="Cycles on the GPU: OptiX, else CUDA")
     return parser.parse_args(argv)
+
+
+def use_gpu() -> str:
+    """Point Cycles at the GPU (OptiX, else CUDA); returns the backend. The device choice lives in the user
+    preferences, not the blend, so every process (the guide pool's too) has to make it."""
+    prefs = bpy.context.preferences.addons["cycles"].preferences
+    for backend in ("OPTIX", "CUDA"):
+        try:
+            prefs.compute_device_type = backend
+        except TypeError:
+            continue
+        prefs.get_devices()
+        found = [d for d in prefs.devices if d.type == backend]
+        if found:
+            for d in prefs.devices:
+                d.use = d.type == backend
+            bpy.context.scene.cycles.device = "GPU"
+            print(f"bake: Cycles on {backend}: {', '.join(d.name for d in found)}")
+            return backend
+    raise SystemExit("bake: --gpu asked for, but Cycles finds no OptiX or CUDA device")
 
 
 def atlas_objects(atlas: str) -> list[bpy.types.Object]:
@@ -367,7 +388,8 @@ def pooled_guide_passes(objs, size, margin, positions: bool, workers: int, tag: 
     for k, names in enumerate(runs):
         spec = work / f"{tag}_{k}.json"
         spec.write_text(json.dumps({"objects": names, "size": size, "margin": margin, "positions": positions,
-                                    "threads": threads, "out": str(work / f"{tag}_{k}")}))
+                                    "threads": threads, "gpu": bpy.context.scene.cycles.device == "GPU",
+                                    "out": str(work / f"{tag}_{k}")}))
         log = open(work / f"{tag}_{k}.log", "w")
         procs.append((subprocess.Popen([bpy.app.binary_path, "-b", str(copy), "-t", str(threads), "--python-exit-code",
                                         "1", "-P", __file__, "--", "--guide-worker", str(spec)],
@@ -398,6 +420,8 @@ def guide_worker(spec_path: str):
     spec = json.loads(Path(spec_path).read_text())
     scene = bpy.context.scene
     scene.render.threads_mode, scene.render.threads = "FIXED", spec["threads"]
+    if spec.get("gpu"):
+        use_gpu()
     objs = [bpy.data.objects[n] for n in spec["objects"]]
     for key, px in guide_passes(objs, spec["size"], spec["margin"], spec["positions"]).items():
         np.save(f"{spec['out']}_{key}.npy", px)
@@ -660,6 +684,8 @@ def main():
     scene.cycles.device = "CPU"
     scene.render.threads_mode = "FIXED"
     scene.render.threads = min(args.threads, MAX_THREADS)
+    if args.gpu:
+        use_gpu()
     atlases = args.atlas.split(",")
     room = [a for a in atlases if not a.startswith("window_")]
     view = [a for a in atlases if a.startswith("window_")]
