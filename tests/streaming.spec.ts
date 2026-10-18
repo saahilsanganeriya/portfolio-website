@@ -97,7 +97,9 @@ test('an image atlas is fetched with the room and is on screen from the first fr
 
 /**
  * Catches a first-frame atlas coming back after the full one streamed in: a material that copies its texture from one
- * the scene no longer draws (the swaying plants' did, every frame) puts the 1024 px atlas back on screen and on the GPU.
+ * the scene no longer draws (the swaying plants' did, every frame), or that took it before the full set landed and
+ * never looked again (the darkroom prints' wall light, once the full set arrived before the prints were hung), puts the
+ * 1024 px atlas back on screen and on the GPU.
  */
 test('once the shipped atlases have streamed, nothing in the room draws a first-frame atlas', async ({ page }) => {
   const shipped = JSON.parse(readFileSync('public/room/atlases.json', 'utf8')) as { name: string; low: { px: number }; full?: { px: number } }[];

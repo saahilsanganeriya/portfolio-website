@@ -15,7 +15,8 @@ export interface QualityTier {
   shine: boolean;
   /**
    * Anisotropic taps on every texture (or the GPU's maximum, if lower): the floor and the desk top are seen at grazing
-   * angles. The top two tiers only: a machine below them is short of time, and a software GPU pays for the taps.
+   * angles. The top two tiers only: a machine below them is short of time, and a software GPU pays for the taps. The
+   * top tier asks for 16, which every M-series GPU offers: closer to a 16-sample frame on grazing edges than 8 (T93).
    */
   anisotropy: number;
   /**
@@ -34,7 +35,7 @@ export interface QualityLadder {
 
 export const FULL: QualityLadder = {
   tiers: [
-    { resolution: 1, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 8, dither: true },
+    { resolution: 1, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 16, dither: true },
     { resolution: 0.8, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 8, dither: true },
     { resolution: 0.62, msaa: 4, grade: false, bloom: true, film: true, halos: true, shine: true, anisotropy: 1, dither: true },
     { resolution: 0.5, msaa: 4, grade: false, bloom: false, film: true, halos: false, shine: true, anisotropy: 1, dither: true },
