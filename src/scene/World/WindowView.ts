@@ -38,8 +38,6 @@ export interface MotifState {
   /** Where the plane is along the arc (a fraction of its length): 0 over New Delhi, 1 over San Francisco; -1 while it is off the arc. */
   plane: number;
   moving: boolean;
-  /** The plane's length in metres. */
-  planeLengthM: number;
   /** The trail's strength (0 none, under reduced motion always). */
   trail: number;
   /** How far the plane is banked, in degrees. */
@@ -628,7 +626,6 @@ class Motif {
       drawn: this.drawn,
       plane: Number(this.u.toFixed(3)),
       moving: !this.still && this.drawn,
-      planeLengthM: this.planeLength,
       trail: this.trail.visible ? Number(this.trail.material.uniforms.uOpacity.value.toFixed(3)) : 0,
       bankDeg: Number(this.bank.toFixed(2)),
     };
