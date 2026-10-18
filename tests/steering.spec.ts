@@ -1,5 +1,6 @@
 import { devices, expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
+import { PINCHES, pinchRatio } from './pinches';
 
 // How drag, scroll and pinch feel (brief round 9 §1.5): a flick coasts and eases out, a press stops it; the tilt and
 // zoom limits give a little and spring back; one zoom speed for every wheel; the platform's own directions; a pinch
@@ -212,13 +213,14 @@ test.describe('in Chromium', () => {
    * pulls the camera in through the glass.
    */
   /**
-   * Catches a pinch cut short when Chromium merges its events on a busy frame (T98: the same pinch zoomed 7.68 → 4.16 m
-   * in Chromium and to the 2.4 m limit in WebKit): the cap is per time, not per event, so a merged event moves as far as
-   * the events it stands for, while a lone Control+wheel notch still moves no more than a frame's worth.
+   * Catches a pinch cut short when Chromium merges its events on a busy frame: the cap is per time, not per event, so a
+   * merged event moves as far as the events it stands for, while a lone Control+wheel notch still moves no more than a
+   * frame's worth. (T98's 7.68 → 4.16 m in Chromium against the 2.4 m limit in WebKit was not this: Playwright's
+   * Chromium at DPR 2 delivers each 10 px wheel as 5 px; see pinches.ts.)
    */
   test('a pinch zooms as far when its events arrive merged as when they arrive frame by frame', async ({ page }) => {
     await inRoom(page);
-    /** The radius's change (ln) for ctrl+wheel events at the page clock's [gap ms, deltaY] steps, from the wide view. */
+    /** The radius's change (ln) for ctrl+wheel events stamped [gap ms, deltaY] apart, from the wide view. */
     const pinch = async (steps: [number, number][]) => {
       await page.evaluate(() => window.__room!.goto('idle'));
       await settledAt(page, 'idle');
@@ -227,16 +229,12 @@ test.describe('in Chromium', () => {
       const start = (await orbit(page))!.radius;
       await page.evaluate((list) => {
         const stage = document.querySelector('[data-room-world]')!;
-        const realNow = performance.now.bind(performance);
-        let at = realNow();
-        performance.now = () => at;
-        try {
-          for (const [gap, deltaY] of list) {
-            at += gap;
-            stage.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 720, clientY: 520, ctrlKey: true, deltaY }));
-          }
-        } finally {
-          performance.now = realNow;
+        let at = performance.now();
+        for (const [gap, deltaY] of list) {
+          at += gap;
+          const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 720, clientY: 520, ctrlKey: true, deltaY });
+          Object.defineProperty(event, 'timeStamp', { value: at });
+          stage.dispatchEvent(event);
         }
       }, steps);
       await orbitRests(page);
@@ -249,6 +247,23 @@ test.describe('in Chromium', () => {
     expect(Math.abs(merged / everyFrame - 1), 'merged vs frame by frame').toBeLessThan(0.02);
     const notch = await pinch([[400, -100]]);
     expect(notch, 'a lone notch with Control held moves a frame’s worth').toBeCloseTo(-0.12, 2);
+  });
+
+  /**
+   * Catches a pinch that zooms less than the fingers in Chrome while Safari follows them (pinch-webkit.spec.ts has its
+   * twin): a cap of 12 px an event cut a brisk pinch's 15–21 px steps short, so fingers spread 2.5x brought the room
+   * about 2x nearer.
+   */
+  test('a trackpad pinch zooms the room by the fingers’ scale, gentle or brisk, as in Safari', async ({ page }) => {
+    await inRoom(page);
+    const cdp = await page.context().newCDPSession(page);
+    for (const [scaleFactor, relativeSpeed] of PINCHES) {
+      const ratio = await pinchRatio(page, 720, 520, () =>
+        cdp.send('Input.synthesizePinchGesture', { x: 720, y: 520, scaleFactor, relativeSpeed, gestureSourceType: 'mouse' }),
+      );
+      expect(ratio, `fingers ${scaleFactor}x at ${relativeSpeed} px/s`).toBeGreaterThan(scaleFactor * 0.96);
+      expect(ratio, `fingers ${scaleFactor}x at ${relativeSpeed} px/s`).toBeLessThan(scaleFactor * 1.04);
+    }
   });
 
   test('a trackpad pinch zooms the room, never the page, over the room, its controls and the OS on the monitor', async ({ page }) => {
