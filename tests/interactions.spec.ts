@@ -177,8 +177,9 @@ test.describe('room v3 interactions', () => {
   });
 
   /**
-   * Catches prints off the set's order or Chinatown off the hero clip, a hero no bigger than the rest, a hover label that
-   * is not his marker line, and a print that opens no photograph.
+   * Catches prints off the set's order or Chinatown off the hero clip, a photograph left off the line (a set larger than
+   * the room's clips), a hero no bigger than the rest, a hover label that is not his marker line, and a print that opens
+   * no photograph.
    */
   test('the darkroom hangs the set in its order with Chinatown biggest, and a print opens its photograph', async () => {
     await page.evaluate(() => window.__room!.goto('photos'));
@@ -186,7 +187,8 @@ test.describe('room v3 interactions', () => {
     await expect.poll(async () => (await world(page)).darkroom!.prints.every((p) => p.shown === 1), { timeout: 30_000 }).toBe(true);
     const { prints, light } = (await world(page)).darkroom!;
     expect(light).toBe('wall-bake');
-    expect(prints.map((p) => p.slug)).toEqual(SET.slice(0, prints.length).map((p) => p.slug));
+    expect(prints.map((p) => p.slug)).toEqual(SET.map((p) => p.slug));
+    expect(prints.every((p) => p.picture !== null), 'every print drawn from its photograph').toBe(true);
     expect(prints[0]).toMatchObject({ hero: true, slug: 'chinatown-bus', caption: SET[0].sharpie });
     const area = ({ paper: [w, h] }: { paper: number[] }) => w * h;
     expect(Math.max(...prints.slice(1).map(area))).toBeLessThan(area(prints[0]));

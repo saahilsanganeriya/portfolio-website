@@ -2,12 +2,32 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { WORLD_SCALE } from '../src/scene/Application/RoomModel';
 import { lampUniforms } from '../src/scene/World/art';
-import { affineUv, Darkroom, hangOrder, printSize } from '../src/scene/World/Darkroom';
+import { affineUv, Darkroom, hangOrder, makeRoom, printSize } from '../src/scene/World/Darkroom';
 import type { Photograph, Picture } from '../src/scene/World/photographs';
 
 const clip = (line: number, k: number, y: number, along: number, hero = false) => ({ line, k, y, along, hero });
 
 describe('the darkroom line', () => {
+  /**
+   * Catches a print added to a full line that hides part of another (or leaves one gap wide and the rest shut), runs
+   * past a string's screw eye, or shuffles the line's order. Line 1 as round 8 hangs it (along in metres, left to right
+   * from the room) on a string usable from -2.011 to 0.031, and a 0.28 m print to add: it takes the widest gap (between
+   * chinatown 2/n and the hero), and the six then hang evenly from one end of the string to the other.
+   */
+  it('makes room on a line for one more print, evenly and in order', () => {
+    const widths = [0.3007, 0.3291, 0.4132, 0.34, 0.31];
+    const slots = [-1.814, -1.443, -0.99, -0.537, -0.166].map((along, i) => ({ along, width: widths[i], hero: i === 2 }));
+    const { placed, added } = makeRoom(slots, [-2.011, 0.031], 0.28);
+    const row = [0, 1, -1, 2, 3, 4].map((i) => (i < 0 ? { along: added, width: 0.28 } : { along: placed[i], width: widths[i] }));
+    expect(row.map((s) => s.along)).toEqual([...row.map((s) => s.along)].sort((a, b) => a - b));
+    expect(row[0].along - row[0].width / 2).toBeCloseTo(-2.011, 9);
+    expect(row[5].along + row[5].width / 2).toBeCloseTo(0.031, 9);
+    const joints = row.slice(1).map((s, i) => s.along - s.width / 2 - (row[i].along + row[i].width / 2));
+    const even = (0.031 + 2.011 - [...widths, 0.28].reduce((sum, w) => sum + w, 0)) / 5;
+    for (const joint of joints) expect(joint).toBeCloseTo(even, 9);
+    expect(even).toBeGreaterThan(0);
+  });
+
   /** Catches the set's first photograph off the hero clip, and lines hung out of their order (the hero's, above, below). */
   it('hangs the hero clip first, then its line, the lines above, the lines below, each left to right', () => {
     const clips = [
