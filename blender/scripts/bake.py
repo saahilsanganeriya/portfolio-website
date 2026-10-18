@@ -404,12 +404,10 @@ def pooled_guide_passes(objs, size, margin, positions: bool, workers: int, tag: 
     merged = {}
     for k in range(len(runs)):
         for key in ("albedo", "normal", "position") if positions else ("albedo", "normal"):
-            part = np.load(work / f"{tag}_{k}_{key}.npy")
-            if key not in merged:
-                merged[key] = part
-            else:
-                mask = part[..., 3] > 0
-                merged[key][mask] = part[mask]
+            part = np.load(work / f"{tag}_{k}_{key}.npz")
+            flat = merged.setdefault(key, np.zeros((size * size, 4), dtype=np.float32))
+            flat[part["index"]] = part["value"]
+    merged = {key: flat.reshape(size, size, 4) for key, flat in merged.items()}
     for f in work.glob(f"{tag}*"):
         f.unlink()
     return merged
@@ -424,7 +422,9 @@ def guide_worker(spec_path: str):
         use_gpu()
     objs = [bpy.data.objects[n] for n in spec["objects"]]
     for key, px in guide_passes(objs, spec["size"], spec["margin"], spec["positions"]).items():
-        np.save(f"{spec['out']}_{key}.npy", px)
+        flat = px.reshape(-1, 4)
+        index = np.flatnonzero(flat[:, 3] > 0)  # only the texels this run baked: a fifth of the bytes of the image
+        np.savez(f"{spec['out']}_{key}.npz", index=index, value=flat[index])
 
 
 def image_from(name: str, px: np.ndarray) -> bpy.types.Image:
