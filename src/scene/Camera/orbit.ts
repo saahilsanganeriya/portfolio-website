@@ -210,9 +210,13 @@ export class Orbit {
     return this.pivotGoal.equals(this.settings.center);
   }
 
-  /** How fast the view is turning now (radians a second): zero once it has come to rest. */
+  /**
+   * How fast the set is turning now (radians a second): the view's speed, or the goal's when a key has just pushed it
+   * (after a let-go the view is never slower than its goal, so a coast only slows); zero once it has come to rest.
+   */
   get turning() {
-    return Math.hypot(this.azimuthGoal - this.azimuth, this.polarGoal - this.polar) / FOLLOW_TAU_S;
+    const view = Math.hypot(this.azimuthGoal - this.azimuth, this.polarGoal - this.polar) / FOLLOW_TAU_S;
+    return Math.max(view, Math.hypot(this.velocity.azimuth, this.velocity.polar));
   }
 
   /** Whether anything still moves: the turn, a rubber band springing back, the zoom or the pivot. */
@@ -397,7 +401,7 @@ export class Orbit {
     // At rest: a coast this slow stops, and a view this close to its goal lands on it.
     if (!this.dragging) {
       for (const axis of ['azimuth', 'polar'] as const) if (Math.abs(this.velocity[axis]) < REST_RAD_S) this.velocity[axis] = 0;
-      if (this.velocity.azimuth === 0 && this.velocity.polar === 0 && this.turning < REST_RAD_S) {
+      if (this.velocity.azimuth === 0 && this.velocity.polar === 0 && this.turning < REST_RAD_S && this.polars.beyond(this.polarGoal) === null) {
         this.azimuth = this.azimuthGoal;
         this.polar = this.polarGoal;
       }

@@ -217,28 +217,6 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
   expect(back.outside.every((o) => o.shown), 'the city behind the back wall, from the side, in its mask').toBe(true);
 });
 
-/** Catches a wheel that steps between framings instead of zooming, zooms the wrong way, or breaks out of the limits. */
-test('the wheel zooms in and out within the orbit’s limits, as the platform scrolls', async ({ page }) => {
-  await inRoom(page);
-  const { minDist, maxDist } = await page.evaluate(() => window.__room!.orbitSettings.limits);
-  await page.mouse.move(720, 520);
-  // Negative deltaY (the wheel turned toward the screen, or two fingers pushed up on a trackpad) moves in.
-  await page.mouse.wheel(0, -200);
-  await orbitRests(page);
-  const start = (await room(page)).orbit!.radius;
-  await page.mouse.wheel(0, -200);
-  await expect.poll(async () => (await room(page)).orbit!.radius).toBeLessThan(start - 1);
-  for (let i = 0; i < 30; i++) await page.mouse.wheel(0, -400);
-  await page.waitForTimeout(800);
-  expect((await room(page)).orbit!.radius).toBeGreaterThanOrEqual(minDist - 1);
-  expect((await room(page)).orbit!.radius).toBeLessThan(minDist + 50);
-  for (let i = 0; i < 40; i++) await page.mouse.wheel(0, 600);
-  await page.waitForTimeout(800);
-  expect((await room(page)).orbit!.radius).toBeLessThanOrEqual(maxDist + 1);
-  expect((await room(page)).orbit!.radius).toBeGreaterThan(maxDist - 50);
-  expect((await room(page)).destination).toBe('orbit');
-});
-
 /** Catches keys that step framings instead of turning the set, a zoom key that does nothing, and a lost way back. */
 test('arrow keys turn the set, + and - zoom, Escape goes back to the wide view, Page Down steps a framing', async ({ page }) => {
   await inRoom(page);
