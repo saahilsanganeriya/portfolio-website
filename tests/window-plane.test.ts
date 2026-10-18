@@ -8,8 +8,9 @@ const HEIGHT = 0.48;
 
 describe('the plane over the window', () => {
   /**
-   * Catches a plane grown, or a flight stretched toward the rings, until it covers a name at take-off or landing: its
-   * footprint (a circle 0.6 of its length across its centre, which holds it at any heading) stays off both names' boxes.
+   * Catches a name moved up under the arc (LABEL_DROP 0.07 instead of 0.17 puts New Delhi under the take-off), or a
+   * plane or flight changed until it covers a name: the plane's footprint (a circle 0.6 of its length across its
+   * centre, which holds it at any heading) stays off both names' boxes all along the flight.
    */
   it('stays clear of both names all along its flight', () => {
     const path = flightPath(WIDTH, HEIGHT);
