@@ -106,6 +106,9 @@ export interface AudioHandle {
    */
   setMusicSource(record: RecordId | null, cue?: number): void;
   readonly musicSource: RecordId | null;
+  /** Holds the music (the bed or the record, where it is) while another player is open, then lets it go on. */
+  setMusicHeld(held: boolean): void;
+  readonly musicHeld: boolean;
   /** The sound runs: the browser let it start, and it is not suspended (muted a moment, or the tab hidden). */
   readonly unlocked: boolean;
   readonly muted: boolean;
@@ -145,6 +148,7 @@ export class RoomAudio implements AudioHandle {
   private derived: AudioState | null = null;
   private isMuted = false;
   private source: RecordId | null = null;
+  private held = false;
   private deck: Promise<RecordDeck | null> | null = null;
   private deckReady: RecordDeck | null = null;
   private level = 1;
@@ -178,6 +182,10 @@ export class RoomAudio implements AudioHandle {
 
   get musicSource() {
     return this.source;
+  }
+
+  get musicHeld() {
+    return this.held;
   }
 
   subscribe(listener: () => void) {
@@ -214,6 +222,7 @@ export class RoomAudio implements AudioHandle {
     mix.output.connect(this.master);
     this.mix = mix;
     mix.setState(this.current, true);
+    if (this.held) mix.holdMusic(true, true);
     ctx.addEventListener('statechange', this.onState);
     document.addEventListener('visibilitychange', this.onVisibility);
     this.loaded = this.load(ctx, mix);
@@ -243,7 +252,7 @@ export class RoomAudio implements AudioHandle {
     if (this.ctx && this.master) {
       const ctx = this.ctx;
       if (!muted && document.visibilityState !== 'hidden') void ctx.resume();
-      this.deckReady?.hold(muted || document.visibilityState === 'hidden');
+      this.deckReady?.hold(this.deckHeld());
       this.fadeMaster();
       // A muted room stops processing once its fade is done.
       if (muted) this.suspendTimer = window.setTimeout(() => void ctx.suspend(), SUSPEND_AFTER_MUTE_MS);
@@ -268,6 +277,19 @@ export class RoomAudio implements AudioHandle {
 
   sfx(name: SfxName, position?: THREE.Vector3) {
     this.play(name, position, 1);
+  }
+
+  setMusicHeld(held: boolean) {
+    if (held === this.held) return;
+    this.held = held;
+    this.mix?.holdMusic(held);
+    this.deckReady?.hold(this.deckHeld());
+    this.notify();
+  }
+
+  /** The record waits where it is while the sound is off, the tab is hidden or the music holds. */
+  private deckHeld() {
+    return this.isMuted || this.held || document.visibilityState === 'hidden';
   }
 
   setMusicSource(record: RecordId | null, cue = QUICK_CUE_S) {
@@ -309,7 +331,7 @@ export class RoomAudio implements AudioHandle {
           this.notify();
         },
       });
-      deck.hold(this.isMuted || document.visibilityState === 'hidden');
+      deck.hold(this.deckHeld());
       this.deckReady = deck;
       return deck;
     });
@@ -405,6 +427,7 @@ export class RoomAudio implements AudioHandle {
       muted: this.isMuted,
       volume: this.level,
       musicSource: this.source,
+      musicHeld: this.held,
       /** The turntable's stream: which record, the needle, whether the music itself plays, its position. */
       deck: this.deckReady?.state ?? null,
       master: this.master?.gain.value ?? null,
@@ -476,7 +499,7 @@ export class RoomAudio implements AudioHandle {
   private readonly onVisibility = () => {
     if (!this.ctx) return;
     const hidden = document.visibilityState === 'hidden';
-    this.deckReady?.hold(hidden || this.isMuted);
+    this.deckReady?.hold(this.deckHeld());
     if (hidden) void this.ctx.suspend();
     else if (!this.isMuted) void this.ctx.resume();
   };

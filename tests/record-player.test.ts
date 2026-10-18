@@ -41,8 +41,9 @@ function host(reducedMotion: boolean) {
       listener = fn;
       return () => {};
     },
+    setMusicHeld() {},
   };
-  return { calls, host: { audio, reducedMotion, station: () => 'record_player', announce: () => {} } };
+  return { calls, host: { audio, reducedMotion, station: () => 'record_player', announce: () => {}, openWindow: () => {} } };
 }
 
 const run = (player: RecordPlayer, seconds: number) => {

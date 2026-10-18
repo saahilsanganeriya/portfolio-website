@@ -93,3 +93,73 @@ test('the crate works from the keyboard and has no serious or critical axe viola
   // Escape closed the crate only: a flight out would have set the camera's destination as the key was handled.
   expect(await page.evaluate(() => ({ destination: window.__room!.destination, moving: window.__room!.moving }))).toEqual({ destination: 'desk', moving: false });
 });
+
+// Max Richter's record is Spotify's player, never a file of ours. No test reaches Spotify: its player is answered with
+// an empty page here, and every request for it is counted.
+const SPOTIFY_PLAYER = 'https://open.spotify.com/embed/track/5DFUsGW4Cmltv8Spd0u1aV';
+const nowPlaying = (page: Page) => page.frameLocator('.room-monitor iframe').getByRole('dialog', { name: 'Now Playing' });
+async function standInForSpotify(page: Page) {
+  const asked: string[] = [];
+  await page.route(/^https:\/\/([a-z0-9-]+\.)*(spotify\.com|scdn\.co|spotifycdn\.com)\//, (route) => {
+    asked.push(route.request().url());
+    return route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Spotify stand-in</title>' });
+  });
+  return asked;
+}
+async function chooseMaxRichter(page: Page) {
+  await page.evaluate(() => window.__room!.openRecords());
+  await crate(page).getByRole('button', { name: /^On the Nature of Daylight, Max Richter/ }).click();
+  await expect(nowPlaying(page)).toBeVisible({ timeout: 30_000 });
+}
+
+/**
+ * Catches a crate without the Max Richter sleeve, a request to Spotify before the visitor picks it, a pick that does
+ * not take the camera to the monitor or opens anything but Spotify's official player for the track, and room music
+ * (here a record on the turntable) that plays on under it or does not come back where it was when the window closes.
+ */
+test('the Max Richter sleeve opens Now Playing on the monitor; the room’s music waits until it closes', async ({ page }) => {
+  const spotify = await standInForSpotify(page);
+  await soundOn(page);
+  await page.evaluate(() => window.__room!.openRecords());
+  await expect(crate(page).getByRole('button', { name: /^On the Nature of Daylight, Max Richter\. 6:12\. Opens Spotify’s player on the monitor\.$/ })).toBeVisible();
+  await crate(page).getByRole('button', { name: /^Night in Venice/ }).click();
+  await expect.poll(async () => (await graph(page)).deck?.time ?? 0, { timeout: 30_000 }).toBeGreaterThan(1);
+  expect(spotify).toEqual([]);
+
+  await crate(page).getByRole('button', { name: /^On the Nature of Daylight/ }).click();
+  await expect(crate(page)).toBeHidden();
+  await expect(nowPlaying(page)).toBeVisible({ timeout: 30_000 });
+  await page.waitForFunction(() => window.__room?.phase === 'monitor' && !window.__room.moving, null, { timeout: 30_000 });
+  const player = nowPlaying(page).locator('iframe');
+  await expect(player).toHaveAttribute('src', SPOTIFY_PLAYER);
+  await expect(player).toHaveAttribute('title', 'Spotify player: On the Nature of Daylight, Max Richter');
+  await expect.poll(() => spotify[0]).toBe(SPOTIFY_PLAYER);
+  // The music bus holds silent and the record stops where it was.
+  await expect.poll(async () => (await graph(page)).hold?.to).toBe(0);
+  await expect.poll(async () => (await graph(page)).deck?.playing).toBe(false);
+  const heldAt = (await graph(page)).deck!.time;
+  expect((await graph(page)).musicHeld).toBe(true);
+
+  await nowPlaying(page).getByRole('button', { name: 'Close Now Playing' }).click();
+  await expect(nowPlaying(page)).toBeHidden();
+  await expect.poll(async () => (await graph(page)).hold?.to).toBe(1);
+  expect((await graph(page)).musicHeld).toBe(false);
+  await expect.poll(async () => (await graph(page)).deck?.playing, { timeout: 10_000 }).toBe(true);
+  expect((await graph(page)).deck!.time).toBeGreaterThanOrEqual(heldAt);
+  expect((await graph(page)).deck!.time).toBeLessThan(heldAt + 5);
+});
+
+/** Catches two records at once: a record put on while Now Playing is open must close it and end the hold. */
+test('putting a record on closes Now Playing', async ({ page }) => {
+  await standInForSpotify(page);
+  await soundOn(page);
+  await chooseMaxRichter(page);
+  await expect.poll(async () => (await graph(page)).musicHeld).toBe(true);
+  // The crate hides while the camera is in the monitor: the visitor steps back out first, Now Playing still open.
+  await page.evaluate(() => window.__room!.goto('desk'));
+  await page.waitForFunction(() => window.__room?.phase === 'desk' && !window.__room.moving, null, { timeout: 30_000 });
+  await page.evaluate(() => window.__room!.openRecords());
+  await crate(page).getByRole('button', { name: /^Washed Up/ }).click();
+  await expect(nowPlaying(page)).toBeHidden();
+  expect(await graph(page)).toMatchObject({ musicHeld: false, musicSource: 'washed-up' });
+});

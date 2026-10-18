@@ -1,7 +1,8 @@
 ---
 // The record crate by the armchair (PLAN-ROUND-7 §7): opened by a click on the record player, it holds four records to
-// put on, Stop, and every record's credit (the CC BY ones ask for it). It stays empty until the first visit to the
-// player, when src/scene/World/RecordPlayer.ts fills it, so no page carries the sleeves before they are wanted.
+// put on, a fifth that plays on the monitor through Spotify's player, Stop, and every record's credit (the CC BY ones
+// ask for it). It stays empty until the first visit to the player, when src/scene/World/RecordPlayer.ts fills it, so
+// no page carries the sleeves before they are wanted.
 ---
 
 <section id="room-records" class="room-records" aria-labelledby="room-records-title" data-room-ui data-records hidden>
@@ -26,7 +27,7 @@
     right: var(--space-3);
     bottom: calc(var(--space-3) + 2.4rem);
     z-index: 4;
-    width: min(26rem, calc(100vw - 2 * var(--space-3)));
+    width: min(32rem, calc(100vw - 2 * var(--space-3)));
     max-height: calc(100% - 5rem);
     overflow-y: auto;
     padding: var(--space-3);
@@ -83,10 +84,10 @@
     cursor: default;
   }
 
-  /* The crate: four sleeves side by side, flipped through left to right. */
+  /* The crate: five sleeves side by side, flipped through left to right. */
   .room-records-crate {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: var(--space-2);
     margin: 0 0 var(--space-3);
     padding: 0;

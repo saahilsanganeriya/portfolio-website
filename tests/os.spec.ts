@@ -404,23 +404,52 @@ test.describe('desktop', () => {
   });
 
   /**
-   * Catches About losing the owner's lead (or leading on a project's number again), the résumé line opening nothing,
-   * or the page printing his address where the Contact window should be.
+   * Catches About losing the owner's lead (or leading on a project's number again), a résumé line whose "Click here"
+   * opens nothing (or the file instead of the window) or does not answer the keyboard, a "PDF" link that is not the
+   * file in a new tab, and links whose names mean nothing read out of context.
    */
-  test('About leads with what he does, opens the résumé from its line, and sends mail through Contact', async ({ page }) => {
+  test('About leads with what he does; its résumé line opens the Résumé window or the PDF', async ({ page }) => {
     await page.goto('/os?embed=1');
     const about = page.getByRole('dialog', { name: 'About' });
     // The owner's words (2026-10-16), not one project's number.
     await expect(about.locator('.os-about-lead')).toHaveText(
       'Builder, engineer, researcher, tinkerer — a software engineer at Mercor, where I work on anonymization.',
     );
-    await expect(about.locator('.os-about-resume')).toHaveText('Looking for my resume? Click here to open it.');
-    await expect(about).not.toContainText('@');
-    await about.getByRole('link', { name: 'Click here' }).click();
+    const line = about.locator('.os-about-resume');
+    // What a reader sees; the hidden words only name the two links for a screen reader.
+    const seen = await line.evaluate((el) => {
+      const copy = el.cloneNode(true) as HTMLElement;
+      copy.querySelectorAll('.visually-hidden').forEach((hidden) => hidden.remove());
+      return copy.textContent!.replace(/\s+/g, ' ').trim();
+    });
+    expect(seen).toBe('Looking for my resume? Click here to open it (PDF).');
+    const pdf = line.getByRole('link', { name: 'PDF of my résumé, in a new tab' });
+    await expect(pdf).toHaveAttribute('href', '/resume.pdf');
+    await expect(pdf).toHaveAttribute('target', '_blank');
+    await expect(pdf).toHaveAttribute('rel', 'noopener');
+    // "Click here" from the keyboard: the same window, at the same address, as the desktop's Résumé icon.
+    await line.getByRole('link', { name: 'Click here to open my résumé' }).focus();
+    await page.keyboard.press('Enter');
     await expect(page.getByRole('dialog', { name: 'Résumé' })).toBeVisible();
+    await expect(page).toHaveURL(/\/os\?embed=1#resume$/);
     await page.goto('/os?embed=1');
     await about.getByRole('link', { name: 'contact form' }).click();
     await expect(page.getByRole('dialog', { name: 'Contact' })).toBeVisible();
+  });
+
+  /** Catches his address missing from About or from beside the Contact form, misspelt, or printed without a mailto. */
+  test('his address is a mailto link in About and beside the Contact form', async ({ page }) => {
+    const ADDRESS = 'saahilsanganeria666@gmail.com';
+    await page.goto('/os?embed=1');
+    const about = page.getByRole('dialog', { name: 'About' });
+    // Under his name at first sight, and again where the page says how to reach him.
+    await expect(about.getByRole('link', { name: ADDRESS })).toHaveCount(2);
+    for (const link of await about.getByRole('link', { name: ADDRESS }).all()) await expect(link).toHaveAttribute('href', `mailto:${ADDRESS}`);
+    await expect(about.locator('.os-about-head').getByRole('link', { name: ADDRESS })).toBeVisible();
+    await page.goto('/os?embed=1#contact');
+    const contact = page.getByRole('dialog', { name: 'Contact' });
+    await expect(contact.locator('.os-contact-direct')).toHaveText(`Or email me: ${ADDRESS}`);
+    await expect(contact.getByRole('link', { name: ADDRESS })).toHaveAttribute('href', `mailto:${ADDRESS}`);
   });
 
   /** Catches the résumé's header line linking an address (or nothing) where the Contact window should open. */
@@ -726,14 +755,17 @@ test.describe('desktop at 1440 × 900', () => {
 
   /**
    * Catches a window whose text fails colour contrast or naming at the desktop size the brief names: every app on the
-   * desktop, Code's views and a photograph, each alone in a fresh load (stacked windows overlap their controls).
+   * desktop, Code's views, a photograph and Now Playing, each alone in a fresh load (stacked windows overlap their
+   * controls).
    */
   test('axe passes on every window, colour contrast included', async ({ page }) => {
-    // Nineteen fresh loads, each settled and scanned: about 3 s apiece, more on a loaded machine.
+    // Twenty fresh loads, each settled and scanned: about 3 s apiece, more on a loaded machine.
     test.setTimeout(180_000);
     await serveShelves(page, 'sample');
     await serveGithubFiles(page, 'import napari  # the viewer\n');
     await serveFilms(page);
+    // Now Playing frames Spotify's player; a stand-in page answers for it, so the scan stays offline.
+    await page.route(/^https:\/\/open\.spotify\.com\//, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Spotify stand-in</title>' }));
     for (const [hash, name, ready] of [
       ['about', 'About', '.os-prose p'],
       ['projects', 'Projects', '.os-row'],
@@ -754,6 +786,7 @@ test.describe('desktop at 1440 × 900', () => {
       ['books', 'Books', 'li'],
       ['recipes/sample-loaf', 'Kitchen', 'h2'],
       ['voyager', 'Voyager Golden Record', 'h2'],
+      ['now-playing', 'Now Playing', '.os-now-playing-note'],
     ]) {
       await page.goto(`/os?embed=1#${hash}`);
       await page.reload();

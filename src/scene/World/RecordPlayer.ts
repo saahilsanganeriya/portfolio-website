@@ -1,16 +1,20 @@
 import * as THREE from 'three';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import type { AudioHandle } from '../audio/RoomAudio';
-import { CRATE, duration, recordById, sleeveSvg, type CrateRecord, type RecordId } from '../audio/crate';
+import { CRATE, duration, NOW_PLAYING, recordById, sleeveSvg, type RecordId, type SleeveId } from '../audio/crate';
 
 // The record player by the armchair and its crate (PLAN-ROUND-7 §7). A click on the player opens the crate overlay;
 // picking a record swings the tonearm out, lowers the needle and spins the platter, and the record becomes the room's
 // music until it ends, Stop is pressed or the player is clicked again. Reduced motion keeps the arm and platter still,
-// and the record still plays. Loaded the first time the visitor reaches the player.
+// and the record still plays. The crate's fifth sleeve is not on the turntable: it takes the camera to the monitor and
+// opens Now Playing (Spotify's player), and the room holds its own music while that window is open. One record at a
+// time: putting a record on closes Now Playing. Loaded the first time the visitor reaches the player.
 
 export interface RecordPlayerHost {
-  readonly audio: Pick<AudioHandle, 'setMusicSource' | 'musicSource' | 'subscribe' | 'muted'>;
+  readonly audio: Pick<AudioHandle, 'setMusicSource' | 'musicSource' | 'subscribe' | 'muted' | 'setMusicHeld'>;
   readonly reducedMotion: boolean;
+  /** Takes the camera to the monitor with this SaahilOS window open. */
+  openWindow(target: string): void;
   /** The framing the camera is at or heading to. */
   station(): string;
   announce(text: string): void;
@@ -115,6 +119,8 @@ export class RecordPlayer {
   private speed = 0;
   private playing: RecordId | null = null;
   private openedAt: string | null = null;
+  /** SaahilOS, while its Now Playing window is open (it says so when the window opens and closes). */
+  private nowPlaying: MessageEventSource | null = null;
   private built = false;
   private readonly abort = new AbortController();
 
@@ -147,6 +153,8 @@ export class RecordPlayer {
       this.playing = now;
       this.refresh();
     });
+    // (No window in the unit tests, which drive the turntable alone.)
+    if (typeof window !== 'undefined') window.addEventListener('message', (event) => this.receive(event), { signal: this.abort.signal });
   }
 
   get isOpen() {
@@ -184,7 +192,9 @@ export class RecordPlayer {
 
   choose(id: RecordId) {
     const record = recordById(id);
-    if (!record || id === this.playing) return;
+    if (!record) return;
+    this.endNowPlaying();
+    if (id === this.playing) return;
     const wasPlaying = this.playing !== null;
     this.playing = id;
     // The needle meets the groove when the arm's moves end; a record swapped mid-play lifts and sets down again.
@@ -195,6 +205,13 @@ export class RecordPlayer {
     this.host.audio.setMusicSource(id, cue);
     this.host.announce(`Now playing ${record.title} by ${record.artist}.`);
     this.refresh();
+  }
+
+  /** The fifth sleeve: the crate closes and the camera goes to the monitor, where Now Playing opens. */
+  chooseNowPlaying() {
+    this.close();
+    this.host.openWindow(NOW_PLAYING.window);
+    this.host.announce(`Now Playing opens on the monitor: ${NOW_PLAYING.title} by ${NOW_PLAYING.artist}, in Spotify’s player.`);
   }
 
   stop() {
@@ -245,6 +262,24 @@ export class RecordPlayer {
     this.abort.abort();
   }
 
+  /** Now Playing's open and close, from SaahilOS's frame (same origin only): the room's music holds while it is open. */
+  private receive(event: MessageEvent) {
+    if (event.origin !== location.origin || !event.source || event.source === window) return;
+    const data = event.data as { type?: unknown; open?: unknown } | null;
+    if (data?.type !== 'now-playing' || typeof data.open !== 'boolean') return;
+    this.nowPlaying = data.open ? event.source : null;
+    this.host.audio.setMusicHeld(data.open);
+    this.refresh();
+  }
+
+  /** Closes Now Playing (a record is going on instead) and lets the room's music go on. */
+  private endNowPlaying() {
+    if (!this.nowPlaying) return;
+    (this.nowPlaying as Window).postMessage({ type: 'close', target: NOW_PLAYING.window }, location.origin);
+    this.nowPlaying = null;
+    this.host.audio.setMusicHeld(false);
+  }
+
   private get targetSpeed() {
     return this.playing && !this.host.reducedMotion ? (RPM * Math.PI * 2) / 60 : 0;
   }
@@ -286,14 +321,23 @@ export class RecordPlayer {
     this.built = true;
     const q = <T extends Element>(selector: string) => panel.querySelector<T>(selector)!;
     const list = q<HTMLUListElement>('[data-records-list]');
-    for (const record of CRATE) list.append(this.item(record));
+    for (const record of CRATE) {
+      const length = duration(record.seconds);
+      list.append(this.item(record, `${record.genre} · ${length}`, `${record.title}, ${record.artist}. ${record.genre}, ${length}.`));
+    }
+    const streamed = duration(NOW_PLAYING.seconds);
+    list.append(
+      this.item(NOW_PLAYING, `On Spotify · ${streamed}`, `${NOW_PLAYING.title}, ${NOW_PLAYING.artist}. ${streamed}. Opens Spotify’s player on the monitor.`),
+    );
     const credits = q<HTMLUListElement>('[data-records-credits]');
-    for (const record of CRATE) credits.append(this.creditItem(record));
+    for (const record of CRATE) credits.append(this.creditItem(record.credit, record.sourceUrl, record.licenceUrl));
+    credits.append(this.creditItem(NOW_PLAYING.credit, NOW_PLAYING.sourceUrl, null));
     const { signal } = this.abort;
 
     list.addEventListener('click', (event) => {
       const button = (event.target as Element).closest<HTMLButtonElement>('[data-record]');
-      if (button) this.choose(button.dataset.record as RecordId);
+      if (button?.dataset.record === NOW_PLAYING.id) this.chooseNowPlaying();
+      else if (button) this.choose(button.dataset.record as RecordId);
     }, { signal });
     // Arrow keys move between the sleeves (Tab does too); the room must not also take them as a step.
     list.addEventListener('keydown', (event) => {
@@ -325,14 +369,14 @@ export class RecordPlayer {
     }, { capture: true, signal });
   }
 
-  private item(record: CrateRecord) {
+  private item(record: { id: SleeveId; title: string; artist: string }, metaText: string, label: string) {
     const li = document.createElement('li');
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'room-records-record';
     button.dataset.record = record.id;
     button.setAttribute('aria-pressed', 'false');
-    button.setAttribute('aria-label', `${record.title}, ${record.artist}. ${record.genre}, ${duration(record.seconds)}.`);
+    button.setAttribute('aria-label', label);
     button.innerHTML = `<span class="room-records-sleeve">${sleeveSvg(record.id)}</span>`;
     const caption = document.createElement('span');
     caption.className = 'room-records-caption';
@@ -345,14 +389,14 @@ export class RecordPlayer {
     artist.textContent = record.artist;
     const meta = document.createElement('span');
     meta.className = 'room-records-meta';
-    meta.textContent = `${record.genre} · ${duration(record.seconds)}`;
+    meta.textContent = metaText;
     caption.append(title, artist, meta);
     button.append(caption);
     li.append(button);
     return li;
   }
 
-  private creditItem(record: CrateRecord) {
+  private creditItem(credit: string, sourceUrl: string, licenceUrl: string | null) {
     const li = document.createElement('li');
     const link = (href: string, text: string) => {
       const a = document.createElement('a');
@@ -362,18 +406,24 @@ export class RecordPlayer {
       a.textContent = text;
       return a;
     };
-    li.append(`${record.credit}. `, link(record.sourceUrl, 'Source'), ' · ', link(record.licenceUrl, 'Licence'));
+    li.append(`${credit}. `, link(sourceUrl, 'Source'));
+    if (licenceUrl) li.append(' · ', link(licenceUrl, 'Licence'));
     return li;
   }
 
   private refresh() {
     const panel = this.panel;
     if (!panel || !this.built) return;
+    const on = this.nowPlaying ? NOW_PLAYING.id : this.playing;
     for (const button of panel.querySelectorAll<HTMLButtonElement>('[data-record]')) {
-      button.setAttribute('aria-pressed', String(button.dataset.record === this.playing));
+      button.setAttribute('aria-pressed', String(button.dataset.record === on));
     }
     const now = this.playing ? recordById(this.playing) : null;
-    panel.querySelector('[data-records-now]')!.textContent = now ? `Now playing: ${now.title}, ${now.artist}` : 'Nothing on the turntable.';
+    panel.querySelector('[data-records-now]')!.textContent = this.nowPlaying
+      ? `On the monitor: ${NOW_PLAYING.title}, ${NOW_PLAYING.artist}`
+      : now
+        ? `Now playing: ${now.title}, ${now.artist}`
+        : 'Nothing on the turntable.';
     panel.querySelector<HTMLButtonElement>('[data-records-stop]')!.disabled = !now;
     panel.querySelector<HTMLElement>('[data-records-sound]')!.hidden = !this.host.audio.muted;
   }

@@ -4,6 +4,7 @@ summary: "Builder, engineer, researcher, tinkerer — a software engineer at Mer
 ---
 
 import MePhoto from '../../components/MePhoto.astro';
+import { SITE } from '../../site';
 
 <MePhoto file="childhood-cap" side="right" />
 
@@ -29,4 +30,4 @@ I cook, and I bake. The little oven in the room on the front page opens my [kitc
 
 There is a mango plant in that room too. It is a slow one.
 
-You can reach me through the [contact form](/#contact), on [GitHub](https://github.com/saahilsanganeriya) and on [LinkedIn](https://www.linkedin.com/in/saahil-sanganeriya).
+You can reach me at <a href={`mailto:${SITE.email}`}>{SITE.email}</a>, through the [contact form](/#contact), on [GitHub](https://github.com/saahilsanganeriya) and on [LinkedIn](https://www.linkedin.com/in/saahil-sanganeriya).

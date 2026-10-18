@@ -37,7 +37,7 @@ export interface WorldHost {
   /** The audio layer's recorded one-shot (`audio.sfx`). */
   sfx(name: SfxName, at?: THREE.Vector3): void;
   /** The room's sound, for the record player: which music plays (the lo-fi bed or a record) and whether sound is off. */
-  readonly audio?: Pick<AudioHandle, 'setMusicSource' | 'musicSource' | 'subscribe' | 'muted'>;
+  readonly audio?: Pick<AudioHandle, 'setMusicSource' | 'musicSource' | 'subscribe' | 'muted' | 'setMusicHeld'>;
   readonly reducedMotion: boolean;
 }
 
@@ -367,6 +367,7 @@ export class World {
         reducedMotion: this.host.reducedMotion,
         station: () => this.host.station(),
         announce: (text) => this.announce(text),
+        openWindow: (target) => this.host.openWindow(target),
       });
       return this.records;
     });

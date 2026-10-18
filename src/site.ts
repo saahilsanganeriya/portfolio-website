@@ -2,6 +2,8 @@ export const SITE = {
   name: 'Saahil Sanganeriya',
   description:
     'Saahil Sanganeriya is a software engineer who builds data systems and research tools. Projects, essays and film notes.',
+  // His own public address (no 'y' in "sanganeria"); scripts/check-routes.mjs fails a build that prints any other.
+  email: 'saahilsanganeria666@gmail.com',
   github: 'https://github.com/saahilsanganeriya',
   linkedin: 'https://www.linkedin.com/in/saahil-sanganeriya/',
   letterboxd: 'https://letterboxd.com/saahilsan/',
