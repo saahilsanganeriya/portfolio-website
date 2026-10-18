@@ -110,6 +110,7 @@ def build_dressing(mats, placed):
     found["plaque"] = build_plaque(mats)
     before = set(bpy.data.objects)
     kitchen = build_kitchen_nook(mats)
+    bpy.context.view_layer.update()  # objects placed by .location (the board's croissants) have a stale matrix_world
     for obj in set(bpy.data.objects) - before:
         obj.matrix_world = Matrix.Translation(KITCHEN_SHIFT) @ obj.matrix_world
     found.update({k: (v + KITCHEN_SHIFT if isinstance(v, Vector) else v) for k, v in kitchen.items()})
@@ -124,6 +125,7 @@ def build_dressing(mats, placed):
     build_pothos(Matrix.Translation((2.86, -0.70, BOOKCASE_LEVELS[-1])) @ Matrix.Rotation(math.radians(-90), 4, "Z"))
     turn = (Matrix.Translation(BOOKCASE_AT) @ Matrix.Rotation(math.radians(BOOKCASE_TURN), 4, "Z")
             @ Matrix.Translation(-Vector(((BOOKCASE[0] + BOOKCASE[1]) / 2, (BOOKCASE[2] + BOOKCASE[3]) / 2, 0.0))))
+    bpy.context.view_layer.update()
     for obj in set(bpy.data.objects) - before:
         obj.matrix_world = turn @ obj.matrix_world
     found.update(build_space_wall(mats))
