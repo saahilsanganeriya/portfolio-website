@@ -62,7 +62,12 @@ desk atlas packs axis-aligned): the props atlas holds thousands of small islands
 and the cut desk top's atlas 52 %.
 Per atlas: the view-independent light (diffuse direct and indirect, emission) at 256 samples, with metals and glass
 baked as diffuse in their own colour; a diffuse-colour and a normal bake that guide OIDN; the AgX view transform; then
-the void fade, blended per texel from a bake of world positions. Samples: `-- --samples N` (the default is 256). Each atlas also keeps its denoised linear light and
+the void fade, blended per texel from a bake of world positions. The three guide bakes (colour, normal, world position)
+run in a pool of four Blender processes (`-- --guide-workers N`; 1 runs them in this process), each baking a run of
+the atlas's objects on a quarter of the threads: Cycles syncs the whole scene again for every object it bakes, mostly
+on one core, so in one process the 4-sample guides took as long as the light (round eight's props: 1,377 of 2,740 s).
+The pooled guides are byte-identical to the serial ones (props at 1,024 px: 138 s serial, 61 s pooled). Samples:
+`-- --samples N` (the default is 256). Each atlas also keeps its denoised linear light and
 its fade under `.cache/bake/`, so `-- --regrade <atlas>` redoes the exposure and the fade in minutes. Glossy light is
 left out on purpose: it is right from one viewpoint only, and the site draws the shine of the surfaces tagged `gloss`
 live from the room probe. For a quick look, bake small: `-- --scale 0.25 --samples 32`; one atlas: `-- --atlas desk`;
