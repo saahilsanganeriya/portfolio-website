@@ -24,7 +24,9 @@ fade (<atlas>_fade.npy), so --regrade can redo the view transform and the fade a
 """
 
 import argparse
+import json
 import math
+import subprocess
 import sys
 import time
 from contextlib import contextmanager
@@ -43,15 +45,22 @@ BAKE_DIR = REPO / "blender" / ".cache" / "bake"
 BLEND = REPO / "blender" / "room.blend"
 
 # Bake sizes (coordinator ruling, 2026-10-17 08:00Z, for a night-long budget): the desk hero atlas bakes at 1.5x the
-# 4096 px it ships at, so every shipped texel averages a couple of baked ones; art and props bake at their 4096 ship
-# size, and the walls and floor, smooth diffuse light, at 3072. The view's halves ship at their bake size: San
-# Francisco's larger, for the Painted Ladies' trim and windows, each half's KTX2 kept under about 0.6 MB.
-ATLAS_SIZES = {"desk": 6144, "art": 4096, "props": 4096, "env": 3072, "window_sf": 1792, "window_delhi": 1536}
+# 4096 px it ships at, so every shipped texel averages a couple of baked ones, and so does the bezel's (3072 for 1792);
+# art and props bake at their 4096 ship size, and the walls and floor, smooth diffuse light, at 3072. The view's halves
+# ship at their bake size: San Francisco's larger, for the Painted Ladies' trim and windows, each half's KTX2 kept under
+# about 0.6 MB.
+ATLAS_SIZES = {"desk": 6144, "bezel": 3072, "art": 4096, "props": 4096, "env": 3072, "window_sf": 1792,
+               "window_delhi": 1536}
 SHIP_PX = 4096
-# Island margin at the bake size. The desk keeps CRAFT-R8's 16 px at the shipped 4096 (24 at the 6144 bake); the art,
-# props and env atlases hold thousands of small islands, where that margin left the props atlas 10 % full, so they use
-# round seven's 12 (8 px shipped): props 40 % full, art 43 % (measured on this set). The view keeps 6 px.
-MARGIN_PX = {"desk": 24, "art": 8, "props": 8, "env": 6, "window_sf": 6, "window_delhi": 6}
+# Island margin at the bake size: 8 px at the shipped size everywhere (the view keeps 6 px). The desk had CRAFT-R8's
+# 16 px; once its top was cut into the rectangles the views see (build_room.split_desk_top_by_view), that margin round
+# ~150 islands left it 52 % full, and 8 px brought it back to 64 % (round eight's fill with one desk-top island).
+MARGIN_PX = {"desk": 12, "bezel": 12, "art": 8, "props": 8, "env": 6, "window_sf": 6, "window_delhi": 6}
+# Margins copy texels from the face across a UV seam (Extend left a sawtooth along slanted island edges, which the site
+# sampled as beads wherever one surface is split into islands: the CRT bezel's creases, the desk top's rectangles).
+MARGIN_TYPE = "ADJACENT_FACES"
+# Islands of the desk atlas stay axis-aligned: its desk-top rectangles pack tighter (52 % vs 50 % at 16 px).
+PACK_ROTATE = {"desk": "AXIS_ALIGNED"}
 # The world seen through the open front of the view while it bakes: a pale day sky.
 VIEW_WORLD = ((0.62, 0.70, 0.82, 1.0), 0.35)
 GUIDE_SAMPLES = 4  # the albedo and normal guides for OIDN (they barely change within a texel)
@@ -70,7 +79,31 @@ def parse_args():
     parser.add_argument("--no-save", action="store_true", help="do not write room.blend")
     parser.add_argument("--save-as", default="", help="write the baked blend here instead (a parallel lane)")
     parser.add_argument("--regrade", default="", help="atlases to re-grade from their saved light, without baking")
+    parser.add_argument("--guide-workers", type=int, default=GUIDE_WORKERS,
+                        help="processes for the guide passes (1: in this process)")
+    parser.add_argument("--guide-worker", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--gpu", action="store_true", help="Cycles on the GPU: OptiX, else CUDA")
     return parser.parse_args(argv)
+
+
+def use_gpu() -> str:
+    """Point Cycles at the GPU (OptiX, else CUDA); returns the backend. The device choice lives in the user
+    preferences, not the blend, so every process (the guide pool's too) has to make it."""
+    prefs = bpy.context.preferences.addons["cycles"].preferences
+    for backend in ("OPTIX", "CUDA"):
+        try:
+            prefs.compute_device_type = backend
+        except TypeError:
+            continue
+        prefs.get_devices()
+        found = [d for d in prefs.devices if d.type == backend]
+        if found:
+            for d in prefs.devices:
+                d.use = d.type == backend
+            bpy.context.scene.cycles.device = "GPU"
+            print(f"bake: Cycles on {backend}: {', '.join(d.name for d in found)}")
+            return backend
+    raise SystemExit("bake: --gpu asked for, but Cycles finds no OptiX or CUDA device")
 
 
 def atlas_objects(atlas: str) -> list[bpy.types.Object]:
@@ -88,7 +121,7 @@ def select_only(objs):
     bpy.context.view_layer.objects.active = objs[0]
 
 
-def make_bake_uvs(objs, size: int, margin_px: int):
+def make_bake_uvs(objs, size: int, margin_px: int, rotate: str = "ANY"):
     """Give every object a 'bake' UV map, then pack all islands into one atlas.
 
     An object whose own UV map has no overlapping faces (Henry's lightmap UVs, the props' unwraps) keeps that
@@ -111,12 +144,15 @@ def make_bake_uvs(objs, size: int, margin_px: int):
         mesh.uv_layers.active = bake_uv
         if source is not None:
             source.active_render = True
-    if to_project:
-        select_only(to_project)
+    # An object may ask for a wider projection angle (extra project_angle): islands cut at a crease bake beaded edges
+    # there, each side sampling the other face's shadow on its border texels.
+    for angle in sorted({float(o.get("project_angle", 60.0)) for o in to_project}):
+        group = [o for o in to_project if float(o.get("project_angle", 60.0)) == angle]
+        select_only(group)
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.reveal()
         bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.0, area_weight=0.0,
+        bpy.ops.uv.smart_project(angle_limit=math.radians(angle), island_margin=0.0, area_weight=0.0,
                                  correct_aspect=False, scale_to_bounds=False)
         bpy.ops.object.mode_set(mode="OBJECT")
     print(f"bake: {len(objs) - len(to_project)} objects keep their UVs, {len(to_project)} smart-projected")
@@ -126,7 +162,7 @@ def make_bake_uvs(objs, size: int, margin_px: int):
     bpy.ops.mesh.reveal()
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.uv.select_all(action="SELECT")
-    bpy.ops.uv.pack_islands(udim_source="CLOSEST_UDIM", rotate=True, rotate_method="ANY", scale=True,
+    bpy.ops.uv.pack_islands(udim_source="CLOSEST_UDIM", rotate=True, rotate_method=rotate, scale=True,
                             merge_overlap=False, margin_method="FRACTION", margin=margin_px / size,
                             pin=False, shape_method="CONCAVE")
     bpy.ops.object.mode_set(mode="OBJECT")
@@ -220,14 +256,16 @@ def fill_gaps(image):
     screen and a poster there. Each level halves the image with alpha-weighted averages; going back up, a texel
     with no baked texel under it takes its parent's colour.
     """
-    w, h = image.size
-    px = np.empty(w * h * 4, dtype=np.float32)
-    image.pixels.foreach_get(px)
-    px = px.reshape(h, w, 4)
+    image.pixels.foreach_set(filled(pixels(image)).ravel())
+    image.update()
+
+
+def filled(px: np.ndarray) -> np.ndarray:
+    """fill_gaps on an (h, w, 4) array: the result is opaque everywhere."""
+    px = px.copy()
     px[..., :3] = push_pull(px[..., :3], px[..., 3] > 0.5)
     px[..., 3] = 1.0
-    image.pixels.foreach_set(px.ravel())
-    image.update()
+    return px
 
 
 def push_pull(rgb, known):
@@ -266,19 +304,20 @@ def pixels(image) -> np.ndarray:
     return px.reshape(h, w, 4)
 
 
-def bake_pass(objs, image, kind, samples, margin, **extra):
+def bake_pass(objs, image, kind, samples, margin, fill=True, **extra):
     """One Cycles bake of objs into image (their materials' active bake_target node points at it)."""
     attach_target(objs, image)
     select_only(objs)
     bpy.context.scene.cycles.samples = samples
-    bpy.ops.object.bake(type=kind, margin=margin, margin_type="EXTEND", use_clear=False, target="IMAGE_TEXTURES",
+    bpy.ops.object.bake(type=kind, margin=margin, margin_type=MARGIN_TYPE, use_clear=False, target="IMAGE_TEXTURES",
                         uv_layer="bake", **extra)
-    fill_gaps(image)
+    if fill:
+        fill_gaps(image)
 
 
 def bake_positions(objs, size, margin) -> np.ndarray:
     """World position (x, y, z) per texel, from an emission bake through one probe material; floor objects emit z
-    pushed down by FLOOR_FLAG so void_fade can tell the floor's rim from the walls' tops."""
+    pushed down by FLOOR_FLAG so void_fade can tell the floor's rim from the walls' tops. Unfilled (h, w, 4)."""
     image = float_image("bake_position", size)
     probes = {}
     for floor in (False, True):
@@ -300,14 +339,14 @@ def bake_positions(objs, size, margin) -> np.ndarray:
         for o in objs:
             for slot in o.material_slots:
                 slot.material = probes[o.name.startswith("floor")]
-        bake_pass(objs, image, "EMIT", 1, margin)
+        bake_pass(objs, image, "EMIT", 1, margin, fill=False)
     finally:
         for o in objs:
             for slot, mat in zip(o.material_slots, saved[o.name]):
                 slot.material = mat
         for mat in probes.values():
             bpy.data.materials.remove(mat)
-    pos = pixels(image)[..., :3].astype(np.float64)
+    pos = pixels(image)
     bpy.data.images.remove(image)
     return pos
 
@@ -319,6 +358,87 @@ def void_fade_map(pos: np.ndarray) -> np.ndarray:
     floor = pos[..., 2] < -FLOOR_FLAG / 2
     z = np.where(floor, pos[..., 2] + FLOOR_FLAG, pos[..., 2])
     return room_lib.void_fade(pos[..., 0], pos[..., 1], z, floor=floor)
+
+
+# The guide passes run in a bounded pool of Blender processes, each baking a run of the atlas's objects (in their
+# sorted order) into its own image, threads shared out under MAX_THREADS. Cycles syncs the whole scene again for every
+# object it bakes, mostly on one core, so round eight spent as long on the 4-sample guides as on the light itself
+# (props: 1,377 s of 2,740 s). Each object bakes exactly as it would alone, and the runs merge in order.
+GUIDE_WORKERS = 4
+
+
+def guide_passes(objs, size, margin, positions: bool) -> dict[str, np.ndarray]:
+    """The albedo and normal bakes that guide OIDN, and the world positions for the void fade: unfilled (h, w, 4)."""
+    out = {}
+    albedo = float_image("guide_albedo", size)
+    bake_pass(objs, albedo, "DIFFUSE", GUIDE_SAMPLES, margin, fill=False, pass_filter={"COLOR"})
+    out["albedo"] = pixels(albedo)
+    normal = float_image("guide_normal", size)
+    bake_pass(objs, normal, "NORMAL", GUIDE_SAMPLES, margin, fill=False, normal_space="OBJECT")
+    out["normal"] = pixels(normal)
+    for img in (albedo, normal):
+        bpy.data.images.remove(img)
+    if positions:
+        out["position"] = bake_positions(objs, size, margin)
+    return out
+
+
+def pooled_guide_passes(objs, size, margin, positions: bool, workers: int, tag: str) -> dict[str, np.ndarray]:
+    """guide_passes over runs of objs in up to `workers` Blender processes, merged in object order (a later object's
+    texels over an earlier one's, as in one bake)."""
+    runs = [list(r) for r in np.array_split(np.array([o.name for o in objs], dtype=object), min(workers, len(objs)))]
+    work = BAKE_DIR / "guides"
+    work.mkdir(parents=True, exist_ok=True)
+    copy = work / f"{tag}.blend"
+    bpy.ops.wm.save_as_mainfile(filepath=str(copy), copy=True, compress=False, relative_remap=True)
+    threads = max(1, bpy.context.scene.render.threads // len(runs))
+    procs = []
+    for k, names in enumerate(runs):
+        spec = work / f"{tag}_{k}.json"
+        spec.write_text(json.dumps({"objects": names, "size": size, "margin": margin, "positions": positions,
+                                    "threads": threads, "gpu": bpy.context.scene.cycles.device == "GPU",
+                                    "out": str(work / f"{tag}_{k}")}))
+        log = open(work / f"{tag}_{k}.log", "w")
+        procs.append((subprocess.Popen([bpy.app.binary_path, "-b", str(copy), "-t", str(threads), "--python-exit-code",
+                                        "1", "-P", __file__, "--", "--guide-worker", str(spec)],
+                                       stdout=log, stderr=subprocess.STDOUT), log))
+    failed = []
+    for k, (proc, log) in enumerate(procs):
+        if proc.wait() != 0:
+            failed.append(k)
+        log.close()
+    if failed:
+        raise SystemExit(f"bake: guide workers {failed} failed (logs in {work})")
+    merged = {}
+    for k in range(len(runs)):
+        for key in ("albedo", "normal", "position") if positions else ("albedo", "normal"):
+            part = np.load(work / f"{tag}_{k}_{key}.npz")
+            flat = merged.setdefault(key, np.zeros((size * size, 4), dtype=np.float32))
+            flat[part["index"]] = part["value"]
+    merged = {key: flat.reshape(size, size, 4) for key, flat in merged.items()}
+    for f in work.glob(f"{tag}*"):
+        f.unlink()
+    return merged
+
+
+def guide_worker(spec_path: str):
+    """One process of the guide pool: bake the guide passes of the objects in the spec and save them as .npy."""
+    spec = json.loads(Path(spec_path).read_text())
+    scene = bpy.context.scene
+    scene.render.threads_mode, scene.render.threads = "FIXED", spec["threads"]
+    if spec.get("gpu"):
+        use_gpu()
+    objs = [bpy.data.objects[n] for n in spec["objects"]]
+    for key, px in guide_passes(objs, spec["size"], spec["margin"], spec["positions"]).items():
+        flat = px.reshape(-1, 4)
+        index = np.flatnonzero(flat[:, 3] > 0)  # only the texels this run baked: a fifth of the bytes of the image
+        np.savez(f"{spec['out']}_{key}.npz", index=index, value=flat[index])
+
+
+def image_from(name: str, px: np.ndarray) -> bpy.types.Image:
+    image = float_image(name, px.shape[0])
+    image.pixels.foreach_set(px.ravel())
+    return image
 
 
 def denoise_and_save(image, path: Path, albedo=None, normal=None, exr: Path | None = None, denoise=True):
@@ -405,27 +525,30 @@ def bake_atlas(atlas: str, size: int, samples: int, out_name: str | None = None,
     out_name = out_name or atlas
     started = time.monotonic()
     if make_uvs or any("bake" not in o.data.uv_layers for o in objs):
-        make_bake_uvs(objs, ATLAS_SIZES[atlas], MARGIN_PX[atlas])
+        make_bake_uvs(objs, ATLAS_SIZES[atlas], MARGIN_PX[atlas], PACK_ROTATE.get(atlas, "ANY"))
     t_uv = time.monotonic()
     scene = bpy.context.scene
     scene.cycles.use_denoising = False
     # Cycles bakes object by object and dilates each one on its own, so its margin must stay under half the gap
     # between islands or it paints over a neighbour; fill_gaps() fills the rest of the atlas afterwards.
     margin = max(1, MARGIN_PX[atlas] * size // ATLAS_SIZES[atlas] // 2)
-    scene.render.bake.margin, scene.render.bake.margin_type, scene.render.bake.use_clear = margin, "EXTEND", False
+    scene.render.bake.margin, scene.render.bake.margin_type, scene.render.bake.use_clear = margin, MARGIN_TYPE, False
     image = float_image(f"bake_{out_name}", size)
     # The set bakes its view-independent light; the window's view, seen only from in front, keeps its sheen.
     light = {"EMIT", "DIRECT", "INDIRECT", "DIFFUSE"} | ({"GLOSSY"} if atlas.startswith("window_") else set())
     bake_pass(objs, image, "COMBINED", samples, margin, pass_filter=light)
     t_bake = time.monotonic()
-    albedo = float_image(f"bake_{out_name}_albedo", size)
-    bake_pass(objs, albedo, "DIFFUSE", GUIDE_SAMPLES, margin, pass_filter={"COLOR"})
-    normal = float_image(f"bake_{out_name}_normal", size)
-    bake_pass(objs, normal, "NORMAL", GUIDE_SAMPLES, margin, normal_space="OBJECT")
-    n = pixels(normal)
+    positions = not atlas.startswith("window_")
+    if GUIDE_WORKERS > 1 and len(objs) > 1:
+        guides = pooled_guide_passes(objs, size, margin, positions, GUIDE_WORKERS, out_name)
+    else:
+        guides = guide_passes(objs, size, margin, positions)
+    albedo = image_from(f"bake_{out_name}_albedo", filled(guides["albedo"]))
+    n = filled(guides["normal"])
     n[..., :3] = n[..., :3] * 2.0 - 1.0  # the bake stores (n + 1) / 2; OIDN wants n
-    normal.pixels.foreach_set(n.ravel())
-    fade = None if atlas.startswith("window_") else void_fade_map(bake_positions(objs, size, margin))
+    normal = image_from(f"bake_{out_name}_normal", n)
+    fade = void_fade_map(filled(guides["position"])[..., :3].astype(np.float64)) if positions else None
+    del guides, n
     t_guides = time.monotonic()
     BAKE_DIR.mkdir(parents=True, exist_ok=True)
     out = BAKE_DIR / f"{out_name}.png"
@@ -551,7 +674,12 @@ def regrade(atlas: str):
 
 
 def main():
+    global GUIDE_WORKERS
     args = parse_args()
+    if args.guide_worker:
+        guide_worker(args.guide_worker)
+        return
+    GUIDE_WORKERS = args.guide_workers
     if args.save_as:
         SAVE_AS[0] = Path(args.save_as).resolve()
     if args.regrade:
@@ -564,6 +692,8 @@ def main():
     scene.cycles.device = "CPU"
     scene.render.threads_mode = "FIXED"
     scene.render.threads = min(args.threads, MAX_THREADS)
+    if args.gpu:
+        use_gpu()
     atlases = args.atlas.split(",")
     room = [a for a in atlases if not a.startswith("window_")]
     view = [a for a in atlases if a.startswith("window_")]

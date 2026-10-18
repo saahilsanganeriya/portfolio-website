@@ -12,12 +12,30 @@
       "uri": "room.glb",
       "image": 1,
       "px": 1024,
-      "bytes": 206527
+      "bytes": 227488
     },
     "full": {
       "uri": "atlas/desk.ktx2",
       "px": 4096,
-      "bytes": 8222700,
+      "bytes": 8524946,
+      "format": "ktx2-uastc"
+    }
+  },
+  {
+    "name": "bezel",
+    "materials": [
+      "room_bezel"
+    ],
+    "low": {
+      "uri": "room.glb",
+      "image": 2,
+      "px": 1024,
+      "bytes": 156503
+    },
+    "full": {
+      "uri": "atlas/bezel.ktx2",
+      "px": 1792,
+      "bytes": 1783043,
       "format": "ktx2-uastc"
     }
   },
@@ -33,14 +51,14 @@
     ],
     "low": {
       "uri": "room.glb",
-      "image": 3,
+      "image": 4,
       "px": 1024,
-      "bytes": 202690
+      "bytes": 188692
     },
     "full": {
       "uri": "atlas/art.ktx2",
       "px": 4096,
-      "bytes": 7748605,
+      "bytes": 6991200,
       "format": "ktx2-uastc"
     }
   },
@@ -65,12 +83,12 @@
       "uri": "room.glb",
       "image": 0,
       "px": 1024,
-      "bytes": 237798
+      "bytes": 231309
     },
     "full": {
       "uri": "atlas/props.avif",
       "px": 4096,
-      "bytes": 1252029,
+      "bytes": 1029823,
       "format": "avif"
     }
   },
@@ -83,14 +101,14 @@
     ],
     "low": {
       "uri": "room.glb",
-      "image": 2,
+      "image": 3,
       "px": 1024,
-      "bytes": 143160
+      "bytes": 142289
     },
     "full": {
       "uri": "atlas/env.avif",
       "px": 3072,
-      "bytes": 283120,
+      "bytes": 259866,
       "format": "avif"
     }
   }

@@ -23,11 +23,15 @@ import { fileURLToPath } from 'node:url';
  * dictionary and zstd 22, smaller than round 8's at the same or a higher SSIM. props: AVIF; ETC1S showed blocks at the
  * desk view, and UASTC would put the full room over its 25 MB budget. env: AVIF while the full set has no room; UASTC
  * (`--codec env=uastc:q2:l2:d32768:z22`, optionally `--px env=2048`) holds a quarter of its GPU memory for +2.9 MB.
+ * With the bezel's own atlas the full room measured 26.0 MB: desk, art and the bezel take RDO level 2 (-0.85 MB, about
+ * 2 dB PSNR against the resampled bake), the bezel ships at 1792 px (-0.47 MB) and props at crf 16 (-0.10 MB), which
+ * keeps the full room under 25 MB once the darkroom's small prints load before the reveal.
  */
 export const ATLASES = {
-  desk: { px: 4096, codec: 'uastc:q2:l1:d32768:z22' },
-  art: { px: 4096, codec: 'uastc:q2:l1:d32768:z22' },
-  props: { px: 4096, codec: 'avif:14' },
+  desk: { px: 4096, codec: 'uastc:q2:l2:d32768:z22' },
+  bezel: { px: 1792, codec: 'uastc:q2:l2:d32768:z22' }, // the CRT bezel the landing view shows
+  art: { px: 4096, codec: 'uastc:q2:l2:d32768:z22' },
+  props: { px: 4096, codec: 'avif:16' },
   env: { px: 3072, codec: 'avif:14' },
 };
 

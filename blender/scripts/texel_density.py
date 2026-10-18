@@ -8,8 +8,10 @@ area-weighted mean over its objects, the 10th / 50th / 90th percentiles by area,
 atlas its islands cover; islands never overlap).
 """
 
+import functools
 import json
 import math
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,7 +23,8 @@ import bake  # noqa: E402
 import export  # noqa: E402
 
 # Surfaces worth naming in the report (whichever exist in this version of the room).
-WATCH = ("wall_back", "wall_left", "floor", "floor_fade", "desk_desk_top", "desk_crt_front", "desk_computer_front",
+WATCH = ("wall_back", "wall_left", "floor", "floor_fade", "desk_desk_top", "desk_desk_top_mid", "desk_desk_top_rest",
+         "desk_crt_front", "desk_crt_bezel", "props_fujifilm_x100", "desk_computer_front",
          "keyboard", "mouse", "coffee_mug", "crt_badge", "sticky_note_0", "desk_desk", "desk_crt", "crt_glow",
          "props_nas_4bay", "env_window_frame", "voyager_record", "props_frame_pale_blue_dot", "pennant_gatech",
          "print_japanese_lit", "darkroom_line_1", "poster_plaque", "props_mango_plant", "espresso_machine",
@@ -29,10 +32,19 @@ WATCH = ("wall_back", "wall_left", "floor", "floor_fade", "desk_desk_top", "desk
          "props_lounge_chair", "kitchen_counter", "env_credenza", "props_bakery_board", "lava_lamp")
 
 
+@functools.cache
+def full_sizes() -> dict[str, int]:
+    """Each full atlas's shipped size, from the encoder's table."""
+    script = (f"import {{ ATLASES }} from '{export.ENCODER.as_uri()}';"
+              "console.log(JSON.stringify(Object.fromEntries(Object.entries(ATLASES).map(([k, v]) => [k, v.px]))))")
+    found = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True)
+    return json.loads(found.stdout)
+
+
 def shipped_size(atlas: str) -> int:
     if atlas.startswith("window_"):
         return bake.ATLAS_SIZES[atlas]  # the view ships at its bake size
-    return export.FULL_PX[atlas]
+    return full_sizes()[atlas]
 
 
 def object_density(obj, size):

@@ -47,9 +47,6 @@ TEXTURES = {
     "plastered_wall_04": (3.2, {
         "diff": "aaf0e693291d51d13531480625a942f950fed23f6b1d1008ee0e91f2a23a7b1e",
         "rough": "37302048eb2e60be2a73a7f803965097681e652b80b93d6d701cfc7fabc1e0a7"}),
-    "fabric_leather_02": (0.5, {
-        "diff": "d2cd2e14face20b152dffd1d59a48d91bbef7b516242bc39c401c09d018e7eb8",
-        "rough": "36af9f3299a221608de05e4a7e2eac59c70f7a725e7de690361d2e1478d1e16f"}),
     "poly_wool_herringbone": (0.27, {
         "diff": "ca21de8e2e7f43178f8290361bfb2271eb264af0d2887c7c93e76a113ff3cc64",
         "rough": "8678dfb7f474440c12a5f317fe01802dd1aabbb205a6c947bb044ade72294fa7"}),
@@ -69,7 +66,8 @@ CREDENZA_TOP = 0.60  # the low walnut credenza under the posters that carries th
 PROPS = {
     "fujifilm_x100": ((-0.60, -0.29, 0.7345), 18, (0.128, 0.055, 0.075)),
     "nas_4bay": ((0.545, 0.135, 0.7325), 30, (0.27, 0.31, 0.23)),
-    "mango_plant": ((1.44, 0.345, WIN_Z0), 0, (0.45, 0.40, 0.45)),
+    # x 1.37: the leaves clear the Painted Ladies in the window framing; the canopy stays inside the opening
+    "mango_plant": ((1.37, 0.345, WIN_Z0), 0, (0.45, 0.40, 0.45)),
     # Kitchen nook on the counter at the left wall's front end, fronts turned to the room (+X).
     "espresso_machine": ((X_LEFT + 0.28, -2.43, KITCHEN_TOP), 90, (0.23, 0.38, 0.55)),
     "countertop_oven": ((X_LEFT + 0.30, -3.02, KITCHEN_TOP), 90, (0.40, 0.33, 0.23)),
@@ -91,7 +89,8 @@ STILL_POSTERS = ["la-la-land", "yi-yi", "normal-people-2020", "black-swan"]
 CAMERAS = {
     # name: (position, target) in metres; vertical field of view is 35 degrees for every framing.
     "cam_loading": ((2.77, -11.30, 3.90), (-0.20, -1.30, 1.00)),
-    "cam_idle": ((1.85, -8.20, 3.00), (-0.20, -1.30, 1.00)),
+    # 12 % further back on round 8's line, so the paper lantern stays whole in a 1512x982 (1.54:1) frame
+    "cam_idle": ((2.096, -9.028, 3.24), (-0.20, -1.30, 1.00)),
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
     "cam_window": ((1.85, -1.75, 1.55), (1.85, 1.40, 1.50)),
@@ -222,17 +221,6 @@ def build_materials() -> dict[str, bpy.types.Material]:
     m.set(metal=1.0)
     mats["brass"] = m.mat
 
-    m = Mat("leather")
-    size = TEXTURES["fabric_leather_02"][0]
-    diff = m.image(texture_path("fabric_leather_02", "diff"), scale=size, loc=(-900, 100))
-    rough_tex = m.image(texture_path("fabric_leather_02", "rough"), non_color=True, scale=size, loc=(-900, -300))
-    colour = m.mix(diff.outputs["Color"], srgb("#7A3A2A"), "MULTIPLY", 0.85, (-400, 100))
-    m.link(m.grime(colour, (0.01, 0.005, 0.004, 1), 0.03, 0.5), m.bsdf.inputs["Base Color"])
-    m.link(m.remap(rough_tex.outputs["Color"], 0.35, 0.7), m.bsdf.inputs["Roughness"])
-    m.bump(diff.outputs["Color"], strength=0.2, distance=0.001)
-    mats["leather"] = m.mat
-
-    mats["black_metal"] = Mat("black_metal").set(base=srgb("#1D1B19"), rough=0.45, metal=0.3).mat
     mats["rubber"] = Mat("rubber").set(base=srgb("#3A352E"), rough=0.7).mat
     mats["paper"] = Mat("paper").set(base=srgb("#E6DECD"), rough=0.85).mat
 
@@ -373,10 +361,6 @@ def sky_material() -> bpy.types.Material:
 
 HENRY_MATERIALS = {
     "desk_desk": ["walnut"],
-    "desk_chair_base": ["black_metal"],
-    "desk_chair_seat": ["leather"],
-    "desk_computer": ["cream_plastic"],
-    "desk_crt": ["cream_plastic"],
     "desk_keyboard": ["cream_plastic"],
     "desk_mouse": ["cream_plastic"],
     "desk_cables": ["rubber"],
@@ -405,6 +389,29 @@ def place_henry(mats):
         smooth_by_angle(obj, 40)
         if obj.name in HERO_NAMES:
             obj.name = obj.data.name = HERO_NAMES[obj.name]
+
+
+# The CRT's case, the computer under it and the desk chair are prop files in place of Henry's: the CRT stands on the
+# computer as desk_crt, placed before the glass, the sticky notes and the badge are fitted to its face; the chair takes
+# his chair's spot and turn. name: (name in the room, location, z turn in degrees).
+DESK_PROPS = {
+    "crt_shell": ("desk_crt", (0.0, 0.040, 0.865), 0.0),
+    "desk_chair": ("desk_chair", (0.199, -0.681, 0.0), -130.0),
+    "computer_case": ("desk_computer", (0.0058, 0.0170, 0.7316), 0.0),
+}
+DESK_PROP_ANCHORS: dict[str, Vector] = {}  # the empties they bring (crt_screen, crt_badge_seat), in world space
+
+
+def place_desk_props(mats):
+    for name, (room_name, loc, turn) in DESK_PROPS.items():
+        if not (PROPS_DIR / f"{name}.blend").exists():
+            raise SystemExit(f"build_room: no prop file {name}.blend")
+        root = Matrix.Translation(loc) @ Matrix.Rotation(math.radians(turn), 4, "Z")
+        meshes, anchors = place_one(name, root, "desk", "desk", mats)
+        for obj in meshes:
+            if obj.name.split(".")[0] == name:
+                obj.name = obj.data.name = room_name
+        DESK_PROP_ANCHORS.update(anchors)
 
 
 # ---- The corner: two walls and the floor ----
@@ -752,10 +759,12 @@ def crt_opening():
     crt = bpy.data.objects["desk_crt"]
     depsgraph = bpy.context.evaluated_depsgraph_get()
     step, cz = 0.002, 1.137
+    to_local = crt.matrix_world.inverted()  # Object.ray_cast works in the object's own space
 
     def inside(x, z):
-        hit, loc, *_ = crt.ray_cast(Vector((x, -1.0, z)), Vector((0, 1, 0)), depsgraph=depsgraph)
-        return hit and loc.y > -0.09
+        hit, loc, *_ = crt.ray_cast(to_local @ Vector((x, -1.0, z)), to_local.to_3x3() @ Vector((0, 1, 0)),
+                                    depsgraph=depsgraph)
+        return hit and (crt.matrix_world @ loc).y > -0.09
 
     def run(axis):
         ends = []
@@ -770,8 +779,18 @@ def crt_opening():
     return Vector(((x0 + x1) / 2, -0.085, cz + (z0 + z1) / 2)), x1 - x0, z1 - z0
 
 
+# The site sizes and places SaahilOS's hole from monitor_screen, so the screen stays where round eight put it whatever
+# CRT case stands round it; a case whose opening no longer matches (to the 2 mm the measurement steps) stops the build.
+MONITOR_SCREEN = (Vector((0.0, -0.085, 1.14)), 0.344, 0.27)
+
+
 def build_crt_glass(mats):
-    centre, width, height = crt_opening()
+    measured, width_seen, height_seen = crt_opening()
+    centre, width, height = MONITOR_SCREEN
+    off = max((measured - centre).length, abs(width_seen - width), abs(height_seen - height))
+    if off > 0.003:
+        raise SystemExit(f"build_room: the CRT opening measures {width_seen:.4f} x {height_seen:.4f} m at "
+                         f"{tuple(round(v, 4) for v in measured)}, {off * 1000:.1f} mm from monitor_screen")
     tilt = Matrix.Rotation(math.radians(-3), 4, "X")
     bm = bmesh.new()
     nx, nz = 16, 12
@@ -1242,6 +1261,21 @@ def build_lights(mats):
     lights.objects.link(obj)
 
 
+# The darkroom lines' lights (room_dressing places the fixtures): each picture light's watts and how far below it it
+# aims on the wall; the fill's watts, height, distance from the wall and aim height. Measured from cam_photos the way
+# the site lights a print (the wall's bake there over the bake under the lamps): every print at 0.82-0.96, where round
+# eight's one strip gave 0.28-0.87, and the brightest point as bright as round eight's.
+DARKROOM_LAMP_W, DARKROOM_AIM_DROP = 3.0, 1.6
+DARKROOM_FILL_W, DARKROOM_FILL_Z, DARKROOM_FILL_OUT, DARKROOM_FILL_AIM_Z = 4.8, 0.95, 0.55, 1.4
+DARKROOM_FILL_EXTRA, DARKROOM_FILL_SPREAD = 0.6, 120
+
+
+def along_wall(aim: Vector):
+    """An area light's rotation that aims it along `aim` with its long side (local X) along the left wall: tracking
+    with local X as the up axis stood round eight's strip on end, so it lit a narrow upright band of the prints."""
+    return aim.normalized().to_track_quat("-Z", "Y")
+
+
 def build_practical_lights(dressing):
     """The lights that come with the room's things, each with its source in view or just out of it."""
     lights = collection("lights")
@@ -1275,11 +1309,17 @@ def build_practical_lights(dressing):
     lo, hi = world_bounds([oven])
     add("oven_glow", "POINT", Vector((hi.x + 0.04, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2)), (1.0, 0.42, 0.12), 2.5,
         size=0.05)
-    # The darkroom lines' brass strip light on the left wall: a long soft warm wash down over the prints.
-    p = dressing["darkroom_light"]
-    aim = Vector((X_LEFT, p.y, p.z - 0.9)) - p
-    add("darkroom_light", "AREA", p + Vector((0.0, 0.0, -0.022)), (1.0, 0.64, 0.36), 16.0,
-        size=(dressing["darkroom_light_len"], 0.05), rot=aim.normalized().to_track_quat("-Z", "X"), spread=120)
+    # The darkroom lines' picture lights on the left wall, each washing down over the prints below it, and a soft
+    # fill from below (the floor's bounce, strengthened) so the lowest string reads like the top one.
+    for k, p in enumerate(dressing["darkroom_lamps"]):
+        aim = Vector((X_LEFT, p.y, p.z - DARKROOM_AIM_DROP)) - p
+        add(f"darkroom_light_{k}", "AREA", p + Vector((0.0, 0.0, -0.02)), (1.0, 0.64, 0.36), DARKROOM_LAMP_W,
+            size=(room_dressing.DARKROOM_LAMP_LEN, 0.04), rot=along_wall(aim), spread=130)
+    u0, u1 = dressing["darkroom_span"]
+    fill = Vector((X_LEFT + DARKROOM_FILL_OUT, (u0 + u1) / 2, DARKROOM_FILL_Z))
+    aim = Vector((X_LEFT, fill.y, DARKROOM_FILL_AIM_Z)) - fill
+    add("darkroom_fill", "AREA", fill, (1.0, 0.80, 0.62), DARKROOM_FILL_W, size=(u1 - u0 + DARKROOM_FILL_EXTRA, 0.30),
+        rot=along_wall(aim), spread=DARKROOM_FILL_SPREAD)
     # Paper lantern between the armchair and the record cabinet: a warm bulb inside the globe, kept below the desk
     # lamp and the CRT so the eye goes to the desk first.
     add("floor_lamp", "POINT", dressing["floor_lamp"], (1.0, 0.58, 0.26), 2.2, size=0.12)
@@ -1337,7 +1377,7 @@ def aim_camera(name: str):
 # Room-only triangle reduction (the prop files keep their full detail): the share of triangles each dense mesh keeps,
 # so the glb's geometry stays near 100k vertices with the round-two dressing (PLAN 11.3, room.glb <= 4.3 MB).
 DECIMATE = {
-    "props_fujifilm_x100": 0.4, "props_nas_4bay": 0.5, "espresso_machine": 0.6, "countertop_oven": 0.75,
+    "props_nas_4bay": 0.5, "espresso_machine": 0.6, "countertop_oven": 0.75,
     "props_haworthia": 0.5, "props_tea_tin": 0.6, "props_pen_cup": 0.7, "lava_lamp": 0.7,
     "props_mango_plant": 0.6, "props_board_croissant_0": 0.45, "props_board_croissant_1": 0.45,
 }
@@ -1373,14 +1413,15 @@ def reduce_geometry():
             bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
-# Four atlases by importance (CRAFT-R8 4): desk (the hero surfaces of the desk view), art (the wall art, the window
-# and the space prints), props (everything else that stands in the set) and env (the walls, the floor and what lies
-# on them). An object goes to the first atlas whose name prefixes claim it; the rest keep the atlas they were built
+# Atlases by importance (CRAFT-R8 4): desk (the hero surfaces of the desk view), bezel (the CRT bezel the landing view
+# shows), art (the wall art, the window and the space prints), props (everything else that stands in the set) and env
+# (the walls, the floor and what lies on them). An object goes to the first atlas whose name prefixes claim it; the rest keep the atlas they were built
 # with. split_desk_heroes() first cuts the desk, the CRT and the computer into the faces the desk view sees (desk
 # atlas) and the rest (props).
 ATLAS_BY_NAME = [
     ("desk", ("desk_desk_top", "desk_crt_front", "desk_computer_front", "keyboard", "mouse", "coffee_mug", "crt_glow",
-              "crt_badge", "sticky_note_")),
+              "crt_badge", "sticky_note_", "props_fujifilm_x100")),
+    ("bezel", ("desk_crt_bezel",)),
     ("art", ("env_window", "env_curtain_rod", "env_picture_light", "env_space_light", "props_poster_frame_", "poster_art_", "poster_plaque",
              "voyager_record", "props_frame_pale_blue_dot", "print_pale_blue_dot", "pennant_gatech",
              "print_japanese_lit", "darkroom_", "env_darkroom_light")),
@@ -1389,14 +1430,14 @@ ATLAS_BY_NAME = [
 # Share of its atlas per object relative to its surface area (1 = by area), within its atlas: the hero props of the
 # desk view and the type on the books and prints get more texels, the big smooth surfaces fewer.
 TEXEL_WEIGHTS = {
-    # desk: the desk top is big and smooth; the small things on it carry the detail
-    "desk_desk_top": 0.72, "keyboard": 1.3, "mouse": 1.0, "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4,
-    "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3, "props_mouse_cable": 0.3,
-    "desk_computer_front": 0.85, "crt_glow": 0.3,
+    # desk: the desk top by what the views see of it (split_desk_top_by_view); the small things on it carry the detail
+    "desk_desk_top": 1.2, "desk_desk_top_mid": 0.44, "desk_desk_top_rest": 0.02, "keyboard": 1.3, "mouse": 1.0,
+    "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4, "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3,
+    "props_mouse_cable": 0.3, "desk_computer_front": 1.2, "crt_glow": 0.3, "props_fujifilm_x100": 1.0,
     # the rest of the desk sits in the props atlas, a little above its average: the desk view sees it
-    "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4, "props_nas_4bay": 1.6,
+    "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4,
     "desk_tray_bottom": 1.2, "desk_tray_top": 1.2, "desk_cables": 0.8, "desk_papers_a": 1.4,
-    "desk_papers_b": 1.4, "desk_paper": 1.4, "props_fujifilm_x100": 1.6, "props_pen_cup": 1.4, "lamp_bulb": 1.0,
+    "desk_papers_b": 1.4, "desk_paper": 1.4, "props_pen_cup": 1.4, "lamp_bulb": 1.0,
     # art: frames and the window frame by area; the engraved and printed type sharper
     "env_window_frame": 0.8, "env_window_sill": 0.8, "poster_plaque": 3.0, "voyager_record": 1.6, "pennant_gatech": 1.4,
     "print_japanese_lit": 1.4, "props_frame_pale_blue_dot": 1.0, "env_curtain_rod": 0.6,
@@ -1404,15 +1445,17 @@ TEXEL_WEIGHTS = {
     "floor_fade": 0.3, "env_rug": 0.8, "env_rug_corner": 0.8, "env_curtains": 0.7, "env_skirting": 1.0,
     # props: what the tour stops at
     "kitchen_counter": 1.0, "env_kitchen_top": 1.2, "env_kitchen_tiles": 1.2, "env_kitchen_shelf": 1.0,
-    "env_credenza": 0.8, "env_record_cabinet": 0.9, "bookshelf": 0.9, "record_player": 2.0, "platter": 2.2,
-    "tonearm": 2.2, "record_crate": 1.0, "props_kitchen_spices": 1.6, "props_kitchen_mugs": 1.4,
+    "env_credenza": 0.8, "env_record_cabinet": 0.9, "bookshelf": 0.9, "record_player": 3.0, "platter": 3.3,
+    "tonearm": 4.4, "record_crate": 1.0, "props_kitchen_spices": 1.6, "props_kitchen_mugs": 1.4,
     "props_pour_over": 1.6, "props_bakery_board": 2.0, "props_cinnamon_rolls": 2.0, "props_under_shelf_light": 1.0,
     "props_bookcase_books": 1.0, "props_bookend": 1.0, "props_kitchen_jars": 1.4, "props_kitchen_pendant": 1.2,
-    "props_chopping_board": 1.0, "props_jacket": 0.8, "props_lounge_chair": 0.8, "props_lantern": 0.8,
+    "props_chopping_board": 1.0, "props_lounge_chair": 0.8, "props_lantern": 0.8,
     "props_reading_mug": 1.4, "props_floor_books": 0.9, "espresso_machine": 1.6, "espresso_cup": 2.2,
     "espresso_coffee": 1.0, "countertop_oven": 1.6, "oven_door": 1.8, "croissant": 3.0, "lava_lamp": 1.6,
-    "lava_lamp_glass": 1.8, "oven_glow": 1.6, "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_desk": 0.6,
+    "lava_lamp_glass": 1.8, "oven_glow": 1.6, "desk_chair_base": 0.6, "desk_chair": 0.9, "desk_desk": 0.6,
     "desk_crt": 2.0, "desk_computer": 1.5, "props_mango_plant_leaves": 1.4,
+    # its object card frames it at half the view's height (~2,300 texels/m for 1 per device pixel); 24 gives ~1,500
+    "props_nas_4bay": 24.0,
 }
 # Heights things rest on (their bottoms there are hidden): floor, desk, record cabinet, credenza, sill, counter,
 # bookcase levels.
@@ -1454,14 +1497,247 @@ def split_by_faces(obj, keep, name):
     return part
 
 
+CRT_PARTING_Y = -0.0715  # the CRT case's parting groove (props_crt_shell.py: y -0.072), just behind it
+
+
 def split_desk_heroes():
     """The desk view sees the desk's top, the CRT's and the computer's fronts and tops: those faces get the desk
     atlas's density, the rest of each (legs, sides, backs) the props atlas's."""
     desk = bpy.data.objects["desk_desk"]
     top_z = max((desk.matrix_world @ v.co).z for v in desk.data.vertices)
     split_by_faces(desk, lambda c, n, m: n.z > 0.7 and c.z > top_z - 0.01, "desk_desk_top")
-    split_by_faces(bpy.data.objects["desk_crt"], lambda c, n, m: n.y < -0.3 or n.z > 0.7, "desk_crt_front")
-    split_by_faces(bpy.data.objects["desk_computer"], lambda c, n, m: n.y < -0.3 or n.z > 0.7, "desk_computer_front")
+    # The CRT's case parts at its parting groove: the whole bezel in front of it (face, lip, rolled edge) in the desk
+    # atlas, the rear cover in props. A cut by facing cut across the rounded bevels, which then showed both atlases'
+    # densities side by side and a dotted seam along the cut. One smart projection keeps the bezel one island.
+    front = split_by_faces(bpy.data.objects["desk_crt"], lambda c, n, m: c.y < CRT_PARTING_Y, "desk_crt_front")
+    front["bake_uv"] = "project"
+    split_crt_bezel_by_landing(front)
+    split_computer_front()
+    split_desk_top_by_view()
+
+
+def split_computer_front():
+    """The computer's front panel and the strip of its lid in front of the CRT's foot go to the desk atlas; the rest of
+    the lid (under the CRT, out of sight from the desk), the sides and the back to props."""
+    comp, crt = bpy.data.objects["desk_computer"], bpy.data.objects["desk_crt"]
+    foot_y = min((crt.matrix_world @ v.co).y for v in crt.data.vertices if (crt.matrix_world @ v.co).z < 0.88)
+    bm = bmesh.new()
+    bm.from_mesh(comp.data)
+    to_world = comp.matrix_world
+    bm.transform(to_world)
+    bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], plane_co=(0, foot_y, 0), plane_no=(0, 1, 0))
+    bm.transform(to_world.inverted())
+    bm.to_mesh(comp.data)
+    bm.free()
+    split_by_faces(comp, lambda c, n, m: n.y < -0.3 or (n.z > 0.7 and c.y < foot_y), "desk_computer_front")
+
+
+# The landing view (the monitor framing every visit ends in) fills about a quarter of its frame with the bezel round
+# the glass and asks ~5,800 texels/m of it at 1512x982 @2, 2.5x what the rest of the case gets. The faces it shows bake
+# as desk_crt_bezel into an atlas of their own (bake.ATLAS_SIZES "bezel").
+MONITOR_MARGIN = 1.3  # src/scene/Camera/RoomCamera.ts: how far back from a glass-filled frame the monitor framing sits
+LANDING_ASPECTS = (1512 / 982, 16 / 9, 4 / 3)
+
+
+def landing_views():
+    screen = bpy.data.objects["monitor_screen"]
+    centre = screen.matrix_world.translation.copy()
+    back = (bpy.data.objects["cam_monitor"].location - bpy.data.objects["cam_monitor_target"].location).normalized()
+    half = math.tan(math.radians(CAMERA_FOV_DEG) / 2)
+    for aspect in LANDING_ASPECTS:
+        distance = max(screen["height_m"] / 2 / half, screen["width_m"] / 2 / (half * aspect)) * MONITOR_MARGIN
+        yield centre + back * distance, centre, aspect
+
+
+def split_crt_bezel_by_landing(front):
+    bpy.context.view_layer.update()
+    scene, depsgraph = bpy.context.scene, bpy.context.evaluated_depsgraph_get()
+    half_v = math.tan(math.radians(CAMERA_FOV_DEG) / 2)
+    views = []
+    for eye, target, aspect in landing_views():
+        forward = (target - eye).normalized()
+        right = forward.cross(Vector((0, 0, 1))).normalized()
+        views.append((eye, forward, right, right.cross(forward), half_v * aspect))
+
+    def shown(centre, normal):
+        p = centre + normal * 0.001
+        for eye, forward, right, up, half_h in views:
+            v = p - eye
+            depth = v.dot(forward)
+            if (depth > 0.05 and abs(v.dot(right)) <= half_h * depth and abs(v.dot(up)) <= half_v * depth
+                    and normal.dot(eye - p) > 0 and seen_from(p, eye, scene, depsgraph)):
+                return True
+        return False
+
+    bezel = split_by_faces(front, lambda c, n, m: shown(c, n), "desk_crt_bezel")
+    if bezel is None:
+        return
+    bezel["bake_uv"] = "project"
+    # One ring of a projection round the glass packs like a frame with nothing inside: cut it into its top, bottom,
+    # left and right sides (along the screen's diagonals), each its own island.
+    screen = bpy.data.objects["monitor_screen"]
+    centre, half_w, half_h = screen.matrix_world.translation, screen["width_m"] / 2, screen["height_m"] / 2
+    bm = bmesh.new()
+    bm.from_mesh(bezel.data)
+    mw = bezel.matrix_world
+
+    def side(face):
+        c = mw @ face.calc_center_median()
+        dx, dz = (c.x - centre.x) / half_w, (c.z - centre.z) / half_h
+        return ("top" if dz > 0 else "bottom") if abs(dz) > abs(dx) else ("right" if dx > 0 else "left")
+
+    sides = {f.index: side(f) for f in bm.faces}
+    bmesh.ops.split_edges(bm, edges=[e for e in bm.edges if len(e.link_faces) == 2
+                                     and sides[e.link_faces[0].index] != sides[e.link_faces[1].index]])
+    bm.to_mesh(bezel.data)
+    bm.free()
+
+
+# The desk top's density follows what the framings see of it: only about half of its 1.4 m2 shows from the desk
+# view (the CRT, the computer and the keyboard cover the rest), so a uniform density spent most texels where no one
+# looks. The top is cut into DESK_TOP_CELL squares and each goes to the first tier whose need it reaches: the texels
+# per metre its most demanding view asks for 1 texel per device pixel across the pixel's short side, in a frame
+# DESK_TOP_FRAME_PX tall (2560x1440 CSS at DPR 2). Views: every cam_* framing and the orbit at DESK_TOP_ORBIT_DIST
+# (nearer is a zoom past the default). The parts bake as their own objects; export.py joins them back into one
+# desk_desk_top (one node, one shine).
+DESK_TOP_CELL = 0.03
+DESK_TOP_FRAME_PX = 2880
+DESK_TOP_ORBIT_DIST = 4.5
+DESK_TOP_TIERS = (("desk_desk_top", 2200.0), ("desk_desk_top_mid", 900.0), ("desk_desk_top_rest", 0.0))
+
+
+def desk_top_views():
+    views = [(bpy.data.objects[o.name].location.copy(), bpy.data.objects[f"{o.name}_target"].location.copy())
+             for o in bpy.data.objects if o.name.startswith("cam_") and not o.name.endswith("_target")]
+    centre = bpy.data.objects["orbit_center"].location.copy()
+    for polar in (40, 55, 70, 80):
+        for azimuth in range(0, 360, 15):
+            p, a = math.radians(polar), math.radians(azimuth)
+            offset = Vector((math.sin(p) * math.sin(a), -math.sin(p) * math.cos(a), math.cos(p)))
+            views.append((centre + DESK_TOP_ORBIT_DIST * offset, centre.copy()))
+    return views
+
+
+def seen_from(point, eye, scene, depsgraph):
+    """No surface a camera renders lies between point and eye (proxies, ghosts and glass let the ray through)."""
+    ray = eye - point
+    left = ray.length
+    ray.normalize()
+    origin = point + ray * 0.003
+    for _ in range(16):
+        hit, loc, _n, _i, obj, _m = scene.ray_cast(depsgraph, origin, ray, distance=left)
+        if not hit:
+            return True
+        if not (obj.hide_render or not obj.visible_camera or obj.name.startswith(("hit_", "ghost_", "env_sky"))
+                or obj.name in ("window_glass", "crt_glow")):
+            return False
+        left -= (loc - origin).length + 0.001
+        origin = loc + ray * 0.001
+        if left <= 0:
+            return True
+    return True
+
+
+def desk_top_need(points, views) -> float:
+    half_v = math.tan(math.radians(CAMERA_FOV_DEG) / 2)
+    half_h = half_v * 16 / 9
+    scene, depsgraph = bpy.context.scene, bpy.context.evaluated_depsgraph_get()
+    best = 0.0
+    for eye, target in views:
+        forward = (target - eye).normalized()
+        right = forward.cross(Vector((0, 0, 1))).normalized()
+        up = right.cross(forward)
+        for p in points:
+            v = p - eye
+            depth = v.dot(forward)
+            if depth <= 0.05 or abs(v.dot(right)) > half_h * depth or abs(v.dot(up)) > half_v * depth:
+                continue
+            need = DESK_TOP_FRAME_PX / (2 * half_v * depth)
+            if need > best and seen_from(p, eye, scene, depsgraph):
+                best = need
+    return best
+
+
+DESK_TOP_RECT_CELLS = 20  # a rectangle's longest side in cells (0.6 m, ~1,800 px at 3,000 texels/m)
+
+
+def desk_top_rectangles(tiers, nx, ny) -> dict:
+    """Cover each tier's cells with rectangles, greedily: from each free cell, run along x, then down y while the run
+    stays in the tier. Returns cell -> rectangle id."""
+    rect, next_id = {}, 0
+    for j in range(ny):
+        for i in range(nx):
+            if (i, j) in rect:
+                continue
+            tier = tiers[i, j]
+            i1 = i
+            while i1 + 1 < nx and i1 + 1 - i < DESK_TOP_RECT_CELLS and tiers[i1 + 1, j] == tier and (i1 + 1, j) not in rect:
+                i1 += 1
+            j1 = j
+            while (j1 + 1 < ny and j1 + 1 - j < DESK_TOP_RECT_CELLS
+                   and all(tiers[k, j1 + 1] == tier and (k, j1 + 1) not in rect for k in range(i, i1 + 1))):
+                j1 += 1
+            for jj in range(j, j1 + 1):
+                for ii in range(i, i1 + 1):
+                    rect[ii, jj] = next_id
+            next_id += 1
+    return rect
+
+
+def split_desk_top_by_view():
+    top = bpy.data.objects["desk_desk_top"]
+    bpy.context.view_layer.update()
+    mw = top.matrix_world
+    world = [mw @ v.co for v in top.data.vertices]
+    lo = Vector((min(p.x for p in world), min(p.y for p in world)))
+    hi = Vector((max(p.x for p in world), max(p.y for p in world)))
+    z = max(p.z for p in world) + 0.0005
+    nx, ny = math.ceil((hi.x - lo.x) / DESK_TOP_CELL), math.ceil((hi.y - lo.y) / DESK_TOP_CELL)
+    bm = bmesh.new()
+    bm.from_mesh(top.data)
+    bm.transform(mw)
+    for axis, count, start in ((Vector((1, 0, 0)), nx, lo.x), (Vector((0, 1, 0)), ny, lo.y)):
+        for k in range(1, count):
+            co = axis * (start + k * DESK_TOP_CELL)
+            bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], plane_co=co, plane_no=axis)
+    bm.transform(mw.inverted())
+    bm.to_mesh(top.data)
+    bm.free()
+    views = desk_top_views()
+    tiers = {}
+    for j in range(ny):
+        for i in range(nx):
+            x, y = lo.x + i * DESK_TOP_CELL, lo.y + j * DESK_TOP_CELL
+            pts = [Vector((x + fx * DESK_TOP_CELL, y + fy * DESK_TOP_CELL, z))
+                   for fx, fy in ((0.5, 0.5), (0.15, 0.15), (0.85, 0.15), (0.15, 0.85), (0.85, 0.85))]
+            need = desk_top_need(pts, views)
+            tiers[i, j] = next(name for name, floor in DESK_TOP_TIERS if need >= floor)
+
+    def cell_of(centre):
+        return (min(max(int((centre.x - lo.x) / DESK_TOP_CELL), 0), nx - 1),
+                min(max(int((centre.y - lo.y) / DESK_TOP_CELL), 0), ny - 1))
+
+    def tier_of(centre):
+        return tiers[cell_of(centre)]
+
+    # Each tier's cells as rectangles, each its own UV island: one island per tier, full of holes where the CRT and
+    # the keyboard stand, left the desk atlas 40 % full; rectangles pack like any other island.
+    rect = desk_top_rectangles(tiers, nx, ny)
+    bm = bmesh.new()
+    bm.from_mesh(top.data)
+    bm.faces.ensure_lookup_table()
+    face_rect = {f.index: rect[cell_of(mw @ f.calc_center_median())] for f in bm.faces}
+    cut = [e for e in bm.edges if len(e.link_faces) == 2
+           and face_rect[e.link_faces[0].index] != face_rect[e.link_faces[1].index]]
+    bmesh.ops.split_edges(bm, edges=cut)
+    bm.to_mesh(top.data)
+    bm.free()
+    for name, _ in DESK_TOP_TIERS[1:]:
+        part = split_by_faces(top, lambda c, n, m, name=name: tier_of(c) == name, name)
+        if part is not None:
+            part["join_into"] = "desk_desk_top"
+    counts = {name: sum(1 for t in tiers.values() if t == name) for name, _ in DESK_TOP_TIERS}
+    print("desk top tiers: " + ", ".join(f"{name} {n * DESK_TOP_CELL ** 2:.3f} m2" for name, n in counts.items()))
 
 
 # The plants' leaves for the site's wind: (source object, the materials that sway, how the sway weight runs). "leaf":
@@ -1622,6 +1898,7 @@ def main():
     subprocess.run(["node", str(REPO / "blender" / "scripts" / "room_art.mjs"), str(CACHE / "art")], check=True)
     mats = build_materials()
     place_henry(mats)
+    place_desk_props(mats)
     build_shell(mats)
     build_window(mats)
     if not QUICK:

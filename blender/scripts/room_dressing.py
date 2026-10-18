@@ -63,7 +63,9 @@ DARKROOM_PRINTS = [
      (0.735, 0.33, 0.25, -3.0), (0.905, 0.35, 0.27, 2.0)],
 ]
 DARKROOM_HERO = (1, 2)  # (line, print)
-DARKROOM_LIGHT_Z = 2.34
+# Picture lights along the top of the lines, like the posters' and the pennant's (one strip over the middle left the
+# end prints dim): how many, their height, how far off the wall, and each hood's length.
+DARKROOM_LAMPS, DARKROOM_LAMP_Z, DARKROOM_LAMP_OUT, DARKROOM_LAMP_LEN = 5, 2.40, 0.30, 0.22
 
 # The space prints over the desk on the back wall (each built facing -Y, the room) and the Georgia Tech pennant
 # pinned over them: the Voyager record's shadow box and the Pale Blue Dot, side by side, centred over the desk.
@@ -110,9 +112,11 @@ def build_dressing(mats, placed):
     found["plaque"] = build_plaque(mats)
     before = set(bpy.data.objects)
     kitchen = build_kitchen_nook(mats)
+    bpy.context.view_layer.update()  # objects placed by .location (the board's croissants) have a stale matrix_world
     for obj in set(bpy.data.objects) - before:
         obj.matrix_world = Matrix.Translation(KITCHEN_SHIFT) @ obj.matrix_world
     found.update({k: (v + KITCHEN_SHIFT if isinstance(v, Vector) else v) for k, v in kitchen.items()})
+    build_cinnamon_rolls()
     found.update(build_darkroom(mats))
     found.update(build_record_corner(mats, rng))
     found["sticky_notes"] = build_desk_clutter(rng)
@@ -123,12 +127,12 @@ def build_dressing(mats, placed):
     build_pothos(Matrix.Translation((2.86, -0.70, BOOKCASE_LEVELS[-1])) @ Matrix.Rotation(math.radians(-90), 4, "Z"))
     turn = (Matrix.Translation(BOOKCASE_AT) @ Matrix.Rotation(math.radians(BOOKCASE_TURN), 4, "Z")
             @ Matrix.Translation(-Vector(((BOOKCASE[0] + BOOKCASE[1]) / 2, (BOOKCASE[2] + BOOKCASE[3]) / 2, 0.0))))
+    bpy.context.view_layer.update()
     for obj in set(bpy.data.objects) - before:
         obj.matrix_world = turn @ obj.matrix_world
     found.update(build_space_wall(mats))
     found["pennant"] = build_pennant()
     found["cc0"] = {name: import_cc0(name, *spec) for name, spec in CC0.items()}
-    build_jacket()
     build_floor_books(rng)
     found["floor_lamp"] = build_reading_corner(mats)
     return found
@@ -310,8 +314,8 @@ def build_kitchen_nook(mats):
 
 def build_kitchen_detail(mats, shelf_z, glass, lids):
     """The mini kitchen's lived-in layer: a row of spice jars and three mugs on hooks under the shelf, a warm light
-    bar under it, a pour-over and a gooseneck kettle at the counter's back end, a board of bagels and croissants
-    beside the espresso machine, and a rack of cinnamon rolls cooling on the oven. Returns the light bar's centre."""
+    bar under it, a pour-over and a gooseneck kettle at the counter's back end, and a board of bagels and croissants
+    beside the espresso machine. Returns the light bar's centre."""
     rng = random.Random(SEED + 23)
     spices = [pl.surface(f"spice_{k}", rgb, 0.85, micro_bump=(1400, 0.4), color_var=0.10)
               for k, rgb in enumerate([(0.80, 0.50, 0.04), (0.52, 0.07, 0.03), (0.40, 0.25, 0.12), (0.36, 0.45, 0.20),
@@ -396,7 +400,6 @@ def build_kitchen_detail(mats, shelf_z, glass, lids):
     finish(b, "props_pour_over", smooth=40)
 
     build_bakery_board(mats)
-    build_cinnamon_rolls()
     return centre + Vector((0, 0, -0.012))
 
 
@@ -444,7 +447,8 @@ def build_bakery_board(mats):
 
 def build_cinnamon_rolls():
     """Six cinnamon rolls cooling on a wire rack on top of the oven, the spiral of cinnamon showing and a little
-    glaze drizzled across."""
+    glaze drizzled across. Runs after the kitchen nook's batch shift: the oven already stands in the corner (inside
+    the batch the rack was moved twice and landed on the espresso machine)."""
     oven = bpy.data.objects["countertop_oven"]
     pts = [oven.matrix_world @ Vector(c) for c in oven.bound_box]
     top = max(p.z for p in pts)
@@ -558,7 +562,7 @@ def string_point(line, t):
 
 def build_darkroom(mats):
     """The darkroom lines: three cotton strings on brass screw eyes along the left wall with a wooden peg per print
-    (darkroom_line_<n>, baked), a brass strip light over them (env_darkroom_light) and an empty per peg,
+    (darkroom_line_<n>, baked), brass picture lights over them (env_darkroom_light) and an empty per peg,
     darkroom_clip_<line>_<k>, at the middle of the print's top edge where the peg grips it. Each empty faces the room
     (glTF local +Z out of the wall, +Y up) and carries the print's largest size (maxW_m, maxH_m) and its turn about
     the wall's normal (tiltDeg); the site draws each print hanging below its empty."""
@@ -603,23 +607,25 @@ def build_darkroom(mats):
         obj["texel"] = 1.5
         lines.append(obj)
 
-    # The strip light over the top string: a slim brass bar on two arms, lighting the prints from above.
-    u0 = min(l[0] for l in DARKROOM_LINES) + 0.06
-    u1 = max(l[1] for l in DARKROOM_LINES) - 0.06
-    p = left_wall((u0 + u1) / 2, DARKROOM_LIGHT_Z, 0.12)
+    # The picture lights over the top string, evenly along the lines: a short brass hood on an arm from a wall plate.
+    u0 = min(l[0] for l in DARKROOM_LINES)
+    u1 = max(l[1] for l in DARKROOM_LINES)
+    lamps = [left_wall(u0 + (u1 - u0) * (k + 0.5) / DARKROOM_LAMPS, DARKROOM_LAMP_Z, DARKROOM_LAMP_OUT)
+             for k in range(DARKROOM_LAMPS)]
     bm = bmesh.new()
-    add_cylinder(bm, 0.018, u1 - u0, p, segments=20, axis="Y")
-    add_box(bm, (0.012, u1 - u0 - 0.02, 0.012), p + Vector((-0.01, 0, -0.022)))
-    for du in (-(u1 - u0) * 0.3, (u1 - u0) * 0.3):
-        add_box(bm, (0.12, 0.012, 0.012), Vector((X_LEFT + 0.06, p.y + du, p.z + 0.03)), bevel=0.003)
-        add_cylinder(bm, 0.03, 0.012, Vector((X_LEFT + 0.006, p.y + du, p.z + 0.03)), segments=24, axis="X")
+    for p in lamps:
+        add_cylinder(bm, 0.016, DARKROOM_LAMP_LEN, p, segments=20, axis="Y")
+        add_box(bm, (0.010, DARKROOM_LAMP_LEN - 0.02, 0.010), p + Vector((-0.009, 0, -0.019)))
+        add_box(bm, (DARKROOM_LAMP_OUT, 0.010, 0.010), Vector((X_LEFT + DARKROOM_LAMP_OUT / 2, p.y, p.z + 0.026)),
+                bevel=0.003)
+        add_cylinder(bm, 0.024, 0.010, Vector((X_LEFT + 0.005, p.y, p.z + 0.026)), segments=24, axis="X")
     light = new_object("env_darkroom_light", bm, "env", "art", [brass])
     smooth_by_angle(light, 50)
 
     bpy.context.view_layer.update()
     lo = Vector((X_LEFT, min(l[0] for l in DARKROOM_LINES) - 0.08, 0.86))
     hi = Vector((X_LEFT + 0.12, max(l[1] for l in DARKROOM_LINES) + 0.08, max(l[2] for l in DARKROOM_LINES) + 0.03))
-    return {"darkroom_lines": lines, "darkroom_clips": clips, "darkroom_light": p, "darkroom_light_len": u1 - u0,
+    return {"darkroom_lines": lines, "darkroom_clips": clips, "darkroom_lamps": lamps, "darkroom_span": (u0, u1),
             "darkroom_bounds": (lo, hi)}
 
 
@@ -1462,81 +1468,7 @@ def pen_cup_from_supplies(meshes):
     return [cup, *pens]
 
 
-# ---- round six: a jacket, a pothos, floor books and a reading corner ----
-
-def build_jacket():
-    """A mustard corduroy jacket thrown over the desk chair's back: the torso folded over the top edge, longer on
-    the side toward the room, sleeves hanging down the back, the collar turned up. Shaped procedurally over the
-    backrest Henry's chair already has."""
-    chair = bpy.data.objects.get("desk_chair_seat")
-    if chair is None:
-        return None
-    pts = [chair.matrix_world @ v.co for v in chair.data.vertices]
-    top = [p for p in pts if p.z > max(q.z for q in pts) - 0.03]
-    a, b = min(top, key=lambda p: p.x), max(top, key=lambda p: p.x)
-    centre = (a + b) / 2
-    u = (b - a).normalized()
-    u.z = 0
-    u.normalize()
-    n = Vector((u.y, -u.x, 0.0))
-    room = Vector((3.75, -4.95, 0.0)) - centre
-    if n.dot(room) < 0:
-        n = -n
-    half_t, width, front, back = 0.042, 0.50, 0.40, 0.56
-    cord = pl.surface("jacket_corduroy", (0.26, 0.15, 0.045), 0.85, color_tex=pl.ambientcg("Fabric036")["Color"],
-                      tint=(0.50, 0.32, 0.11), tile=0.05, micro_bump=(900, 0.3), edge_wear=0.4,
-                      edge_color=(0.46, 0.31, 0.12), grime=0.4, color_var=0.06, sheen=0.4)
-    lining = pl.surface("jacket_lining", (0.15, 0.06, 0.04), 0.6, color_var=0.04)
-    b_ = pl.Builder("props_jacket")
-    bm = b_.bm
-    before = set(bm.faces)
-
-    def drape(aa, ss):
-        fold = 0.010 * math.sin(aa * 28 + ss * 7) * min(abs(ss) / 0.2, 1.0)
-        if abs(ss) <= half_t:
-            p = centre + u * aa + n * ss + Vector((0, 0, 0.012 * math.cos(math.pi * ss / (2 * half_t)) + 0.006))
-        else:
-            side = 1 if ss > 0 else -1
-            drop = abs(ss) - half_t
-            flare = 0.018 + 0.05 * drop + fold
-            p = centre + u * (aa * (1 + 0.12 * drop)) + n * side * (half_t + flare) - Vector((0, 0, drop))
-        return p
-
-    na, ns = 14, 34
-    grid = []
-    for i in range(na + 1):
-        aa = -width / 2 + width * i / na
-        col = []
-        for j in range(ns + 1):
-            ss = -front + (front + back) * j / ns
-            col.append(bm.verts.new(drape(aa, ss)))
-        grid.append(col)
-    for i in range(na):
-        for j in range(ns):
-            bm.faces.new((grid[i][j], grid[i + 1][j], grid[i + 1][j + 1], grid[i][j + 1]))
-    torso = b_._wrap(before, None, cord)
-    bmesh.ops.solidify(bm, geom=torso, thickness=0.004)
-    # Sleeves hang from the shoulder ends down the room side.
-    for side in (-1, 1):
-        start = drape(side * width / 2, half_t + 0.02)
-        path = [start + u * side * 0.02]
-        for k in range(1, 10):
-            t = k / 9
-            path.append(start + u * side * (0.035 + 0.02 * math.sin(t * 2)) + n * (0.03 + 0.04 * t)
-                        - Vector((0, 0, 0.50 * t)))
-        b_.tube(path, 0.05, sides=8, mat=cord, radius_fn=lambda t: 0.052 - 0.012 * t)
-    # The collar: a turned-up band along the top edge, a little proud on the room side.
-    before = set(bm.faces)
-    band = []
-    for i in range(9):
-        aa = -0.13 + 0.26 * i / 8
-        base = drape(aa, half_t + 0.01)
-        band.append((bm.verts.new(base + n * 0.012), bm.verts.new(base + n * 0.02 + Vector((0, 0, 0.055)))))
-    for (p0, p1), (q0, q1) in zip(band, band[1:]):
-        bm.faces.new((p0, q0, q1, p1))
-    b_._wrap(before, None, lining)
-    return finish(b_, "props_jacket", atlas="desk", smooth=70)
-
+# ---- round six: a pothos, floor books and a reading corner ----
 
 def build_pothos(placement: Matrix):
     """A golden pothos in a small glazed pot, trailing over the edge in front of it (local -Y) and down; placement

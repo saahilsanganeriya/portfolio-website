@@ -211,17 +211,17 @@ function wrap(phrase, max) {
 }
 
 /**
- * The stills' sticky notes: the phrases in src/content/sticky-notes.json (the site writes the same ones at runtime),
- * or the two the brief names before that file exists.
+ * The stills' sticky notes: the notes in src/content/sticky-notes.json (the site writes the same ones at runtime;
+ * each is a phrase or a { lines } note already broken into lines), or the two the brief names before that file exists.
  */
 async function stickyNotes() {
-  let phrases = ['You win some, you lose some.', 'Cost of doing business.'];
+  let notes = ['You win some, you lose some.', 'Cost of doing business.'];
   try {
-    phrases = JSON.parse(await readFile(new URL('../../src/content/sticky-notes.json', import.meta.url), 'utf8'));
+    notes = JSON.parse(await readFile(new URL('../../src/content/sticky-notes.json', import.meta.url), 'utf8'));
   } catch {}
-  return phrases.slice(0, 6).map((phrase, k) => {
+  return notes.slice(0, 6).map((note, k) => {
     const s = 800;
-    const lines = wrap(phrase, 14);
+    const lines = typeof note === 'string' ? wrap(note, 14) : note.lines;
     const size = Math.min(110, ...lines.map((l) => fitSize('serifItalic', l, 110, s * 0.84)));
     const top = s / 2 - ((lines.length - 1) * size * 1.25) / 2 + size * 0.3;
     const body = [`<rect width="${s}" height="${s}" fill="#fff"/>`,

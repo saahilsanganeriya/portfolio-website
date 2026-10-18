@@ -43,7 +43,7 @@ OUT_DIR = REPO / "public" / "room"
 ATLAS_DIR = OUT_DIR / "atlas"
 RENDERS = REPO / "blender" / "renders"
 
-ATLASES = ("desk", "art", "props", "env")
+ATLASES = ("desk", "bezel", "art", "props", "env")
 LOW_PX = 1024  # the first-frame copies embedded in room.glb
 # The full atlases' sizes and codecs live in the one encoder, which turns the bakes into public/room/atlas/.
 ENCODER = REPO / "scripts" / "encode-atlases.mjs"
@@ -63,7 +63,7 @@ GLTF_TRANSFORM = ["npx", "--yes", "-p", "@gltf-transform/cli@4.5.1", "gltf-trans
 # Byte budgets (brief 1.3, with T71's margin): the first frame is room.glb and what the site loads before it draws
 # the room (the two day halves of the window); the full set adds the full atlases and the Pale Blue Dot.
 MAX_FIRST_FRAME_BYTES = 5_500_000
-MAX_FULL_SET_BYTES = 23_000_000
+MAX_FULL_SET_BYTES = 25_000_000  # round nine: the full room <= 25,000,000 B (PLAN-ROUND-9 §4)
 VOID = "0x" + room_lib.VOID_HEX.lstrip("#")
 PALE_DOT_SOURCE = (5230, 5175)  # PIA23645's size; the print crops it square
 PALE_DOT_PX = 1024
@@ -269,7 +269,23 @@ def prepare_meshes() -> list[bpy.types.Object]:
 
 
 # Scenery the site reads by name stays its own node when --merge-static joins the rest.
-MERGE_KEEP = {"wall_back", "wall_left", "floor", "floor_fade"}
+MERGE_KEEP = {"wall_back", "wall_left", "floor", "floor_fade", "desk_desk_top"}
+
+
+def join_parts(meshes):
+    """Join the parts an object was cut into for the bake (extra join_into = its name) back into it: one node, one
+    material, the parts' own texel densities kept in the bake UVs."""
+    for target_name in sorted({obj["join_into"] for obj in meshes if "join_into" in obj}):
+        target = bpy.data.objects[target_name]
+        parts = [obj for obj in meshes if obj.get("join_into") == target_name]
+        objs = [target, *parts]
+        with bpy.context.temp_override(active_object=target, selected_editable_objects=objs, selected_objects=objs,
+                                       object=target):
+            bpy.ops.object.join()
+        for obj in parts:
+            meshes.remove(obj)
+        print(f"export: joined {len(parts)} parts into {target_name}")
+    return meshes
 
 
 def merge_static(meshes):
@@ -323,7 +339,7 @@ def add_pivots(meshes):
 
 
 def export_glb(merge=False):
-    meshes = prepare_meshes()
+    meshes = join_parts(prepare_meshes())
     if merge:
         meshes = merge_static(meshes)
     pivots = add_pivots(meshes)
@@ -544,7 +560,7 @@ REQUIRED_NODES = (
     + [f"darkroom_line_{n}" for n in range(3)] + ["hit_darkroom"]
     + ["keyboard", "mouse", "coffee_mug", "coffee_steam", "croissant", "hit_croissant", "crt_badge", "hit_crt_badge",
        "pennant_gatech", "hit_pennant", "voyager_record", "hit_voyager", "print_pale_blue_dot", "hit_pale_blue_dot"]
-    + ["monitor_screen", "crt_glow", "lamp_bulb", "hit_nas", *(f"nas_led_{i}" for i in range(4)), "hit_mango",
+    + ["monitor_screen", "desk_desk_top", "crt_glow", "lamp_bulb", "hit_nas", *(f"nas_led_{i}" for i in range(4)), "hit_mango",
        "mango_fruit", "hit_fujifilm_a"]
     + [f"poster_art_{i}" for i in range(4)] + ["poster_plaque", "hit_plaque"]
     + [f"hit_poster_{p}" for p in ("the-odyssey-2026", "la-la-land", "chungking-express", "marty-supreme")]

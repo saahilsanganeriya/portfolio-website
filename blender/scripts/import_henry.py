@@ -29,13 +29,9 @@ METRES_PER_UNIT = 0.26
 FLOOR_Z_UNITS = -3.316
 
 # Henry's mesh name -> our name and atlas. His backdrop, floor plant and binders are dropped (the NAS takes
-# the binders' place on the desk).
+# the binders' place on the desk); his computer, CRT and chair are replaced by prop files (build_room.DESK_PROPS).
 KEEP = {
     "desk": ("desk_desk", "desk"),
-    "chair_base": ("desk_chair_base", "desk"),
-    "chair_seat": ("desk_chair_seat", "desk"),
-    "computer": ("desk_computer", "desk"),
-    "monitor_base": ("desk_crt", "desk"),
     "keyboard": ("desk_keyboard", "desk"),
     "mouse": ("desk_mouse", "desk"),
     "cables": ("desk_cables", "desk"),
