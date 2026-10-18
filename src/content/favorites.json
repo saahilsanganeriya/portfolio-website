@@ -21,7 +21,8 @@
       "title": "Normal People",
       "year": 2020,
       "director": "Lenny Abrahamson and Hettie Macdonald",
-      "poster": "/room/posters/normal-people-2020.avif"
+      "poster": "/room/posters/normal-people-2020.avif",
+      "kind": "mini-series"
     },
     {
       "slug": "black-swan",

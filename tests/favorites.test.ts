@@ -77,11 +77,20 @@ describe('resolving a link', () => {
 describe('favorites.json', () => {
   // Catches a re-run with the same favourites rewriting `updated`, which makes every rebuild a new commit.
   it('moves `updated` only when the list changes', () => {
-    const films = favorites.films;
     const previous = favorites as Favorites;
+    const films = previous.films;
     expect(buildFavorites([...films], previous, new Date('2030-01-01T00:00:00Z'))).toBe(previous);
     const changed = buildFavorites(films.slice(0, 3), previous, new Date('2030-01-01T00:00:00Z'));
     expect(changed.updated).toBe('2030-01-01T00:00:00.000Z');
+  });
+
+  // Catches a rebuild from the Letterboxd export (which lists series as films) dropping the hand-set kind: the room's
+  // card and poster would call Normal People a film again.
+  it('keeps a hand-set kind across a rebuild', () => {
+    const previous = favorites as Favorites;
+    expect(previous.films.some((film) => film.kind)).toBe(true);
+    const resolved = previous.films.map(({ kind: _kind, ...film }) => film);
+    expect(buildFavorites(resolved, previous, new Date('2030-01-01T00:00:00Z'))).toBe(previous);
   });
 
   // Catches a poster path that points at nothing (a blank poster in the room), a missing texture beside it, a

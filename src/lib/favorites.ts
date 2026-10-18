@@ -12,6 +12,8 @@ export interface Favorite {
   director: string;
   /** Hand-drawn runtime art (`/room/posters/<slug>.avif`, a .ktx2 beside it), or null to draw it with renderPoster. */
   poster: string | null;
+  /** Set by hand when it is not a film (Letterboxd lists series as films); kept across rebuilds. */
+  kind?: 'mini-series';
 }
 
 export interface Favorites {
@@ -103,7 +105,9 @@ export async function resolveFavorite(link: string, options: ResolveOptions = {}
 }
 
 /** The new favorites.json; `updated` moves only when the list itself changed, so a re-run is a no-op. */
-export function buildFavorites(films: Favorite[], previous: Favorites | null, now: Date): Favorites {
+export function buildFavorites(resolved: Favorite[], previous: Favorites | null, now: Date): Favorites {
+  const kinds = new Map(previous?.films.flatMap((film) => (film.kind ? [[film.slug, film.kind] as const] : [])));
+  const films = resolved.map((film) => (kinds.has(film.slug) ? { ...film, kind: kinds.get(film.slug)! } : film));
   if (previous && JSON.stringify(previous.films) === JSON.stringify(films)) return previous;
   return { source: FAVORITES_SOURCE, updated: now.toISOString(), films };
 }
