@@ -43,6 +43,21 @@ async function sampleOrbit(page: Page) {
     page.evaluate(() => (window as unknown as { samples: { t: number; azimuth: number; polar: number; radius: number; turning: number }[] }).samples.slice());
 }
 
+/**
+ * A flick: a press, eight moves 60 px apart and the let-go, dispatched in the page in one go, as a hand's flick arrives
+ * (Playwright's own moves come more than 80 ms apart on a loaded machine, which the room rightly reads as a slow drag).
+ * Pointer 1 is the mouse's, so the stage's pointer capture takes it.
+ */
+const flick = (page: Page) =>
+  page.evaluate(() => {
+    const stage = document.querySelector('[data-room-world]')!;
+    const fire = (type: string, x: number) =>
+      stage.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: 500 }));
+    fire('pointerdown', 900);
+    for (let x = 840; x >= 420; x -= 60) fire('pointermove', x);
+    fire('pointerup', 420);
+  });
+
 /** Wheel events as a browser would send them, on the room's stage (deltaMode 1 = lines, which Playwright cannot send). */
 const wheelOnStage = (page: Page, events: { deltaX?: number; deltaY: number; deltaMode?: number; ctrlKey?: boolean }[]) =>
   page.evaluate(async (list) => {
@@ -61,11 +76,7 @@ test.describe('in Chromium', () => {
   test('after a flick the set keeps turning, slows without ever speeding up, and stops; a press stops it at once', async ({ page }) => {
     await inRoom(page);
     const stop = await sampleOrbit(page);
-    await page.mouse.move(900, 500);
-    await page.mouse.down();
-    // Let go straight after the last move, as a flick does (a rest of 80 ms hands no speed on).
-    await page.mouse.move(400, 500, { steps: 8 });
-    await page.mouse.up();
+    await flick(page);
     const releasedAt = await page.evaluate(() => performance.now());
     const letGo = (await orbit(page))!;
     await page.waitForFunction(() => window.__room!.orbit?.turning === 0, null, { timeout: 30_000 });
@@ -78,10 +89,7 @@ test.describe('in Chromium', () => {
     expect(after.at(-1)!.turning).toBe(0);
 
     // A second flick, then a press: the coast stops where it is.
-    await page.mouse.move(900, 500);
-    await page.mouse.down();
-    await page.mouse.move(400, 500, { steps: 8 });
-    await page.mouse.up();
+    await flick(page);
     await expect.poll(async () => (await orbit(page))!.turning).toBeGreaterThan(0.1);
     await page.mouse.down();
     expect((await orbit(page))!.turning, 'stopped by the press').toBe(0);

@@ -69,19 +69,21 @@ test('every new hotspot does what it says', async ({ page }) => {
   test.setTimeout(420_000);
   await inRoom(page);
 
-  // The window takes the camera to its framing first; so does the darkroom line (T75).
+  // The window takes the camera to its framing first; so does the darkroom line (T75), unless the click lands on one of
+  // its prints (the hero print hangs in the middle of the line), which then gets a framing of its own.
   for (const [proxy, framing] of [
     ['hit_window', 'window'],
     ['hit_darkroom', 'photos'],
   ] as const) {
     await backToIdle(page);
+    const at = (await page.evaluate((n) => window.__room!.point(n), proxy))!;
+    const hit = await page.evaluate(({ x, y }) => window.__room!.hit(x, y), at);
     await clickProp(page, proxy);
-    await settledAt(page, framing);
+    await settledAt(page, hit?.startsWith('hit_darkroom_print_') ? `object:${hit}` : framing);
   }
 
   // At the darkroom line a print flies to itself with its card, and a second click opens that photograph in SaahilOS.
-  await backToIdle(page);
-  await clickProp(page, 'hit_darkroom');
+  await page.evaluate(() => window.__room!.goto('photos'));
   await settledAt(page, 'photos');
   await openByTwoClicks(page, 'hit_darkroom_print_0');
   await settledAt(page, 'monitor');
