@@ -1418,7 +1418,7 @@ def reduce_geometry():
 # atlas) and the rest (props).
 ATLAS_BY_NAME = [
     ("desk", ("desk_desk_top", "desk_crt_front", "desk_computer_front", "keyboard", "mouse", "coffee_mug", "crt_glow",
-              "crt_badge", "sticky_note_", "props_fujifilm_x100")),
+              "crt_badge", "sticky_note_", "props_fujifilm_x100", "desk_crt_bezel")),
     ("art", ("env_window", "env_curtain_rod", "env_picture_light", "env_space_light", "props_poster_frame_", "poster_art_", "poster_plaque",
              "voyager_record", "props_frame_pale_blue_dot", "print_pale_blue_dot", "pennant_gatech",
              "print_japanese_lit", "darkroom_", "env_darkroom_light")),
@@ -1429,7 +1429,7 @@ ATLAS_BY_NAME = [
 TEXEL_WEIGHTS = {
     # desk: the desk top by what the views see of it (split_desk_top_by_view); the small things on it carry the detail
     "desk_desk_top": 1.2, "desk_desk_top_mid": 0.44, "desk_desk_top_rest": 0.02, "keyboard": 1.3, "mouse": 1.0,
-    "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4, "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3,
+    "coffee_mug": 1.0, "desk_crt_front": 1.0, "desk_crt_bezel": 3.0, "crt_badge": 1.4, "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3,
     "props_mouse_cable": 0.3, "desk_computer_front": 0.85, "crt_glow": 0.3, "props_fujifilm_x100": 1.0,
     # the rest of the desk sits in the props atlas, a little above its average: the desk view sees it
     "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4, "props_nas_4bay": 1.6,
@@ -1506,8 +1506,71 @@ def split_desk_heroes():
     # densities side by side and a dotted seam along the cut. One smart projection keeps the bezel one island.
     front = split_by_faces(bpy.data.objects["desk_crt"], lambda c, n, m: c.y < CRT_PARTING_Y, "desk_crt_front")
     front["bake_uv"] = "project"
+    split_crt_bezel_by_landing(front)
     split_by_faces(bpy.data.objects["desk_computer"], lambda c, n, m: n.y < -0.3 or n.z > 0.7, "desk_computer_front")
     split_desk_top_by_view()
+
+
+# The landing view (the monitor framing every visit ends in) fills about a quarter of its frame with the bezel round
+# the glass and asks ~5,800 texels/m of it at 1512x982 @2, 2.5x what the rest of the case gets. The faces it shows bake
+# as their own part (desk_crt_bezel, its own texel weight) and export.py joins them back into desk_crt_front.
+MONITOR_MARGIN = 1.3  # src/scene/Camera/RoomCamera.ts: how far back from a glass-filled frame the monitor framing sits
+LANDING_ASPECTS = (1512 / 982, 16 / 9, 4 / 3)
+
+
+def landing_views():
+    screen = bpy.data.objects["monitor_screen"]
+    centre = screen.matrix_world.translation.copy()
+    back = (bpy.data.objects["cam_monitor"].location - bpy.data.objects["cam_monitor_target"].location).normalized()
+    half = math.tan(math.radians(CAMERA_FOV_DEG) / 2)
+    for aspect in LANDING_ASPECTS:
+        distance = max(screen["height_m"] / 2 / half, screen["width_m"] / 2 / (half * aspect)) * MONITOR_MARGIN
+        yield centre + back * distance, centre, aspect
+
+
+def split_crt_bezel_by_landing(front):
+    bpy.context.view_layer.update()
+    scene, depsgraph = bpy.context.scene, bpy.context.evaluated_depsgraph_get()
+    half_v = math.tan(math.radians(CAMERA_FOV_DEG) / 2)
+    views = []
+    for eye, target, aspect in landing_views():
+        forward = (target - eye).normalized()
+        right = forward.cross(Vector((0, 0, 1))).normalized()
+        views.append((eye, forward, right, right.cross(forward), half_v * aspect))
+
+    def shown(centre, normal):
+        p = centre + normal * 0.001
+        for eye, forward, right, up, half_h in views:
+            v = p - eye
+            depth = v.dot(forward)
+            if (depth > 0.05 and abs(v.dot(right)) <= half_h * depth and abs(v.dot(up)) <= half_v * depth
+                    and normal.dot(eye - p) > 0 and seen_from(p, eye, scene, depsgraph)):
+                return True
+        return False
+
+    bezel = split_by_faces(front, lambda c, n, m: shown(c, n), "desk_crt_bezel")
+    if bezel is None:
+        return
+    bezel["bake_uv"] = "project"
+    bezel["join_into"] = "desk_crt_front"
+    # One ring of a projection round the glass packs like a frame with nothing inside: cut it into its top, bottom,
+    # left and right sides (along the screen's diagonals), each its own island.
+    screen = bpy.data.objects["monitor_screen"]
+    centre, half_w, half_h = screen.matrix_world.translation, screen["width_m"] / 2, screen["height_m"] / 2
+    bm = bmesh.new()
+    bm.from_mesh(bezel.data)
+    mw = bezel.matrix_world
+
+    def side(face):
+        c = mw @ face.calc_center_median()
+        dx, dz = (c.x - centre.x) / half_w, (c.z - centre.z) / half_h
+        return ("top" if dz > 0 else "bottom") if abs(dz) > abs(dx) else ("right" if dx > 0 else "left")
+
+    sides = {f.index: side(f) for f in bm.faces}
+    bmesh.ops.split_edges(bm, edges=[e for e in bm.edges if len(e.link_faces) == 2
+                                     and sides[e.link_faces[0].index] != sides[e.link_faces[1].index]])
+    bm.to_mesh(bezel.data)
+    bm.free()
 
 
 # The desk top's density follows what the framings see of it: only about half of its 1.4 m2 shows from the desk
