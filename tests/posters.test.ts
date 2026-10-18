@@ -56,7 +56,8 @@ describe('the hand-drawn poster sheets', () => {
   // Catches a sheet whose drawn credit line calls a series "a film by" (or a film a series), or prints the wrong year.
   it('print each title as what it is, and its year', async () => {
     const { POSTERS } = await import('../scripts/posters/designs.mjs');
-    const { setLine } = await import('../scripts/posters/type.mjs');
+    type SetLine = (face: string, text: string, options: Record<string, unknown>) => { d: string };
+    const { setLine } = (await import('../scripts/posters/type.mjs')) as unknown as { setLine: SetLine };
     const at = { x: SHEET.margin, y: SHEET.creditBase, size: SHEET.creditSize };
     const film = setLine('serifItalic', 'a film by', at).d;
     const series = setLine('serifItalic', 'a series directed by', at).d;
