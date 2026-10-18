@@ -21,7 +21,8 @@ import bake  # noqa: E402
 import export  # noqa: E402
 
 # Surfaces worth naming in the report (whichever exist in this version of the room).
-WATCH = ("wall_back", "wall_left", "floor", "floor_fade", "desk_desk_top", "desk_crt_front", "desk_computer_front",
+WATCH = ("wall_back", "wall_left", "floor", "floor_fade", "desk_desk_top", "desk_desk_top_mid", "desk_desk_top_rest",
+         "desk_crt_front", "desk_crt_bezel", "props_fujifilm_x100", "desk_computer_front",
          "keyboard", "mouse", "coffee_mug", "crt_badge", "sticky_note_0", "desk_desk", "desk_crt", "crt_glow",
          "props_nas_4bay", "env_window_frame", "voyager_record", "props_frame_pale_blue_dot", "pennant_gatech",
          "print_japanese_lit", "darkroom_line_1", "poster_plaque", "props_mango_plant", "espresso_machine",
