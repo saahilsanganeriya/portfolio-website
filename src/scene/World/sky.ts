@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import type { CityId } from './daylight';
 
-// The sky over the window: San Francisco's day sky on the left, Delhi's on the right, one gradient between them with no
-// seam. It never changes (both cities stay in daylight), so each vertex of the dome gets its colour once, here, and the
-// sky's shader only draws it. San Francisco's horizon is cooler and greyer (the marine layer); Delhi's warmer and
-// dustier.
+// The sky over the window at one fixed moment (owner): San Francisco at 7 PM, the sun setting into the fog, amber at
+// the horizon through rose to a dusky violet-blue; New Delhi at 7:30 AM, the same moment, the sun rising through a pale
+// gold haze to a clear pale blue. One gradient runs between them with no seam. It never changes, so each vertex of the
+// dome gets its colour once, here, and the sky's shader only draws it.
 
 export type RGB = readonly [number, number, number];
 
@@ -15,9 +15,10 @@ export type RGB = readonly [number, number, number];
  */
 export const BLEND_HALF_WIDTH_M = 0.62;
 
-export const DAY_SKY: Record<CityId, { zenith: string; horizon: string }> = {
-  sf: { zenith: '#2f64ab', horizon: '#b4c8dc' },
-  delhi: { zenith: '#3a6aa8', horizon: '#d3cdb8' },
+/** Each city's sky from the horizon up: three stops, on a smooth curve (the middle one bends it, it is not reached). */
+export const SKY: Record<CityId, { horizon: string; middle: string; zenith: string }> = {
+  sf: { horizon: '#f2b07e', middle: '#d9909a', zenith: '#5d6aa8' },
+  delhi: { horizon: '#f1dcae', middle: '#cdd5d3', zenith: '#8eb3da' },
 };
 
 /** Where the blend from one city to the other is measured: the dome's centre, the window framing's eye, out and right. */
@@ -56,12 +57,12 @@ export function windowBlend(p: THREE.Vector3, f: SkyFrame): number {
   return smoothstep(-f.band, f.band, crossing.dot(f.right));
 }
 
-/** One city's sky in the direction `d` from the dome's centre: horizon to zenith, the horizon band kept wide. */
+/** One city's sky at height `up` (the sine of the direction's elevation from the dome's centre): horizon to zenith, the horizon band kept wide. */
 function cityAt(city: CityId, up: number): RGB {
-  const zenith = linearOf(DAY_SKY[city].zenith);
-  const horizon = linearOf(DAY_SKY[city].horizon);
+  const [h, m, z] = [SKY[city].horizon, SKY[city].middle, SKY[city].zenith].map(linearOf);
   const t = smoothstep(0, 1, Math.pow(Math.min(1, Math.max(0, up)), 0.55));
-  return [horizon[0] + (zenith[0] - horizon[0]) * t, horizon[1] + (zenith[1] - horizon[1]) * t, horizon[2] + (zenith[2] - horizon[2]) * t];
+  const [a, b, c] = [(1 - t) * (1 - t), 2 * t * (1 - t), t * t];
+  return [a * h[0] + b * m[0] + c * z[0], a * h[1] + b * m[1] + c * z[1], a * h[2] + b * m[2] + c * z[2]];
 }
 
 const direction = new THREE.Vector3();
@@ -84,7 +85,7 @@ export function skyColour(p: THREE.Vector3, f: SkyFrame): RGB {
 
 /** The horizon colours (linear) the far land hazes into, San Francisco's then Delhi's. */
 export function horizons(): [RGB, RGB] {
-  return [linearOf(DAY_SKY.sf.horizon), linearOf(DAY_SKY.delhi.horizon)];
+  return [linearOf(SKY.sf.horizon), linearOf(SKY.delhi.horizon)];
 }
 
 // ---- the dome, completed for the orbit ----

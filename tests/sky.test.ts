@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { BLEND_HALF_WIDTH_M, DAY_SKY, linearOf, skyColour, windowBlend, type SkyFrame } from '../src/scene/World/sky';
+import { BLEND_HALF_WIDTH_M, SKY, linearOf, skyColour, windowBlend, type SkyFrame } from '../src/scene/World/sky';
 
 // A frame like the room's, in metres: the window's middle on the back wall, the window framing's eye 3 m in front of it,
 // out of the window along -Z, San Francisco to the left (-X), Delhi to the right.
@@ -38,21 +38,23 @@ describe('the sky over the window', () => {
     }
   });
 
-  /** Catches the cities swapped, or a blend that stops short so one side shows a mix of both skies. */
+  /** Catches the cities swapped (dusk over Delhi, morning over San Francisco), or a blend that stops short so one side shows a mix of both skies. */
   it('is San Francisco’s sky at the left edge and Delhi’s at the right', () => {
     expect(windowBlend(domePoint(-0.75, 0.4), frame)).toBe(0);
     expect(windowBlend(domePoint(0.75, 0.4), frame)).toBe(1);
     expect(windowBlend(domePoint(0, 0.4), frame)).toBeCloseTo(0.5, 2);
-    // San Francisco's horizon is the cooler of the two (the marine layer), Delhi's the warmer and dustier.
+    // San Francisco's is the sunset (its horizon the redder, its zenith the darker), Delhi's the morning.
     const [left, right] = [skyColour(domePoint(-0.75, 0.02), frame), skyColour(domePoint(0.75, 0.02), frame)];
-    expect(left[2] - left[0]).toBeGreaterThan(right[2] - right[0]);
+    expect(left[0] - left[1]).toBeGreaterThan(right[0] - right[1]);
+    const luma = (c: readonly number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    expect(luma(skyColour(domePoint(-0.75, 1.4), frame))).toBeLessThan(luma(skyColour(domePoint(0.75, 1.4), frame)));
   });
 
-  /** Catches a gradient upside down (a dark horizon under a pale zenith reads as dusk, not day). */
+  /** Catches a gradient upside down (a dark horizon under a pale zenith reads as night coming, not the sun's glow). */
   it('is paler at the horizon than overhead, on both sides', () => {
     for (const city of ['sf', 'delhi'] as const) {
       const luma = (c: readonly number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-      expect(luma(linearOf(DAY_SKY[city].horizon))).toBeGreaterThan(luma(linearOf(DAY_SKY[city].zenith)));
+      expect(luma(linearOf(SKY[city].horizon))).toBeGreaterThan(luma(linearOf(SKY[city].zenith)));
     }
     for (const x of [-0.6, 0.6]) expect(skyColour(domePoint(x, 0.02), frame)[1]).toBeGreaterThan(skyColour(domePoint(x, 1.4), frame)[1]);
   });
