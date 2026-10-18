@@ -138,7 +138,7 @@ export class RoomCamera {
   constructor(
     nodes: RoomNodes,
     aspect: number,
-    /** Reduced motion: no inertia, no glides and no sway (each move lands at once). */
+    /** Reduced motion: no inertia, no glides, no sway and no lean (each move lands at once). */
     private readonly still = false,
   ) {
     this.orbitSettings = readOrbit(nodes.root);
@@ -387,8 +387,9 @@ export class RoomCamera {
       this.rig.set(this.goal);
     }
 
-    // The pointer leans the view at a framing; at the monitor, in the boot framing and while orbiting it does not.
-    if (station === 'monitor' || station === 'loading' || station === 'orbit') this.pointer.set(0, 0);
+    // The pointer leans the view at a framing; never under reduced motion, nor at the monitor, in the boot framing, while
+    // orbiting, or at an object's framing, where its card must stay put as the pointer goes for Learn more.
+    if (this.still || station === 'monitor' || station === 'loading' || station === 'orbit' || station.startsWith('object:')) this.pointer.set(0, 0);
     else this.pointer.copy(pointer);
     const lean = station === 'idle' ? WIDE_LEAN : 1;
     this.lookGoal[0] = -this.pointer.x * POINTER_LOOK.yaw * lean;

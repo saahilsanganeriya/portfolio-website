@@ -88,6 +88,8 @@ export interface RoomCard {
   more: boolean;
   /** Where the object is on the page now, or null when it is out of view. */
   rect: ScreenRect | null;
+  /** Where the other objects in view are on the page, which the card keeps clear of. */
+  avoid: ScreenRect[];
 }
 
 export interface RoomHandle {
@@ -795,13 +797,36 @@ export class Application implements RoomHandle {
     }
     if (this.camera.moving || this.camera.phase !== focus.station) return null;
     const { hotspot, proxy } = focus;
+    const box = new THREE.Box3().setFromObject(proxy);
     return {
       id: proxy.name,
       title: hotspot.card?.title ?? hotspot.label,
       line: hotspot.card?.line ?? `${hotspot.prop}.`,
       more: Boolean(hotspot.target),
-      rect: this.screenRect(new THREE.Box3().setFromObject(proxy)),
+      rect: this.screenRect(box),
+      avoid: this.neighbourRects(proxy, box),
     };
+  }
+
+  /**
+   * The other objects in view, as page rectangles: every proxy that takes the pointer, but the object's own and any
+   * that holds it (the darkroom line round a print, the oven round its croissant).
+   */
+  private neighbourRects(own: THREE.Object3D, ownBox: THREE.Box3) {
+    const centre = ownBox.getCenter(new THREE.Vector3());
+    return this.nodes.proxies.flatMap((proxy) => {
+      if (proxy === own || !proxy.layers.isEnabled(0)) return [];
+      const box = new THREE.Box3().setFromObject(proxy);
+      if (box.containsPoint(centre)) return [];
+      const rect = this.screenRect(box);
+      return rect ? [rect] : [];
+    });
+  }
+
+  /** The object whose card shows now: the camera rests at its framing. */
+  private carded() {
+    const focus = this.focus;
+    return focus && this.camera.phase === focus.station && this.camera.destination === focus.station && !this.camera.moving ? focus.proxy : null;
   }
 
   learnMore() {
@@ -984,7 +1009,8 @@ export class Application implements RoomHandle {
     this.camera.update(dt, this.clock, this.interaction.pointer);
     if (this.diorama.update(this.camera.instance.position, dt)) this.dirty = true;
     this.interaction.update();
-    this.hover.set(this.interaction.hoveredProxy);
+    // The object a card names stays lit while the card shows, so the eye knows which one it means.
+    this.hover.set(this.interaction.hoveredProxy ?? this.carded());
     if (this.hover.update(dt, now)) this.dirty = true;
     if (!this.paused) this.effects.update(this.clock);
     this.monitor.update(this.clock, this.camera.instance);

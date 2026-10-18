@@ -13,6 +13,11 @@ const CARD_BOTTOM = 72;
 const CARD_BOTTOM_NARROW = 120;
 // Narrower than this, the card sits above the bottom row instead of beside the object.
 const CARD_DOCK_BELOW = 640;
+// Beside its object, the card tries these sides in turn and takes the first that covers no other object (kept this far
+// clear of them); an object that fills this share of the stage is the backdrop, not a neighbour.
+const CARD_SIDES = ['right', 'left', 'below', 'above'] as const;
+const CARD_CLEAR = 8;
+const BACKDROP_SHARE = 0.4;
 
 /** The visitor's local time as hh:mm on a 24-hour clock. */
 export function clockText(at: Date) {
@@ -94,7 +99,7 @@ export function mountCard(card: HTMLElement, status: HTMLElement, room: RoomHand
     const state = room.card();
     if (!state) return hide();
     if (state.id !== shown) show(state);
-    place(card, state.rect, stage);
+    place(card, state, stage);
     frame = requestAnimationFrame(follow);
   };
   const show = (state: RoomCard) => {
@@ -105,7 +110,7 @@ export function mountCard(card: HTMLElement, status: HTMLElement, room: RoomHand
     card.hidden = false;
     status.textContent = `${state.title}. ${state.line}`;
     // Placed before it fades in, so it never flashes at the corner.
-    place(card, state.rect, stage);
+    place(card, state, stage);
     requestAnimationFrame(() => card.setAttribute('data-shown', ''));
     // The next Tab reaches Learn more: after a click on the room the browser would carry on from the room (into the
     // monitor). Focus another control holds (Home, the map) stays where it is.
@@ -127,23 +132,41 @@ export function mountCard(card: HTMLElement, status: HTMLElement, room: RoomHand
   };
 }
 
-/** Beside the object: to its right, else its left, else at the stage's right edge; on a narrow stage, above the bottom row. */
-function place(card: HTMLElement, rect: ScreenRect | null, stage: HTMLElement) {
+interface Slot {
+  left: number;
+  top: number;
+}
+
+/**
+ * Beside the object: to its right, left, below or above it, the first side that covers no other object; failing that,
+ * to its right, else its left, else at the stage's right edge. On a narrow stage, above the bottom row.
+ */
+function place(card: HTMLElement, { rect, avoid }: RoomCard, stage: HTMLElement) {
   const box = stage.getBoundingClientRect();
   const [width, height] = [card.offsetWidth, card.offsetHeight];
   const bottom = box.height - height - (box.width < CARD_DOCK_BELOW ? CARD_BOTTOM_NARROW : CARD_BOTTOM);
-  let left: number;
-  let top: number;
+  const highest = Math.min(CARD_TOP, bottom);
+  let slot: Slot;
   if (box.width < CARD_DOCK_BELOW || !rect) {
-    left = box.width < CARD_DOCK_BELOW ? CARD_EDGE : box.width - width - CARD_EDGE;
-    top = box.width < CARD_DOCK_BELOW ? bottom : (box.height - height) / 2;
+    slot = box.width < CARD_DOCK_BELOW ? { left: CARD_EDGE, top: bottom } : { left: box.width - width - CARD_EDGE, top: (box.height - height) / 2 };
   } else {
-    const [objLeft, objRight] = [rect.left - box.left, rect.right - box.left];
-    left = objRight + CARD_GAP;
-    if (left + width > box.width - CARD_EDGE) left = objLeft - CARD_GAP - width;
-    if (left < CARD_EDGE) left = box.width - width - CARD_EDGE;
-    top = (rect.top + rect.bottom) / 2 - box.top - height / 2;
+    const object = { left: rect.left - box.left, right: rect.right - box.left, top: rect.top - box.top, bottom: rect.bottom - box.top };
+    const others = avoid
+      .map((r) => ({ left: r.left - box.left - CARD_CLEAR, right: r.right - box.left + CARD_CLEAR, top: r.top - box.top - CARD_CLEAR, bottom: r.bottom - box.top + CARD_CLEAR }))
+      .filter((r) => (r.right - r.left) * (r.bottom - r.top) < BACKDROP_SHARE * box.width * box.height);
+    const across = clamp((object.top + object.bottom) / 2 - height / 2, highest, bottom);
+    const along = clamp((object.left + object.right) / 2 - width / 2, CARD_EDGE, box.width - width - CARD_EDGE);
+    const sides: Record<(typeof CARD_SIDES)[number], Slot | null> = {
+      right: object.right + CARD_GAP + width <= box.width - CARD_EDGE ? { left: object.right + CARD_GAP, top: across } : null,
+      left: object.left - CARD_GAP - width >= CARD_EDGE ? { left: object.left - CARD_GAP - width, top: across } : null,
+      below: object.bottom + CARD_GAP <= bottom ? { left: along, top: object.bottom + CARD_GAP } : null,
+      above: object.top - CARD_GAP - height >= highest ? { left: along, top: object.top - CARD_GAP - height } : null,
+    };
+    const clear = (s: Slot) => others.every((r) => s.left >= r.right || s.left + width <= r.left || s.top >= r.bottom || s.top + height <= r.top);
+    slot = CARD_SIDES.map((side) => sides[side]).find((s): s is Slot => s !== null && clear(s)) ?? sides.right ?? sides.left ?? { left: box.width - width - CARD_EDGE, top: across };
   }
-  top = Math.max(Math.min(top, bottom), Math.min(CARD_TOP, bottom));
-  card.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+  const top = clamp(slot.top, highest, bottom);
+  card.style.transform = `translate(${Math.round(slot.left)}px, ${Math.round(top)}px)`;
 }
+
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(value, high));

@@ -68,6 +68,66 @@ test('a click on the Voyager record flies to it and shows its card; Learn more o
   await expect(card(page)).toBeHidden();
 });
 
+/** The proxies under a 7 × 4 grid of points over the card (the room's own hit test), but the object's and the line's it hangs on. */
+async function underCard(page: Page, proxy: string) {
+  const box = (await card(page).boundingBox())!;
+  const points = Array.from({ length: 28 }, (_, i) => ({ x: box.x + ((i % 7) + 0.5) * (box.width / 7), y: box.y + (Math.floor(i / 7) + 0.5) * (box.height / 4) }));
+  const hits = await page.evaluate((list) => list.map(({ x, y }) => window.__room!.hit(x, y)), points);
+  return [...new Set(hits)].filter((hit): hit is string => hit !== null && hit !== proxy && hit !== 'hit_darkroom');
+}
+
+/**
+ * Catches a card laid over the object next to the one it names (T98: Yi Yi's card printed over the Normal People
+ * poster, Chinatown's over the next print, the Voyager record's over the Pale Blue Dot's frame) and an object that stops
+ * looking picked once the pointer leaves it: the card covers no other object, and its own object stays lifted.
+ */
+test('the card sits clear of the neighbouring objects, and its object stays lifted while it shows', async ({ page }) => {
+  await inRoom(page);
+  for (const proxy of ['hit_poster_1', 'hit_darkroom_print_0', 'hit_voyager']) {
+    await page.evaluate(() => window.__room!.goto('idle'));
+    await settledAt(page, 'idle');
+    await clickProp(page, proxy);
+    await atObject(page, proxy);
+    await expect(card(page)).toBeVisible();
+    expect(await underCard(page, proxy), `objects under ${proxy}'s card`).toEqual([]);
+  }
+  // The record lifts off the wall on hover (posters are too large to lift; they only glint).
+  await page.mouse.move(4, 4);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => window.__room!.lift('hit_voyager')), 'the record still lifted, the pointer away').toBeGreaterThan(0.5);
+});
+
+/**
+ * Catches a card that slides as the pointer reaches for Learn more (T98: 79-103 px, so a quick click missed and threw
+ * the visitor out of the card): at an object's framing the view does not lean with the pointer.
+ */
+test('the card does not move while the pointer crosses the stage', async ({ page }) => {
+  await inRoom(page);
+  await clickProp(page, 'hit_poster_1');
+  await atObject(page, 'hit_poster_1');
+  await expect(card(page)).toBeVisible();
+  const before = (await card(page).boundingBox())!;
+  for (const [x, y] of [[1430, 890], [10, 890], [10, 10], [1430, 10], [before.x + 20, before.y + before.height - 12]]) {
+    await page.mouse.move(x, y, { steps: 4 });
+    await page.waitForTimeout(700);
+    const now = (await card(page).boundingBox())!;
+    expect([now.x - before.x, now.y - before.y], `the card with the pointer at ${x}, ${y}`).toEqual([0, 0]);
+  }
+});
+
+/** Catches the view leaning with the pointer under prefers-reduced-motion (T98: the lean ran the same with it on). */
+test('under reduced motion the view never leans with the pointer', async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  await inRoom(page);
+  for (const [x, y] of [[40, 40], [1400, 860], [720, 450]]) {
+    await page.mouse.move(x, y, { steps: 3 });
+    await page.waitForTimeout(600);
+    expect(await page.evaluate(() => window.__room!.look), `the lean with the pointer at ${x}, ${y}`).toEqual({ yaw: 0, pitch: 0 });
+  }
+  await context.close();
+});
+
 /** Catches a second click on the object that does nothing (or flies again), and an Escape or Home that leaves the card behind. */
 test('a second click on the object opens its window; Escape and Home leave and take the card away', async ({ page }) => {
   await inRoom(page);
