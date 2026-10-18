@@ -232,6 +232,8 @@ export interface Calibration {
   frames: { tier: number; ms: number }[];
   ms: number;
   tier: number;
+  /** The frame drawn with the full atlases before the room is shown, timed until the GPU finished it (ms). */
+  warm?: number;
 }
 
 declare global {
@@ -439,10 +441,23 @@ export class Application implements RoomHandle {
     this.uploadTextures();
     await this.shine.start();
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
+    this.warmUp();
     progress.step();
     this.installProbe();
     // Behind the dark screen until the room starts; the ladder measures on from here.
     this.loop();
+  }
+
+  /**
+   * One frame with the full set, drawn and waited for behind the dark screen: whatever a GPU does the first time it
+   * samples a new texture happens here, not in the first frames the visitor sees (on software WebGL they were slow
+   * enough to stretch the wide view's hold from 1 s to 2.2 s).
+   */
+  private warmUp() {
+    const start = performance.now();
+    this.render();
+    this.renderer.waitForGpu();
+    if (this.calibration) this.calibration.warm = performance.now() - start;
   }
 
   /** Until SaahilOS's full-size wallpaper has loaded and decoded (it starts once onOsLoaded has run), or a time limit. */
