@@ -522,8 +522,7 @@ def cut_opening(wall, size, centre):
 
 
 def tidy_wall(obj, outward: Vector):
-    """Drop the faces nobody sees from the front (outside, bottom) and the back wall's free end, which the zoomed-out
-    orbit saw edge-on as a light hairline against the void; the top and the left wall's free end keep the section colour
+    """Drop the faces nobody sees from the front (outside, bottom); the top and the free end keep the section colour
     (the bake fades both into the void anyway)."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -533,11 +532,8 @@ def tidy_wall(obj, outward: Vector):
         if n.dot(outward) > 0.9 or n.z < -0.9 and c.z < 0.01:
             bm.faces.remove(f)
             continue
-        if abs(n.x) > 0.9 and c.x > BACK_X1 - 0.01:
-            bm.faces.remove(f)
-            continue
         is_top = n.z > 0.9 and c.z > WALL_H - 0.01
-        is_end = abs(n.y) > 0.9 and c.y < LEFT_Y0 + 0.01
+        is_end = (abs(n.y) > 0.9 and c.y < LEFT_Y0 + 0.01) or (abs(n.x) > 0.9 and c.x > BACK_X1 - 0.01)
         f.material_index = 1 if (is_top or is_end) else 0
     bm.to_mesh(obj.data)
     bm.free()
