@@ -5,7 +5,7 @@ import { HOTSPOTS, type Hotspot } from '../hotspots';
 import type { QualityTier } from '../Application/Quality';
 import type { RoomNodes, StationName } from '../Application/RoomModel';
 import { WORLD_SCALE } from '../Application/RoomModel';
-import { ArtSurface, lampUniforms, Posters } from './art';
+import { ArtSurface, FrameBacks, lampUniforms, Posters } from './art';
 import { Espresso } from './Espresso';
 import { Darkroom } from './Darkroom';
 import { LavaLamp } from './LavaLamp';
@@ -80,6 +80,7 @@ export class World {
   private readonly lamp = lampUniforms();
   private readonly posters: Posters;
   private readonly paleBlueDot: ArtSurface | null;
+  private readonly frameBacks: FrameBacks;
   readonly darkroom: Darkroom | null;
   private readonly stickies: StickyNotes | null;
   private readonly windowView: WindowView | null;
@@ -122,6 +123,7 @@ export class World {
     this.paleBlueDot = n.paleBlueDot
       ? new ArtSurface(n.paleBlueDot.node, this.lamp, { ambient: 0.55, top: 0.6, lightAbove: 0.3, fall: 0.45 })
       : null;
+    this.frameBacks = new FrameBacks(room.root, room.framings.idle.target);
     this.stickies = n.stickies.length
       ? new StickyNotes(n.stickies, this.lamp, room.proxies, room.monitor.position, room.root.getObjectByName('crt_badge') ?? null)
       : null;
@@ -303,6 +305,13 @@ export class World {
       if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1 || p.z > 1) return null;
       return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
     }
+    if (name.startsWith('backing:')) {
+      const at = this.frameBacks.sample(name.slice('backing:'.length));
+      if (!at || !this.camera) return null;
+      const p = at.project(this.camera);
+      if (Math.abs(p.x) > 1 || Math.abs(p.y) > 1 || p.z > 1) return null;
+      return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+    }
     return undefined;
   }
 
@@ -314,6 +323,7 @@ export class World {
       wind: this.wind.state(),
       posters: this.posters.loaded,
       paleBlueDot: this.paleBlueDot?.shown ?? null,
+      frameBacks: this.frameBacks.probe(),
       darkroom: this.darkroom?.probe() ?? null,
       stickies: this.stickies?.written ?? null,
       lava: this.lava?.probe() ?? null,
@@ -330,6 +340,7 @@ export class World {
     clearTimeout(this.timer);
     this.posters.dispose();
     this.paleBlueDot?.dispose();
+    this.frameBacks.dispose();
     this.darkroom?.dispose();
     this.stickies?.dispose();
     this.windowView?.dispose();
