@@ -165,6 +165,8 @@ const LOAD_STEPS = 5;
 const SKIP_CLICK_MS = 600;
 // On tiers this coarse (a machine that composites slowly), the screen seen from the wide view is a still picture.
 const STILL_SCREEN_RESOLUTION = 0.5;
+// The pointer the camera is given while a card is wanted: none, so the view holds still and the card with it.
+const NO_LEAN = new THREE.Vector2();
 
 /** Debug and measurement hook: tests click real props by their projected screen position. */
 export interface RoomProbe {
@@ -1006,7 +1008,10 @@ export class Application implements RoomHandle {
       if (frameMs > 0) this.frameSink(frameMs);
     }
 
-    this.camera.update(dt, this.clock, this.interaction.pointer);
+    // From the click on an object until the camera leaves it, the view does not lean: the card must stay put as the
+    // pointer goes for Learn more, at an object's own framing or a named one (the window, the shelf, the darkroom line).
+    const carding = this.focus !== null && this.camera.destination === this.focus.station;
+    this.camera.update(dt, this.clock, carding ? NO_LEAN : this.interaction.pointer);
     if (this.diorama.update(this.camera.instance.position, dt)) this.dirty = true;
     this.interaction.update();
     // The object a card names stays lit while the card shows, so the eye knows which one it means.

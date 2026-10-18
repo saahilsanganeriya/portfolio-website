@@ -103,15 +103,20 @@ test('the card sits clear of the neighbouring objects, and its object stays lift
  */
 test('the card does not move while the pointer crosses the stage', async ({ page }) => {
   await inRoom(page);
-  await clickProp(page, 'hit_poster_1');
-  await atObject(page, 'hit_poster_1');
-  await expect(card(page)).toBeVisible();
-  const before = (await card(page).boundingBox())!;
-  for (const [x, y] of [[1430, 890], [10, 890], [10, 10], [1430, 10], [before.x + 20, before.y + before.height - 12]]) {
-    await page.mouse.move(x, y, { steps: 4 });
-    await page.waitForTimeout(700);
-    const now = (await card(page).boundingBox())!;
-    expect([now.x - before.x, now.y - before.y], `the card with the pointer at ${x}, ${y}`).toEqual([0, 0]);
+  // A poster at its own fitted framing; the books at the shelf's named one.
+  for (const [proxy, station] of [['hit_poster_1', 'object:hit_poster_1'], ['hit_books', 'shelf']]) {
+    await page.evaluate(() => window.__room!.goto('idle'));
+    await settledAt(page, 'idle');
+    await clickProp(page, proxy);
+    await settledAt(page, station);
+    await expect(card(page)).toBeVisible();
+    const before = (await card(page).boundingBox())!;
+    for (const [x, y] of [[1430, 890], [10, 890], [10, 10], [1430, 10], [before.x + 20, before.y + before.height - 12]]) {
+      await page.mouse.move(x, y, { steps: 4 });
+      await page.waitForTimeout(700);
+      const now = (await card(page).boundingBox())!;
+      expect([now.x - before.x, now.y - before.y], `${proxy}'s card with the pointer at ${x}, ${y}`).toEqual([0, 0]);
+    }
   }
 });
 

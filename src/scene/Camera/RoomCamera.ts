@@ -388,9 +388,9 @@ export class RoomCamera {
       this.rig.set(this.goal);
     }
 
-    // The pointer leans the view at a framing; never under reduced motion, nor at the monitor, in the boot framing, while
-    // orbiting, or at an object's framing, where its card must stay put as the pointer goes for Learn more.
-    if (this.still || station === 'monitor' || station === 'loading' || station === 'orbit' || station.startsWith('object:')) this.pointer.set(0, 0);
+    // The pointer leans the view at a framing; never under reduced motion, nor at the monitor, in the boot framing or
+    // while orbiting (nor where a card shows: the room passes no pointer then).
+    if (this.still || station === 'monitor' || station === 'loading' || station === 'orbit') this.pointer.set(0, 0);
     else this.pointer.copy(pointer);
     const lean = station === 'idle' ? WIDE_LEAN : 1;
     this.lookGoal[0] = -this.pointer.x * POINTER_LOOK.yaw * lean;
