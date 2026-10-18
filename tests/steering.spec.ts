@@ -44,19 +44,22 @@ async function sampleOrbit(page: Page) {
 }
 
 /**
- * A flick: a press, eight moves 60 px apart and the let-go, dispatched in the page in one go, as a hand's flick arrives
+ * A flick: a press, four moves 60 px apart and the let-go, dispatched in the page in one go, as a hand's flick arrives
  * (Playwright's own moves come more than 80 ms apart on a loaded machine, which the room rightly reads as a slow drag).
- * Pointer 1 is the mouse's, so the stage's pointer capture takes it.
+ * 240 px turns the set about 50°, so from the wide view (and back from the side) it lets go inside the coast's edge,
+ * 95° round, and coasts. `sign` 1 drags to the left, -1 to the right. Pointer 1 is the mouse's, so the stage's pointer
+ * capture takes it.
  */
-const flick = (page: Page) =>
-  page.evaluate(() => {
+const flick = (page: Page, sign: 1 | -1 = 1) =>
+  page.evaluate((s) => {
     const stage = document.querySelector('[data-room-world]')!;
     const fire = (type: string, x: number) =>
       stage.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: 500 }));
-    fire('pointerdown', 900);
-    for (let x = 840; x >= 420; x -= 60) fire('pointermove', x);
-    fire('pointerup', 420);
-  });
+    const from = s > 0 ? 900 : 660;
+    fire('pointerdown', from);
+    for (let k = 1; k <= 4; k++) fire('pointermove', from - s * 60 * k);
+    fire('pointerup', from - s * 240);
+  }, sign);
 
 /** Wheel events as a browser would send them, on the room's stage (deltaMode 1 = lines, which Playwright cannot send). */
 const wheelOnStage = (page: Page, events: { deltaX?: number; deltaY: number; deltaMode?: number; ctrlKey?: boolean }[]) =>
@@ -88,8 +91,8 @@ test.describe('in Chromium', () => {
     after.slice(1).forEach((s, i) => expect(s.turning, `frame ${i + 1} of the coast`).toBeLessThanOrEqual(after[i].turning + 1e-9));
     expect(after.at(-1)!.turning).toBe(0);
 
-    // A second flick, then a press: the coast stops where it is.
-    await flick(page);
+    // A second flick, back the other way, then a press: the coast stops where it is.
+    await flick(page, -1);
     await expect.poll(async () => (await orbit(page))!.turning).toBeGreaterThan(0.1);
     await page.mouse.down();
     expect((await orbit(page))!.turning, 'stopped by the press').toBe(0);

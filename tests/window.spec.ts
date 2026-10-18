@@ -118,8 +118,8 @@ async function orbitTo(page: Page, deg: number) {
     const orbit = await page.evaluate(() => window.__room!.orbit);
     const delta = orbit ? wrap((deg * Math.PI) / 180 - orbit.azimuth) : 0.05;
     if (orbit && Math.abs(delta) < 0.02 && !orbit.turning) return;
-    // About 0.0056 rad a pixel of drag (the orbit's default); the loop corrects whatever it really is.
-    const dx = Math.max(-width * 0.4, Math.min(width * 0.4, -delta / ((Math.PI * 1.6) / 900)));
+    // About 0.0038 rad a pixel of drag (the orbit's default); the loop corrects whatever it really is.
+    const dx = Math.max(-width * 0.4, Math.min(width * 0.4, -delta / ((Math.PI * 1.1) / 900)));
     await page.mouse.move(width / 2, height * 0.58);
     await page.mouse.down();
     for (let i = 1; i <= 12; i++) await page.mouse.move(width / 2 + (dx * i) / 12, height * 0.58);

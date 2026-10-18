@@ -146,7 +146,7 @@ test('Home in the middle of a drag cancels the drag and its coast, and lands at 
 test('Home from behind a wall swings round the set, smoothly, and the walls come back', async ({ page }) => {
   const home = await inRoom(page);
   // Half a turn round: behind the back wall, which fades.
-  const perRad = 900 / (Math.PI * 1.6);
+  const perRad = 900 / (Math.PI * 1.1);
   for (let k = 0; k < 3; k++) {
     await drag(page, -(Math.PI / 3) * perRad);
     await orbitRests(page);
