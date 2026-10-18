@@ -1407,6 +1407,14 @@ body.os-moving iframe {
   color: var(--os-muted);
 }
 
+.os-about-email {
+  margin: 4px 0 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .os-about-actions ul {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
@@ -1585,6 +1593,11 @@ body.os-moving iframe {
 
 .os-contact-status {
   color: var(--os-dark);
+}
+
+.os-contact-direct {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .os-contact-trap {

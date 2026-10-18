@@ -4,8 +4,7 @@ import { linkAttributes } from './content';
 
 const ENDPOINT = 'https://api.web3forms.com/submit';
 // Web3Forms' access key is public by design (it only names the inbox to forward to). It comes from the build's
-// environment, never from git. A build without it points to GitHub and LinkedIn: the owner's address is never on the
-// site, so there is no mailto to fall back to.
+// environment, never from git. A build without it offers the owner's address instead.
 const ACCESS_KEY: string | undefined = import.meta.env.PUBLIC_WEB3FORMS_ACCESS_KEY || undefined;
 const SEND_TIMEOUT_MS = 15_000;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -58,7 +57,7 @@ async function send(values: Values): Promise<string | null> {
   }
 }
 
-/** The contact form: name, email and message, sent through Web3Forms so the owner's address never reaches the page. */
+/** The contact form (name, email and message, sent through Web3Forms), with the owner's address beside it. */
 export function ContactApp() {
   const id = useId();
   const [values, setValues] = useState<Values>(EMPTY);
@@ -155,6 +154,9 @@ export function ContactApp() {
             </button>
             <p className="os-contact-note">All messages get forwarded straight to my personal email.</p>
           </div>
+          <p className="os-contact-direct">
+            Or email me: <a href={`mailto:${SITE.email}`}>{SITE.email}</a>
+          </p>
           <p className="os-contact-status" role="status">
             {phase.kind === 'sending' && 'Sending…'}
             {phase.kind === 'sent' && `Sent. Thanks, ${phase.name}. I will reply to ${phase.email}.`}
@@ -167,9 +169,9 @@ export function ContactApp() {
         </form>
       ) : (
         <p className="os-note">
-          The form is not set up on this copy of the site. Find me on{' '}
-          <a href={SITE.github} {...linkAttributes(SITE.github)}>GitHub</a> or{' '}
-          <a href={SITE.linkedin} {...linkAttributes(SITE.linkedin)}>LinkedIn</a> instead.
+          The form is not set up on this copy of the site. Email me at <a href={`mailto:${SITE.email}`}>{SITE.email}</a>
+          , or find me on <a href={SITE.github} {...linkAttributes(SITE.github)}>GitHub</a> or{' '}
+          <a href={SITE.linkedin} {...linkAttributes(SITE.linkedin)}>LinkedIn</a>.
         </p>
       )}
     </article>

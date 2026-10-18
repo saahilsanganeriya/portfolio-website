@@ -1,3 +1,4 @@
+import { SITE } from '../../site';
 import { PixelIcon } from '../assets/PixelIcon';
 import type { IconName } from '../assets/icons';
 import type { OsApi, OsPage } from '../types';
@@ -48,6 +49,9 @@ export function AboutApp({ os }: { os: OsApi }) {
         <div>
           <h2 className="os-about-name">Saahil Sanganeriya</h2>
           <p className="os-about-role">Software Engineer, Applied AI at Mercor · San Francisco</p>
+          <p className="os-about-email">
+            <a href={`mailto:${SITE.email}`}>{SITE.email}</a>
+          </p>
         </div>
       </header>
 

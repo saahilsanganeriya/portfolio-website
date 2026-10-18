@@ -437,6 +437,21 @@ test.describe('desktop', () => {
     await expect(page.getByRole('dialog', { name: 'Contact' })).toBeVisible();
   });
 
+  /** Catches his address missing from About or from beside the Contact form, misspelt, or printed without a mailto. */
+  test('his address is a mailto link in About and beside the Contact form', async ({ page }) => {
+    const ADDRESS = 'saahilsanganeria666@gmail.com';
+    await page.goto('/os?embed=1');
+    const about = page.getByRole('dialog', { name: 'About' });
+    // Under his name at first sight, and again where the page says how to reach him.
+    await expect(about.getByRole('link', { name: ADDRESS })).toHaveCount(2);
+    for (const link of await about.getByRole('link', { name: ADDRESS }).all()) await expect(link).toHaveAttribute('href', `mailto:${ADDRESS}`);
+    await expect(about.locator('.os-about-head').getByRole('link', { name: ADDRESS })).toBeVisible();
+    await page.goto('/os?embed=1#contact');
+    const contact = page.getByRole('dialog', { name: 'Contact' });
+    await expect(contact.locator('.os-contact-direct')).toHaveText(`Or email me: ${ADDRESS}`);
+    await expect(contact.getByRole('link', { name: ADDRESS })).toHaveAttribute('href', `mailto:${ADDRESS}`);
+  });
+
   /** Catches the résumé's header line linking an address (or nothing) where the Contact window should open. */
   test('the résumé’s header line opens the Contact window, beside GitHub and LinkedIn', async ({ page }) => {
     await page.goto('/os?embed=1#resume');

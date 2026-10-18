@@ -2,7 +2,7 @@
 // window on the monitor, and its JSON body; no other page exists beyond the documents framed inside the room and the
 // 404 page; every page carries the tags a shared link needs (title, description, og:title, og:image) and one <h1>;
 // no internal link or anchor is broken, and no link is glued to the word next to it; no built file carries an email
-// address or a mailto: link (the Contact window takes their place).
+// address or a mailto: link other than the owner's own (About and Contact print it).
 // Usage: node scripts/check-routes.mjs [--samples] [--no-build]   (--samples builds with SAMPLES=1: draft posts too)
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -180,17 +180,25 @@ for (const file of pages) {
 
 // ---- no contact address ----
 
-// The owner's address is never on the site; only the published résumé PDF carries it. An address in any other built
-// file must be on a domain reserved for examples (RFC 2606, RFC 6761), as the posts' made-up ones are.
+// The one address the site prints is the owner's own (src/site.ts; he confirmed the spelling without a 'y'). Any
+// other address in a built file must be on a domain reserved for examples (RFC 2606, RFC 6761), as the posts' made-up
+// ones are, and a mailto: may only reach the owner, so a misspelt copy of his address fails the build.
+const OWNER_ADDRESS = 'saahilsanganeria666@gmail.com';
 const TEXT_FILE = /\.(html|js|mjs|json|xml|txt|css|svg|webmanifest|map)$/i;
 const ADDRESS = /[\w.%+-]+@([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})\b/gi;
 const EXAMPLE_DOMAIN = /(^|\.)(example\.(com|net|org)|example|invalid|test|localhost)$/i;
+const MAILTO = /mailto:([^"'`$\\\s<>)?]*)/gi;
 for (const file of walk(DIST, TEXT_FILE)) {
   const text = readFileSync(file, 'utf8');
   const where = '/' + relative(DIST, file);
-  if (/mailto:/i.test(text)) problems.push(`${where}: a mailto: link; link the Contact window (/#contact) instead`);
+  for (const [link, to] of text.matchAll(MAILTO)) {
+    // The OS builds its links from the address at run time, so a bare `mailto:` prefix in a script is the owner's too.
+    if (to !== OWNER_ADDRESS && !(to === '' && /\.m?js$/.test(file))) problems.push(`${where}: ${link} reaches someone other than the owner`);
+  }
   for (const [address, domain] of text.matchAll(ADDRESS)) {
-    if (!EXAMPLE_DOMAIN.test(domain)) problems.push(`${where}: an email address (${address}); the site prints none`);
+    if (address.toLowerCase() !== OWNER_ADDRESS && !EXAMPLE_DOMAIN.test(domain)) {
+      problems.push(`${where}: an email address (${address}); the site prints only the owner's (${OWNER_ADDRESS})`);
+    }
   }
 }
 
