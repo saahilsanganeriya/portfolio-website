@@ -112,6 +112,9 @@ test('a click beside the screen steps back from the monitor to the desk, with or
 test('Escape inside SaahilOS steps back to the desk, unless it closed the Start menu', async ({ page }) => {
   await page.goto('/projects/swe-sim');
   await settledAt(page, 'monitor', 120_000);
+  // SaahilOS's buttons are on the page before React makes them live, and a click before that is lost; the address's
+  // window opens only once SaahilOS is live.
+  await expect(os(page).getByRole('dialog', { name: 'swe-sim: a SWE simulator for coding-agent tasks' })).toBeVisible();
   await os(page).getByRole('button', { name: 'Start', exact: true }).click();
   const menu = os(page).getByRole('navigation', { name: 'Start menu' });
   await expect(menu).toBeVisible();
