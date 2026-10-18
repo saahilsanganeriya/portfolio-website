@@ -85,8 +85,8 @@ Renders the stills and the room probe, writes the view's two day KTX2 files (ETC
 (via `npx`): dedup, prune (empties and attributes kept), KTX2 ETC1S for the five first-frame atlases (1024 px), meshopt
 geometry. Then it encodes the full atlases into `public/room/atlas/` through `scripts/encode-atlases.mjs`, which holds
 each atlas's size and codec (picked by an A/B of bytes, SSIM and crops: UASTC level 2 with RDO λ 2, a 32 KB dictionary
-and zstd 22 in KTX2 for the desk and the art at 4096 px, the same with RDO λ 1 for the bezel at 1792 px, AVIF crf 14
-for the props at 4096 px and the walls and floor at 3072 px; λ 2 and 1792 keep the full room under 25 MB), and writes
+and zstd 22 in KTX2 for the desk and the art at 4096 px and the bezel at 1792 px, AVIF crf 16 for the props at 4096 px
+and crf 14 for the walls and floor at 3072 px; λ 2, 1792 and crf 16 keep the full room under 25 MB), and writes
 `public/room/atlases.json` and `public/room/floorplan.json` (floorplan.py). It fails if the first frame (room.glb and the
 two day halves of the window) is over 5,500,000 B, the full set over 25,000,000 B, a node from the contract below is
 missing, a removed one (or a night view's file) is back, or the probe is over 400 KB. Needs Node (`npx`), `ktx` from
