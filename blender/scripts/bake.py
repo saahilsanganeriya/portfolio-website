@@ -48,10 +48,12 @@ BLEND = REPO / "blender" / "room.blend"
 # Francisco's larger, for the Painted Ladies' trim and windows, each half's KTX2 kept under about 0.6 MB.
 ATLAS_SIZES = {"desk": 6144, "art": 4096, "props": 4096, "env": 3072, "window_sf": 1792, "window_delhi": 1536}
 SHIP_PX = 4096
-# Island margin at the bake size. The desk keeps CRAFT-R8's 16 px at the shipped 4096 (24 at the 6144 bake); the art,
-# props and env atlases hold thousands of small islands, where that margin left the props atlas 10 % full, so they use
-# round seven's 12 (8 px shipped): props 40 % full, art 43 % (measured on this set). The view keeps 6 px.
-MARGIN_PX = {"desk": 24, "art": 8, "props": 8, "env": 6, "window_sf": 6, "window_delhi": 6}
+# Island margin at the bake size: 8 px at the shipped size everywhere (the view keeps 6 px). The desk had CRAFT-R8's
+# 16 px; once its top was cut into the rectangles the views see (build_room.split_desk_top_by_view), that margin round
+# ~150 islands left it 52 % full, and 8 px brought it back to 64 % (round eight's fill with one desk-top island).
+MARGIN_PX = {"desk": 12, "art": 8, "props": 8, "env": 6, "window_sf": 6, "window_delhi": 6}
+# Islands of the desk atlas stay axis-aligned: its desk-top rectangles pack tighter (52 % vs 50 % at 16 px).
+PACK_ROTATE = {"desk": "AXIS_ALIGNED"}
 # The world seen through the open front of the view while it bakes: a pale day sky.
 VIEW_WORLD = ((0.62, 0.70, 0.82, 1.0), 0.35)
 GUIDE_SAMPLES = 4  # the albedo and normal guides for OIDN (they barely change within a texel)
@@ -88,7 +90,7 @@ def select_only(objs):
     bpy.context.view_layer.objects.active = objs[0]
 
 
-def make_bake_uvs(objs, size: int, margin_px: int):
+def make_bake_uvs(objs, size: int, margin_px: int, rotate: str = "ANY"):
     """Give every object a 'bake' UV map, then pack all islands into one atlas.
 
     An object whose own UV map has no overlapping faces (Henry's lightmap UVs, the props' unwraps) keeps that
@@ -126,7 +128,7 @@ def make_bake_uvs(objs, size: int, margin_px: int):
     bpy.ops.mesh.reveal()
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.uv.select_all(action="SELECT")
-    bpy.ops.uv.pack_islands(udim_source="CLOSEST_UDIM", rotate=True, rotate_method="ANY", scale=True,
+    bpy.ops.uv.pack_islands(udim_source="CLOSEST_UDIM", rotate=True, rotate_method=rotate, scale=True,
                             merge_overlap=False, margin_method="FRACTION", margin=margin_px / size,
                             pin=False, shape_method="CONCAVE")
     bpy.ops.object.mode_set(mode="OBJECT")
@@ -405,7 +407,7 @@ def bake_atlas(atlas: str, size: int, samples: int, out_name: str | None = None,
     out_name = out_name or atlas
     started = time.monotonic()
     if make_uvs or any("bake" not in o.data.uv_layers for o in objs):
-        make_bake_uvs(objs, ATLAS_SIZES[atlas], MARGIN_PX[atlas])
+        make_bake_uvs(objs, ATLAS_SIZES[atlas], MARGIN_PX[atlas], PACK_ROTATE.get(atlas, "ANY"))
     t_uv = time.monotonic()
     scene = bpy.context.scene
     scene.cycles.use_denoising = False
