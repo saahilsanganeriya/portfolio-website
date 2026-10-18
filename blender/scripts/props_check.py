@@ -36,9 +36,11 @@ REQUIRED = {
     "crt_badge": ["crt_badge"],
     "desk_chair": ["desk_chair", "desk_chair_base"],
     "crt_shell": ["crt_shell", "crt_power_led", "crt_screen", "crt_badge_seat"],
+    "computer_case": ["computer_case", "case_power_led", "case_hdd_led"],
 }
-# The oven carries its door, cavity and the croissant; the chair its five twin-wheel casters.
-PROP_BUDGETS = {"countertop_oven": 18000, "desk_chair": 20000}
+# The oven carries its door, cavity and the croissant; the chair its five twin-wheel casters; the base unit stays
+# near its brief's 10k.
+PROP_BUDGETS = {"countertop_oven": 18000, "desk_chair": 20000, "computer_case": 10000}
 HANGING = set()  # props whose origin is a mount point on top (none since the ceiling fan left the room)
 CAMERAS = {"fujifilm_x100", "fujifilm_xt", "fujica_st", "super8_camera"}
 PLAN_EXPR = "import bpy; print(sum(len(o.data.polygons) for o in bpy.data.objects if o.type=='MESH'))"
