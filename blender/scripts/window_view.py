@@ -1311,7 +1311,7 @@ def sunset_fog(b, mats):
         d = Vector((math.cos(az), math.sin(az), 0.0))
         r = dome_radius(Vector((d.x, d.y, 0.03)).normalized()) * 0.975
         lump = 0.5 + 0.3 * math.sin(i * 0.8 + 0.4) + 0.2 * math.sin(i * 2.1)
-        top = WATER_Z + 0.045 + 0.05 * lump * (0.35 + 0.65 * i / n)
+        top = WATER_Z + 0.07 + 0.06 * lump * (0.35 + 0.65 * i / n)
         ring = []
         for frac, lift in ((1.0, WATER_Z - 0.01), (0.996, None), (0.985, None)):
             z = lift if lift is not None else (top if frac == 0.996 else top - 0.012)
