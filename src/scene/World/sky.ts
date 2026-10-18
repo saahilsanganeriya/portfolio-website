@@ -105,6 +105,38 @@ const FLOOR_DROP_M = 0.15;
 const FLOOR_CELLS_X = 32;
 const FLOOR_CELLS_Z = 6;
 
+/** How far short of the wall's ends the view and its sky stop, in metres: past an end they show edge-on, a light line in the void. */
+const WALL_END_INSET_M = 0.02;
+
+/**
+ * Moves every vertex lying past either end of `wall` (its box in the world; the ends are along its longer side) back to
+ * WALL_END_INSET_M short of that end, in place. Returns how many moved.
+ */
+export function keepShortOfWallEnds(geometry: THREE.BufferGeometry, toWorld: THREE.Matrix4, wall: THREE.Box3): number {
+  const along = wall.max.x - wall.min.x >= wall.max.z - wall.min.z ? 'x' : 'z';
+  const inset = WALL_END_INSET_M * WORLD_SCALE;
+  const [lo, hi] = [wall.min[along] + inset, wall.max[along] - inset];
+  const position = geometry.getAttribute('position');
+  const toLocal = toWorld.clone().invert();
+  const p = new THREE.Vector3();
+  let moved = 0;
+  for (let i = 0; i < position.count; i++) {
+    p.fromBufferAttribute(position, i).applyMatrix4(toWorld);
+    const at = THREE.MathUtils.clamp(p[along], lo, hi);
+    if (at === p[along]) continue;
+    p[along] = at;
+    p.applyMatrix4(toLocal);
+    position.setXYZ(i, p.x, p.y, p.z);
+    moved++;
+  }
+  if (moved) {
+    position.needsUpdate = true;
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+  }
+  return moved;
+}
+
 export interface DomeCompletion {
   geometry: THREE.BufferGeometry;
   /** Grid cells (ring by column, plus the cap) that had no vertex, and triangles added in all. */

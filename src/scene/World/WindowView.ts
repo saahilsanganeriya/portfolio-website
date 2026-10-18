@@ -13,13 +13,14 @@ import { WORLD_SCALE } from '../Application/RoomModel';
 import { CITIES, type CityId } from './daylight';
 import stampFont from '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2?url';
 import { seeded, seedOf } from './handwriting';
-import { BLEND_HALF_WIDTH_M, completeDome, horizons, skyColour, type SkyFrame } from './sky';
+import { BLEND_HALF_WIDTH_M, completeDome, horizons, keepShortOfWallEnds, skyColour, type SkyFrame } from './sky';
 import type { WindowMotifNode, WindowSkyNode, WindowViewNode } from './nodes';
 import type { TextureStore } from './textures';
 
 // The window looks out on San Francisco (left) and New Delhi (right), both by day. One sky spans them (window_sky): its
 // colour runs from San Francisco's day sky to Delhi's with no seam, worked out once per vertex (sky.ts), and where the
-// build culled the dome the sky is filled in, so no angle of the orbit sees the void through the pane. Each city's land
+// build culled the dome the sky is filled in, so no angle of the orbit sees the void through the pane; none of it reaches
+// past the wall's ends, where it would show from the side as a line in the void. Each city's land
 // is its day picture, loaded with the room. Across the sky a red and white airliner flies a dotted arc from New Delhi to
 // San Francisco with a fading trail, the two names written in his hand (window_motif); under reduced motion it holds
 // still, with no trail.
@@ -28,6 +29,7 @@ const ROOM_PATH = '/room/';
 // Without the sky's markers (an older room), how far in front of the window the eye stands.
 const FALLBACK_EYE_M = 3;
 const CITY_ORDER: CityId[] = ['sf', 'delhi'];
+const WALL_MESH = /^(?:env_)?wall_(?:back|left|right)$/;
 
 export interface CityState {
   name: string;
@@ -106,6 +108,14 @@ export class WindowView {
         skyNode.mesh.geometry = done.geometry;
       }
       Object.assign(this.skyFilled, { cells: done.filledCells, triangles: done.addedTriangles });
+    }
+    const wall = (skyNode?.mesh ?? nodes[0]?.mesh)?.parent?.children.find((node) => WALL_MESH.test(node.name));
+    if (wall) {
+      const ends = new THREE.Box3().setFromObject(wall, true);
+      for (const mesh of [...nodes.map((n) => n.mesh), ...(skyNode ? [skyNode.mesh] : [])]) {
+        mesh.updateWorldMatrix(true, false);
+        keepShortOfWallEnds(mesh.geometry, mesh.matrixWorld, ends);
+      }
     }
     this.skyMaterial = skyNode ? paintSky(skyNode.mesh, this.frame) : null;
     const glass = (skyNode?.mesh.parent ?? motifNode?.anchor.parent)?.getObjectByName('window_glass');

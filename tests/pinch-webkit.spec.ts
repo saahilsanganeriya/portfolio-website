@@ -1,5 +1,6 @@
 import { devices, expect, test, type Page } from '@playwright/test';
 import type {} from '../src/scene/Application/Application';
+import { PINCHES, pinchRatio, safariPinch } from './pinches';
 
 // Safari's trackpad pinch (brief round 9 §1.5): WebKit sends gesturestart / gesturechange / gestureend with a scale,
 // not a wheel. Run in Playwright's WebKit on the M-series profile (MacBook Pro 14": 1512×982 CSS px at DPR 2). Linux
@@ -56,4 +57,17 @@ test('Safari’s gesture events pinch the room and never zoom the page', async (
   await orbitRests(page);
   expect((await orbit(page))!.radius / nearer).toBeGreaterThan(1.35);
   expect(await page.evaluate(() => visualViewport!.scale)).toBe(1);
+});
+
+/**
+ * Catches Safari's pinch drifting from the fingers' scale, gentle or brisk, so that the same pinch zooms differently
+ * here and in Chrome (steering.spec.ts has its twin).
+ */
+test('Safari’s pinch zooms the room by the fingers’ scale, gentle or brisk, as in Chrome', async ({ page }) => {
+  await inRoom(page);
+  for (const [scale, , steps] of PINCHES) {
+    const ratio = await pinchRatio(page, 756, 540, () => safariPinch(page, scale, steps));
+    expect(ratio, `fingers ${scale}x in ${steps} steps`).toBeGreaterThan(scale * 0.96);
+    expect(ratio, `fingers ${scale}x in ${steps} steps`).toBeLessThan(scale * 1.04);
+  }
 });

@@ -131,7 +131,7 @@ export function FilmsApp({ slug, os }: { slug?: string; os: OsApi }) {
           <span className="os-films-heading-aside">— from Letterboxd</span>
         </h2>
         <p className="os-films-note">
-          The {favourites.length === 4 ? 'four ' : ''}films on my Letterboxd profile. Their posters hang in the room.
+          Three films and a series, pinned on my Letterboxd profile. Their posters hang in the room.
         </p>
         <ul className="os-film-grid os-film-wall">
           {favourites.map((film) => (
