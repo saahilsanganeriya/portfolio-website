@@ -265,10 +265,16 @@ test('the plane stays inside the window framing all along its route, at every st
  * window void for about a second): in no frame of the swing round does the wall stand over 0.9 with its view hidden.
  */
 test('coming home from behind the set, the window shows its view as soon as the wall is back', async ({ page }) => {
+  // A smaller stage draws faster in software; what is tested is the walls' state each frame, not pixels.
+  await page.setViewportSize({ width: 960, height: 600 });
   await windowAt(page, HOURS[0]);
   await page.evaluate(() => window.__room!.goto('idle'));
   await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
-  await orbitTo(page, 180);
+  // Round behind the back wall by the arrow keys (15° a press; four at a time stay under the coast's top speed).
+  for (let round = 0; round < 3; round++) {
+    for (let press = 0; press < 4; press++) await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(() => window.__room!.orbit !== null && !window.__room!.moving, null, { timeout: 60_000 });
+  }
   await page.evaluate(() => {
     const seen: { opacity: number; shown: boolean }[] = [];
     (window as unknown as { seen: typeof seen }).seen = seen;
