@@ -33,6 +33,8 @@ export interface WorldHost {
   fly(station: StationName): boolean;
   /** The framing the camera is at or heading to. */
   station(): string;
+  /** The camera rests at that framing: no flight under way (a cut has landed at once). */
+  landed(): boolean;
   openWindow(target: string): void;
   /** The audio layer's recorded one-shot (`audio.sfx`). */
   sfx(name: SfxName, at?: THREE.Vector3): void;
@@ -56,8 +58,8 @@ export interface WorldFrame {
 const LABELS_EVERY_S = 1;
 // Once the room is interactive, on-demand loading starts after this pause, so it never overlaps the first moment.
 const ON_DEMAND_DELAY_MS = 400;
-// A prop acts once the camera it called has landed: slower than this (world units a second) for a moment, or after
-// this long whatever the camera is doing.
+// A prop acts once the camera it called has landed: its flight over, or slower than this (world units a second) for a
+// moment (a spring's landing is detected late), or after this long whatever the camera is doing.
 const LANDED_SPEED = 0.03 * WORLD_SCALE;
 const LANDED_FRAMES = 3;
 const LANDING_TIMEOUT_S = 2.4;
@@ -396,7 +398,7 @@ export class World {
     }
     landing.waited += realDt;
     landing.still = speed < LANDED_SPEED ? landing.still + 1 : 0;
-    if (landing.still >= LANDED_FRAMES || landing.waited >= LANDING_TIMEOUT_S) {
+    if (this.host.landed() || landing.still >= LANDED_FRAMES || landing.waited >= LANDING_TIMEOUT_S) {
       this.landing = null;
       landing.run();
     }
