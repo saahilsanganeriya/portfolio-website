@@ -45,7 +45,7 @@ BAKE_DIR = REPO / "blender" / ".cache" / "bake"
 BLEND = REPO / "blender" / "room.blend"
 
 # Bake sizes (coordinator ruling, 2026-10-17 08:00Z, for a night-long budget): the desk hero atlas bakes at 1.5x the
-# 4096 px it ships at, so every shipped texel averages a couple of baked ones, and so does the bezel's (3072 for 1792);
+# 4096 px it ships at, so every shipped texel averages a couple of baked ones, and so does the bezel's (3072 for 2048);
 # art and props bake at their 4096 ship size, and the walls and floor, smooth diffuse light, at 3072. The view's halves
 # ship at their bake size: San Francisco's larger, for the Painted Ladies' trim and windows, each half's KTX2 kept under
 # about 0.6 MB.
