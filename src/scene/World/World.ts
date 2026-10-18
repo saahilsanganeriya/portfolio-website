@@ -287,6 +287,13 @@ export class World {
 
   /** Screen point of a world feature by name (the steam's plume, the window's motif), for tests. */
   point(name: string, rect: DOMRect) {
+    const windowPoint = this.windowView?.point(name);
+    if (windowPoint !== undefined) {
+      if (!windowPoint || !this.camera) return null;
+      const p = windowPoint.project(this.camera);
+      if (p.z > 1) return null;
+      return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+    }
     if (name === 'coffee_steam_plume' || name === 'window_motif') {
       const node = name === 'window_motif' ? this.nodes.windowMotif?.anchor : this.coffeeSteam?.mesh;
       if (!node || !this.camera) return null;

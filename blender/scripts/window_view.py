@@ -1,5 +1,7 @@
-"""The view from the window: San Francisco on the left and Delhi on the right, joined by the Golden Gate across an
-imagined bay (Delhi has no coast), built as a small diorama behind the back wall.
+"""The view from the window: San Francisco on the left and Delhi on the right across one imagined bay (Delhi has no
+coast; its side of the water is the Yamuna), built as a small diorama behind the back wall. Each city keeps its own
+bridge on its own side: the Golden Gate from San Francisco's shore to the Marin hill, and Delhi's Signature Bridge,
+cable-stayed from a sandbar to the right bank.
 
 Every part of the land, water and landmarks is its own object in atlas window_sf or window_delhi (the seam is the
 plane x = SEAM_X, behind the middle of the window's one pane); export.py joins each atlas into one mesh,
@@ -21,10 +23,12 @@ the first window keeps its look and reads larger through the bigger one.
 
     blender -b --factory-startup -P blender/scripts/window_view.py -- <out_dir> [day|night] [cam ...]
 
-renders quick previews of the view alone (a bare wall with the window), for work on the diorama.
+renders quick previews of the view alone (a bare wall with the window), for work on the diorama; VIEW_SAMPLES,
+VIEW_THREADS and VIEW_SIZE (e.g. 1512x982) override 64 samples, 16 threads and 1200x750.
 """
 
 import math
+import os
 import random
 import sys
 from pathlib import Path
@@ -103,29 +107,59 @@ def setup_viewpoints(framings):
 
 
 SF_HILLS = [  # (x, y, height above water, radius)
-    (0.80, 1.86, 0.22, 0.20), (1.08, 1.94, 0.13, 0.16), (0.50, 1.84, 0.15, 0.24), (0.70, 1.02, 0.07, 0.16),
+    (0.70, 1.88, 0.19, 0.10), (0.84, 1.86, 0.18, 0.09),  # Twin Peaks
+    (0.55, 1.96, 0.20, 0.12),  # Sutro Tower's hill
+    (0.38, 1.88, 0.13, 0.16), (1.08, 1.96, 0.11, 0.14),  # the hills behind, Mount Davidson to the hill behind downtown
+    (0.70, 1.02, 0.07, 0.16),  # Telegraph Hill
     (0.15, 1.05, 0.13, 0.22), (0.25, 1.65, 0.12, 0.2),
+    (1.02, 0.97, 0.045, 0.13),  # Alamo Square, rising behind the Painted Ladies
 ]
-SUTRO = (0.82, 1.87)
-BRIDGE_Y, BRIDGE_X = 1.36, (0.70, 1.86)
-TOWERS_X = (0.96, 1.62)
-DECK_Z = WATER_Z + 0.10
-TOWER_TOP = WATER_Z + 0.40
+SUTRO = (0.55, 1.96)
+# The Golden Gate, all on San Francisco's side: from its shore to the Marin hill just short of the seam.
+BRIDGE_Y, BRIDGE_X = 1.45, (0.58, 1.21)
+TOWERS_X = (0.76, 1.04)
+DECK_Z = WATER_Z + 0.09
+TOWER_TOP = WATER_Z + 0.32
+MARIN = (1.25, 1.52, 0.07, 0.10)  # centre, radius across and in depth
+# Delhi's Signature Bridge over the Yamuna, in front of the Golden Gate's depth: from a sandbar near the seam to the
+# right bank; one inclined white pylon near the bank, bent at its top, with fans of stays to both spans.
+SIG_Y, SIG_X, SIG_PYLON = 1.30, (1.41, 1.84), 1.665  # the deck runs on along the bank, where the back stays hold
+SIG_DECK = WATER_Z + 0.055
+SANDBAR = (1.43, 1.29, 0.055, 0.11)
+# The Painted Ladies: seven houses from LADIES_X along the row at depth LADIES_Y, facing the window, stepping up the
+# slope to the left, with Alamo Square in front of them.
+LADIES_X, LADIES_Y = 1.062, 0.915
+LADY = (0.028, 0.05, 0.058, 0.023)  # width, depth, height to the eaves, the gable's rise
+ALAMO = ((1.04, 1.29), (0.62, 0.885))
 LOTUS, INDIA_GATE, QUTUB = (1.56, 0.86), (1.72, 1.04), (1.80, 1.20)
 # Round seven: downtown San Francisco with the Transamerica Pyramid and Salesforce Tower, Coit Tower on Telegraph
 # Hill and Alcatraz in the bay; Humayun's Tomb, Jama Masjid and the Red Fort's wall in Delhi; a far ridge.
-TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (1.10, 1.70), (0.99, 1.76), (0.70, 1.03), (1.17, 1.57)
+TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (1.10, 1.70), (0.99, 1.76), (0.70, 1.03), (1.00, 1.27)
 DOWNTOWN = ((0.90, 1.24), (1.63, 1.86), (1.06, 1.75))  # x range, y range, densest point (behind the bridge)
 HUMAYUN, JAMA_MASJID, RED_FORT_Y = (1.88, 1.42), (1.60, 1.72), 1.96
 HAZE_NEAR, HAZE_FAR, HAZE_MAX = 1.05, 2.35, 0.25
+# The window's fixed moment (owner): San Francisco at 7 PM, the sun setting into the fog; New Delhi at 7:30 AM, the same
+# moment, the sun rising through a pale gold haze. Each city hazes toward its own light, the two blended across the
+# seam (HAZE_BLEND either side of it) so the halves meet without a step.
+HAZE_SF, HAZE_DELHI, HAZE_BLEND = (0.80, 0.60, 0.56), (0.88, 0.79, 0.58), 0.08
+HAZE_MAX_DELHI = 0.32
+# The bake's sky glow, horizon to zenith, per city: dusk's amber to violet-blue; morning's pale gold to pale blue.
+GLOW_SF = ((0.95, 0.60, 0.42), (0.22, 0.22, 0.46))
+GLOW_DELHI = ((0.92, 0.84, 0.62), (0.38, 0.54, 0.76))
 
 
 def sf_coast(y):
-    """x of the San Francisco shoreline at depth y: a foreground promontory, the bay's west shore at the bridge,
-    and the far shore behind it where the hills rise."""
-    t = smoothstep(0.92, 1.16, y)
+    """x of the San Francisco shoreline at depth y: a foreground promontory (the Painted Ladies' slope) reaching nearly
+    to the seam, the bay's west shore at the bridge, and the far shore behind it where the hills rise."""
+    t = smoothstep(0.96, 1.18, y)
     far = smoothstep(1.52, 1.72, y)
-    return (1.24 * (1 - t) + 0.78 * t) * (1 - far) + (SEAM_X + 0.06) * far
+    return (1.31 * (1 - t) + 0.78 * t) * (1 - far) + (SEAM_X + 0.06) * far
+
+
+def ellipse(x, y, shape):
+    """1 at the centre of an ellipse (cx, cy, rx, ry), 0 on its edge and outside."""
+    cx, cy, rx, ry = shape
+    return max(0.0, 1 - ((x - cx) / rx) ** 2 - ((y - cy) / ry) ** 2)
 
 
 def delhi_coast(y):
@@ -262,8 +296,26 @@ def keep_suns_off_water():
     for entry in sunless.collection_objects:
         entry.light_linking.link_state = "EXCLUDE"
     for light in bpy.data.collections["window_lights"].objects if "window_lights" in bpy.data.collections else []:
-        if light.get("window_mode") == "day" and light.data.type == "SUN":
+        if light.get("window_mode") == "day" and light.data.type == "SUN" and "window_receivers" not in light:
             light.light_linking.receiver_collection = sunless
+
+
+LIT = {"sf": "window_sf_lit", "delhi": "window_delhi_lit"}
+
+
+def light_each_city(objs):
+    """Each city's own sun and sky reach only its own half (land, city, landmarks, its bridge; not the water, which
+    stays sunless): San Francisco's sunset from the front left, Delhi's sunrise from the front right."""
+    for side, name in LIT.items():
+        lit = bpy.data.collections.get(name) or bpy.data.collections.new(name)
+        for o in objs:
+            if o.get("view_side") == side and not o.name.endswith("_water") and o.name not in lit.objects:
+                lit.objects.link(o)
+        for entry in lit.collection_objects:
+            entry.light_linking.link_state = "INCLUDE"
+        for light in bpy.data.collections["window_lights"].objects:
+            if light.get("window_receivers") == side:
+                light.light_linking.receiver_collection = lit
 
 
 def view_material(name, day, night=None, rough=0.85, emit_night=None, emit_strength=0.0, kit=None, metal=0.0):
@@ -276,11 +328,13 @@ def view_material(name, day, night=None, rough=0.85, emit_night=None, emit_stren
         color = kit(k, color, n)
         if isinstance(color, tuple):
             color, glow = color
-    # Aerial perspective: the further back (object y, the diorama's depth), the more the colour fades into the haze
-    # on the horizon, pale by day and blue-black by night.
-    depth = k.map_range(k.node("ShaderNodeSeparateXYZ", inputs={"Vector": k.coords("Object")}).outputs["Y"], HAZE_NEAR,
-                        HAZE_FAR, 0.0, HAZE_MAX)
-    haze = k.mix_color(n, (0.66, 0.72, 0.80, 1.0), (0.030, 0.034, 0.055, 1.0))
+    # Aerial perspective: the further back (object y, the diorama's depth), the more the colour fades into its city's
+    # haze (object x, across the seam): San Francisco's dusk, Delhi's morning; blue-black by night.
+    obj = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": k.coords("Object")})
+    delhi = k.map_range(obj.outputs["X"], SEAM_X - HAZE_BLEND, SEAM_X + HAZE_BLEND)
+    depth = k.math("MULTIPLY", k.map_range(obj.outputs["Y"], HAZE_NEAR, HAZE_FAR),
+                   k.math("ADD", HAZE_MAX, k.math("MULTIPLY", delhi, HAZE_MAX_DELHI - HAZE_MAX)))
+    haze = k.mix_color(n, k.mix_color(delhi, HAZE_SF + (1.0,), HAZE_DELHI + (1.0,)), (0.030, 0.034, 0.055, 1.0))
     color = k.mix_color(depth, color, haze)
     bsdf = k.node("ShaderNodeBsdfPrincipled", inputs={"Base Color": color, "Roughness": rough, "Metallic": metal})
     if emit_night is not None:
@@ -312,17 +366,19 @@ def lit_windows(k, color, n, scale=(180.0, 180.0, 260.0), share=0.45, warm=(1.0,
 
 
 def sky_material(side):
-    """The sky's light on the diorama while the halves bake: one day gradient over both cities. Emission only; the site
-    draws the sky itself (window_sky), so nothing here is seen."""
+    """The sky's light on the diorama while the halves bake: San Francisco's dusk on the left turning, by direction,
+    into Delhi's morning on the right, the same function on both halves of the dome, so their water still meets at the
+    seam in one colour. Emission only; the site draws the sky itself (window_sky), so nothing here is seen."""
     mat, k = pl.new_material(f"view_sky_{side}")
     geo = k.node("ShaderNodeNewGeometry")
     rel = k.node("ShaderNodeVectorMath", operation="SUBTRACT", inputs={0: geo.outputs["Position"], 1: tuple(DOME_CENTRE)})
     d = k.node("ShaderNodeVectorMath", operation="NORMALIZE", inputs={0: rel.outputs[0]})
     sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": d.outputs[0]})
-    up = k.math("MAXIMUM", sep.outputs["Z"], 0.0)
-    day_hz = (0.78, 0.73, 0.66, 1.0)  # one glow for both halves: their water then meets at the seam in one colour
-    day = k.mix_color(k.math("POWER", up, 0.55), day_hz, (0.13, 0.30, 0.62, 1.0))
-    emit = k.node("ShaderNodeEmission", inputs={"Color": day, "Strength": 0.34})
+    up = k.math("POWER", k.math("MAXIMUM", sep.outputs["Z"], 0.0), 0.55)
+    east = k.map_range(sep.outputs["X"], -0.25, 0.25)
+    glow = k.mix_color(east, k.mix_color(up, GLOW_SF[0] + (1.0,), GLOW_SF[1] + (1.0,)),
+                       k.mix_color(up, GLOW_DELHI[0] + (1.0,), GLOW_DELHI[1] + (1.0,)))
+    emit = k.node("ShaderNodeEmission", inputs={"Color": glow, "Strength": 0.34})
     k.set(k.node("ShaderNodeOutputMaterial"), "Surface", emit.outputs[0])
     return mat
 
@@ -346,15 +402,16 @@ def water_material():
                          emit_night=(0.95, 0.58, 0.26), emit_strength=0.45)
 
 
-def land_material(name, day, night, lights_share=0.0):
-    """Ground painted by height and noise; by night a scatter of warm house lights."""
+def land_material(name, day, night, lights_share=0.0, patch=None, high=(0.52, 0.47, 0.30), patch_share=(0.4, 0.62)):
+    """Ground painted by height and noise (patches of `patch`, by default a darker `day`; `high` on the hilltops); by
+    night a scatter of warm house lights."""
     def paint(k, color, n):
         obj = k.coords("Object")
         sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": obj})
         patches = k.noise(k.coords("Object", 18.0), 1.0, detail=3.0)
-        color = k.mix_color(k.map_range(patches, 0.4, 0.62), color, tuple(c * 0.72 for c in day) + (1.0,))
-        high = k.map_range(sep.outputs["Z"], WATER_Z + 0.08, WATER_Z + 0.25)
-        color = k.mix_color(k.math("MULTIPLY", high, k.math("SUBTRACT", 1.0, n)), color, (0.52, 0.47, 0.30, 1.0))
+        color = k.mix_color(k.map_range(patches, *patch_share), color, (patch or tuple(c * 0.72 for c in day)) + (1.0,))
+        top = k.map_range(sep.outputs["Z"], WATER_Z + 0.08, WATER_Z + 0.25)
+        color = k.mix_color(k.math("MULTIPLY", top, k.math("SUBTRACT", 1.0, n)), color, high + (1.0,))
         if lights_share > 0:
             dots = k.node("ShaderNodeTexVoronoi", inputs={"Vector": k.coords("Object", 70.0)}, feature="F1")
             lit = k.math("MULTIPLY", k.map_range(dots.outputs["Distance"], 0.18, 0.05),
@@ -369,13 +426,14 @@ def land_material(name, day, night, lights_share=0.0):
 def build_materials():
     m = {}
     m["water"] = water_material()
-    m["sf_land"] = land_material("view_sf_land", (0.30, 0.31, 0.15), (0.020, 0.021, 0.018), lights_share=0.35)
+    # San Francisco's hills in late-summer gold with dark oak scrub in their folds; its city in cream and pastels, darker
+    # than they look, as the room's exposure lifts them.
+    m["sf_land"] = land_material("view_sf_land", (0.30, 0.22, 0.08), (0.020, 0.021, 0.018), lights_share=0.35,
+                                 patch=(0.075, 0.11, 0.035), high=(0.42, 0.30, 0.11), patch_share=(0.5, 0.68))
     m["delhi_land"] = land_material("view_delhi_land", (0.33, 0.34, 0.16), (0.022, 0.020, 0.015), lights_share=0.2)
     m["lawn"] = view_material("view_lawn", (0.16, 0.26, 0.07), (0.010, 0.016, 0.008), rough=0.95)
     m["path"] = view_material("view_path", (0.52, 0.40, 0.25), (0.05, 0.035, 0.022), rough=0.9)
     m["trees"] = view_material("view_trees", (0.06, 0.12, 0.04), (0.006, 0.010, 0.006), rough=0.9)
-    m["fog"] = view_material("view_fog", (0.80, 0.82, 0.86), (0.12, 0.09, 0.10), rough=1.0,
-                             emit_night=(0.60, 0.40, 0.26), emit_strength=0.035, kit=fog_paint)
     m["ggb"] = view_material("view_ggb", (0.55, 0.075, 0.035), (0.13, 0.03, 0.02), rough=0.55)
     m["ggb_dark"] = view_material("view_ggb_dark", (0.20, 0.035, 0.02), (0.03, 0.01, 0.008), rough=0.6)
     m["concrete"] = view_material("view_concrete", (0.48, 0.46, 0.42), (0.04, 0.04, 0.04), rough=0.9)
@@ -386,11 +444,11 @@ def build_materials():
     m["sutro"] = sutro_material()
     m["houses"] = [view_material(f"view_house_{i}", c, tuple(x * 0.08 for x in c), rough=0.8, emit_night=(1.0, 0.58, 0.24),
                                  emit_strength=1.6, kit=lambda k, col, n: lit_windows(k, col, n, share=0.55))
-                   for i, c in enumerate([(0.52, 0.62, 0.70), (0.80, 0.52, 0.52), (0.85, 0.74, 0.40),
-                                          (0.55, 0.72, 0.58), (0.62, 0.55, 0.72), (0.86, 0.64, 0.48)])]
+                   for i, c in enumerate([(0.30, 0.42, 0.56), (0.62, 0.36, 0.33), (0.66, 0.52, 0.22),
+                                          (0.34, 0.50, 0.38), (0.44, 0.38, 0.56), (0.66, 0.44, 0.30)])]
     m["trim"] = view_material("view_trim", (0.86, 0.85, 0.80), (0.05, 0.05, 0.05), rough=0.7)
     m["roof"] = view_material("view_roof", (0.18, 0.17, 0.18), (0.02, 0.02, 0.022), rough=0.8)
-    m["city"] = view_material("view_city", (0.80, 0.78, 0.72), (0.05, 0.05, 0.05), rough=0.85,
+    m["city"] = view_material("view_city", (0.66, 0.62, 0.53), (0.05, 0.05, 0.05), rough=0.85,
                               emit_night=(1.0, 0.60, 0.26), emit_strength=1.6,
                               kit=lambda k, col, n: lit_windows(k, col, n, share=0.4))
     m["delhi_city"] = view_material("view_delhi_city", (0.80, 0.74, 0.62), (0.05, 0.045, 0.04), rough=0.9,
@@ -418,16 +476,26 @@ def build_materials():
     m["rock"] = view_material("view_rock", (0.36, 0.33, 0.28), (0.03, 0.03, 0.03), rough=0.95)
     m["ridge"] = view_material("view_ridge", (0.10, 0.17, 0.07), (0.008, 0.012, 0.008), rough=0.95)
     m["hull"] = view_material("view_hull", (0.30, 0.16, 0.08), (0.03, 0.02, 0.015), rough=0.7)
+    m["roof_flat"] = view_material("view_roof_flat", (0.20, 0.19, 0.19), (0.02, 0.02, 0.02), rough=0.85)
+    m["glass_dark"] = view_material("view_glass_dark", (0.03, 0.04, 0.05), (0.02, 0.02, 0.025), rough=0.3)
+    m["ridge_sf"] = view_material("view_ridge_sf", (0.12, 0.15, 0.07), (0.008, 0.012, 0.008), rough=0.95)
+    # Postcard Row's colours, each house a body and an accent (the white trim is shared).
+    m["ladies"] = [(view_material(f"view_lady_{i}", body, None, rough=0.75), view_material(f"view_lady_{i}_accent", accent, None, rough=0.75))
+                   for i, (body, accent) in enumerate([
+                       ((0.30, 0.48, 0.70), (0.06, 0.10, 0.20)), ((0.86, 0.68, 0.26), (0.36, 0.10, 0.06)),
+                       ((0.42, 0.60, 0.40), (0.06, 0.14, 0.08)), ((0.82, 0.44, 0.42), (0.20, 0.06, 0.10)),
+                       ((0.54, 0.45, 0.72), (0.12, 0.08, 0.22)), ((0.88, 0.55, 0.30), (0.04, 0.18, 0.18)),
+                       ((0.48, 0.72, 0.64), (0.50, 0.32, 0.06))])]
+    # The Signature Bridge's white steel, its stays, the deck's underside and the glass gallery; the Yamuna's sand.
+    m["steel_white"] = view_material("view_steel_white", (0.80, 0.81, 0.80), (0.06, 0.06, 0.065), rough=0.4)
+    m["cable"] = view_material("view_cable", (0.62, 0.64, 0.66), (0.05, 0.05, 0.05), rough=0.5)
+    m["deck"] = view_material("view_deck", (0.62, 0.61, 0.58), (0.04, 0.04, 0.04), rough=0.85)
+    m["deck_under"] = view_material("view_deck_under", (0.34, 0.34, 0.34), (0.02, 0.02, 0.02), rough=0.8)
+    m["gallery"] = view_material("view_gallery", (0.18, 0.26, 0.32), (0.04, 0.05, 0.07), rough=0.25,
+                                 emit_night=(0.9, 0.85, 0.7), emit_strength=2.0)
+    m["sand"] = view_material("view_sand", (0.62, 0.50, 0.32), (0.04, 0.035, 0.025), rough=0.95)
+    m["fog"] = view_material("view_fog", (0.90, 0.70, 0.64), (0.12, 0.09, 0.10), rough=1.0)
     return m
-
-
-def fog_paint(k, color, n):
-    """Fog is brightest on its tops and dims into the hills, so it reads as mist, not snow."""
-    sep = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": k.coords("Object")})
-    wisps = k.noise(k.coords("Object", 30.0), 1.0, detail=4.0)
-    fade = k.map_range(sep.outputs["Z"], WATER_Z + 0.08, WATER_Z + 0.26, 0.55, 1.0)
-    fade = k.math("MULTIPLY", fade, k.map_range(wisps, 0.3, 0.7, 0.85, 1.05))
-    return k.mix_color(fade, (0.42, 0.45, 0.42, 1.0), color)
 
 
 def sutro_material():
@@ -650,10 +718,17 @@ def extend_water_to_wall(bm):
 
 def sf_height(x, y):
     inland = sf_coast(y) - x
-    h = WATER_Z - 0.02 + 0.045 * smoothstep(-0.01, 0.10, inland)
+    # The foreground promontory meets the water at a steep shore, so its row of houses stands on level ground.
+    shore = 0.10 - 0.065 * (1 - smoothstep(0.98, 1.12, y))
+    h = WATER_Z - 0.02 + 0.045 * smoothstep(-0.01, shore, inland)
     for hx, hy, hh, hr in SF_HILLS:
         h += hh * math.exp(-((x - hx) ** 2 + (y - hy) ** 2) / (hr * hr)) * smoothstep(-0.02, 0.08, inland)
-    return h
+    marin = ellipse(x, y, MARIN)
+    return max(h, WATER_Z - 0.02 + 0.10 * marin ** 0.6) if marin > 0 else h
+
+
+def on_sf_land(x, y, pad=0.0):
+    return x < sf_coast(y) + pad or ellipse(x, y, MARIN) > 0
 
 
 def delhi_height(x, y):
@@ -661,10 +736,16 @@ def delhi_height(x, y):
     return WATER_Z - 0.02 + 0.03 * smoothstep(-0.01, 0.04, inland)
 
 
+def sandbar_height(x, y):
+    """The Yamuna's sandbar near the seam: low, flat-topped, a little above the water."""
+    return WATER_Z - 0.01 + 0.022 * min(1.0, ellipse(x, y, SANDBAR) * 3)
+
+
 # ---- landmarks ----
 
 def golden_gate(b, mats):
-    """Two art-deco towers on piers, the deck on its truss, main cables, suspenders and the approaches."""
+    """Two art-deco towers on piers, the deck on its truss, main cables, suspenders and the approaches, across San
+    Francisco's part of the bay from its shore to the Marin hill."""
     x0, x1 = BRIDGE_X
     y = BRIDGE_Y
     half_w = 0.032
@@ -674,14 +755,17 @@ def golden_gate(b, mats):
         xk = x0 + 0.011 + k * 0.022
         b.box((0.0025, 2 * half_w - 0.004, 0.012), loc=(xk, y, DECK_Z - 0.011), rot=(0, 45 if k % 2 else -45, 0),
               mat=mats["ggb_dark"])
+    tower = TOWER_TOP - WATER_Z
     for xt in TOWERS_X:
         b.box((0.07, 0.11, 0.05), loc=(xt, y, WATER_Z + 0.005), mat=mats["concrete"])
         for side in (-1, 1):
             yl = y + side * (half_w + 0.004)
-            for z0, z1, w in ((WATER_Z + 0.03, WATER_Z + 0.20, 0.016), (WATER_Z + 0.20, WATER_Z + 0.31, 0.013),
-                              (WATER_Z + 0.31, TOWER_TOP, 0.010)):
+            # Three stepped tiers, each a little slimmer, as the art-deco towers taper.
+            for z0, z1, w in ((WATER_Z + 0.03, WATER_Z + 0.5 * tower, 0.015), (WATER_Z + 0.5 * tower, WATER_Z + 0.78 * tower, 0.012),
+                              (WATER_Z + 0.78 * tower, TOWER_TOP, 0.0095)):
                 b.box((w + 0.004, w, z1 - z0), loc=(xt, yl, (z0 + z1) / 2), mat=mats["ggb"], bevel=0.0008, bevel_seg=1)
-        for zs in (DECK_Z + 0.07, DECK_Z + 0.15, DECK_Z + 0.22, TOWER_TOP - 0.025):
+        braces = [DECK_Z + f * (TOWER_TOP - 0.025 - DECK_Z) for f in (0.3, 0.62)] + [TOWER_TOP - 0.025]
+        for zs in braces:
             b.box((0.012, 2 * half_w + 0.006, 0.016 if zs < TOWER_TOP - 0.03 else 0.022), loc=(xt, y, zs),
                   mat=mats["ggb"])
         b.box((0.014, 2 * half_w + 0.006, 0.012), loc=(xt, y, DECK_Z - 0.03), mat=mats["ggb"])
@@ -713,6 +797,50 @@ def golden_gate(b, mats):
                         mats["deck_lights"])
     for xa in (x0, x1):
         b.box((0.05, 0.09, 0.03), loc=(xa, y, DECK_Z - 0.005), mat=mats["concrete"])
+
+
+def signature_bridge(b, mats):
+    """Delhi's Signature Bridge over the Yamuna, a cantilever-spar cable-stayed bridge: a deck on piers from the sandbar
+    to the right bank, and one white steel pylon near the bank, two columns straddling the deck that lean back over the
+    bank at about 63°, bend upright and meet in the glass-walled head; fifteen pairs of stays run from its upper part to
+    the main span and four pairs back to the short span on the bank."""
+    x0, x1 = SIG_X
+    y, z = SIG_Y, SIG_DECK
+    half_w = 0.024
+    steel, cable = mats["steel_white"], mats["cable"]
+    b.box((x1 - x0, 2 * half_w, 0.0055), loc=((x0 + x1) / 2, y, z), mat=mats["deck"])
+    b.box((x1 - x0, 2 * half_w - 0.012, 0.004), loc=((x0 + x1) / 2, y, z - 0.0045), mat=mats["deck_under"])
+    for side in (-1, 1):
+        b.box((x1 - x0, 0.0016, 0.004), loc=((x0 + x1) / 2, y + side * (half_w - 0.0008), z + 0.006), mat=steel)
+    for xp in (x0 + 0.015, x0 + 0.11, SIG_PYLON + 0.055, SIG_PYLON + 0.12, x1 - 0.012):
+        b.box((0.012, 0.03, z - WATER_Z + 0.012), loc=(xp, y, (z + WATER_Z - 0.012) / 2), mat=mats["concrete"])
+    b.box((0.05, 0.085, 0.022), loc=(SIG_PYLON + 0.01, y, WATER_Z + 0.004), mat=mats["concrete"])
+    # The pylon, in the bridge's plane (x along the deck; the main span lies toward the seam, the bank behind it).
+    lean = 1 / math.tan(math.radians(63))
+    bend_z, head_z = z + 0.175, z + 0.262
+    bend_x = SIG_PYLON + lean * (bend_z - z)
+    head = Vector((bend_x + 0.014, y, head_z))
+    for side in (-1, 1):
+        foot = Vector((SIG_PYLON, y + side * (half_w + 0.010), z - 0.012))
+        bend = Vector((bend_x, y + side * half_w * 0.55, bend_z))
+        b.tube([foot, foot.lerp(bend, 0.5), bend, bend.lerp(head, 0.6) + Vector((0, side * 0.002, 0)), head + Vector((0, side * 0.003, 0))],
+               0.0085, sides=8, mat=steel, radius_fn=lambda t: 0.0092 - 0.0034 * t)
+    b.box((0.017, 0.016, 0.011), loc=tuple(head + Vector((0.001, 0, 0.007))), rot=(0, -12, 0), mat=mats["gallery"])
+
+    def anchor(t):
+        """A point on the pylon's upper part, t 0 at the bend to 1 under the head, between the two columns."""
+        return Vector((bend_x, y, bend_z)).lerp(head, t) - Vector((0, 0, 0.02 * (1 - t)))
+
+    for side in (-1, 1):
+        ys = y + side * (half_w - 0.003)
+        for k in range(15):
+            top = anchor(0.05 + 0.9 * k / 14)
+            foot = Vector((SIG_PYLON - 0.02 - 0.215 * (k + 1) / 15, ys, z + 0.004))
+            b.tube([Vector((top.x, y + side * 0.004, top.z)), foot], 0.0006, sides=3, mat=cable, cap=False)
+        for k in range(4):
+            top = anchor(0.3 + 0.6 * k / 3)
+            foot = Vector((bend_x + 0.022 + 0.016 * k, ys, z + 0.004))
+            b.tube([Vector((top.x, y + side * 0.004, top.z)), foot], 0.0007, sides=3, mat=cable, cap=False)
 
 
 def facing_quad(b, x, y, z0, z1, width, mat):
@@ -749,58 +877,107 @@ def sutro_tower(b, mats, base):
 
 
 def painted_ladies(b, mats, rng):
-    """A stepped row of Victorian houses with gables, bay windows and white trim, down the foreground slope."""
-    x, y = 1.08, 0.80
-    for i in range(5):
-        w, d, hgt = 0.046, 0.05, 0.058
-        xc = x + i * (w + 0.002)
-        base = sf_height(xc, y) - 0.004
-        mat = mats["houses"][i % len(mats["houses"])]
-        b.box((w, d, hgt), loc=(xc, y, base + hgt / 2), mat=mat)
-        roof = [(-w / 2, 0.0), (w / 2, 0.0), (0.0, 0.026)]
-        faces = b.extrude(roof, d, mat=mats["roof"])
-        bmesh.ops.transform(b.bm, matrix=Matrix.Translation((xc, y, base + hgt)),
+    """Postcard Row: seven Victorian houses in a row facing the window, each a step higher up Alamo Square's slope to
+    the left. Each has a front gable trimmed in white over a cornice and a frieze in its accent colour, a two-storey
+    angled bay of dark windows framed in white, two tall windows and a door at the top of its stoop."""
+    w, d, h, rise = LADY
+    gap = 0.0016
+    trim, glass, roof = mats["trim"], mats["glass_dark"], mats["roof"]
+    for i, (body, accent) in enumerate(mats["ladies"]):
+        xc = LADIES_X + w / 2 + i * (w + gap)
+        y = LADIES_Y
+        front = y - d / 2
+        # Up the slope to the left: the ground under the house, and a step more for each house further up the row.
+        base = min(sf_height(xc + dx, y + dy) for dx in (-w / 2, w / 2) for dy in (-d / 2, d / 2)) - 0.003
+        lift = 0.0045 * (len(mats["ladies"]) - 1 - i)
+        top = base + 0.004 + lift + h
+        b.box((w, d, top - base), loc=(xc, y, (base + top) / 2), mat=body)
+        faces = b.extrude([(-w / 2 - 0.0015, 0.0), (w / 2 + 0.0015, 0.0), (0.0, rise)], d + 0.003, mat=roof)
+        bmesh.ops.transform(b.bm, matrix=Matrix.Translation((xc, y, top)), verts=list({v for f in faces for v in f.verts}))
+        # The gable's face in the accent colour, framed by white boards, over a white cornice and a frieze.
+        faces = b.extrude([(-w / 2 + 0.001, 0.0), (w / 2 - 0.001, 0.0), (0.0, rise - 0.0016)], 0.002, mat=accent)
+        bmesh.ops.transform(b.bm, matrix=Matrix.Translation((xc, front - 0.0022, top + 0.0012)),
                             verts=list({v for f in faces for v in f.verts}))
-        b.box((w * 0.52, 0.010, hgt * 0.55), loc=(xc - w * 0.12, y - d / 2 - 0.005, base + hgt * 0.42), mat=mat)
-        b.box((w + 0.003, 0.004, 0.004), loc=(xc, y - d / 2 - 0.001, base + hgt), mat=mats["trim"])
-        b.box((w * 0.6, 0.006, 0.003), loc=(xc - w * 0.12, y - d / 2 - 0.008, base + hgt * 0.7), mat=mats["trim"])
-        b.box((0.012, 0.016, 0.012), loc=(xc + w * 0.3, y - d / 2 - 0.008, base + 0.004), mat=mats["trim"])
+        slope = math.degrees(math.atan2(rise, w / 2))
+        board = math.hypot(w / 2, rise) + 0.002
+        for side in (-1, 1):
+            b.box((board, 0.0035, 0.0018), loc=(xc + side * w / 4, front - 0.0035, top + rise / 2 + 0.0004),
+                  rot=(0, side * slope, 0), mat=trim)
+        b.box((w + 0.003, 0.006, 0.0032), loc=(xc, front - 0.0022, top + 0.0005), mat=trim)
+        b.box((w, 0.0025, 0.0042), loc=(xc, front - 0.0012, top - 0.0035), mat=accent)
+        b.box((0.0035, 0.0025, 0.0035), loc=(xc - w * 0.18, front - 0.0045, top - rise * 0.05 + rise * 0.55), mat=glass)
+        # The bay: two storeys, its corners cut at 45°, dark windows framed in white, a white band at each floor.
+        bw, bp = w * 0.48, 0.0055
+        bx = xc - w * 0.2
+        z0, z1 = top - h + 0.004, top - 0.0085
+        b.box((bw, bp * 2, z1 - z0), loc=(bx, front, (z0 + z1) / 2), mat=body, corner=bp * 0.9, corner_seg=1)
+        storey = (z1 - z0) / 2
+        for k in range(2):
+            zc = z0 + storey * (k + 0.55)
+            b.box((bw * 0.62, 0.0012, storey * 0.62), loc=(bx, front - bp - 0.0002, zc), mat=trim)
+            b.box((bw * 0.5, 0.0012, storey * 0.5), loc=(bx, front - bp - 0.0007, zc), mat=glass)
+            b.box((bw + 0.0012, bp * 2 + 0.0012, 0.0016), loc=(bx, front, z0 + storey * k + 0.0008), mat=trim)
+        b.box((bw + 0.0016, bp * 2 + 0.0016, 0.0022), loc=(bx, front, z1 + 0.0011), mat=trim)
+        # Beside the bay: a tall window over the door, and the stoop up to the door.
+        wx = xc + w * 0.27
+        for zc, tall, mat in ((z0 + storey * 1.55, 0.6, glass), (z0 + storey * 0.62, 0.62, accent)):
+            b.box((w * 0.24, 0.0012, storey * (tall + 0.1)), loc=(wx, front - 0.0002, zc), mat=trim)
+            b.box((w * 0.17, 0.0012, storey * tall), loc=(wx, front - 0.0007, zc), mat=mat)
+        b.box((w * 0.26, 0.007, 0.004 + lift * 0.6), loc=(wx, front - 0.0035, base + (0.004 + lift * 0.6) / 2), mat=trim)
+
+
+def alamo_square(b, mats, rng):
+    """Alamo Square: the lawn sloping down toward the window in front of the row, a path across it, and its trees."""
+    (x0, x1), (y0, y1) = ALAMO
+    heightfield(b, x0, x1, y0, y1, 0.012, lambda x, y: sf_height(x, y) + 0.0015, mats["lawn"],
+                keep=lambda x, y: on_sf_land(x, y, -0.03))
+    path = [Vector((x0 + 0.02 + (x1 - x0 - 0.04) * t, y0 + 0.05 + 0.15 * (1 - t) ** 1.3, 0.0)) for t in (k / 16 for k in range(17))]
+    b.tube([p + Vector((0, 0, sf_height(p.x, p.y) + 0.0022)) for p in path], 0.0035, sides=4, mat=mats["path"])
+    for x, y, r in ((1.055, 0.84, 0.016), (1.115, 0.70, 0.013), (1.275, 0.83, 0.015), (1.21, 0.66, 0.012),
+                    (1.07, 0.68, 0.014)):
+        if not on_sf_land(x, y, -0.02):
+            continue
+        faces = b.lathe([(0.0, 0.0), (r, r * 0.5), (r * 0.85, r * 1.3), (0.0, r * 1.75)], segments=7, mat=mats["trees"],
+                        phase=rng.uniform(0, 1))
+        bmesh.ops.transform(b.bm, matrix=Matrix.Translation((x, y, sf_height(x, y) + 0.008)),
+                            verts=list({v for f in faces for v in f.verts}))
+        b.cylinder(0.0012, 0.009, segments=4, loc=(x, y, sf_height(x, y)), mat=mats["hull"])
 
 
 def sf_city(b, mats, rng):
-    """White and pastel houses on a street grid over the hills; none on Sutro's hilltop park."""
+    """Houses in cream and pastels on a street grid over the hills, their flat roofs grey, with a street tree here and
+    there; none on the bare hilltops, Sutro's hill, the Marin hill or round Alamo Square."""
     rot = math.radians(10)
-    step = 0.05
-    for i in range(-40, 40):
-        for j in range(-40, 40):
+    step = 0.042
+    roof = b.slot(mats["roof_flat"])
+    for i in range(-48, 48):
+        for j in range(-48, 48):
             gx, gy = i * step, j * step
             x = 0.6 + gx * math.cos(rot) - gy * math.sin(rot) + rng.uniform(-0.004, 0.004)
             y = 1.25 + gx * math.sin(rot) + gy * math.cos(rot) + rng.uniform(-0.004, 0.004)
-            if y < 0.66 or x > SEAM_X - 0.02 or not inside_dome(Vector((x, y, sf_height(x, y) + 0.04)), 0.04):
+            if y < 0.62 or x > SEAM_X - 0.02 or not inside_dome(Vector((x, y, sf_height(x, y) + 0.04)), 0.04):
                 continue
             inland = sf_coast(y) - x
             hgt = sf_height(x, y)
-            if inland < 0.025 or hgt > WATER_Z + 0.24 or math.hypot(x - SUTRO[0], y - SUTRO[1]) < 0.12:
+            if inland < 0.025 or hgt > WATER_Z + 0.15 or math.hypot(x - SUTRO[0], y - SUTRO[1]) < 0.12:
                 continue
-            if 1.04 < x < SEAM_X and y < 0.86 or rng.random() < 0.25:
+            if 1.03 < x < SEAM_X and y < 0.98 or ellipse(x, y, MARIN) > 0 or rng.random() < 0.22:
                 continue
-            w, d, h = rng.uniform(0.024, 0.04), rng.uniform(0.02, 0.032), rng.uniform(0.014, 0.034)
-            mat = mats["city"] if rng.random() < 0.7 else rng.choice(mats["houses"])
+            if rng.random() < 0.07:
+                r = rng.uniform(0.008, 0.012)
+                faces = b.lathe([(0.0, 0.0), (r, r * 0.5), (r * 0.85, r * 1.3), (0.0, r * 1.7)], segments=6,
+                                mat=mats["trees"], phase=rng.uniform(0, 1))
+                bmesh.ops.transform(b.bm, matrix=Matrix.Translation((x, y, hgt + 0.002)),
+                                    verts=list({v for f in faces for v in f.verts}))
+                continue
+            w, d, h = rng.uniform(0.018, 0.032), rng.uniform(0.016, 0.028), rng.uniform(0.012, 0.028)
+            mat = mats["city"] if rng.random() < 0.4 else rng.choice(mats["houses"])
             faces = b.box((w, d, h), loc=(x, y, hgt - 0.006 + h / 2), rot=(0, 0, 10 + rng.uniform(-4, 4)), mat=mat)
+            for f in faces:
+                f.normal_update()
+                if f.normal.z > 0.9:
+                    f.material_index = roof
             bmesh.ops.delete(b.bm, geom=[f for f in faces if f.normal.z < -0.9], context="FACES")
-
-
-def fog_height(x, y):
-    """Karl the fog: a blanket lying over the hills behind the city, thickest at the back, lumpy, thinning to
-    nothing toward the bay and the seam, so Sutro Tower stands out of it."""
-    lumps = 0.55 + 0.25 * math.sin(x * 23.0 + 1.3) * math.sin(y * 17.0) + 0.2 * math.sin(x * 51.0 + y * 37.0)
-    thick = 0.065 * smoothstep(1.58, 1.86, y) * (1 - smoothstep(SEAM_X - 0.22, SEAM_X - 0.02, x)) * lumps
-    return sf_height(x, y) + thick, thick
-
-
-def fog_bank(b, mats, rng):
-    heightfield(b, -0.95, SEAM_X, 1.6, 2.35, 0.05, lambda x, y: fog_height(x, y)[0], mats["fog"],
-                keep=lambda x, y: fog_height(x, y)[1] > 0.012 and inside_dome(Vector((x, y, fog_height(x, y)[0])), 0.03))
 
 
 def lotus_temple(b, mats, centre):
@@ -901,6 +1078,11 @@ def qutub_minar(b, mats, centre):
             mat=mats["red_sandstone"])
 
 
+def near_signature(x, y):
+    """Whether a tree or house would stand on the Signature Bridge's approach on the right bank."""
+    return abs(y - SIG_Y) < 0.045 and x < SIG_X[1] + 0.06
+
+
 def delhi_ground(b, mats, rng):
     """Lawns and paths around the monuments, a stepped ghat down to the water, trees, low whitewashed houses and
     street lamps along the river front."""
@@ -925,6 +1107,8 @@ def delhi_ground(b, mats, rng):
             continue
         if any(math.hypot(x - c[0], y - c[1]) < r for c, r in ((INDIA_GATE, 0.06), (LOTUS, 0.10), (QUTUB, 0.04))):
             continue
+        if near_signature(x, y):
+            continue
         r = rng.uniform(0.010, 0.018)
         faces = b.lathe([(0.0, 0.0), (r, r * 0.4), (r * 0.9, r * 1.2), (0.0, r * 1.6)], segments=6, mat=mats["trees"],
                         phase=rng.uniform(0, 1))
@@ -934,7 +1118,7 @@ def delhi_ground(b, mats, rng):
         x, y = (rng.uniform(1.62, 1.98), rng.uniform(1.12, 1.45)) if k < 18 else (rng.uniform(1.30, 1.90),
                                                                                       rng.uniform(1.62, 2.1)) \
             if k < 60 else (rng.uniform(1.95, 2.30), rng.uniform(1.40, 2.05))
-        if x < delhi_coast(y) + 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.06)), 0.04):
+        if x < delhi_coast(y) + 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.06)), 0.04) or near_signature(x, y):
             continue
         w, d, h = rng.uniform(0.016, 0.03), rng.uniform(0.014, 0.024), rng.uniform(0.010, 0.026)
         b.box((w, d, h), loc=(x, y, delhi_height(x, y) + h / 2 - 0.002), rot=(0, 0, rng.uniform(-8, 8)),
@@ -1090,19 +1274,19 @@ def red_fort(b, mats):
         b.box((0.05, 0.026, 0.065), loc=(gx, y - 0.002, delhi_height(gx, y) + 0.0325), mat=mats["red_stone"])
 
 
-def far_ridge(b, mats):
-    """The Delhi Ridge: low wooded hills along the back of the Delhi half, just inside the sky, a last layer for the
-    eye before the sky."""
+def far_ridge(b, mats, az_from=0.0, az_to=70.0, mat="ridge", phase=1.0):
+    """A low ridge along the back of the view between two azimuths, just inside the sky, a last layer for the eye
+    before the sky: the Delhi Ridge on the right by default; San Francisco's far hills on the left."""
     bm = b.bm
     before = set(bm.faces)
     n = 24
     row_lo, row_hi = [], []
     for i in range(n + 1):
-        az = math.radians(70 * i / n)
+        az = math.radians(az_from + (az_to - az_from) * i / n)
         d = Vector((math.cos(az), math.sin(az), 0.0))
         r = dome_radius(Vector((d.x, d.y, 0.02)).normalized()) * 0.94
         p = DOME_CENTRE + d * r
-        h = 0.018 + 0.03 * (0.5 + 0.5 * math.sin(i * 0.9 + 1.0)) * (0.6 + 0.4 * math.sin(i * 0.37)) * math.sin(math.pi * i / n) ** 0.5
+        h = 0.018 + 0.03 * (0.5 + 0.5 * math.sin(i * 0.9 + phase)) * (0.6 + 0.4 * math.sin(i * 0.37)) * math.sin(math.pi * i / n) ** 0.5
         row_lo.append(bm.verts.new((p.x, p.y, WATER_Z - 0.01)))
         row_hi.append(bm.verts.new((p.x * 0.995 + DOME_CENTRE.x * 0.005, p.y * 0.995 + DOME_CENTRE.y * 0.005, WATER_Z + h)))
     for i in range(n):
@@ -1112,7 +1296,37 @@ def far_ridge(b, mats):
         f.normal_update()
         if f.normal.dot(DOME_CENTRE - f.calc_center_median()) < 0:
             f.normal_flip()
-    return b._wrap(before, None, mats["ridge"])
+    return b._wrap(before, None, mats[mat])
+
+
+def sunset_fog(b, mats):
+    """The fog the sun is setting into: a low bank on San Francisco's far horizon, just behind its far ridge, lumpy along
+    its top and rounded over, warm in the last light; it peeks over the hills, it does not lie on them."""
+    bm = b.bm
+    before = set(bm.faces)
+    n = 30
+    rows = []
+    for i in range(n + 1):
+        az = math.radians(112 + 66 * i / n)
+        d = Vector((math.cos(az), math.sin(az), 0.0))
+        r = dome_radius(Vector((d.x, d.y, 0.03)).normalized()) * 0.975
+        lump = 0.5 + 0.3 * math.sin(i * 0.8 + 0.4) + 0.2 * math.sin(i * 2.1)
+        top = WATER_Z + 0.07 + 0.06 * lump * (0.35 + 0.65 * i / n)
+        ring = []
+        for frac, lift in ((1.0, WATER_Z - 0.01), (0.996, None), (0.985, None)):
+            z = lift if lift is not None else (top if frac == 0.996 else top - 0.012)
+            p = DOME_CENTRE + d * (r * frac)
+            ring.append(bm.verts.new((p.x, p.y, z)))
+        rows.append(ring)
+    for a, c in zip(rows, rows[1:]):
+        for j in range(2):
+            bm.faces.new((a[j], c[j], c[j + 1], a[j + 1]))
+    faces = [f for f in bm.faces if f not in before]
+    for f in faces:
+        f.normal_update()
+        if f.normal.dot(DOME_CENTRE - f.calc_center_median()) < 0:
+            f.normal_flip()
+    return b._wrap(before, None, mats["fog"])
 
 
 # ---- lights ----
@@ -1143,15 +1357,25 @@ def build_lights():
         obj.hide_render = True
         return obj
 
-    add("sun", "SUN", (0.0, 0.8, 3.0), (1.0, 0.92, 0.80), 2.6, "day", aim=(1.0, 1.6, WATER_Z), size=2.0)
-    add("sky_fill", "SUN", (2.0, 0.6, 3.0), (0.55, 0.68, 0.95), 0.6, "day", aim=(0.6, 1.8, WATER_Z), size=30.0)
+    # A soft light from straight above for both, lower than the full sun every bake had before (their aims never reached
+    # the lights until place_in_room updated the scene first): it keeps both cities lit at dusk and at dawn.
+    add("sun", "SUN", (0.0, 0.8, 3.0), (1.0, 0.94, 0.86), 1.5, "day", aim=(0.0, 0.8, 0.0), size=2.0)
+    add("sky_fill", "SUN", (2.0, 0.6, 3.0), (0.62, 0.66, 0.85), 0.5, "day", aim=(2.0, 0.6, 0.0), size=30.0)
+    # Each city's own light: San Francisco's sun low and amber from the front left, setting, with a rose sky; Delhi's
+    # low and pale gold from the front right, rising.
+    for name, loc, aim, color, energy, side, size in (
+            ("sun_sf", (-0.9, 0.6, 1.25), (1.0, 1.3, WATER_Z), (1.0, 0.62, 0.44), 1.7, "sf", 3.0),
+            ("sky_sf", (0.4, -0.6, 3.0), (0.7, 1.4, WATER_Z), (0.86, 0.56, 0.62), 0.45, "sf", 25.0),
+            ("sun_delhi", (3.6, 0.6, 1.25), (1.6, 1.3, WATER_Z), (1.0, 0.84, 0.58), 1.3, "delhi", 3.0)):
+        add(name, "SUN", loc, color, energy, "day", aim=aim, size=size)["window_receivers"] = side
     add("moon", "SUN", (2.5, 0.8, 3.0), (0.55, 0.65, 1.0), 0.12, "night", aim=(0.8, 1.5, WATER_Z), size=3.0)
     for name, target, color, energy, offset in (
             ("india_gate", INDIA_GATE, (1.0, 0.68, 0.35), 2.2, (-0.10, -0.12, 0.02)),
             ("qutub", QUTUB, (1.0, 0.62, 0.32), 1.6, (-0.08, -0.10, 0.03)),
             ("lotus", LOTUS, (0.80, 0.86, 1.0), 0.9, (0.0, -0.14, 0.05)),
             ("tower_sf", (TOWERS_X[0], BRIDGE_Y), (1.0, 0.55, 0.30), 2.5, (0.05, -0.15, 0.04)),
-            ("tower_delhi", (TOWERS_X[1], BRIDGE_Y), (1.0, 0.55, 0.30), 2.5, (-0.05, -0.15, 0.04)),
+            ("tower_marin", (TOWERS_X[1], BRIDGE_Y), (1.0, 0.55, 0.30), 2.5, (-0.05, -0.15, 0.04)),
+            ("signature", (SIG_PYLON, SIG_Y), (0.95, 0.92, 0.85), 2.0, (-0.06, -0.14, 0.06)),
             ("humayun", HUMAYUN, (1.0, 0.86, 0.66), 1.4, (-0.06, -0.14, 0.05)),
             ("jama_masjid", JAMA_MASJID, (1.0, 0.80, 0.55), 1.0, (0.05, -0.14, 0.05)),
             ("transamerica", TRANSAMERICA, (0.95, 0.92, 0.85), 1.2, (0.08, -0.12, 0.06))):
@@ -1178,15 +1402,19 @@ def build_window_view(framings):
     parts.add("water", water, texel=0.35, split=True)
 
     sf = pl.Builder("land")
-    heightfield(sf, -0.95, SEAM_X, WALL_BACK + 0.01, 2.35, 0.055, sf_height,
-                mats["sf_land"], keep=lambda x, y: x < sf_coast(y) + 0.02 and inside_dome(Vector((x, y, sf_height(x, y)))),
+    heightfield(sf, -0.95, SEAM_X, WALL_BACK + 0.01, 2.35, 0.045, sf_height,
+                mats["sf_land"], keep=lambda x, y: on_sf_land(x, y, 0.02) and inside_dome(Vector((x, y, sf_height(x, y)))),
                 skirt=True)
-    parts.add("land", sf, texel=0.7, side="sf")
+    parts.add("land", sf, texel=0.8, side="sf")
 
     city = pl.Builder("city")
     sf_city(city, mats, rng)
-    painted_ladies(city, mats, rng)
     parts.add("city", city, texel=1.6, side="sf")
+
+    ladies = pl.Builder("ladies")
+    painted_ladies(ladies, mats, rng)
+    alamo_square(ladies, mats, random.Random(SEED + 5))
+    parts.add("ladies", ladies, texel=3.2, side="sf")
 
     tower = pl.Builder("sutro")
     sutro_tower(tower, mats, SUTRO)
@@ -1205,13 +1433,27 @@ def build_window_view(framings):
     far_ridge(ridge, mats)
     parts.add("ridge", ridge, texel=0.25, side="delhi")
 
+    sf_ridge = pl.Builder("ridge")
+    far_ridge(sf_ridge, mats, 112.0, 180.0, "ridge_sf", phase=2.4)
+    parts.add("ridge", sf_ridge, texel=0.25, side="sf")
+
     fog = pl.Builder("fog")
-    fog_bank(fog, mats, rng)
+    sunset_fog(fog, mats)
     parts.add("fog", fog, texel=0.35, side="sf", smooth=True)
 
     bridge = pl.Builder("bridge")
     golden_gate(bridge, mats)
-    parts.add("bridge", bridge, texel=2.2, split=True)
+    parts.add("bridge", bridge, texel=2.2, side="sf")
+
+    signature = pl.Builder("signature")
+    signature_bridge(signature, mats)
+    parts.add("signature", signature, texel=2.6, side="delhi")
+
+    sand = pl.Builder("sandbar")
+    cx, cy, rx, ry = SANDBAR
+    heightfield(sand, cx - rx, cx + rx, cy - ry, cy + ry, 0.012, sandbar_height, mats["sand"],
+                keep=lambda x, y: ellipse(x, y, SANDBAR) > 0)
+    parts.add("sandbar", sand, texel=0.8, side="delhi")
 
     boat = pl.Builder("boats")
     boats(boat, mats)
@@ -1238,6 +1480,7 @@ def build_window_view(framings):
     objs = parts.build() + [build_sky()]
     check_hidden(objs)
     build_lights()
+    light_each_city(objs)
     place_in_room(objs)
     build_sky_markers(framings)
     set_night(0.0)
@@ -1259,8 +1502,8 @@ def build_sky():
         me.materials.append(m)
     obj = bpy.data.objects.new("window_sky", me)
     collection("window_view").objects.link(obj)
+    # Kept whole (never culled): the orbit sees the sky from angles no framing does, and it is never baked.
     me.shade_smooth()
-    cull_unseen(obj)
     obj["atlas"] = "window_sky"
     return obj
 
@@ -1280,6 +1523,9 @@ def place_in_room(objs):
     """Carry the diorama (built and checked in its own frame) behind the room's window. Mesh data stays in the
     diorama's frame, so the materials' object-space patterns keep their scale; point and spot lights get VIEW_SCALE
     squared more power for the same light at the scaled distances."""
+    # Each light's aim is a rotation not yet in its matrix_world until the scene updates; reading it stale would
+    # point every light straight down.
+    bpy.context.view_layer.update()
     for obj in objs:
         obj.matrix_world = DIORAMA_TO_ROOM @ obj.matrix_world
     for light in bpy.data.collections["window_lights"].objects:
@@ -1316,13 +1562,18 @@ def main():
     import build_room
     preview_scene()
     objs = build_window_view(build_room.CAMERAS)
+    # The bake lights the view with the room hidden; here the wall stays in the picture but casts no shadow on it.
+    view = set(objs) | set(bpy.data.collections["window_lights"].objects)
+    for obj in bpy.context.scene.objects:
+        if obj not in view:
+            obj.visible_shadow = False
     set_night(1.0 if mode == "night" else 0.0)
     for obj in bpy.data.collections["window_lights"].objects:
         obj.hide_render = obj["window_mode"] != mode
     scene = bpy.context.scene
-    scene.cycles.samples = 64
-    scene.render.threads_mode, scene.render.threads = "FIXED", 16
-    scene.render.resolution_x, scene.render.resolution_y = 1200, 750
+    scene.cycles.samples = int(os.environ.get("VIEW_SAMPLES", 64))
+    scene.render.threads_mode, scene.render.threads = "FIXED", int(os.environ.get("VIEW_THREADS", 16))
+    scene.render.resolution_x, scene.render.resolution_y = (int(v) for v in os.environ.get("VIEW_SIZE", "1200x750").split("x"))
     scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.0
     tris = sum(len(o.data.polygons) for o in objs)
     print(f"VIEW parts={len(objs)} faces={tris}")

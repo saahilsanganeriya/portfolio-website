@@ -2,10 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import sharp from 'sharp';
 import type {} from '../src/scene/Application/Application';
 
-// The window over San Francisco (left) and New Delhi (right): both cities by day at any hour, one sky whose colour runs
-// from one city's to the other's with no line between them, only the two day pictures fetched, and the motif (a plane
-// on a dotted arc from New Delhi to San Francisco, both names in his hand) drawn over the sky. Each test loads the room
-// with a mocked clock and reads the pixels of the window framing; the screenshots are attached to the report.
+// The window over San Francisco (left) and New Delhi (right): one fixed moment at any hour (San Francisco's dusk,
+// Delhi's morning), one sky whose colour runs from one city's to the other's with no line between them, only the two
+// pictures fetched, the motif (a red and white airliner on a dotted arc from New Delhi to San Francisco, a passport
+// stamp under each end) over the sky, and sky through the pane from every side the orbit reaches. Each test loads the
+// room with a mocked clock and reads the pixels of the window framing; the screenshots are attached to the report.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
@@ -73,6 +74,62 @@ async function pixelsOf(shot: Buffer) {
   return sharp(shot).removeAlpha().raw().toBuffer({ resolveWithObject: true });
 }
 
+/** A feature's screen point from the room's probe (the plane's nose and tail, the pane's corners). */
+const pointOf = (page: Page, name: string) => page.evaluate((n) => window.__room!.point(n), name);
+
+/** How long the plane looks on screen, in CSS px. */
+async function planeLength(page: Page) {
+  const [nose, tail] = [await pointOf(page, 'window_plane_nose'), await pointOf(page, 'window_plane_tail')];
+  expect(nose && tail, 'the plane is on screen').toBeTruthy();
+  return Math.hypot(nose!.x - tail!.x, nose!.y - tail!.y);
+}
+
+/** The share of pixels inside the pane (shrunk 6 % toward its middle) that are the void's colour, #14110F, within 6. */
+async function voidInPane(page: Page, shot: Buffer) {
+  const corners = await Promise.all([0, 1, 2, 3].map((i) => pointOf(page, `window_pane_${i}`)));
+  expect(corners.every(Boolean), 'the pane is on screen').toBe(true);
+  const { data, info } = await pixelsOf(shot);
+  const cx = corners.reduce((sum, p) => sum + p!.x, 0) / 4;
+  const cy = corners.reduce((sum, p) => sum + p!.y, 0) / 4;
+  const poly = corners.map((p) => [cx + (p!.x - cx) * 0.94, cy + (p!.y - cy) * 0.94]);
+  const inside = (x: number, y: number) => {
+    let hit = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++)
+      if (poly[i][1] > y !== poly[j][1] > y && x < ((poly[j][0] - poly[i][0]) * (y - poly[i][1])) / (poly[j][1] - poly[i][1]) + poly[i][0]) hit = !hit;
+    return hit;
+  };
+  let [n, dark] = [0, 0];
+  for (let y = 0; y < info.height; y++)
+    for (let x = 0; x < info.width; x++) {
+      if (!inside(x, y)) continue;
+      const i = (y * info.width + x) * 3;
+      n++;
+      if (Math.abs(data[i] - 20) <= 6 && Math.abs(data[i + 1] - 17) <= 6 && Math.abs(data[i + 2] - 15) <= 6) dark++;
+    }
+  return { pixels: n, share: dark / Math.max(n, 1) };
+}
+
+const wrap = (a: number) => ((a % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+
+/** Turns the set by dragging until the orbit's azimuth is within about a degree of `deg` and it has come to rest. */
+async function orbitTo(page: Page, deg: number) {
+  const { width, height } = page.viewportSize()!;
+  for (let k = 0; k < 10; k++) {
+    const orbit = await page.evaluate(() => window.__room!.orbit);
+    const delta = orbit ? wrap((deg * Math.PI) / 180 - orbit.azimuth) : 0.05;
+    if (orbit && Math.abs(delta) < 0.02 && !orbit.turning) return;
+    // About 0.0056 rad a pixel of drag (the orbit's default); the loop corrects whatever it really is.
+    const dx = Math.max(-width * 0.4, Math.min(width * 0.4, -delta / ((Math.PI * 1.6) / 900)));
+    await page.mouse.move(width / 2, height * 0.58);
+    await page.mouse.down();
+    for (let i = 1; i <= 12; i++) await page.mouse.move(width / 2 + (dx * i) / 12, height * 0.58);
+    await page.mouse.up();
+    await page.mouse.move(width - 4, height - 4);
+    await page.waitForFunction(() => !window.__room!.orbit?.turning, null, { timeout: 30_000 });
+  }
+  throw new Error(`the orbit did not settle at ${deg}°`);
+}
+
 test.describe('under reduced motion (the plane holds still)', () => {
   test.use({ reducedMotion: 'reduce' });
 
@@ -80,7 +137,7 @@ test.describe('under reduced motion (the plane holds still)', () => {
    * Catches a seam between the cities' skies (the old halves met in a hard line at the central bar), a window that
    * still follows a clock (a night city, or a different picture at another hour) and night pictures being fetched.
    */
-  test('the window is the same day view at any hour, one sky with no line between the cities', async ({ browser }, info) => {
+  test('the window is the same view at any hour, one sky with no line between the cities', async ({ browser }, info) => {
     const shots: Buffer[] = [];
     for (const at of HOURS) {
       const page = await browser.newPage({ reducedMotion: 'reduce' });
@@ -108,7 +165,7 @@ test.describe('under reduced motion (the plane holds still)', () => {
         const show = (c: number[]) => c.map((v) => v.toFixed(0)).join('/');
         const row = `${at} row ${y}: far left ${farLeft.toFixed(0)}, by the middle ${show(l1)} ${show(l2)} | ${show(r1)} ${show(r2)}, far right ${farRight.toFixed(0)}`;
         expect(step, row).toBeLessThan(2 * slope + 0.2);
-        // Daylight on both sides.
+        // Lit on both sides: dusk and morning, never night.
         expect(Math.min(farLeft, farRight), row).toBeGreaterThan(110);
       }
       await page.close();
@@ -122,27 +179,71 @@ test.describe('under reduced motion (the plane holds still)', () => {
     }
   });
 
-  /** Catches a motif that never draws, or a plane that keeps flying when the visitor asked for less motion. */
+  /** Catches a motif that never draws, or a plane that keeps flying, or leaves a trail, when the visitor asked for less motion. */
   test('the motif is drawn over the sky and its plane holds still', async ({ page }, info) => {
     await windowAt(page, HOURS[0]);
     const before = (await page.evaluate(() => window.__room!.world.window!.motif))!;
-    expect(before).toMatchObject({ drawn: true, moving: false });
+    expect(before).toMatchObject({ drawn: true, moving: false, trail: 0 });
     await frames(page, 60);
     expect((await page.evaluate(() => window.__room!.world.window!.motif))!.plane).toBe(before.plane);
     await info.attach('window with the motif', { body: await page.screenshot(), contentType: 'image/png' });
   });
+
+  /**
+   * Catches the plane left at its old size, or shrunk again: round 8's silhouette (4.1 cm on the motif) measured about
+   * 25 px at the window framing and 7 px from the wide view at this viewport, too small to read as a plane.
+   */
+  test('the plane reads at the window framing and from the wide view', async ({ page }) => {
+    await windowAt(page, HOURS[0]);
+    expect(await planeLength(page), 'at the window framing').toBeGreaterThan(40);
+    await page.evaluate(() => window.__room!.goto('idle'));
+    await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
+    expect(await planeLength(page), 'from the wide view').toBeGreaterThan(11);
+  });
+
+  /**
+   * Catches the void through the pane at the orbit's steep angles: the build culled the sky dome's faces no framing saw,
+   * so from about 55° round to the right San Francisco's side of the pane was black. From the left it showed sky; both
+   * sides are held. Under reduced motion, so the camera cuts to the wide view and neither it nor the orbit sways.
+   */
+  test('at steep orbit angles the pane shows sky on both sides, never the void', async ({ page }, info) => {
+    await windowAt(page, HOURS[0]);
+    await page.evaluate(() => window.__room!.goto('idle'));
+    await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
+    for (const deg of [75, -75]) {
+      await orbitTo(page, deg);
+      await frames(page, 4);
+      const back = (await page.evaluate(() => window.__room!.walls.find((w) => w.name === 'back')))!;
+      expect(back.outside.every((o) => o.shown), `the view is shown at ${deg}°`).toBe(true);
+      const shot = await page.screenshot();
+      await info.attach(`orbit ${deg}°`, { body: shot, contentType: 'image/png' });
+      const { pixels, share } = await voidInPane(page, shot);
+      expect(pixels).toBeGreaterThan(5000);
+      expect(share, `void through the pane at ${deg}°`).toBeLessThan(0.01);
+    }
+  });
 });
 
-/** Catches a plane parked on the arc for everyone: with motion allowed it flies from New Delhi toward San Francisco. */
-test('with motion allowed the plane flies along the arc from New Delhi toward San Francisco', async ({ page }) => {
+/**
+ * Catches a plane parked on the arc for everyone, one that races across (a crossing under 40 s), runs backwards, flies
+ * level through the turn, or leaves no trail: with motion allowed it flies on toward San Francisco, slowly, banked at
+ * mid-route, with its trail behind it.
+ */
+test('with motion allowed the plane flies the arc slowly toward San Francisco, banked, with a trail', async ({ page }) => {
   await windowAt(page, HOURS[0]);
-  const motif = () => page.evaluate(() => window.__room!.world.window!.motif!);
-  expect(await motif()).toMatchObject({ drawn: true, moving: true });
-  const a = (await motif()).plane;
+  const motif = () => page.evaluate(() => ({ ...window.__room!.world.window!.motif!, at: performance.now() }));
+  const a = await motif();
+  expect(a).toMatchObject({ drawn: true, moving: true });
   await frames(page, 60);
-  const b = (await motif()).plane;
-  expect(b, 'the plane moved').not.toBe(a);
-  // Off the arc (-1) between crossings is allowed; on it, the plane only moves toward San Francisco.
-  if (a >= 0 && b >= 0) expect(b).toBeGreaterThan(a);
-  else expect(a >= 0 || b >= 0).toBe(true);
+  const b = await motif();
+  expect(b.plane, 'the plane moved').not.toBe(a.plane);
+  // Off the arc (-1) between crossings is allowed; on it, the plane only moves toward San Francisco, and slowly.
+  if (a.plane >= 0 && b.plane >= 0) {
+    expect(b.plane).toBeGreaterThan(a.plane);
+    expect((b.plane - a.plane) / ((b.at - a.at) / 1000), 'route per second').toBeLessThan(1 / 40);
+  } else expect(a.plane >= 0 || b.plane >= 0).toBe(true);
+  for (const m of [a, b].filter((m) => m.plane > 0.3 && m.plane < 0.7)) {
+    expect(m.bankDeg, 'banked at mid-route').toBeGreaterThan(5);
+    expect(m.trail, 'a trail behind it').toBeGreaterThan(0.2);
+  }
 });
