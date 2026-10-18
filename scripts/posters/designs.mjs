@@ -24,11 +24,11 @@ const circle = (cx, cy, r, clockwise = true) =>
   `A${n(r)} ${n(r)} 0 1 ${clockwise ? 1 : 0} ${n(cx + r)} ${n(cy)}Z`;
 const poly = (points) => `M${points.map(([x, y]) => `${n(x)} ${n(y)}`).join('L')}Z`;
 
-function frame({ id, label, ground, titleLines, titleInk, creditInk, director, year, art, overlay = '' }) {
+function frame({ id, label, ground, titleLines, titleInk, creditInk, director, year, art, overlay = '', credit = 'a film by' }) {
   const title = titleLines
     .map((line, i) => setLine('gothic', line, { x: M - 2, y: TITLE_BASE + i * TITLE_LEAD, size: TITLE_SIZE, tracking: 8 }).d)
     .join('');
-  const byline = setLine('serifItalic', 'a film by', { x: M, y: CREDIT_BASE, size: CREDIT_SIZE });
+  const byline = setLine('serifItalic', credit, { x: M, y: CREDIT_BASE, size: CREDIT_SIZE });
   const name = setLine('serif', director, { x: M + byline.width + 7, y: CREDIT_BASE, size: CREDIT_SIZE });
   const yearLine = setLine('serif', String(year), { x: W - M, y: CREDIT_BASE, size: CREDIT_SIZE, anchor: 'end', features: ['onum'] });
   return composeSheet({
@@ -512,12 +512,14 @@ function normalPeople() {
 
   return frame({
     id: 'normal-people-2020',
-    label: 'Normal People (2020), directed by Lenny Abrahamson and Hettie Macdonald: a silver chain in a loop that does not close',
+    label: 'Normal People (2020), the series directed by Lenny Abrahamson and Hettie Macdonald: a silver chain in a loop that does not close',
     ground: PAPER,
     titleLines: ['NORMAL', 'PEOPLE'],
     titleInk: INK,
     creditInk: INK,
-    director: 'Lenny Abrahamson and Hettie Macdonald',
+    // A twelve-part series (BBC Three and Hulu, 2020), not a film.
+    credit: 'a series directed by',
+    director: 'Lenny Abrahamson & Hettie Macdonald',
     year: 2020,
     art:
       draw(3, 4, shadow, shadow) + clasp(3, 4, shadow) + ring(3, 4, shadow) +

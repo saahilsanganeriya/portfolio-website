@@ -39,3 +39,35 @@ describe('renderPoster', () => {
     expect(svg).not.toContain('<b>');
   });
 });
+
+describe('the hand-drawn poster sheets', () => {
+  // Each title's type and year as checked against Wikipedia and Letterboxd on 2026-10-18. Normal People is a twelve-part
+  // series (BBC Three and Hulu, 2020), not a film.
+  const CHECKED: Record<string, { kind: 'film' | 'series'; year: number }> = {
+    'the-odyssey-2026': { kind: 'film', year: 2026 },
+    'la-la-land': { kind: 'film', year: 2016 },
+    'chungking-express': { kind: 'film', year: 1994 },
+    'marty-supreme': { kind: 'film', year: 2025 },
+    'yi-yi': { kind: 'film', year: 2000 },
+    'normal-people-2020': { kind: 'series', year: 2020 },
+    'black-swan': { kind: 'film', year: 2010 },
+  };
+
+  // Catches a sheet whose drawn credit line calls a series "a film by" (or a film a series), or prints the wrong year.
+  it('print each title as what it is, and its year', async () => {
+    const { POSTERS } = await import('../scripts/posters/designs.mjs');
+    const { setLine } = await import('../scripts/posters/type.mjs');
+    const at = { x: SHEET.margin, y: SHEET.creditBase, size: SHEET.creditSize };
+    const film = setLine('serifItalic', 'a film by', at).d;
+    const series = setLine('serifItalic', 'a series directed by', at).d;
+    const sheets = POSTERS.map((draw: () => string) => draw());
+    expect(sheets.map((svg: string) => svg.match(/data-poster="([^"]+)"/)![1]).sort()).toEqual(Object.keys(CHECKED).sort());
+    for (const svg of sheets) {
+      const { kind, year } = CHECKED[svg.match(/data-poster="([^"]+)"/)![1]];
+      expect(svg.includes(film), `${kind}: "a film by"`).toBe(kind === 'film');
+      expect(svg.includes(series), `${kind}: "a series directed by"`).toBe(kind === 'series');
+      const yearLine = setLine('serif', String(year), { ...at, x: SHEET.width - SHEET.margin, anchor: 'end', features: ['onum'] }).d;
+      expect(svg.includes(yearLine), `the year ${year}`).toBe(true);
+    }
+  });
+});
