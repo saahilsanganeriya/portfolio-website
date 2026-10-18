@@ -1507,9 +1507,12 @@ def jama_masjid(b, mats, base, plinth=0.0):
     for dx, r in ((-0.036, 0.013), (0.0, 0.019), (0.036, 0.013)):
         b.lathe([(r * 0.8, 0.0), (r, 0.008), (r * 0.85, 0.02), (r * 0.4, 0.03), (0.0, 0.034 * r / 0.019)], segments=16,
                 loc=(x + dx, y, z + 0.030), mat=mats["marble"])
+    # The cylinder's loc is its base: on the platform the shafts stand on it, under their pavilions. Round 9's pair
+    # keeps its shafts as built, starting 2 cm above the roof, where the fort wall behind hides the gap.
+    foot = z if plinth else z + 0.05
     for sx in (-1, 1):
         mx = x + sx * 0.068
-        b.cylinder(0.0045, 0.10, segments=8, loc=(mx, y - 0.01, z + 0.05), mat=mats["red_stone"])
+        b.cylinder(0.0045, 0.10, segments=8, loc=(mx, y - 0.01, foot), mat=mats["red_stone"])
         b.lathe([(0.0065, 0.0), (0.006, 0.004), (0.0, 0.010)], segments=8, loc=(mx, y - 0.01, z + 0.10), mat=mats["marble"])
 
 
