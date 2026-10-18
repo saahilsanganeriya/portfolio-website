@@ -45,17 +45,19 @@ BAKE_DIR = REPO / "blender" / ".cache" / "bake"
 BLEND = REPO / "blender" / "room.blend"
 
 # Bake sizes (coordinator ruling, 2026-10-17 08:00Z, for a night-long budget): the desk hero atlas bakes at 1.5x the
-# 4096 px it ships at, so every shipped texel averages a couple of baked ones; art and props bake at their 4096 ship
-# size, and the walls and floor, smooth diffuse light, at 3072. The view's halves ship at their bake size: San
-# Francisco's larger, for the Painted Ladies' trim and windows, each half's KTX2 kept under about 0.6 MB.
-ATLAS_SIZES = {"desk": 6144, "art": 4096, "props": 4096, "env": 3072, "window_sf": 1792, "window_delhi": 1536}
+# 4096 px it ships at, so every shipped texel averages a couple of baked ones, and so does the bezel's (3072 for 2048);
+# art and props bake at their 4096 ship size, and the walls and floor, smooth diffuse light, at 3072. The view's halves
+# ship at their bake size: San Francisco's larger, for the Painted Ladies' trim and windows, each half's KTX2 kept under
+# about 0.6 MB.
+ATLAS_SIZES = {"desk": 6144, "bezel": 3072, "art": 4096, "props": 4096, "env": 3072, "window_sf": 1792,
+               "window_delhi": 1536}
 SHIP_PX = 4096
 # Island margin at the bake size: 8 px at the shipped size everywhere (the view keeps 6 px). The desk had CRAFT-R8's
 # 16 px; once its top was cut into the rectangles the views see (build_room.split_desk_top_by_view), that margin round
 # ~150 islands left it 52 % full, and 8 px brought it back to 64 % (round eight's fill with one desk-top island).
-MARGIN_PX = {"desk": 12, "art": 8, "props": 8, "env": 6, "window_sf": 6, "window_delhi": 6}
+MARGIN_PX = {"desk": 12, "bezel": 12, "art": 8, "props": 8, "env": 6, "window_sf": 6, "window_delhi": 6}
 # Islands of the desk atlas stay axis-aligned: its desk-top rectangles pack tighter (52 % vs 50 % at 16 px).
-PACK_ROTATE = {"desk": "AXIS_ALIGNED"}
+PACK_ROTATE = {"desk": "AXIS_ALIGNED", "bezel": "AXIS_ALIGNED"}
 # The world seen through the open front of the view while it bakes: a pale day sky.
 VIEW_WORLD = ((0.62, 0.70, 0.82, 1.0), 0.35)
 GUIDE_SAMPLES = 4  # the albedo and normal guides for OIDN (they barely change within a texel)

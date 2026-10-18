@@ -5,8 +5,8 @@ headless with Blender 5.2 LTS, Cycles on the CPU.
 
 ```
 build_room.py ──► room.blend ──► bake.py ──► .cache/bake/*.png|exr ──► export.py ──► public/room/
- Henry's desk       (scene)       four atlases (desk, art, props,        (display-ready)   room.glb (first-frame atlases,
- + the corner,                    env; 6144 px, view-independent                          KTX2 ETC1S 1024 px + meshopt)
+ Henry's desk       (scene)       five atlases (desk, bezel, art,        (display-ready)   room.glb (first-frame atlases,
+ + the corner,                    props, env; view-independent                            KTX2 ETC1S 1024 px + meshopt)
    lights, props                  light, void fade baked in); the                         atlas/<atlas>.ktx2|avif (4096 px)
  + room_dressing.py               view's two halves by day                                atlases.json, floorplan.json
  + room_art.mjs                                                                           window_{sf,delhi}_day.ktx2
@@ -50,7 +50,8 @@ window_delhi; 1280 px) by day, on 16 threads, and saves the blend with the bake 
 final bake ran as two parallel lanes, each on its own copy of `room.blend` (`-- --save-as`), merged afterwards: the desk
 at 128 samples (61 min), and props at 96 (46 min), env at 64 (7 min), art at 96 and the view at 96. The atlases split the set by importance: `desk` holds only the hero
 surfaces of the desk view (the desk top, the CRT's and the computer's fronts, the keyboard, mouse, mug, badge, notes
-and the camera), `art` the wall art, the window's frame, the space prints, the pennant and the darkroom lines, `props`
+and the camera), `bezel` the part of the CRT's bezel the landing view shows (`desk_crt_bezel`: the monitor framing
+every visit ends in is a quarter bezel and asks ~5,800 texels/m of it; baked at 3072, shipped at 2048), `art` the wall art, the window's frame, the space prints, the pennant and the darkroom lines, `props`
 everything else that stands in the set, and `env` the walls, the floor, the rugs and the curtains. Each object's share
 of its atlas is its area times its `texel` weight (uniform within the object). The desk top is the exception: about
 half of it shows from the desk view (the CRT, the computer and the keyboard cover the rest), so `build_room.py` cuts it
@@ -81,12 +82,12 @@ blender -b blender/room.blend -P blender/scripts/export.py
 
 Renders the stills and the room probe, writes the view's two day KTX2 files (ETC1S with mipmaps, `ktx create`) and
 `pale-blue-dot.ktx2` (NASA/JPL's PIA23645, cropped square, 1024 px), exports the glb, then runs gltf-transform 4.5.1
-(via `npx`): dedup, prune (empties and attributes kept), KTX2 ETC1S for the four first-frame atlases (1024 px), meshopt
+(via `npx`): dedup, prune (empties and attributes kept), KTX2 ETC1S for the five first-frame atlases (1024 px), meshopt
 geometry. Then it encodes the full atlases into `public/room/atlas/` (`FULL_PX`, `FULL_CODEC`, each picked by an A/B
-of bytes, SSIM and crops: UASTC level 2 with RDO λ 1 and zstd 18 in KTX2 for the desk and the art at 4096 px, AVIF crf 14
+of bytes, SSIM and crops: UASTC level 2 with RDO λ 1 and zstd 18 in KTX2 for the desk and the art at 4096 px and the bezel at 2048, AVIF crf 14
 for the props at 4096 px and the walls and floor at 3072 px) and writes
 `public/room/atlases.json` and `public/room/floorplan.json` (floorplan.py). It fails if the first frame (room.glb and the
-two day halves of the window) is over 5,500,000 B, the full set over 23,000,000 B, a node from the contract below is
+two day halves of the window) is over 5,500,000 B, the full set over 25,000,000 B, a node from the contract below is
 missing, a removed one (or a night view's file) is back, or the probe is over 400 KB. Needs Node (`npx`), `ktx` from
 KTX-Software 4.x and `ffmpeg` with libaom on `PATH`. `-- --no-stills` exports without the stills, `-- --low-only` skips
 the full atlases, `-- --only room_v4_idle,window_view` renders some stills.
@@ -124,7 +125,7 @@ prints the glb's bytes, draw calls, triangles and textures.
 | `wall_back_group`, `wall_left_group` | empties at the origin (identity) holding each wall with its art and fixtures (and, for the back wall, the window and its view), so the site can fade a whole wall when the camera is behind it; every other node stands on the floor at the root |
 | `floor`, `floor_fade` | the floor's solid disc and the ring that fades it into the void |
 | `orbit_center` | where the 360-degree orbit turns; extras `minDist`, `maxDist` (metres), `minPolarDeg`, `maxPolarDeg` (from straight up), chosen so every angle stays above the floor and inside the fades |
-| `env_*` / `desk_*` / `props_*` | the set's baked scenery; `desk_desk_top` (the desk's top, one node: its three baked parts joined), `desk_crt_front` and `desk_computer_front` are the faces the desk view sees (desk atlas), the rest of each stays `desk_desk`, `desk_crt`, `desk_computer` |
+| `env_*` / `desk_*` / `props_*` | the set's baked scenery; `desk_desk_top` (the desk's top, one node: its three baked parts joined), `desk_crt_front` (the CRT's case in front of its parting groove) and `desk_computer_front` are the faces the desk view sees (desk atlas), `desk_crt_bezel` the bezel the landing view shows (bezel atlas), the rest of each stays `desk_desk`, `desk_crt`, `desk_computer` |
 | `keyboard`, `mouse`, `coffee_mug`, `croissant`, `crt_badge`, `pennant_gatech` | the hero props (T72's prop files once they land; Henry's keyboard, mouse and mug until then); `crt_badge` sits on the CRT's chin |
 | `coffee_steam` | where the mug's steam starts, over the coffee; extras `width_m`, `height_m` |
 | `crt_glow`, `lamp_bulb`, `lava_lamp_glass`, `oven_glow`, `nas_led_0..3` | runtime meshes, each with its own unlit material (`nas_led` is shared by the four LEDs) so the site can tint, flicker or replace them |

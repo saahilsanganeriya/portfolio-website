@@ -43,7 +43,7 @@ OUT_DIR = REPO / "public" / "room"
 ATLAS_DIR = OUT_DIR / "atlas"
 RENDERS = REPO / "blender" / "renders"
 
-ATLASES = ("desk", "art", "props", "env")
+ATLASES = ("desk", "bezel", "art", "props", "env")
 LOW_PX = 1024  # the first-frame copies embedded in room.glb
 # The full atlases' sizes and codecs live in the one encoder, which turns the bakes into public/room/atlas/.
 ENCODER = REPO / "scripts" / "encode-atlases.mjs"

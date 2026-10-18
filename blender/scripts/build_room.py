@@ -1411,14 +1411,15 @@ def reduce_geometry():
             bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
-# Four atlases by importance (CRAFT-R8 4): desk (the hero surfaces of the desk view), art (the wall art, the window
-# and the space prints), props (everything else that stands in the set) and env (the walls, the floor and what lies
-# on them). An object goes to the first atlas whose name prefixes claim it; the rest keep the atlas they were built
+# Atlases by importance (CRAFT-R8 4): desk (the hero surfaces of the desk view), bezel (the CRT bezel the landing view
+# shows), art (the wall art, the window and the space prints), props (everything else that stands in the set) and env
+# (the walls, the floor and what lies on them). An object goes to the first atlas whose name prefixes claim it; the rest keep the atlas they were built
 # with. split_desk_heroes() first cuts the desk, the CRT and the computer into the faces the desk view sees (desk
 # atlas) and the rest (props).
 ATLAS_BY_NAME = [
     ("desk", ("desk_desk_top", "desk_crt_front", "desk_computer_front", "keyboard", "mouse", "coffee_mug", "crt_glow",
-              "crt_badge", "sticky_note_", "props_fujifilm_x100", "desk_crt_bezel")),
+              "crt_badge", "sticky_note_", "props_fujifilm_x100")),
+    ("bezel", ("desk_crt_bezel",)),
     ("art", ("env_window", "env_curtain_rod", "env_picture_light", "env_space_light", "props_poster_frame_", "poster_art_", "poster_plaque",
              "voyager_record", "props_frame_pale_blue_dot", "print_pale_blue_dot", "pennant_gatech",
              "print_japanese_lit", "darkroom_", "env_darkroom_light")),
@@ -1429,7 +1430,7 @@ ATLAS_BY_NAME = [
 TEXEL_WEIGHTS = {
     # desk: the desk top by what the views see of it (split_desk_top_by_view); the small things on it carry the detail
     "desk_desk_top": 1.2, "desk_desk_top_mid": 0.44, "desk_desk_top_rest": 0.02, "keyboard": 1.3, "mouse": 1.0,
-    "coffee_mug": 1.0, "desk_crt_front": 1.0, "desk_crt_bezel": 3.0, "crt_badge": 1.4, "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3,
+    "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4, "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3,
     "props_mouse_cable": 0.3, "desk_computer_front": 0.85, "crt_glow": 0.3, "props_fujifilm_x100": 1.0,
     # the rest of the desk sits in the props atlas, a little above its average: the desk view sees it
     "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4, "props_nas_4bay": 1.6,
@@ -1513,7 +1514,7 @@ def split_desk_heroes():
 
 # The landing view (the monitor framing every visit ends in) fills about a quarter of its frame with the bezel round
 # the glass and asks ~5,800 texels/m of it at 1512x982 @2, 2.5x what the rest of the case gets. The faces it shows bake
-# as their own part (desk_crt_bezel, its own texel weight) and export.py joins them back into desk_crt_front.
+# as desk_crt_bezel into an atlas of their own (bake.ATLAS_SIZES "bezel").
 MONITOR_MARGIN = 1.3  # src/scene/Camera/RoomCamera.ts: how far back from a glass-filled frame the monitor framing sits
 LANDING_ASPECTS = (1512 / 982, 16 / 9, 4 / 3)
 
@@ -1552,7 +1553,6 @@ def split_crt_bezel_by_landing(front):
     if bezel is None:
         return
     bezel["bake_uv"] = "project"
-    bezel["join_into"] = "desk_crt_front"
     # One ring of a projection round the glass packs like a frame with nothing inside: cut it into its top, bottom,
     # left and right sides (along the screen's diagonals), each its own island.
     screen = bpy.data.objects["monitor_screen"]

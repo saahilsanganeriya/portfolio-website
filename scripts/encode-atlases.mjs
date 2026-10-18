@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url';
  */
 export const ATLASES = {
   desk: { px: 4096, codec: 'uastc:q2:l1:d32768:z22' },
+  bezel: { px: 2048, codec: 'uastc:q2:l1:d32768:z22' }, // the CRT bezel the landing view shows; encoded as desk
   art: { px: 4096, codec: 'uastc:q2:l1:d32768:z22' },
   props: { px: 4096, codec: 'avif:14' },
   env: { px: 3072, codec: 'avif:14' },
