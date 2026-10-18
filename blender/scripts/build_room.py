@@ -1477,7 +1477,11 @@ def split_desk_heroes():
     desk = bpy.data.objects["desk_desk"]
     top_z = max((desk.matrix_world @ v.co).z for v in desk.data.vertices)
     split_by_faces(desk, lambda c, n, m: n.z > 0.7 and c.z > top_z - 0.01, "desk_desk_top")
-    split_by_faces(bpy.data.objects["desk_crt"], lambda c, n, m: n.y < -0.3 or n.z > 0.7, "desk_crt_front")
+    # The CRT's case parts at its parting groove: the whole bezel in front of it (face, lip, rolled edge) in the desk
+    # atlas, the rear cover in props. A cut by facing cut across the rounded bevels, which then showed both atlases'
+    # densities side by side and a dotted seam along the cut. One smart projection keeps the bezel one island.
+    front = split_by_faces(bpy.data.objects["desk_crt"], lambda c, n, m: c.y < CRT_PARTING_Y, "desk_crt_front")
+    front["bake_uv"] = "project"
     split_by_faces(bpy.data.objects["desk_computer"], lambda c, n, m: n.y < -0.3 or n.z > 0.7, "desk_computer_front")
     split_desk_top_by_view()
 
@@ -1492,6 +1496,9 @@ def split_desk_heroes():
 DESK_TOP_CELL = 0.03
 DESK_TOP_FRAME_PX = 2880
 DESK_TOP_ORBIT_DIST = 4.5
+CRT_PARTING_Y = -0.0715  # the CRT case's parting groove (props_crt_shell.py: y -0.072), just behind it
+
+
 DESK_TOP_TIERS = (("desk_desk_top", 2200.0), ("desk_desk_top_mid", 900.0), ("desk_desk_top_rest", 0.0))
 
 
