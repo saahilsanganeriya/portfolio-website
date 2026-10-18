@@ -1572,9 +1572,15 @@ def split_crt_bezel_by_landing(front):
     bezel = split_by_faces(front, lambda c, n, m: shown(c, n), "desk_crt_bezel")
     if bezel is None:
         return
-    bezel["bake_uv"] = "project"
-    # One ring of a projection round the glass packs like a frame with nothing inside: cut it into its top, bottom,
-    # left and right sides (along the screen's diagonals), each its own island.
+    mark_bezel_sides(bezel)
+
+
+def mark_bezel_sides(bezel):
+    """One ring round the glass packs like a frame with nothing inside, so the bezel unwraps as its top, bottom, left
+    and right sides, parted by UV seams along the screen's diagonals and nowhere else. Seams, not a split: a split
+    mesh smooths each side's normals on its own (up to 44 degrees apart across the cut), which baked a lit seam, and
+    smart projection broke the lip into islands whose borders ran along its highlight."""
+    bezel["bake_uv"] = "unwrap"
     screen = bpy.data.objects["monitor_screen"]
     centre, half_w, half_h = screen.matrix_world.translation, screen["width_m"] / 2, screen["height_m"] / 2
     bm = bmesh.new()
@@ -1587,8 +1593,8 @@ def split_crt_bezel_by_landing(front):
         return ("top" if dz > 0 else "bottom") if abs(dz) > abs(dx) else ("right" if dx > 0 else "left")
 
     sides = {f.index: side(f) for f in bm.faces}
-    bmesh.ops.split_edges(bm, edges=[e for e in bm.edges if len(e.link_faces) == 2
-                                     and sides[e.link_faces[0].index] != sides[e.link_faces[1].index]])
+    for e in bm.edges:
+        e.seam = len(e.link_faces) == 2 and sides[e.link_faces[0].index] != sides[e.link_faces[1].index]
     bm.to_mesh(bezel.data)
     bm.free()
 
