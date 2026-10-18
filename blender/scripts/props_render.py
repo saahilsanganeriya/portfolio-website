@@ -1,6 +1,6 @@
 """Render review stills of one prop: a 1024² three-quarter view and a 2x2 turntable sheet.
 
-    blender -b -t 16 -P blender/scripts/props_render.py -- <prop_name> [--samples N]
+    blender -b -t 16 -P blender/scripts/props_render.py -- <prop_name> [--samples N] [--threads N]
 
 Writes blender/renders/props/<name>.png and <name>_turntable.png. The studio (sweep, lights, HDRI) is built
 in memory and never saved into the prop file.
@@ -156,6 +156,7 @@ def main():
     argv = sys.argv[sys.argv.index("--") + 1:]
     name = argv[0]
     samples = int(argv[argv.index("--samples") + 1]) if "--samples" in argv else 192
+    threads = int(argv[argv.index("--threads") + 1]) if "--threads" in argv else 16
     bpy.ops.wm.open_mainfile(filepath=os.path.join(pl.PROPS_DIR, f"{name}.blend"))
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
@@ -165,7 +166,7 @@ def main():
     scene.cycles.use_denoising = True
     scene.cycles.denoiser = "OPENIMAGEDENOISE"
     scene.render.threads_mode = "FIXED"
-    scene.render.threads = 16
+    scene.render.threads = threads
     scene.view_settings.view_transform = "AgX"
     scene.view_settings.look = "AgX - Medium High Contrast"
     scene.render.image_settings.file_format = "PNG"
