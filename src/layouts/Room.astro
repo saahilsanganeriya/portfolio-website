@@ -282,6 +282,9 @@ const roomBytes = statSync('public/room/room.glb').size;
       const from = event.source;
       if (event.origin !== location.origin || !from || (from !== monitor()?.contentWindow && from !== glass.querySelector('iframe')?.contentWindow)) return;
       const data = event.data as { type?: unknown; key?: unknown } | null;
+      // Escape that SaahilOS did not use takes the camera out of the screen; the keyboard comes out with it, as with
+      // Back to the room, so the arrows and Home steer the room instead of a window no longer in view.
+      if (data?.type === 'escape' && from === monitor()?.contentWindow) stage.focus({ preventScroll: true });
       const key = typeof data?.key === 'string' ? data.key : null;
       const pressed = data?.type === 'mousedown' || (data?.type === 'press' && key === null);
       const typed = (data?.type === 'keydown' || data?.type === 'press') && key !== null && !FOCUS_KEYS.has(key);
