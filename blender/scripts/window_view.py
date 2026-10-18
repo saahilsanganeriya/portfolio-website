@@ -136,6 +136,7 @@ ONE_Y, ONE_X = BRIDGE_Y, (0.56, 1.73)
 ONE_HALF_W = 0.032
 ONE_HEAD = DECK_Z + 0.245  # the pylon's head, a little above the Golden Gate's tower tops
 PYLON_X = 1.47
+ABUTMENT = (0.035, 0.049, 0.09)  # width at the deck, width at the foot (a 1.4x batter), depth
 SANDBAR_ONE = (PYLON_X, 1.42, 0.06, 0.09)
 # The Painted Ladies: seven houses from LADIES_X along the row at depth LADIES_Y, facing the window, stepping up the
 # slope to the left, with Alamo Square in front of them.
@@ -1007,7 +1008,7 @@ def one_deck(b, mats, paints):
     """The deck from the anchorage on San Francisco's shore to the abutment on Delhi's bank: the road and railings in
     each side's paint, the Golden Gate's stiffening truss under San Francisco's side tapering into the Signature
     Bridge's slim girder over the last 10 cm before the seam, a cross-girder at the seam as the expansion joint, and the
-    ends set on the ground (the abutment's face flush with the deck's end)."""
+    anchorage on San Francisco's shore (abutment builds Delhi's end)."""
     x0, x1 = ONE_X
     y, h = ONE_Y, ONE_HALF_W
     b.box((x1 - x0, 2 * h, 0.010), loc=((x0 + x1) / 2, y, DECK_Z), mat=paints["deck"])
@@ -1026,8 +1027,19 @@ def one_deck(b, mats, paints):
     b.box((0.006, 2 * h + 0.008, 0.016), loc=(SEAM_X, y, DECK_Z - 0.008), mat=mats["deck_under"])
     ground = sf_height(x0, y)
     b.box((0.05, 0.09, DECK_Z - ground + 0.01), loc=(x0, y, (DECK_Z + ground) / 2 - 0.005), mat=mats["concrete"])
-    ground = delhi_height(x1 - 0.035, y)  # its foot set into the bank's slope, not floating over it
-    b.box((0.035, 0.09, DECK_Z - ground + 0.01), loc=(x1 - 0.0175, y, (DECK_Z + ground) / 2 - 0.005), mat=mats["concrete"])
+
+
+def abutment(b, mats):
+    """Where the deck lands on Delhi's bank: the riverfront's stone (the ghats'), battered on its river side, its face
+    under the deck's end plumb, its foot set into the bank's slope on a stone apron at the water line. A part of its
+    own in Delhi's light, like India Gate and the ghats beside it (the deck takes San Francisco's)."""
+    x1, y = ONE_X[1], ONE_Y
+    top_w, foot_w, depth = ABUTMENT
+    ground = delhi_height(x1 - top_w, y) - 0.01
+    b.frustum((foot_w, depth * 1.12), (top_w, depth), DECK_Z - 0.005 - ground, loc=(x1 - foot_w / 2, y, ground),
+              top_offset=((foot_w - top_w) / 2, 0), mat=mats["ghat"])
+    b.box((foot_w + 0.016, depth * 1.12 + 0.016, 0.0045), loc=(x1 - (foot_w + 0.016) / 2, y, WATER_Z + 0.00125),
+          mat=mats["ghat"])
 
 
 def main_cable(b, paint, saddles, side):
@@ -1719,6 +1731,9 @@ def build_window_view(framings):
         bridge = pl.Builder("bridge")
         one_bridge(bridge, mats)
         parts.add("bridge", bridge, texel=2.4, split=True, lit_by="sf")
+        bank = pl.Builder("abutment")
+        abutment(bank, mats)
+        parts.add("abutment", bank, texel=2.0, side="delhi")
 
     sand = pl.Builder("sandbar")
     cx, cy, rx, ry = sandbar()
