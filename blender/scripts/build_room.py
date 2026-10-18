@@ -1398,6 +1398,21 @@ def tone_room_emitters():
     mat.node_tree.links.new(dim.outputs[0], emit.inputs["Strength"])
 
 
+# The computer case's power and disk lights, (emission colour, strength): at the room's exposure (+2.8 stops, AgX) the
+# prop studio's 3.0 and 1.5 bake to pale cream; these keep them green and amber. Baked, not a bloom practical.
+CASE_LIGHTS = {"case_power_led": ((0.10, 1.0, 0.22), 0.09), "case_hdd_led": ((1.0, 0.42, 0.04), 0.07)}
+
+
+def tone_case_lights():
+    for name, (colour, strength) in CASE_LIGHTS.items():
+        mat = bpy.data.materials[name]
+        bsdf = next(n for n in mat.node_tree.nodes if n.bl_idname == "ShaderNodeBsdfPrincipled")
+        if bsdf.inputs["Emission Color"].is_linked or bsdf.inputs["Emission Strength"].is_linked:
+            raise SystemExit(f"build_room: {name}'s emission is driven by nodes; tone_case_lights expects plain values")
+        bsdf.inputs["Emission Color"].default_value = (*colour, 1.0)
+        bsdf.inputs["Emission Strength"].default_value = strength
+
+
 def reduce_geometry():
     for name, ratio in DECIMATE.items():
         obj = bpy.data.objects.get(name)
@@ -1923,6 +1938,7 @@ def main():
     build_lights(mats)
     build_practical_lights(dressing)
     tone_room_emitters()
+    tone_case_lights()
     reduce_geometry()
     split_desk_heroes()
     build_plant_sway()
