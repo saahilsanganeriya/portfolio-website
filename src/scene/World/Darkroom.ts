@@ -106,6 +106,14 @@ export function printSize(maxW: number, maxH: number, aspect: number): PrintSize
   return { paperW: photoW + 2 * border, paperH: photoH + border + bottom, photoW, photoH, border, bottom };
 }
 
+/** The print's card title: the photograph's title and its place (unless the title names it), capitalised. */
+export function cardTitle(photo: Pick<Photograph, 'title' | 'place'>) {
+  const title = photo.title.trim();
+  const place = photo.place?.trim();
+  const named = place && title.toLowerCase().includes(place.toLowerCase());
+  return [title.charAt(0).toUpperCase() + title.slice(1), named ? null : place].filter(Boolean).join(', ');
+}
+
 /** What the marker says on the border: his line, else the title, else the day he posted it. */
 export function sharpieOf(photo: Pick<Photograph, 'sharpie' | 'title' | 'date'>) {
   return photo.sharpie?.trim() || photo.title?.trim() || photo.date || '';
@@ -356,6 +364,7 @@ export class Darkroom {
       if (!hotspot) return;
       hotspot.label = sharpieOf(photo) || photo.title;
       hotspot.prop = `A print of “${photo.title}”`;
+      hotspot.card = { title: cardTitle(photo), line: photo.caption };
       hotspot.target = `photography/${photo.slug}`;
       hotspot.href = `/#photography/${photo.slug}`;
     });

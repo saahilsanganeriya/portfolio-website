@@ -57,7 +57,7 @@ const prints: Hotspot[] = Array.from({ length: PRINT_SLOTS }, (_, slot) => ({
   fly: 'photos',
   action: 'print',
   href: '/#photography',
-  // Darkroom names each print once it hangs: its caption is the title, "A print of …" the line.
+  // Darkroom names each print once it hangs: its photograph's title and place, and its caption.
   card: {},
 }));
 

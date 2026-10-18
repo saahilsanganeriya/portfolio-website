@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { WORLD_SCALE } from '../src/scene/Application/RoomModel';
 import { lampUniforms } from '../src/scene/World/art';
-import { affineUv, Darkroom, hangOrder, makeRoom, printSize } from '../src/scene/World/Darkroom';
+import { affineUv, cardTitle, Darkroom, hangOrder, makeRoom, printSize } from '../src/scene/World/Darkroom';
 import type { Photograph, Picture } from '../src/scene/World/photographs';
 
 const clip = (line: number, k: number, y: number, along: number, hero = false) => ({ line, k, y, along, hero });
@@ -26,6 +26,13 @@ describe('the darkroom line', () => {
     const even = (0.031 + 2.011 - [...widths, 0.28].reduce((sum, w) => sum + w, 0)) / 5;
     for (const joint of joints) expect(joint).toBeCloseTo(even, 9);
     expect(even).toBeGreaterThan(0);
+  });
+
+  /** Catches a print card titled in his lowercase marker style (it read as a bug in the card's serif) or naming a place twice. */
+  it('titles a print’s card with its photograph’s title and place, capitalised', () => {
+    expect(cardTitle({ title: 'chinatown', place: 'Boston' })).toBe('Chinatown, Boston');
+    expect(cardTitle({ title: 'anxietyland' })).toBe('Anxietyland');
+    expect(cardTitle({ title: 'boston, in love', place: 'Boston' })).toBe('Boston, in love');
   });
 
   /** Catches the set's first photograph off the hero clip, and lines hung out of their order (the hero's, above, below). */
