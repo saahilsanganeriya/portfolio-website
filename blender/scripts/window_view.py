@@ -147,6 +147,8 @@ LOTUS, INDIA_GATE, QUTUB = (1.56, 0.86), (1.72, 1.04), (1.80, 1.20)
 TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (1.10, 1.70), (0.99, 1.76), (0.70, 1.03), (1.00, 1.27)
 DOWNTOWN = ((0.90, 1.24), (1.63, 1.86), (1.06, 1.75))  # x range, y range, densest point (behind the bridge)
 HUMAYUN, JAMA_MASJID, RED_FORT_Y = (1.88, 1.42), (1.60, 1.72), 1.96
+# One bridge: Jama Masjid back by the Red Fort's wall and up on its platform, so its domes rise clear of the deck.
+JAMA_MASJID_ONE, JAMA_MASJID_PLINTH = (1.60, 1.89), 0.035
 # The two bridges' paints: International Orange and its shadowed truss; the Signature Bridge's white steel, stays, deck
 # and the deck's underside.
 GGB, GGB_DARK = (0.55, 0.075, 0.035), (0.20, 0.035, 0.02)
@@ -762,6 +764,10 @@ def delhi_height(x, y):
     return WATER_Z - 0.02 + 0.03 * smoothstep(-0.01, 0.04, inland)
 
 
+def jama_masjid_site():
+    return JAMA_MASJID if BRIDGE_VARIANT == "two" else JAMA_MASJID_ONE
+
+
 def sandbar_height(x, y):
     """The Yamuna's sandbar near the seam: low, flat-topped, a little above the water."""
     return WATER_Z - 0.01 + 0.022 * min(1.0, ellipse(x, y, SANDBAR) * 3)
@@ -1324,6 +1330,12 @@ def near_signature(x, y):
     return abs(y - SIG_Y) < 0.045 and x < SIG_X[1] + 0.06
 
 
+def on_moved_mosque(x, y):
+    """Whether a house would stand on Jama Masjid where the one bridge moves it (the pair's layout keeps every house)."""
+    mx, my = JAMA_MASJID_ONE
+    return BRIDGE_VARIANT != "two" and abs(x - mx) < 0.09 and abs(y - my) < 0.05
+
+
 def delhi_ground(b, mats, rng):
     """Lawns and paths around the monuments, a stepped ghat down to the water, trees, low whitewashed houses and
     street lamps along the river front."""
@@ -1359,7 +1371,8 @@ def delhi_ground(b, mats, rng):
         x, y = (rng.uniform(1.62, 1.98), rng.uniform(1.12, 1.45)) if k < 18 else (rng.uniform(1.30, 1.90),
                                                                                       rng.uniform(1.62, 2.1)) \
             if k < 60 else (rng.uniform(1.95, 2.30), rng.uniform(1.40, 2.05))
-        if x < delhi_coast(y) + 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.06)), 0.04) or near_signature(x, y):
+        if x < delhi_coast(y) + 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.06)), 0.04) or near_signature(x, y) \
+                or on_moved_mosque(x, y):
             continue
         w, d, h = rng.uniform(0.016, 0.03), rng.uniform(0.014, 0.024), rng.uniform(0.010, 0.026)
         b.box((w, d, h), loc=(x, y, delhi_height(x, y) + h / 2 - 0.002), rot=(0, 0, rng.uniform(-8, 8)),
@@ -1476,11 +1489,14 @@ def humayun_tomb(b, mats, base):
             b.lathe([(0.008, 0.0), (0.007, 0.006), (0.0, 0.011)], segments=10, loc=(cx, cy, z + 0.068), mat=mats["marble"])
 
 
-def jama_masjid(b, mats, base):
+def jama_masjid(b, mats, base, plinth=0.0):
     """Jama Masjid: a red sandstone prayer hall under three white domes, the middle one largest, between two tall
-    minarets with their pavilions."""
+    minarets with their pavilions; on a red sandstone platform `plinth` high (the real one stands on a high one)."""
     x, y = base
     z = delhi_height(x, y)
+    if plinth:
+        b.box((0.16, 0.07, plinth + 0.004), loc=(x, y, z + plinth / 2 - 0.002), mat=mats["red_stone"])
+        z += plinth
     b.box((0.12, 0.05, 0.03), loc=(x, y, z + 0.015), mat=mats["red_stone"])
     for dx, r in ((-0.036, 0.013), (0.0, 0.019), (0.036, 0.013)):
         b.lathe([(r * 0.8, 0.0), (r, 0.008), (r * 0.85, 0.02), (r * 0.4, 0.03), (0.0, 0.034 * r / 0.019)], segments=16,
@@ -1618,7 +1634,7 @@ def build_lights():
             ("tower_marin", (TOWERS_X[1], BRIDGE_Y), (1.0, 0.55, 0.30), 2.5, (-0.05, -0.15, 0.04)),
             ("signature", (SIG_PYLON, SIG_Y), (0.95, 0.92, 0.85), 2.0, (-0.06, -0.14, 0.06)),
             ("humayun", HUMAYUN, (1.0, 0.86, 0.66), 1.4, (-0.06, -0.14, 0.05)),
-            ("jama_masjid", JAMA_MASJID, (1.0, 0.80, 0.55), 1.0, (0.05, -0.14, 0.05)),
+            ("jama_masjid", jama_masjid_site(), (1.0, 0.80, 0.55), 1.0, (0.05, -0.14, 0.05)),
             ("transamerica", TRANSAMERICA, (0.95, 0.92, 0.85), 1.2, (0.08, -0.12, 0.06))):
         tx, ty = target
         tz = WATER_Z + 0.08
@@ -1719,7 +1735,7 @@ def build_window_view(framings):
     india_gate(monuments, mats, INDIA_GATE)
     qutub_minar(monuments, mats, QUTUB)
     humayun_tomb(monuments, mats, HUMAYUN)
-    jama_masjid(monuments, mats, JAMA_MASJID)
+    jama_masjid(monuments, mats, jama_masjid_site(), plinth=0.0 if BRIDGE_VARIANT == "two" else JAMA_MASJID_PLINTH)
     red_fort(monuments, mats)
     parts.add("monuments", monuments, texel=2.6, side="delhi")
 
