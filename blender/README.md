@@ -49,11 +49,17 @@ and props atlases at their 4096 px, the walls and floor at 3072 px, and each hal
 window_delhi; 1280 px) by day, on 16 threads, and saves the blend with the bake UVs after each atlas. Round eight's
 final bake ran as two parallel lanes, each on its own copy of `room.blend` (`-- --save-as`), merged afterwards: the desk
 at 128 samples (61 min), and props at 96 (46 min), env at 64 (7 min), art at 96 and the view at 96. The atlases split the set by importance: `desk` holds only the hero
-surfaces of the desk view (the desk top, the CRT's and the computer's fronts, the keyboard, mouse, mug, badge and
-notes), `art` the wall art, the window's frame, the space prints, the pennant and the darkroom lines, `props` everything
-else that stands in the set, and `env` the walls, the floor, the rugs and the curtains. Each object's share of its atlas
-is its area times its `texel` weight (uniform within the object). Islands sit 16 px apart in the desk atlas and 8 px in
-the others (shipped sizes): those hold thousands of small islands, and the wider gap left the props atlas 10 % full.
+surfaces of the desk view (the desk top, the CRT's and the computer's fronts, the keyboard, mouse, mug, badge, notes
+and the camera), `art` the wall art, the window's frame, the space prints, the pennant and the darkroom lines, `props`
+everything else that stands in the set, and `env` the walls, the floor, the rugs and the curtains. Each object's share
+of its atlas is its area times its `texel` weight (uniform within the object). The desk top is the exception: about
+half of it shows from the desk view (the CRT, the computer and the keyboard cover the rest), so `build_room.py` cuts it
+into 3 cm cells, ray-casts each against every framing and the orbit, and bakes it as three objects by what the most
+demanding view of each cell needs (`desk_desk_top` ~2,400 texels/m where the desk views look, `desk_desk_top_mid`
+~1,450 where only farther views do, `desk_desk_top_rest` ~300 where nothing does), each cut into rectangles of at most
+0.6 m so they pack; `export.py` joins them back into one `desk_desk_top`. Islands sit 8 px apart (shipped sizes; the
+desk atlas packs axis-aligned): the props atlas holds thousands of small islands, and a 16 px gap left it 10 % full
+and the cut desk top's atlas 52 %.
 Per atlas: the view-independent light (diffuse direct and indirect, emission) at 256 samples, with metals and glass
 baked as diffuse in their own colour; a diffuse-colour and a normal bake that guide OIDN; the AgX view transform; then
 the void fade, blended per texel from a bake of world positions. Samples: `-- --samples N` (the default is 256). Each atlas also keeps its denoised linear light and
@@ -94,7 +100,10 @@ Downloads Henry Heffernan's three models (pinned commit, checked by sha256), the
 Haven and ambientCG, Newsreader (pinned commit, sha256) and NASA's Pale Blue Dot Revisited (sha256) into
 `blender/.cache/`, runs `room_art.mjs` (Node) for the typographic art, then builds the scene and overwrites
 `room.blend`. Props are appended from `blender/props/<name>.blend` (root collection named after the prop; rebuild
-them with `python3 blender/scripts/props_build.py --render`). Re-bake after a rebuild. `ROOM_QUICK=1` skips the
+them with `python3 blender/scripts/props_build.py --render`); the CRT's case (`crt_shell`, named `desk_crt` in the room)
+and the desk chair replace Henry's (`DESK_PROPS`). `monitor_screen` is pinned to its round-eight pose and size
+(`MONITOR_SCREEN`), since SaahilOS's hole on the site is sized from it: the build stops if a case's measured opening is
+more than 3 mm off. Re-bake after a rebuild. `ROOM_QUICK=1` skips the
 window view for layout work, and `ROOM_BLEND=<path>` writes the scene elsewhere.
 
 `window_view.py` also renders the view alone: `blender -b --factory-startup -P blender/scripts/window_view.py --
@@ -110,7 +119,7 @@ prints the glb's bytes, draw calls, triangles and textures.
 | `wall_back_group`, `wall_left_group` | empties at the origin (identity) holding each wall with its art and fixtures (and, for the back wall, the window and its view), so the site can fade a whole wall when the camera is behind it; every other node stands on the floor at the root |
 | `floor`, `floor_fade` | the floor's solid disc and the ring that fades it into the void |
 | `orbit_center` | where the 360-degree orbit turns; extras `minDist`, `maxDist` (metres), `minPolarDeg`, `maxPolarDeg` (from straight up), chosen so every angle stays above the floor and inside the fades |
-| `env_*` / `desk_*` / `props_*` | the set's baked scenery; `desk_desk_top`, `desk_crt_front` and `desk_computer_front` are the faces the desk view sees (desk atlas), the rest of each stays `desk_desk`, `desk_crt`, `desk_computer` |
+| `env_*` / `desk_*` / `props_*` | the set's baked scenery; `desk_desk_top` (the desk's top, one node: its three baked parts joined), `desk_crt_front` and `desk_computer_front` are the faces the desk view sees (desk atlas), the rest of each stays `desk_desk`, `desk_crt`, `desk_computer` |
 | `keyboard`, `mouse`, `coffee_mug`, `croissant`, `crt_badge`, `pennant_gatech` | the hero props (T72's prop files once they land; Henry's keyboard, mouse and mug until then); `crt_badge` sits on the CRT's chin |
 | `coffee_steam` | where the mug's steam starts, over the coffee; extras `width_m`, `height_m` |
 | `crt_glow`, `lamp_bulb`, `lava_lamp_glass`, `oven_glow`, `nas_led_0..3` | runtime meshes, each with its own unlit material (`nas_led` is shared by the four LEDs) so the site can tint, flicker or replace them |
