@@ -152,12 +152,25 @@ function panePoints(n = 5, inset = 0.04) {
   return points;
 }
 
-/** How many of the eyes see past the sky somewhere on the pane (a ray through it that meets no front face of it). */
-function unfilled(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) {
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.FrontSide }));
+const placed = (geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, side: THREE.Side) => {
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side }));
   mesh.matrixAutoUpdate = false;
   mesh.matrix.copy(matrix);
   mesh.matrixWorld.copy(matrix);
+  return mesh;
+};
+let halves: THREE.Mesh[] | null = null;
+
+/**
+ * How many of the eyes see the void somewhere on the pane: a ray through it that meets no front face of the sky, nor
+ * (asked only then, they are big) either city's land and water.
+ */
+function unfilled(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) {
+  const mesh = placed(geometry, matrix, THREE.FrontSide);
+  halves ??= ['window_view_sf', 'window_view_delhi'].map((name) => {
+    const half = meshNode(name);
+    return placed(half.geometry, half.matrix, THREE.DoubleSide);
+  });
   const raycaster = new THREE.Raycaster();
   const panes = panePoints();
   const { min, max } = pane();
@@ -171,7 +184,7 @@ function unfilled(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) {
       const back = eye.clone().addScaledVector(d, (mask.max.z - eye.z) / d.z);
       if (back.x < min.x || back.x > max.x || back.y < min.y || back.y > max.y) continue;
       raycaster.set(eye, d);
-      if (!raycaster.intersectObject(mesh, false).length) {
+      if (!raycaster.intersectObject(mesh, false).length && !raycaster.intersectObjects(halves, false).length) {
         missed.push(eye.toArray().map(Math.round).join(','));
         break;
       }
@@ -183,7 +196,7 @@ describe('the sky behind the window, from every angle the orbit allows', () => {
   /**
    * Catches the void through the pane at steep orbit angles: the build culled the dome's faces no framing saw (San
    * Francisco's whole flank and the cap), so from about 55° round to the right the pane showed black. Without
-   * completeDome, 1,000-odd eyes of this grid see past the dome.
+   * completeDome, 215 of its 918 eyes see the void (sky, land and water as shipped, 2026-10-18).
    */
   it('fills the pane from every eye where the back wall stands whole', () => {
     const { geometry, filledCells } = completeDome(sky.geometry, sky.matrix, frame, mask);
