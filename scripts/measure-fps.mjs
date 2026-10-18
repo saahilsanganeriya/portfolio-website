@@ -106,22 +106,27 @@ try {
 
   // The arrival on /, its flight from the wide view into the monitor, measured while nothing touches the page.
   record('arrival', await count(30_000, 'arrival'));
-  await settle('desk');
+  // Wherever the arrival comes to rest: round 9's flight lands at the monitor (round 8's glide rested at the desk).
+  await settle(null);
   // The full-quality atlases stream in after the arrival; the phases measure the room with them.
   if (!flag('--low')) await page.waitForFunction(() => !window.__roomStats || window.__roomStats.done || window.__roomStats.skipped, null, { timeout: 300_000 });
   const streaming = await page.evaluate(() => window.__roomStats && { skipped: window.__roomStats.skipped, atlases: window.__roomStats.atlases.map((a) => `${a.name} ${a.state} ${a.px}px`) });
 
   if (phone) {
-    // The phone holds the desk briefly, then glides into the monitor by itself: measure that glide first.
-    await page.waitForFunction(() => window.__room.moving, null, { timeout: 30_000 });
-    const zoomMs = await page.evaluate(() => {
-      const start = performance.now();
-      return new Promise((resolve) => {
-        const wait = () => (window.__room.moving ? requestAnimationFrame(wait) : resolve(performance.now() - start));
-        requestAnimationFrame(wait);
+    // A phone that rested short of the monitor glides into it by itself: measure that glide first. (Round 9's arrival
+    // flies straight to the monitor, so the arrival phase above already holds that flight.)
+    if ((await page.evaluate(() => window.__room.phase)) !== 'monitor') {
+      await page.waitForFunction(() => window.__room.moving, null, { timeout: 30_000 });
+      const zoomMs = await page.evaluate(() => {
+        const start = performance.now();
+        return new Promise((resolve) => {
+          const wait = () => (window.__room.moving ? requestAnimationFrame(wait) : resolve(performance.now() - start));
+          requestAnimationFrame(wait);
+        });
       });
-    });
-    console.log(`glide into the monitor: ${Math.round(zoomMs)} ms, then SaahilOS takes over: ${await page.evaluate(() => document.documentElement.classList.contains('room-os'))}`);
+      console.log(`glide into the monitor: ${Math.round(zoomMs)} ms`);
+    }
+    console.log(`SaahilOS takes over: ${await page.evaluate(() => document.documentElement.classList.contains('room-os'))}`);
     await page.getByRole('button', { name: 'Back to the room' }).tap();
     await settle('idle');
     for (const phase of ['idle', 'desk', 'move']) {
