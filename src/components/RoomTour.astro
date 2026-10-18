@@ -126,6 +126,13 @@
     stroke-linejoin: miter;
   }
 
+  /* A narrow screen has no room for both rows side by side: the ways on sit above the Sound controls, not under them. */
+  @media (max-width: 767.98px) {
+    .room-ways {
+      bottom: calc(var(--space-3) + 2.75rem);
+    }
+  }
+
   /* On a phone there is no H key, and the corner is shared with the Sound controls: the house alone says Home. */
   @media (max-width: 767.98px), (pointer: coarse) {
     .room-home {
@@ -251,6 +258,12 @@
     padding: var(--space-3);
     border: 1px solid rgb(168 159 145 / 0.5);
     background: var(--ink);
+  }
+
+  @media (max-width: 767.98px) {
+    .room-tour {
+      bottom: calc(var(--space-3) + 5.15rem);
+    }
   }
 
   :global(html.room-os) .room-tour,

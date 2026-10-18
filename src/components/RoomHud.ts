@@ -9,6 +9,8 @@ const CARD_GAP = 20;
 const CARD_EDGE = 16;
 const CARD_TOP = 96;
 const CARD_BOTTOM = 72;
+// On a narrow stage the tour and Home sit in a row above the Sound controls.
+const CARD_BOTTOM_NARROW = 120;
 // Narrower than this, the card sits above the bottom row instead of beside the object.
 const CARD_DOCK_BELOW = 640;
 
@@ -129,7 +131,7 @@ export function mountCard(card: HTMLElement, status: HTMLElement, room: RoomHand
 function place(card: HTMLElement, rect: ScreenRect | null, stage: HTMLElement) {
   const box = stage.getBoundingClientRect();
   const [width, height] = [card.offsetWidth, card.offsetHeight];
-  const bottom = box.height - height - CARD_BOTTOM;
+  const bottom = box.height - height - (box.width < CARD_DOCK_BELOW ? CARD_BOTTOM_NARROW : CARD_BOTTOM);
   let left: number;
   let top: number;
   if (box.width < CARD_DOCK_BELOW || !rect) {
