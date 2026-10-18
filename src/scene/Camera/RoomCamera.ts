@@ -103,8 +103,9 @@ const HOME_SECONDS = { base: 0.7, perMetre: 0.12, perRadian: 0.3, min: 0.9, max:
 // A flight has landed once it is this close (a share of the viewing distance, at least half a millimetre).
 const LAND_SHARE = 0.0025;
 const FOV_TOLERANCE_DEG = 0.05;
-// A home swing has landed once its angles (radians, and ln radius) are this close and its pivot within a millimetre.
-const SWING_LAND = { angle: 5e-4, pivot: 1 };
+// A home swing has landed once its angles (radians, and ln radius) are this close, as a flight does (LAND_SHARE of
+// the distance: under 2 cm at the wide view's 7.3 m), and its pivot within 2 mm.
+const SWING_LAND = { angle: LAND_SHARE, pivot: 2 };
 
 const UP = new THREE.Vector3(0, 1, 0);
 
