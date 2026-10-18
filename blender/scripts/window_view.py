@@ -1,8 +1,8 @@
 """The view from the window: San Francisco on the left and Delhi on the right across one imagined bay (Delhi has no
 coast; its side of the water is the Yamuna), built as a small diorama behind the back wall. BRIDGE_VARIANT picks the
-bridge: "two" gives each city its own on its own side (the Golden Gate from San Francisco's shore to the Marin hill,
-Delhi's Signature Bridge cable-stayed from a sandbar to the right bank); "A", "B" and "C" build one bridge across the
-whole bay that is the Golden Gate at San Francisco's end and the Signature Bridge at Delhi's (one_bridge).
+bridge: "B" builds one bridge across the whole bay, the Golden Gate at San Francisco's end handing its main cable to
+the Signature Bridge's pylon at Delhi's (one_bridge); "two" gives each city its own on its own side (the Golden Gate
+from San Francisco's shore to the Marin hill, Delhi's Signature Bridge cable-stayed from a sandbar to the right bank).
 
 Every part of the land, water and landmarks is its own object in atlas window_sf or window_delhi (the seam is the
 plane x = SEAM_X, behind the middle of the window's one pane); export.py joins each atlas into one mesh,
@@ -127,14 +127,15 @@ MARIN = (1.25, 1.52, 0.07, 0.10)  # centre, radius across and in depth
 SIG_Y, SIG_X, SIG_PYLON = 1.30, (1.41, 1.84), 1.665  # the deck runs on along the bank, where the back stays hold
 SIG_DECK = WATER_Z + 0.055
 SANDBAR = (1.43, 1.29, 0.055, 0.11)
-# One bridge across the bay (one_bridge), "A", "B" or "C"; "two" keeps the pair above. Its deck runs at the Golden
-# Gate's depth and height, from an anchorage on San Francisco's shore to an abutment on Delhi's bank, short of Humayun's
-# Tomb; the Marin hill goes, so the bay is open under it.
-BRIDGE_VARIANT = "two"
-ONE_Y, ONE_X = BRIDGE_Y, (0.56, 1.80)
+# BRIDGE_VARIANT "B" builds one bridge across the bay (one_bridge); "two" keeps the pair above. The one bridge's deck
+# runs at the Golden Gate's depth and height from an anchorage on San Francisco's shore to an abutment on Delhi's bank,
+# ending left of India Gate so the gate does not read as its last pier; the pylon stands just past the seam. The
+# Marin hill goes, so the bay is open under the span.
+BRIDGE_VARIANT = "B"
+ONE_Y, ONE_X = BRIDGE_Y, (0.56, 1.73)
 ONE_HALF_W = 0.032
 ONE_HEAD = DECK_Z + 0.245  # the pylon's head, a little above the Golden Gate's tower tops
-SPAR_LEAN = 1 / math.tan(math.radians(63))  # the pylon leans back at about 63° from the deck
+PYLON_X = 1.47
 # The Painted Ladies: seven houses from LADIES_X along the row at depth LADIES_Y, facing the window, stepping up the
 # slope to the left, with Alamo Square in front of them.
 LADIES_X, LADIES_Y = 1.062, 0.915
@@ -868,61 +869,54 @@ def signature_bridge(b, mats):
             b.tube([Vector((top.x, y + side * 0.004, top.z)), foot], 0.0007, sides=3, mat=cable, cap=False)
 
 
-# ---- one bridge across the bay: the Golden Gate becoming the Signature Bridge ----
+# ---- one bridge across the bay: the Golden Gate hands its cable to the Signature Bridge ----
 #
-#   San Francisco                          seam                               Delhi
-#   anchorage ── tower ── tower ─────────────┼────────────── pylon ── abutment
-#   "A"  four supports, each a step from the art-deco tower to the bent pylon; hangers tilt into stays
-#   "B"  the main cable lands on the pylon's head just past the seam; its stays carry on to Delhi
-#   "C"  the middle span hangs from both: the main cable's hangers and the pylon's stays cross over the seam
+#   San Francisco                            seam                          Delhi
+#   anchorage ── tower ── tower ── main cable ─┼──▶ pylon's head ══ stays ══ abutment
+#                                         joint ┘  paint, truss end and the halves' seam on one line
 
 def lerp(a, b, t):
     return a + (b - a) * t
 
 
-def morph_material(name, a, b, x0, x1, rough=0.5):
-    """Paint that turns from colour a at San Francisco's end to b at Delhi's between x0 and x1 along the bridge (the
-    diorama's x); with x0 == x1 it changes at that one point."""
+def seam_material(name, a, b, rough=0.5):
+    """Paint `a` on San Francisco's side of the seam and `b` on Delhi's, so each half's atlas holds one paint."""
     def paint(k, color, n):
         x = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": k.coords("Object")}).outputs["X"]
-        fac = k.map_range(x, x0, x1) if x1 > x0 else k.math("GREATER_THAN", x, x0)
-        return k.mix_color(fac, a + (1.0,), b + (1.0,))
+        return k.mix_color(k.math("GREATER_THAN", x, SEAM_X), a + (1.0,), b + (1.0,))
     return view_material(name, a, rough=rough, kit=paint)
 
 
-def bridge_paints(x0, x1):
-    """The bridge's paints, International Orange at San Francisco's end turning to the Signature Bridge's white steel,
-    grey deck and pale stays between x0 and x1."""
-    return {"paint": morph_material("view_bridge_paint", GGB, STEEL_WHITE, x0, x1),
-            "dark": morph_material("view_bridge_dark", GGB_DARK, DECK_UNDER, x0, x1, rough=0.7),
-            "deck": morph_material("view_bridge_deck", GGB, DECK_GREY, x0, x1, rough=0.8),
-            "cable": morph_material("view_bridge_cable", GGB, CABLE, x0, x1)}
+def bridge_paints():
+    """The deck's paints: International Orange and its shadowed truss on San Francisco's side, the Signature Bridge's
+    white steel, grey deck and girder on Delhi's."""
+    return {"paint": seam_material("view_bridge_paint", GGB, STEEL_WHITE),
+            "dark": seam_material("view_bridge_dark", GGB_DARK, DECK_UNDER, rough=0.7),
+            "deck": seam_material("view_bridge_deck", GGB, DECK_GREY, rough=0.8)}
 
 
-class Support:
-    """One support of the one bridge, s of the way from the Golden Gate's art-deco tower (0: two upright legs in three
-    stepped tiers, braced across) to the Signature Bridge's pylon (1: two round legs that lean back at about 63°, bend
-    upright and close into one head), standing at x on the deck's line; lean 1 leans it toward Delhi, -1 toward San
-    Francisco."""
+class Pylon:
+    """The Signature Bridge's pylon on the deck's line at x: two round legs rise from its pier to the deck, lean back
+    toward San Francisco at about 63°, bend upright and close into the glass head that takes the main cable (the real
+    pylon leans the other way, back over its bank; here it reaches out to take the cable)."""
 
-    def __init__(self, x, s, lean=1):
-        self.x, self.s, self.lean = x, s, lean
-        self.foot_z = lerp(WATER_Z + 0.03, WATER_Z + 0.015, s)  # on its pier
-        self.lean_z = lerp(self.foot_z, DECK_Z - 0.012, s)  # the pylon's legs rise upright to the deck, then lean
-        self.top_z = lerp(TOWER_TOP, ONE_HEAD, s)
-        self.bend_z = lerp(self.top_z, DECK_Z + 0.16, s)
-        self.bend_x = x + lean * math.tan(math.radians(27 * s)) * (self.bend_z - self.lean_z)
-        self.head_x = self.bend_x + lean * 0.014 * s
-        h = ONE_HALF_W
-        self.spreads = (lerp(h + 0.004, h + 0.010, s), lerp(h + 0.004, h * 0.55, s), lerp(h + 0.004, 0.003, s))
+    def __init__(self, x):
+        self.x = x
+        self.foot_z = WATER_Z + 0.015  # on its pier
+        self.lean_z = DECK_Z - 0.012  # upright to the deck, then leaning
+        self.bend_z = DECK_Z + 0.16
+        self.top_z = ONE_HEAD
+        self.bend_x = x - math.tan(math.radians(27)) * (self.bend_z - self.lean_z)
+        self.head_x = self.bend_x - 0.014
+        self.spreads = (ONE_HALF_W + 0.010, ONE_HALF_W * 0.55, 0.003)
 
     def _t(self, z):
         """Which part of the legs height z is on (0 upright foot, 1 leaning, 2 upright head) and how far along it."""
         if z <= self.lean_z:
             return 0, 0.0
         if z <= self.bend_z:
-            return 1, (z - self.lean_z) / max(self.bend_z - self.lean_z, 1e-6)
-        return 2, (z - self.bend_z) / max(self.top_z - self.bend_z, 1e-6)
+            return 1, (z - self.lean_z) / (self.bend_z - self.lean_z)
+        return 2, (z - self.bend_z) / (self.top_z - self.bend_z)
 
     def centre(self, z):
         """The point between the two legs at height z."""
@@ -937,14 +931,48 @@ class Support:
         return (foot, lerp(foot, bend, t), lerp(bend, top, t))[part]
 
     def saddle(self, side):
-        """Where a main cable passes over (or lands on) the support's top, on one side of the deck."""
+        """Where the main cable on one side of the deck lands on the head."""
         return self.centre(self.top_z) + Vector((0, side * self.spreads[2], -0.004))
 
     def anchor(self, t, side):
-        """A stay's upper end on one side, t 0 the lowest to 1 the highest, high on the support."""
-        low = lerp(self.top_z - 0.07, self.bend_z - 0.02, self.s)
-        z = lerp(low, self.top_z - 0.008, t)
+        """A stay's upper end on one side, t 0 the lowest (under the bend) to 1 the highest (under the head)."""
+        z = lerp(self.bend_z - 0.02, self.top_z - 0.008, t)
         return self.centre(z) + Vector((0, side * min(self.spread(z), 0.004), 0))
+
+    def build(self, b, mats):
+        """Its pier, its two legs (round, tapering, cut level so the leaning part stays as thick as the rest) and the
+        glass head, seated square on the legs' top and turned with their last stretch."""
+        b.box((0.05, 0.095, 0.022), loc=(self.x, ONE_Y, WATER_Z + 0.004), mat=mats["concrete"])
+        heights = sorted({self.foot_z, self.lean_z, self.bend_z, self.top_z}
+                         | {lerp(self.lean_z, self.bend_z, k / 4) for k in (1, 2, 3)}
+                         | {lerp(self.bend_z, self.top_z, k / 3) for k in (1, 2)})
+        stretch = 1 / math.cos(math.radians(27))
+        for side in (-1, 1):
+            rings = []
+            for z in heights:
+                r = lerp(0.0092, 0.0058, (z - self.foot_z) / (self.top_z - self.foot_z))
+                rx = r * stretch if self._t(z)[0] == 1 else r
+                rings.append((self.centre(z) + Vector((0, side * self.spread(z), 0)), rx, r))
+            leg(b, rings, mats["steel_white"])
+        axis = Vector((self.head_x - self.bend_x, 0, self.top_z - self.bend_z)).normalized()
+        size = (0.017, 0.016, 0.011)
+        b.box(size, loc=tuple(self.centre(self.top_z) + axis * (size[2] / 2 - 0.001)),
+              rot=(0, math.degrees(math.atan2(axis.x, axis.z)), 0), mat=mats["gallery"])
+
+
+def leg(b, rings, mat):
+    """A round leg as a stack of level rings, each (centre, radius across, radius along the deck)."""
+    bm = b.bm
+    before = set(bm.faces)
+    loops = [[bm.verts.new((c.x + rx * math.cos(a), c.y + ry * math.sin(a), c.z))
+              for a in (2 * math.pi * k / 12 for k in range(12))] for c, rx, ry in rings]
+    for lo, hi in zip(loops, loops[1:]):
+        for i in range(12):
+            bm.faces.new((lo[i], lo[(i + 1) % 12], hi[(i + 1) % 12], hi[i]))
+    bm.faces.new(list(reversed(loops[0])))
+    bm.faces.new(loops[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=[f for f in bm.faces if f not in before])
+    return b._wrap(before, None, mat)
 
 
 def deco_tower(b, mats, x, paint):
@@ -963,124 +991,45 @@ def deco_tower(b, mats, x, paint):
     b.box((0.014, 2 * half_w + 0.006, 0.012), loc=(x, y, DECK_Z - 0.03), mat=paint)
 
 
-def leg_rings(b, rings, rounded, mat):
-    """A leg as a stack of level rings, each (centre, half-size across, half-size along the deck): rectangles when
-    `rounded` is 0, their corners rounding with it to circles at 1; two rings at one height make a ledge."""
-    bm = b.bm
-    before = set(bm.faces)
-    loops = []
-    for centre, hx, hy in rings:
-        if rounded < 0.02:
-            pts = [(hx, hy), (-hx, hy), (-hx, -hy), (hx, -hy)]
-        else:
-            r = rounded * min(hx, hy)
-            pts = []
-            for q, (sx, sy) in enumerate(((1, 1), (-1, 1), (-1, -1), (1, -1))):
-                for j in range(4):
-                    a = math.radians(90 * q + 30 * j)
-                    pts.append((sx * (hx - r) + r * math.cos(a), sy * (hy - r) + r * math.sin(a)))
-        loops.append([bm.verts.new((centre.x + px, centre.y + py, centre.z)) for px, py in pts])
-    n = len(loops[0])
-    for lo, hi in zip(loops, loops[1:]):
-        for i in range(n):
-            bm.faces.new((lo[i], lo[(i + 1) % n], hi[(i + 1) % n], hi[i]))
-    bm.faces.new(list(reversed(loops[0])))
-    bm.faces.new(loops[-1])
-    faces = [f for f in bm.faces if f not in before]
-    bmesh.ops.recalc_face_normals(bm, faces=faces)
-    return b._wrap(before, None, mat)
-
-
-def support(b, mats, sup, paint):
-    """Build one Support: its pier, its two legs (the Golden Gate's stepped tiers giving way to round tapering tubes
-    as s grows), its portal braces (fewer as s grows) and its top (a brace, or the pylon's glass head)."""
-    if sup.s == 0:
-        deco_tower(b, mats, sup.x, paint)
-        return
-    s = sup.s
-    size = [lerp(a, c, s) for a, c in zip((0.07, 0.11, 0.05), (0.05, 0.095, 0.022))]
-    b.box(tuple(size), loc=(sup.x, ONE_Y, lerp(WATER_Z + 0.005, WATER_Z + 0.004, s)), mat=mats["concrete"])
-    tower = TOWER_TOP - WATER_Z
-    tiers = ((WATER_Z + 0.5 * tower, 0.019, 0.015), (WATER_Z + 0.78 * tower, 0.016, 0.012), (9.0, 0.0135, 0.0095))
-
-    def section(z, tier):
-        t = (z - sup.foot_z) / (sup.top_z - sup.foot_z)
-        tube = lerp(0.0184, 0.0116, t)
-        part, _ = sup._t(z)
-        stretch = 1 / math.cos(math.radians(27 * s)) if part == 1 else 1.0
-        return lerp(tiers[tier][1], tube, s) / 2 * stretch, lerp(tiers[tier][2], tube, s) / 2
-
-    heights = sorted({sup.foot_z, sup.lean_z, sup.bend_z, sup.top_z} | {lerp(sup.lean_z, sup.bend_z, k / 4) for k in (1, 2, 3)}
-                     | {lerp(sup.bend_z, sup.top_z, k / 3) for k in (1, 2)})
-    for side in (-1, 1):
-        rings = []
-        for z in heights:
-            tier = next(i for i, (z1, _, _) in enumerate(tiers) if z < z1 or i == 2)
-            for k, (z1, _, _) in enumerate(tiers[:2]):
-                if s < 0.9 and rings and rings[-1][0].z < z1 <= z:
-                    centre = sup.centre(z1) + Vector((0, side * sup.spread(z1), 0))
-                    rings.append((centre, *section(z1, k)))
-                    rings.append((centre, *section(z1, k + 1)))
-            rings.append((sup.centre(z) + Vector((0, side * sup.spread(z), 0)), *section(z, tier)))
-        leg_rings(b, rings, s, paint)
-        if s < 0.5:
-            b.box((0.004, 0.004, 0.004), loc=tuple(sup.centre(sup.top_z) + Vector((0, side * sup.spreads[2], 0.003))),
-                  mat=mats["red_light"])
-    braces = [DECK_Z + f * (TOWER_TOP - 0.025 - DECK_Z) for f in (0.3, 0.62)][(2 if s >= 0.5 else 1 if s >= 0.25 else 0):]
-    if s < 0.5:
-        braces += [DECK_Z - 0.03]
-    for zs in braces:
-        c = sup.centre(zs)
-        b.box((0.012 * (1 - 0.4 * s), 2 * sup.spread(zs) + 0.006, 0.016), loc=tuple(c), mat=paint)
-    if s < 0.5:
-        b.box((0.012, 2 * sup.spreads[2] + 0.006, 0.022), loc=tuple(sup.centre(TOWER_TOP - 0.025)), mat=paint)
-    else:
-        head = sup.centre(sup.top_z) + Vector((sup.lean * 0.001, 0, 0.007))
-        k = lerp(0.6, 1.0, s)
-        b.box((0.017 * k, 0.016 * k, 0.011 * k), loc=tuple(head), rot=(0, -12 * sup.lean, 0), mat=mats["gallery"])
-
-
-def one_deck(b, mats, paints, truss, piers=()):
-    """The one bridge's deck from the anchorage on San Francisco's shore to the abutment on Delhi's bank: the road,
-    the Golden Gate's stiffening truss under it as deep as truss(x) says (1 the Golden Gate's, 0 the Signature Bridge's
-    slim girder), railings, concrete piers at `piers`, and the ends set on the ground."""
+def one_deck(b, mats, paints):
+    """The deck from the anchorage on San Francisco's shore to the abutment on Delhi's bank: the road and railings in
+    each side's paint, the Golden Gate's stiffening truss under San Francisco's side tapering into the Signature
+    Bridge's slim girder over the last 10 cm before the seam, a cross-girder at the seam as the expansion joint, and the
+    ends set on the ground (the abutment's face flush with the deck's end)."""
     x0, x1 = ONE_X
     y, h = ONE_Y, ONE_HALF_W
     b.box((x1 - x0, 2 * h, 0.010), loc=((x0 + x1) / 2, y, DECK_Z), mat=paints["deck"])
     step = 0.022
-    for k in range(int((x1 - x0) / step)):
-        xk = x0 + step * (k + 0.5)
-        deep = truss(xk)
+    for k in range(int((x1 - x0) / step) + 1):
+        xa, xb = x0 + step * k, min(x0 + step * (k + 1), x1)
+        xk = (xa + xb) / 2
+        deep = 1 - smoothstep(SEAM_X - 0.10, SEAM_X, xk)
         depth = 0.004 + 0.008 * deep
-        b.box((step + 0.0004, 2 * h - 0.008, depth), loc=(xk, y, DECK_Z - 0.005 - depth / 2), mat=paints["dark"])
+        b.box((xb - xa + 0.0004, 2 * h - 0.008, depth), loc=(xk, y, DECK_Z - 0.005 - depth / 2), mat=paints["dark"])
         if deep > 0.4:
             b.box((0.0025, 2 * h - 0.004, depth), loc=(xk, y, DECK_Z - 0.005 - depth / 2), rot=(0, 45 if k % 2 else -45, 0),
                   mat=paints["dark"])
     for side in (-1, 1):
         b.box((x1 - x0, 0.0016, 0.004), loc=((x0 + x1) / 2, y + side * (h - 0.0008), DECK_Z + 0.006), mat=paints["paint"])
-    for xp in piers:
-        b.box((0.012, 0.03, DECK_Z - WATER_Z), loc=(xp, y, (DECK_Z + WATER_Z) / 2 - 0.008), mat=mats["concrete"])
-    for xa, ground in ((x0, sf_height(x0, y)), (x1, delhi_height(x1, y))):
-        b.box((0.05, 0.09, DECK_Z - ground + 0.01), loc=(xa, y, (DECK_Z + ground) / 2 - 0.005), mat=mats["concrete"])
+    b.box((0.006, 2 * h + 0.008, 0.016), loc=(SEAM_X, y, DECK_Z - 0.008), mat=mats["deck_under"])
+    ground = sf_height(x0, y)
+    b.box((0.05, 0.09, DECK_Z - ground + 0.01), loc=(x0, y, (DECK_Z + ground) / 2 - 0.005), mat=mats["concrete"])
+    ground = delhi_height(x1 - 0.035, y)  # its foot set into the bank's slope, not floating over it
+    b.box((0.035, 0.09, DECK_Z - ground + 0.01), loc=(x1 - 0.0175, y, (DECK_Z + ground) / 2 - 0.005), mat=mats["concrete"])
 
 
-def main_cable(b, paint, stops, side, lands=False):
-    """One main cable over its supports in order: up from the anchorage, a sagging span between each pair, and either
-    down to the deck past the last (a side span) or, with `lands`, ending on the last support's head. Returns its
-    points."""
-    pts = []
+def main_cable(b, paint, saddles, side):
+    """One main cable: up from the anchorage over its first saddle, then a span sagging between each pair of saddles,
+    ending on the last. Returns its points."""
     start = Vector((ONE_X[0], ONE_Y + side * (ONE_HALF_W + 0.004), DECK_Z + 0.01))
-    first = stops[0].saddle(side)
-    for k in range(13):
-        t = k / 12
-        pts.append(Vector((lerp(start.x, first.x, t), lerp(start.y, first.y, t), start.z + (first.z - start.z) * t ** 1.4)))
-    for a, c in zip(stops, stops[1:]):
-        pa, pc = a.saddle(side), c.saddle(side)
+    first = saddles[0]
+    pts = [Vector((lerp(start.x, first.x, t), lerp(start.y, first.y, t), start.z + (first.z - start.z) * t ** 1.4))
+           for t in (k / 12 for k in range(13))]
+    for pa, pc in zip(saddles, saddles[1:]):
         sag = (pa.z + pc.z) / 2 - (DECK_Z + 0.022)
-        for k in range(1, 31):
-            t = k / 30
+        for t in (k / 30 for k in range(1, 31)):
             pts.append(Vector((lerp(pa.x, pc.x, t), lerp(pa.y, pc.y, t), lerp(pa.z, pc.z, t) - 4 * sag * t * (1 - t))))
-    b.tube(pts, 0.0019, sides=5, mat=paint, cap=lands)
+    b.tube(pts, 0.0019, sides=5, mat=paint)
     return pts
 
 
@@ -1092,104 +1041,45 @@ def cable_at(pts, x):
     return None
 
 
-def hangers(b, pts, paint, x_from, x_to, width=lambda x: 0.0012, toward=None):
-    """Hangers from a main cable down to the deck every 2.1 cm from x_from to x_to: vertical, or where toward(x) gives
-    (x of the support it leans to, how far 0..1) reaching up the cable toward that support, so they tilt into stays."""
-    x = x_from
-    while x < x_to:
+def hangers(b, pts, paint, xs):
+    """Vertical hangers from a main cable down to the deck at each x of xs (none where the cable runs too low)."""
+    for x in xs:
         foot = cable_at(pts, x)
-        if foot is not None:
-            top = foot
-            lean = toward(x) if toward else None
-            if lean:
-                top = cable_at(pts, lerp(x, lean[0], lean[1])) or foot
-            if top.z - DECK_Z > 0.012:
-                if top is foot:
-                    facing_quad(b, x, foot.y, DECK_Z + 0.005, foot.z, width(x), paint)
-                else:
-                    b.tube([Vector((x, foot.y, DECK_Z + 0.004)), top], 0.0006, sides=3, mat=paint, cap=False)
-        x += 0.021
+        if foot is not None and foot.z - DECK_Z > 0.012:
+            facing_quad(b, x, foot.y, DECK_Z + 0.005, foot.z, 0.0012, paint)
 
 
-def stays(b, paint, sup, feet, t_range=(0.05, 0.95)):
-    """A fan of stays on both sides of the deck from a support's upper part to deck points `feet`, ordered nearest
-    first, so the furthest reaches the highest anchor."""
+def stays(b, paint, pylon, feet):
+    """A fan of stays on both sides of the deck from the pylon's upper part to deck points `feet`, nearest first, so
+    the furthest reaches the highest anchor."""
     for side in (-1, 1):
         ys = ONE_Y + side * (ONE_HALF_W - 0.003)
         for k, xf in enumerate(feet):
-            t = lerp(*t_range, k / max(len(feet) - 1, 1))
-            b.tube([sup.anchor(t, side), Vector((xf, ys, DECK_Z + 0.004))], 0.0006, sides=3, mat=paint, cap=False)
+            t = lerp(0.05, 0.95, k / max(len(feet) - 1, 1))
+            b.tube([pylon.anchor(t, side), Vector((xf, ys, DECK_Z + 0.004))], 0.0006, sides=3, mat=paint, cap=False)
 
 
 def spaced(x0, x1, n):
     return [lerp(x0, x1, k / (n - 1)) for k in range(n)]
 
 
-def bridge_morph(b, mats):
-    """A: four supports, each a step from the Golden Gate's tower to the Signature Bridge's pylon, and the cables with
-    them: the main cable's hangers vertical, then tilting up the cable toward the nearer support, then fans of stays;
-    the truss under the deck thins out, and the paint turns from International Orange to white along the bridge."""
-    paints = bridge_paints(0.92, 1.50)
-    t0, t1, t2, pylon = Support(TOWERS_X[0], 0.0), Support(1.00, 1 / 3), Support(1.22, 2 / 3), Support(1.54, 1.0)
-    one_deck(b, mats, paints, truss=lambda x: 1 - smoothstep(0.85, 1.40, x), piers=(1.70,))
-    for sup in (t0, t1, t2, pylon):
-        support(b, mats, sup, paints["paint"])
-    start, end = t1.centre(DECK_Z).x + 0.012, t2.centre(DECK_Z).x - 0.012
-    middle = (start + end) / 2
-    for side in (-1, 1):
-        pts = main_cable(b, paints["cable"], (t0, t1, t2), side, lands=True)
-        hangers(b, pts, paints["cable"], ONE_X[0] + 0.03, t1.x - 0.012)
-        hangers(b, pts, paints["cable"], start, end,
-                toward=lambda x: (t1.saddle(side).x, 0.25 + 0.2 * smoothstep(start, middle, x)) if x < middle else
-                (t2.saddle(side).x, 0.45 + 0.4 * smoothstep(middle, end, x)))
-    gap = (t2.head_x + pylon.x) / 2
-    stays(b, paints["cable"], t2, spaced(t2.centre(DECK_Z).x + 0.03, gap - 0.01, 7), (0.1, 0.9))
-    stays(b, paints["cable"], pylon, spaced(pylon.x - 0.02, gap + 0.01, 9))
-    stays(b, paints["cable"], pylon, spaced(pylon.bend_x + 0.022, pylon.bend_x + 0.07, 4), (0.3, 0.9))
-
-
-def bridge_meet(b, mats):
-    """B: the Golden Gate's two towers carry the main cable on toward Delhi, where it comes down onto the head of the
-    Signature Bridge's pylon, which stands just past the seam leaning back toward San Francisco to take it; from the
-    pylon a fan of stays carries the deck on to Delhi's bank. The paint changes once, where the cable lands."""
-    meet = 1.40
-    paints = bridge_paints(meet, meet)
-    t0, t1, pylon = Support(TOWERS_X[0], 0.0), Support(TOWERS_X[1], 0.0), Support(1.47, 1.0, lean=-1)
-    one_deck(b, mats, paints, truss=lambda x: 1.0 if x < meet else 0.0, piers=(1.63, 1.72))
-    for sup in (t0, t1):
-        support(b, mats, sup, mats["ggb"])
-    support(b, mats, pylon, mats["steel_white"])
-    for side in (-1, 1):
-        pts = main_cable(b, mats["ggb"], (t0, t1, pylon), side, lands=True)
-        hangers(b, pts, mats["ggb"], ONE_X[0] + 0.03, pylon.head_x - 0.02)
-    stays(b, mats["cable"], pylon, spaced(pylon.x + 0.03, ONE_X[1] - 0.03, 15))
-
-
-def bridge_web(b, mats):
-    """C: the Golden Gate's two towers and the Signature Bridge's pylon, leaning back over Delhi's bank as built, share
-    the long middle span. The main cable runs from the second tower to the pylon's head on its vertical hangers, the
-    pylon's stays fan back over it, and over the seam the deck hangs from both, as on the Brooklyn Bridge: the hangers
-    thin out toward Delhi, the stays reach no further than San Francisco's side of the seam, and the paint turns from
-    International Orange to white across the span."""
-    paints = bridge_paints(1.05, 1.58)
-    t0, t1, pylon = Support(TOWERS_X[0], 0.0), Support(TOWERS_X[1], 0.0), Support(1.58, 1.0)
-    one_deck(b, mats, paints, truss=lambda x: 1 - smoothstep(1.05, 1.50, x), piers=(1.74,))
-    for sup in (t0, t1):
-        support(b, mats, sup, mats["ggb"])
-    support(b, mats, pylon, mats["steel_white"])
-    for side in (-1, 1):
-        pts = main_cable(b, paints["cable"], (t0, t1, pylon), side, lands=True)
-        hangers(b, pts, paints["cable"], ONE_X[0] + 0.03, 1.48, width=lambda x: lerp(0.0012, 0.0005, smoothstep(1.20, 1.48, x)))
-    stays(b, mats["cable"], pylon, spaced(pylon.x - 0.025, 1.18, 15))
-    stays(b, mats["cable"], pylon, spaced(pylon.bend_x + 0.022, pylon.bend_x + 0.07, 4), (0.3, 0.9))
-
-
-BRIDGES = {"A": bridge_morph, "B": bridge_meet, "C": bridge_web}
-
-
 def one_bridge(b, mats):
-    """The one bridge across the bay that BRIDGE_VARIANT names."""
-    BRIDGES[BRIDGE_VARIANT](b, mats)
+    """The Golden Gate whole (two towers, x as round 9's) carries its main cable on toward Delhi; the cable comes down
+    and lands on the head of the Signature Bridge's pylon, which stands just past the seam leaning back toward San
+    Francisco to take it; from the pylon a fan of stays carries the deck on to Delhi's bank. The deck's paint changes
+    once, at the seam, where the Golden Gate's truss and hangers end."""
+    pylon = Pylon(PYLON_X)
+    one_deck(b, mats, bridge_paints())
+    for x in TOWERS_X:
+        deco_tower(b, mats, x, mats["ggb"])
+    pylon.build(b, mats)
+    feet = [Vector((x, ONE_Y, TOWER_TOP)) for x in TOWERS_X]
+    for side in (-1, 1):
+        saddles = [p + Vector((0, side * (ONE_HALF_W + 0.004), -0.004)) for p in feet] + [pylon.saddle(side)]
+        pts = main_cable(b, mats["ggb"], saddles, side)
+        last = SEAM_X - 0.002  # the last hanger stands at the joint, on San Francisco's side of the seam
+        hangers(b, pts, mats["ggb"], [last - 0.021 * k for k in range(int((last - ONE_X[0] - 0.02) / 0.021) + 1)])
+    stays(b, mats["cable"], pylon, spaced(pylon.x + 0.03, ONE_X[1] - 0.025, 15))
 
 
 def facing_quad(b, x, y, z0, z1, width, mat):
