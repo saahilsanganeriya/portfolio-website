@@ -20,7 +20,7 @@ const PROJECT = { slug: 'entity-resolution-and-anonymization', title: 'Entity re
 const os = (page: Page) => page.frameLocator('.room-monitor iframe');
 const drawnOs = (page: Page) => page.frameLocator('[data-monitor-glass] iframe');
 
-async function settled(page: Page, phase: 'idle' | 'desk' | 'monitor' | 'shelf', timeout = 120_000) {
+async function settled(page: Page, phase: string, timeout = 120_000) {
   await page.waitForFunction((p) => window.__room?.phase === p && !window.__room.moving, phase, { timeout });
 }
 
@@ -276,8 +276,11 @@ test('every content address lands at the monitor within a second of the room sta
   }
 });
 
-/** Catches a prop proxy that is not hit-tested, or a hotspot that zooms in without telling the OS what to open. */
-test('hovering the mango plant labels it, and clicking it opens About in SaahilOS', async ({ page }) => {
+/**
+ * Catches a prop proxy that is not hit-tested, or a hotspot that zooms in without telling the OS what to open. Since
+ * round 9 §10.2 the first click flies to the plant and shows its card; the second opens About.
+ */
+test('hovering the mango plant labels it, and clicking it twice opens About in SaahilOS', async ({ page }) => {
   await page.goto('/');
   await arrived(page);
   await page.evaluate(() => window.__room!.goto('idle'));
@@ -286,15 +289,19 @@ test('hovering the mango plant labels it, and clicking it opens About in SaahilO
   await page.mouse.move(mango.x, mango.y);
   await expect(page.locator('.room-label')).toHaveText('About');
   await page.mouse.click(mango.x, mango.y);
+  await settled(page, 'object:hit_mango', 15_000);
+  const atPlant = await screenPoint(page, 'hit_mango');
+  await page.mouse.click(atPlant.x, atPlant.y);
   await settled(page, 'monitor', 15_000);
   await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
 });
 
 /**
  * Catches a round-7 prop that opens the wrong window or none (books, the Japanese literature print, the Voyager record,
- * the Pale Blue Dot print), a bookshelf that opens Books before flying to it, or a pennant that does more than label.
+ * the Pale Blue Dot print), a bookshelf that opens Books before flying to it, or a Georgia Tech pennant whose card does
+ * not lead to About (round 9 §10.2: every prop flies to itself first, and its second click or Learn more opens it).
  */
-test('the new props open their windows, and the Georgia Tech pennant only labels itself', async ({ page }) => {
+test('the new props open their windows on a second click, and the Georgia Tech pennant’s card leads to About', async ({ page }) => {
   test.setTimeout(300_000);
   await page.goto('/');
   await arrived(page);
@@ -314,8 +321,11 @@ test('the new props open their windows, and the Georgia Tech pennant only labels
   await page.mouse.move(pennant.x, pennant.y);
   await expect(page.locator('.room-label')).toHaveText('Georgia Tech');
   await page.mouse.click(pennant.x, pennant.y);
-  await page.waitForTimeout(1500);
-  expect(await page.evaluate(() => window.__room!.destination)).toBe('idle');
+  // Either of the pennant's two boxes (the set's, and the one derived from its mesh) names the framing.
+  await page.waitForFunction(() => window.__room!.phase.startsWith('object:hit_pennant') && !window.__room!.moving, null, { timeout: 30_000 });
+  await page.getByRole('group', { name: 'Georgia Tech' }).getByRole('button', { name: 'Learn more' }).click();
+  await settled(page, 'monitor', 30_000);
+  await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
 
   for (const [proxy, window] of [
     ['hit_voyager', 'Voyager Golden Record'],
@@ -323,6 +333,8 @@ test('the new props open their windows, and the Georgia Tech pennant only labels
     ['hit_print_japanese_lit', 'Books'],
   ] as const) {
     await fromWideView();
+    await click(proxy);
+    await settled(page, `object:${proxy}`, 30_000);
     await click(proxy);
     await settled(page, 'monitor', 30_000);
     await expect(os(page).getByRole('dialog', { name: window }), `${proxy} opens ${window}`).toBeVisible();

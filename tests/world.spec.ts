@@ -49,6 +49,13 @@ async function hoverProp(page: Page, name: string) {
   }
 }
 
+/** A prop with a card (brief round 9 §10.2): the first click flies to it and shows its card, the second opens its window. */
+async function openByTwoClicks(page: Page, name: string) {
+  await clickProp(page, name);
+  await settledAt(page, `object:${name}`);
+  await clickProp(page, name);
+}
+
 async function backToIdle(page: Page) {
   await page.evaluate(() => window.__room!.goto('idle'));
   await settledAt(page, 'idle');
@@ -72,11 +79,11 @@ test('every new hotspot does what it says', async ({ page }) => {
     await settledAt(page, framing);
   }
 
-  // At the darkroom line a print opens that photograph in SaahilOS.
+  // At the darkroom line a print flies to itself with its card, and a second click opens that photograph in SaahilOS.
   await backToIdle(page);
   await clickProp(page, 'hit_darkroom');
   await settledAt(page, 'photos');
-  await clickProp(page, 'hit_darkroom_print_0');
+  await openByTwoClicks(page, 'hit_darkroom_print_0');
   await settledAt(page, 'monitor');
   await expect(os(page).getByRole('dialog', { name: 'Photographs' })).toBeVisible();
 
@@ -93,7 +100,7 @@ test('every new hotspot does what it says', async ({ page }) => {
   await settledAt(page, 'desk');
   await hoverProp(page, 'hit_crt_badge');
   await expect(page.locator('.room-label')).toHaveText('My family name and a thread spool, for my father’s spinning mill');
-  await clickProp(page, 'hit_crt_badge');
+  await openByTwoClicks(page, 'hit_crt_badge');
   await settledAt(page, 'monitor');
   await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
 
@@ -105,7 +112,7 @@ test('every new hotspot does what it says', async ({ page }) => {
     ['hit_nas', /^projectionist/],
   ] as const) {
     await backToIdle(page);
-    await clickProp(page, proxy);
+    await openByTwoClicks(page, proxy);
     await settledAt(page, 'monitor');
     await expect(os(page).getByRole('dialog', { name: window }), `${proxy} opens ${window}`).toBeVisible();
   }

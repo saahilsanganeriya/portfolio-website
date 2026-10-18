@@ -111,6 +111,9 @@ test.describe('room v3 interactions', () => {
     // Open again: the croissant leads to the recipes.
     await clickProp(page, 'hit_oven');
     await expect.poll(async () => (await world(page)).oven?.croissantActive, { timeout: 10_000 }).toBe(true);
+    // The croissant's card, then a second click opens the recipes (brief round 9 §10.2).
+    await clickProp(page, 'hit_croissant');
+    await expect(page.getByRole('group', { name: 'Croissant' })).toBeVisible({ timeout: 10_000 });
     await clickProp(page, 'hit_croissant');
     await settledAt(page, 'monitor');
     await expect(page.frameLocator('.room-monitor iframe').getByRole('dialog', { name: 'Kitchen' })).toBeVisible();
@@ -189,6 +192,9 @@ test.describe('room v3 interactions', () => {
     const point = await page.evaluate(() => window.__room!.point('hit_darkroom_print_3'));
     await page.mouse.move(point!.x, point!.y);
     await expect(page.locator('.room-label')).toHaveText(SET[3].sharpie);
+    // The print's own card first, then a second click opens it (brief round 9 §10.2).
+    await clickProp(page, 'hit_darkroom_print_0');
+    await settledAt(page, 'object:hit_darkroom_print_0');
     await clickProp(page, 'hit_darkroom_print_0');
     await settledAt(page, 'monitor');
     await expect
