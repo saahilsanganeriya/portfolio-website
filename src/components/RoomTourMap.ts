@@ -118,10 +118,9 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
 
   const placed = placeStops(room, plan);
   // A camera off the plan (the wide view stands 8 m in front of the set) is marked on the floor's edge, looking in.
-  const floorXs = plan.outline.map(([x]) => x);
-  const floorZs = plan.outline.map(([, z]) => z);
-  const onPlan = (x: number, z: number) =>
-    [clamp(x, Math.min(...floorXs), Math.max(...floorXs)), clamp(z, Math.min(...floorZs), Math.max(...floorZs))] as const;
+  const [floorXs, floorZs] = [plan.outline.map(([x]) => x), plan.outline.map(([, z]) => z)];
+  const onFloor = { x: [Math.min(...floorXs), Math.max(...floorXs)], z: [Math.min(...floorZs), Math.max(...floorZs)] };
+  const onPlan = (x: number, z: number) => [clamp(x, onFloor.x[0], onFloor.x[1]), clamp(z, onFloor.z[0], onFloor.z[1])] as const;
   const points = [...plan.outline, ...placed.map((s) => s.position)];
   const minX = Math.min(...points.map(([x]) => x)) - PLAN_MARGIN_M;
   const minZ = Math.min(...points.map(([, z]) => z)) - PLAN_MARGIN_M;
