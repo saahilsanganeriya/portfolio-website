@@ -129,13 +129,14 @@ SIG_DECK = WATER_Z + 0.055
 SANDBAR = (1.43, 1.29, 0.055, 0.11)
 # BRIDGE_VARIANT "B" builds one bridge across the bay (one_bridge); "two" keeps the pair above. The one bridge's deck
 # runs at the Golden Gate's depth and height from an anchorage on San Francisco's shore to an abutment on Delhi's bank,
-# ending left of India Gate so the gate does not read as its last pier; the pylon stands just past the seam. The
-# Marin hill goes, so the bay is open under the span.
+# ending left of India Gate so the gate does not read as its last pier; the pylon stands just past the seam on the
+# sandbar. The Marin hill goes, so the bay is open under the span.
 BRIDGE_VARIANT = "B"
 ONE_Y, ONE_X = BRIDGE_Y, (0.56, 1.73)
 ONE_HALF_W = 0.032
 ONE_HEAD = DECK_Z + 0.245  # the pylon's head, a little above the Golden Gate's tower tops
 PYLON_X = 1.47
+SANDBAR_ONE = (PYLON_X, 1.42, 0.06, 0.09)
 # The Painted Ladies: seven houses from LADIES_X along the row at depth LADIES_Y, facing the window, stepping up the
 # slope to the left, with Alamo Square in front of them.
 LADIES_X, LADIES_Y = 1.062, 0.915
@@ -764,13 +765,18 @@ def delhi_height(x, y):
     return WATER_Z - 0.02 + 0.03 * smoothstep(-0.01, 0.04, inland)
 
 
+def sandbar():
+    """The Yamuna's sandbar: near the seam for the pair of bridges, under the pylon's foot for the one bridge."""
+    return SANDBAR if BRIDGE_VARIANT == "two" else SANDBAR_ONE
+
+
 def jama_masjid_site():
     return JAMA_MASJID if BRIDGE_VARIANT == "two" else JAMA_MASJID_ONE
 
 
 def sandbar_height(x, y):
-    """The Yamuna's sandbar near the seam: low, flat-topped, a little above the water."""
-    return WATER_Z - 0.01 + 0.022 * min(1.0, ellipse(x, y, SANDBAR) * 3)
+    """The Yamuna's sandbar: low, flat-topped, a little above the water."""
+    return WATER_Z - 0.01 + 0.022 * min(1.0, ellipse(x, y, sandbar()) * 3)
 
 
 # ---- landmarks ----
@@ -1712,9 +1718,9 @@ def build_window_view(framings):
         parts.add("bridge", bridge, texel=2.4, split=True, lit_by="sf")
 
     sand = pl.Builder("sandbar")
-    cx, cy, rx, ry = SANDBAR
+    cx, cy, rx, ry = sandbar()
     heightfield(sand, cx - rx, cx + rx, cy - ry, cy + ry, 0.012, sandbar_height, mats["sand"],
-                keep=lambda x, y: ellipse(x, y, SANDBAR) > 0)
+                keep=lambda x, y: ellipse(x, y, sandbar()) > 0)
     parts.add("sandbar", sand, texel=0.8, side="delhi")
 
     boat = pl.Builder("boats")
