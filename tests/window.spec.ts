@@ -200,28 +200,28 @@ test.describe('under reduced motion (the plane holds still)', () => {
     await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
     expect(await planeLength(page), 'from the wide view').toBeGreaterThan(11);
   });
-});
 
-/**
- * Catches the void through the pane at the orbit's steep angles: the build culled the sky dome's faces no framing saw,
- * so from about 55° round to the right San Francisco's side of the pane was black. From the left it showed sky; both
- * sides are held.
- */
-test('at steep orbit angles the pane shows sky on both sides, never the void', async ({ page }, info) => {
-  await windowAt(page, HOURS[0]);
-  await page.evaluate(() => window.__room!.goto('idle'));
-  await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
-  for (const deg of [75, -75]) {
-    await orbitTo(page, deg);
-    await frames(page, 4);
-    const back = (await page.evaluate(() => window.__room!.walls.find((w) => w.name === 'back')))!;
-    expect(back.outside.every((o) => o.shown), `the view is shown at ${deg}°`).toBe(true);
-    const shot = await page.screenshot();
-    await info.attach(`orbit ${deg}°`, { body: shot, contentType: 'image/png' });
-    const { pixels, share } = await voidInPane(page, shot);
-    expect(pixels).toBeGreaterThan(5000);
-    expect(share, `void through the pane at ${deg}°`).toBeLessThan(0.01);
-  }
+  /**
+   * Catches the void through the pane at the orbit's steep angles: the build culled the sky dome's faces no framing saw,
+   * so from about 55° round to the right San Francisco's side of the pane was black. From the left it showed sky; both
+   * sides are held. Under reduced motion, so the camera cuts to the wide view and neither it nor the orbit sways.
+   */
+  test('at steep orbit angles the pane shows sky on both sides, never the void', async ({ page }, info) => {
+    await windowAt(page, HOURS[0]);
+    await page.evaluate(() => window.__room!.goto('idle'));
+    await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
+    for (const deg of [75, -75]) {
+      await orbitTo(page, deg);
+      await frames(page, 4);
+      const back = (await page.evaluate(() => window.__room!.walls.find((w) => w.name === 'back')))!;
+      expect(back.outside.every((o) => o.shown), `the view is shown at ${deg}°`).toBe(true);
+      const shot = await page.screenshot();
+      await info.attach(`orbit ${deg}°`, { body: shot, contentType: 'image/png' });
+      const { pixels, share } = await voidInPane(page, shot);
+      expect(pixels).toBeGreaterThan(5000);
+      expect(share, `void through the pane at ${deg}°`).toBeLessThan(0.01);
+    }
+  });
 });
 
 /**
