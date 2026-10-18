@@ -30,6 +30,10 @@ const COVER_NAME = 'diorama_window_cover';
 // the motif's plane and arc, which it must cover too.
 const COVER_ORDER = -1;
 const MOTIF_ORDER = -2;
+// While a wall fades nothing on it writes depth, so the wall itself goes first (after the cover) when the eye is in front
+// and last when it is behind: else the distance sort can lay it over its posters, whose baked shadow it shows there.
+const SURFACE_FIRST_ORDER = -0.5;
+const SURFACE_LAST_ORDER = 0.5;
 // Where the eye stands from the wall's plane (metres, positive behind it): still solid in front of this, gone past it.
 const FADE_FROM_M = -0.2;
 const FADE_TO_M = 0.9;
@@ -60,6 +64,9 @@ interface Wall {
   point: THREE.Vector3;
   normal: THREE.Vector3;
   group: THREE.Object3D | null;
+  /** The wall's own mesh, and its draw order while it stands whole. */
+  surface: THREE.Mesh;
+  surfaceOrder: number;
   meshes: THREE.Mesh[];
   proxies: THREE.Object3D[];
   outside: Outside[];
@@ -144,6 +151,8 @@ export class Diorama {
         point,
         normal,
         group,
+        surface: node as THREE.Mesh,
+        surfaceOrder: node.renderOrder,
         meshes: [node as THREE.Mesh],
         proxies: [],
         outside: [],
@@ -224,6 +233,7 @@ export class Diorama {
       if (settled === wall.opacity && settled === 1) continue;
       changed ||= settled !== wall.opacity;
       wall.opacity = settled;
+      wall.surface.renderOrder = settled >= 1 ? wall.surfaceOrder : behindM < 0 ? SURFACE_FIRST_ORDER : SURFACE_LAST_ORDER;
       for (const mesh of wall.meshes) this.fade(mesh, settled);
       const clickable = settled > CLICKABLE_ABOVE;
       if (clickable !== wall.clickable) {
@@ -374,6 +384,7 @@ export class Diorama {
   }
 
   dispose() {
+    for (const wall of this.walls) wall.surface.renderOrder = wall.surfaceOrder;
     for (const o of this.walls.flatMap((w) => w.outside)) if (o.hidden) o.node.visible = true;
     for (const { cover } of this.walls) {
       cover?.removeFromParent();
