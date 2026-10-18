@@ -89,7 +89,8 @@ STILL_POSTERS = ["la-la-land", "yi-yi", "normal-people-2020", "black-swan"]
 CAMERAS = {
     # name: (position, target) in metres; vertical field of view is 35 degrees for every framing.
     "cam_loading": ((2.77, -11.30, 3.90), (-0.20, -1.30, 1.00)),
-    "cam_idle": ((1.85, -8.20, 3.00), (-0.20, -1.30, 1.00)),
+    # 12 % further back on round 8's line, so the paper lantern stays whole in a 1512x982 (1.54:1) frame
+    "cam_idle": ((2.096, -9.028, 3.24), (-0.20, -1.30, 1.00)),
     "cam_desk": ((0.0, -1.59, 1.38), (0.0, 0.0, 1.01)),
     "cam_monitor": ((0.0, -0.58, 1.137), (0.0, 0.0, 1.137)),
     "cam_window": ((1.85, -1.75, 1.55), (1.85, 1.40, 1.50)),
@@ -521,7 +522,8 @@ def cut_opening(wall, size, centre):
 
 
 def tidy_wall(obj, outward: Vector):
-    """Drop the faces nobody sees from the front (outside, bottom); the top and the free end keep the section colour
+    """Drop the faces nobody sees from the front (outside, bottom) and the back wall's free end, which the zoomed-out
+    orbit saw edge-on as a light hairline against the void; the top and the left wall's free end keep the section colour
     (the bake fades both into the void anyway)."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -531,8 +533,11 @@ def tidy_wall(obj, outward: Vector):
         if n.dot(outward) > 0.9 or n.z < -0.9 and c.z < 0.01:
             bm.faces.remove(f)
             continue
+        if abs(n.x) > 0.9 and c.x > BACK_X1 - 0.01:
+            bm.faces.remove(f)
+            continue
         is_top = n.z > 0.9 and c.z > WALL_H - 0.01
-        is_end = (abs(n.y) > 0.9 and c.y < LEFT_Y0 + 0.01) or (abs(n.x) > 0.9 and c.x > BACK_X1 - 0.01)
+        is_end = abs(n.y) > 0.9 and c.y < LEFT_Y0 + 0.01
         f.material_index = 1 if (is_top or is_end) else 0
     bm.to_mesh(obj.data)
     bm.free()
@@ -1434,7 +1439,7 @@ TEXEL_WEIGHTS = {
     "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4, "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3,
     "props_mouse_cable": 0.3, "desk_computer_front": 1.2, "crt_glow": 0.3, "props_fujifilm_x100": 1.0,
     # the rest of the desk sits in the props atlas, a little above its average: the desk view sees it
-    "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4, "props_nas_4bay": 1.6,
+    "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4,
     "desk_tray_bottom": 1.2, "desk_tray_top": 1.2, "desk_cables": 0.8, "desk_papers_a": 1.4,
     "desk_papers_b": 1.4, "desk_paper": 1.4, "props_pen_cup": 1.4, "lamp_bulb": 1.0,
     # art: frames and the window frame by area; the engraved and printed type sharper
@@ -1444,8 +1449,8 @@ TEXEL_WEIGHTS = {
     "floor_fade": 0.3, "env_rug": 0.8, "env_rug_corner": 0.8, "env_curtains": 0.7, "env_skirting": 1.0,
     # props: what the tour stops at
     "kitchen_counter": 1.0, "env_kitchen_top": 1.2, "env_kitchen_tiles": 1.2, "env_kitchen_shelf": 1.0,
-    "env_credenza": 0.8, "env_record_cabinet": 0.9, "bookshelf": 0.9, "record_player": 2.0, "platter": 2.2,
-    "tonearm": 2.2, "record_crate": 1.0, "props_kitchen_spices": 1.6, "props_kitchen_mugs": 1.4,
+    "env_credenza": 0.8, "env_record_cabinet": 0.9, "bookshelf": 0.9, "record_player": 3.0, "platter": 3.3,
+    "tonearm": 4.4, "record_crate": 1.0, "props_kitchen_spices": 1.6, "props_kitchen_mugs": 1.4,
     "props_pour_over": 1.6, "props_bakery_board": 2.0, "props_cinnamon_rolls": 2.0, "props_under_shelf_light": 1.0,
     "props_bookcase_books": 1.0, "props_bookend": 1.0, "props_kitchen_jars": 1.4, "props_kitchen_pendant": 1.2,
     "props_chopping_board": 1.0, "props_lounge_chair": 0.8, "props_lantern": 0.8,
@@ -1453,6 +1458,8 @@ TEXEL_WEIGHTS = {
     "espresso_coffee": 1.0, "countertop_oven": 1.6, "oven_door": 1.8, "croissant": 3.0, "lava_lamp": 1.6,
     "lava_lamp_glass": 1.8, "oven_glow": 1.6, "desk_chair_base": 0.6, "desk_chair": 0.9, "desk_desk": 0.6,
     "desk_crt": 2.0, "desk_computer": 1.5, "props_mango_plant_leaves": 1.4,
+    # its object card frames it at half the view's height (~2,300 texels/m for 1 per device pixel); 24 gives ~1,500
+    "props_nas_4bay": 24.0,
 }
 # Heights things rest on (their bottoms there are hidden): floor, desk, record cabinet, credenza, sill, counter,
 # bookcase levels.
