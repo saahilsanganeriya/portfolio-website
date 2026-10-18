@@ -226,8 +226,8 @@ export class AtlasStreamer {
     };
   }
 
-  /** Starts fetching the list and every full atlas at once (once); `onBytes` hears each one's bytes as they arrive. */
-  load(onBytes: (name: string, loaded: number, total: number) => void = () => {}) {
+  /** Starts fetching the list and every full atlas at once (once); `onBytes` hears each file's bytes as they arrive. */
+  load(onBytes: (file: string, loaded: number, total: number) => void = () => {}) {
     this.fetching ??= (async () => {
       const entries = this.skipped ? [] : await this.list();
       if (!this.skipped && !entries.length) this.skipped = 'no-atlases';
@@ -235,8 +235,9 @@ export class AtlasStreamer {
       return entries.map((entry) => {
         const status: AtlasStatus = { name: entry.name, state: 'loading', px: entry.low.px, bytes: entry.full.bytes };
         this.atlases.push(status);
-        onBytes(entry.name, 0, entry.full.bytes);
-        const fetched: Fetched = { entry, status, ready: false, texture: this.fetchFull(entry.full, (loaded) => onBytes(entry.name, loaded, entry.full.bytes)) };
+        const file = entry.full.uri.split('/').pop()!;
+        onBytes(file, 0, entry.full.bytes);
+        const fetched: Fetched = { entry, status, ready: false, texture: this.fetchFull(entry.full, (loaded) => onBytes(file, loaded, entry.full.bytes)) };
         fetched.texture.then(
           () => (fetched.ready = true),
           () => (fetched.ready = true),

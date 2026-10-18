@@ -162,6 +162,8 @@ export class RoomAudio implements AudioHandle {
   constructor(
     private readonly positions: SoundPositions,
     private readonly room: THREE.Object3D | null = null,
+    /** A context the page made inside a gesture before this sound existed, taken over in place of a new one. */
+    private readonly adopt: () => AudioContext | null = () => null,
   ) {}
 
   get unlocked() {
@@ -213,7 +215,7 @@ export class RoomAudio implements AudioHandle {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return false;
     // Made inside a gesture it runs at once; made outside one it starts suspended until a gesture resumes it.
-    const ctx = new Ctor();
+    const ctx = this.adopt() ?? new Ctor();
     this.ctx = ctx;
     this.master = ctx.createGain();
     this.master.gain.value = 0;
