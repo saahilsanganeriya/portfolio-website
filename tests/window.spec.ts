@@ -2,11 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import sharp from 'sharp';
 import type {} from '../src/scene/Application/Application';
 
-// The window over San Francisco (left) and New Delhi (right): both cities by day at any hour, one sky whose colour runs
-// from one city's to the other's with no line between them, only the two day pictures fetched, the motif (a red and
-// white airliner on a dotted arc from New Delhi to San Francisco, both names in his hand) over the sky, and sky through
-// the pane from every side the orbit reaches. Each test loads the room with a mocked clock and reads the pixels of the
-// window framing; the screenshots are attached to the report.
+// The window over San Francisco (left) and New Delhi (right): one fixed moment at any hour (San Francisco's dusk,
+// Delhi's morning), one sky whose colour runs from one city's to the other's with no line between them, only the two
+// pictures fetched, the motif (a red and white airliner on a dotted arc from New Delhi to San Francisco, a passport
+// stamp under each end) over the sky, and sky through the pane from every side the orbit reaches. Each test loads the
+// room with a mocked clock and reads the pixels of the window framing; the screenshots are attached to the report.
 const WEBGL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
 test.use({ launchOptions: { args: WEBGL_ARGS }, viewport: { width: 1440, height: 900 } });
 test.describe.configure({ mode: 'serial', timeout: 300_000 });
@@ -137,7 +137,7 @@ test.describe('under reduced motion (the plane holds still)', () => {
    * Catches a seam between the cities' skies (the old halves met in a hard line at the central bar), a window that
    * still follows a clock (a night city, or a different picture at another hour) and night pictures being fetched.
    */
-  test('the window is the same day view at any hour, one sky with no line between the cities', async ({ browser }, info) => {
+  test('the window is the same view at any hour, one sky with no line between the cities', async ({ browser }, info) => {
     const shots: Buffer[] = [];
     for (const at of HOURS) {
       const page = await browser.newPage({ reducedMotion: 'reduce' });
@@ -165,7 +165,7 @@ test.describe('under reduced motion (the plane holds still)', () => {
         const show = (c: number[]) => c.map((v) => v.toFixed(0)).join('/');
         const row = `${at} row ${y}: far left ${farLeft.toFixed(0)}, by the middle ${show(l1)} ${show(l2)} | ${show(r1)} ${show(r2)}, far right ${farRight.toFixed(0)}`;
         expect(step, row).toBeLessThan(2 * slope + 0.2);
-        // Daylight on both sides.
+        // Lit on both sides: dusk and morning, never night.
         expect(Math.min(farLeft, farRight), row).toBeGreaterThan(110);
       }
       await page.close();
