@@ -661,7 +661,7 @@ def show_view_from_bakes():
 # Stills only: the darkroom's clips hang real prints so the framings read as they will on the site (T75 draws the
 # site's own set at runtime). 2022 film shots with the camera in their caption, the Chinatown bus on the hero clip.
 STILL_PRINTS = [  # the two portrait photographs on the two portrait clips (0_1, 2_3)
-    ["a-fable-in-six-things", "the-varsity", "diner", "purples-and-blues", "colorful-tshirts", "take-a-minute"],
+    ["a-fable-in-six-things", "the-varsity", "diner", "rome-in-love", "colorful-tshirts", "take-a-minute"],
     ["taiwan-cafe", "boston-in-love", "chinatown-bus", "brownstone", "green-lamps"],
     ["reading-room", "courtyard", "boyhood-1", "manhattan-bridge", "chinatown-2", "ny-over-thanksgiving"],
 ]

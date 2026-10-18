@@ -17,8 +17,8 @@ export interface Photograph {
   year: number;
   place?: string;
   caption: string;
-  /** Camera and lens as his post names them; the film stock, when it was film. */
-  camera: string;
+  /** Camera and lens as his post names them (none on a photo he picked by name); the film stock, when it was film. */
+  camera?: string;
   film?: string;
   order: number;
   /** His marker line for the print's border; the date he posted it (YYYY-MM-DD). */
@@ -82,7 +82,7 @@ export const PHOTOGRAPHS: Photograph[] = Object.entries(entries)
         year: Number(data.year),
         place: optional(data.place),
         caption: String(data.caption),
-        camera: String(data.camera),
+        camera: optional(data.camera),
         film: optional(data.film),
         order: Number(data.order ?? Number.MAX_SAFE_INTEGER),
         sharpie: optional(data.sharpie),

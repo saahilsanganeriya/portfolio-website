@@ -68,30 +68,38 @@ const pages = defineCollection({
 });
 
 // The owner's own photography, one YAML file per photo, written by `npm run photos:ingest`. Never photos of him: only
-// what he shot on his film or digital camera and posted, with the camera line from his post as the evidence.
+// what he shot on his film or digital camera and posted, with the camera line from his post as the evidence (or his
+// own pick by name, for a post without one).
 const photography = defineCollection({
   loader: glob({ base: './src/content/photography', pattern: '[^_]*.{yaml,yml}' }),
   schema: ({ image }) =>
-    z.object({
-      file: image(),
-      title: z.string(),
-      /** The year he took it. */
-      year: z.number().int(),
-      place: z.string().optional(),
-      /** One line in his voice; it also serves as the photo's alt text. */
-      caption: z.string().max(140),
-      /** Camera and lens, as his post names them; film stock separately (none for digital). */
-      camera: z.string().min(1),
-      film: z.string().optional(),
-      /** The one order of the set: the room's darkroom line and SaahilOS both follow it. */
-      order: z.number().int().optional(),
-      /** The few words he writes on the print's border in the room, in marker. */
-      sharpie: z.string().max(40).optional(),
-      /** The day he posted it. */
-      date: z.coerce.date().optional(),
-      /** His own Instagram caption for it, as posted. */
-      igCaption: z.string().optional(),
-    }),
+    z
+      .object({
+        file: image(),
+        title: z.string(),
+        /** The year he took it. */
+        year: z.number().int(),
+        place: z.string().optional(),
+        /** One line in his voice; it also serves as the photo's alt text. */
+        caption: z.string().max(140),
+        /** Camera and lens, as his post names them; film stock separately (none for digital). */
+        camera: z.string().min(1).optional(),
+        /** He asked for this photograph by name, so it hangs without a camera line. */
+        ownerPick: z.literal(true).optional(),
+        film: z.string().optional(),
+        /** The one order of the set: the room's darkroom line and SaahilOS both follow it. */
+        order: z.number().int().optional(),
+        /** The few words he writes on the print's border in the room, in marker. */
+        sharpie: z.string().max(40).optional(),
+        /** The day he posted it. */
+        date: z.coerce.date().optional(),
+        /** His own Instagram caption for it, as posted. */
+        igCaption: z.string().optional(),
+      })
+      .refine((photo) => Boolean(photo.camera) || photo.ownerPick === true, {
+        message: 'a photograph needs the camera line from his post (or ownerPick: true when he asked for it by name)',
+        path: ['camera'],
+      }),
 });
 
 // ---- SaahilOS shelves: Books, Recipes and Voyager. Each may be empty (or absent) and the build still passes. ----
