@@ -63,7 +63,7 @@ GLTF_TRANSFORM = ["npx", "--yes", "-p", "@gltf-transform/cli@4.5.1", "gltf-trans
 # Byte budgets (brief 1.3, with T71's margin): the first frame is room.glb and what the site loads before it draws
 # the room (the two day halves of the window); the full set adds the full atlases and the Pale Blue Dot.
 MAX_FIRST_FRAME_BYTES = 5_500_000
-MAX_FULL_SET_BYTES = 23_000_000
+MAX_FULL_SET_BYTES = 25_000_000  # round nine: the full room <= 25,000,000 B (PLAN-ROUND-9 §4)
 VOID = "0x" + room_lib.VOID_HEX.lstrip("#")
 PALE_DOT_SOURCE = (5230, 5175)  # PIA23645's size; the print crops it square
 PALE_DOT_PX = 1024
