@@ -365,6 +365,7 @@ export class Application implements RoomHandle {
     void this.atlases.load((file, loaded, total) => progress.bytes(file, loaded, total));
     const undefer = deferWindowPictures(this.ktx2);
     const root = await loadRoom(ROOM_URL, this.renderer.gl, (loaded, total) => progress.bytes(roomFile, loaded, total || this.options.roomBytes || 0), this.ktx2).finally(undefer);
+    progress.loaded(roomFile);
     // Before anything is uploaded: dropping the largest mip level quarters the GPU memory the atlases take.
     if (this.light) halveTextures(root);
     this.nodes = readRoom(root);
@@ -542,6 +543,13 @@ export class Application implements RoomHandle {
       bytes(name: string, loaded: number, total: number) {
         downloads.set(name, { loaded, total });
         report({ name, bytes: { loaded, total }, done: total > 0 && loaded >= total });
+      },
+      /** The file has arrived whole, whatever its byte events said (a server may send no usable length). */
+      loaded(name: string) {
+        const d = downloads.get(name);
+        if (!d) return;
+        d.loaded = d.total = Math.max(d.loaded, d.total);
+        report({ name, bytes: { ...d }, done: true });
       },
       step(name: string) {
         steps = Math.min(LOAD_STEPS, steps + 1);
