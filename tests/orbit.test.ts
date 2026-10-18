@@ -109,8 +109,9 @@ describe('the orbit about the set', () => {
     expect(THREE.MathUtils.radToDeg(orbit.polar)).toBeLessThanOrEqual(80 + 1e-6);
   });
 
-  // Catches a coast whose speed rises again after the let-go, or wobbles with the frame rate (a fixed-step or
-  // first-order integration does at uneven frames), one that never stops, and a press that does not stop it.
+  // Catches a coast whose speed rises again after the let-go (a let-go handed more speed than the view had: on a slow
+  // machine, 100 ms frames, the view has caught up with the pointer by then), one that never stops, and a press that
+  // does not stop it.
   it('slows monotonically to rest after a flick at any frame rate, and stops at once under a press', () => {
     let now = 0;
     const realNow = performance.now;
@@ -121,8 +122,10 @@ describe('the orbit about the set', () => {
         for (let i = 0; i < 6; i++) {
           now += 16;
           orbit.drag(-25, 0, 900);
-          orbit.step(0.016);
+          orbit.step(0.1);
         }
+        now += 16;
+        orbit.drag(-25, 0, 900);
         orbit.release();
         return orbit;
       };

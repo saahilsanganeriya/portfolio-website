@@ -425,7 +425,7 @@ export class RoomCamera {
     this.look.step(this.lookGoal, dt, LOOK_SPRING);
     // The wide view sways by itself; so does the orbit once the visitor has left it alone a while.
     this.orbitRest += dt;
-    const swayOn = !this.still && (station === 'idle' || (station === 'orbit' && this.orbitRest > ORBIT_REST_S && this.orbit?.turning === 0));
+    const swayOn = !this.still && (station === 'idle' || (station === 'orbit' && this.orbitRest > ORBIT_REST_S && this.orbit?.settling === false));
     this.swayWeight.step([swayOn ? 1 : 0], dt, swayOn ? SWAY_IN : SWAY_OUT);
     this.apply();
   }

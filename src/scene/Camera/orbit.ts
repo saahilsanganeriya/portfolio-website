@@ -212,19 +212,17 @@ export class Orbit {
     return this.pivotGoal.equals(this.settings.center);
   }
 
-  /**
-   * How fast the set is turning now (radians a second): the view's speed, or the goal's when a key has just pushed it
-   * (after a let-go the view is never slower than its goal, so a coast only slows); zero once it has come to rest.
-   */
+  /** How fast the view is turning now (radians a second): zero once it has come to rest. */
   get turning() {
-    const view = Math.hypot(this.azimuthGoal - this.azimuth, this.polarGoal - this.polar) / FOLLOW_TAU_S;
-    return Math.max(view, Math.hypot(this.velocity.azimuth, this.velocity.polar));
+    return Math.hypot(this.azimuthGoal - this.azimuth, this.polarGoal - this.polar) / FOLLOW_TAU_S;
   }
 
-  /** Whether anything still moves: the turn, a rubber band springing back, the zoom or the pivot. */
+  /** Whether anything still moves: the turn (or a key's push the view has yet to follow), a rubber band springing back, the zoom or the pivot. */
   get settling() {
     return (
       this.turning > 0 ||
+      this.velocity.azimuth !== 0 ||
+      this.velocity.polar !== 0 ||
       this.polars.beyond(this.polarGoal) !== null ||
       this.radii.beyond(this.logRadiusGoal) !== null ||
       this.logRadius !== this.logRadiusGoal ||
