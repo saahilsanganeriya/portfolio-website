@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import sharp from 'sharp';
 import type {} from '../src/scene/Application/Application';
 
 const notes: { kind: string; lines: string[] }[] = JSON.parse(readFileSync(new URL('../src/content/sticky-notes.json', import.meta.url), 'utf8'));
@@ -262,7 +263,11 @@ test.describe('room v3 interactions with reduced motion', () => {
     expect((await world(page)).lava!.blend).toBe(1);
   });
 
-  /** Catches prints fading in (or swaying) for a reduced-motion visitor instead of hanging there, still, once drawn. */
+  /**
+   * Catches prints fading in (or swaying) for a reduced-motion visitor instead of hanging there, still, once drawn, and
+   * pictures that arrive without the room drawing them: with motion paused it draws only when something changed, and
+   * the prints once stayed blank paper on screen while the probe said shown.
+   */
   test('the darkroom’s prints appear at once and hold still', async () => {
     await page.evaluate(() => window.__room!.goto('photos'));
     await settledAt(page, 'photos');
@@ -270,6 +275,14 @@ test.describe('room v3 interactions with reduced motion', () => {
     const darkroom = (await world(page)).darkroom!;
     expect(darkroom.prints.map((p) => p.shown)).toEqual(darkroom.prints.map(() => 1));
     expect(darkroom.swaying).toBe(false);
+    // The hero's middle on screen: a night photograph spreads its luma by tens of levels; blank paper by a few.
+    const at = await page.evaluate(() => window.__room!.point('hit_darkroom_print_0'));
+    const shot = await page.screenshot({ clip: { x: at!.x - 40, y: at!.y - 30, width: 80, height: 60 } });
+    const { data } = await sharp(shot).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const lumas = Array.from({ length: data.length / 3 }, (_, i) => 0.2126 * data[i * 3] + 0.7152 * data[i * 3 + 1] + 0.0722 * data[i * 3 + 2]);
+    const mean = lumas.reduce((sum, v) => sum + v, 0) / lumas.length;
+    const spread = Math.sqrt(lumas.reduce((sum, v) => sum + (v - mean) ** 2, 0) / lumas.length);
+    expect(spread, 'luma spread across the hero print (levels)').toBeGreaterThan(15);
   });
 
 });

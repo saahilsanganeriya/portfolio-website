@@ -172,7 +172,7 @@ export class World {
 
   /** Something the visitor started is still moving: frames must be drawn even while motion is paused. */
   get animating() {
-    return Boolean(this.espresso?.busy || this.oven?.moving || this.lava?.changing || this.records?.animating || this.landing);
+    return Boolean(this.espresso?.busy || this.oven?.moving || this.lava?.changing || this.records?.animating || this.landing || this.darkroom?.changing);
   }
 
   /**

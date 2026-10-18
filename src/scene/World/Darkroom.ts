@@ -220,6 +220,9 @@ export class Darkroom {
   private loading: Promise<void> | null = null;
   private sinceCheck = CHECK_EVERY_S;
   private hung = false;
+  /** A picture arrived since the last frame; and whether the last update changed what the prints show. */
+  private arrived = false;
+  private changed = false;
 
   constructor(
     root: THREE.Object3D,
@@ -272,6 +275,11 @@ export class Darkroom {
   /** The density the view asks for now: the close-up set once the line shows more than UPGRADE_PX_PER_M. */
   densityFor(camera: THREE.PerspectiveCamera, viewportPx: number): 'small' | 'large' {
     return this.pxPerMetre(camera, viewportPx) > UPGRADE_PX_PER_M ? 'large' : 'small';
+  }
+
+  /** A picture arrived or a print is fading in: the room draws a frame even while motion is paused (reduced motion). */
+  get changing() {
+    return this.changed;
   }
 
   /** The room has a darkroom line to hang prints on. */
@@ -345,6 +353,7 @@ export class Darkroom {
             print.picture = url;
             print.mesh.material.uniforms.uMap.value = texture;
             print.shadow.visible = true;
+            this.arrived = true;
             if (instantly) print.mesh.material.uniforms.uShown.value = 1;
           } catch (error) {
             console.warn(`room: the print of ${print.photo.slug} did not load`, error);
@@ -360,9 +369,14 @@ export class Darkroom {
    * line shows more than UPGRADE_PX_PER_M (`viewportPx`: the canvas height in device pixels).
    */
   update(dt: number, camera: THREE.PerspectiveCamera, viewportPx: number, textures: TextureStore) {
+    this.changed = this.arrived;
+    this.arrived = false;
     for (const print of this.prints) {
       const shown = print.mesh.material.uniforms.uShown;
-      if (print.texture && shown.value < 1) shown.value = Math.min(1, shown.value + dt / FADE_S);
+      if (print.texture && shown.value < 1) {
+        shown.value = Math.min(1, shown.value + dt / FADE_S);
+        this.changed = true;
+      }
     }
     this.followWallMap();
     this.sinceCheck += dt;
