@@ -83,9 +83,10 @@ blender -b blender/room.blend -P blender/scripts/export.py
 Renders the stills and the room probe, writes the view's two day KTX2 files (ETC1S with mipmaps, `ktx create`) and
 `pale-blue-dot.ktx2` (NASA/JPL's PIA23645, cropped square, 1024 px), exports the glb, then runs gltf-transform 4.5.1
 (via `npx`): dedup, prune (empties and attributes kept), KTX2 ETC1S for the five first-frame atlases (1024 px), meshopt
-geometry. Then it encodes the full atlases into `public/room/atlas/` (`FULL_PX`, `FULL_CODEC`, each picked by an A/B
-of bytes, SSIM and crops: UASTC level 2 with RDO λ 1 and zstd 18 in KTX2 for the desk and the art at 4096 px and the bezel at 2048, AVIF crf 14
-for the props at 4096 px and the walls and floor at 3072 px) and writes
+geometry. Then it encodes the full atlases into `public/room/atlas/` through `scripts/encode-atlases.mjs`, which holds
+each atlas's size and codec (picked by an A/B of bytes, SSIM and crops: UASTC level 2 with RDO λ 1, a 32 KB dictionary
+and zstd 22 in KTX2 for the desk and the art at 4096 px and the bezel at 2048, AVIF crf 14 for the props at 4096 px and
+the walls and floor at 3072 px), and writes
 `public/room/atlases.json` and `public/room/floorplan.json` (floorplan.py). It fails if the first frame (room.glb and the
 two day halves of the window) is over 5,500,000 B, the full set over 25,000,000 B, a node from the contract below is
 missing, a removed one (or a night view's file) is back, or the probe is over 400 KB. Needs Node (`npx`), `ktx` from
