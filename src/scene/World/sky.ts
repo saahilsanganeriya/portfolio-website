@@ -146,8 +146,10 @@ export function completeDome(geometry: THREE.BufferGeometry, toWorld: THREE.Matr
     world.push(p);
     const d = p.clone().sub(frame.centre);
     const r = d.length();
+    const az = THREE.MathUtils.radToDeg(Math.atan2(d.dot(frame.out), d.dot(frame.right)));
     polar.push({
-      az: THREE.MathUtils.radToDeg(Math.atan2(d.dot(frame.out), d.dot(frame.right))),
+      // The half-circle runs 0..180°; its far end, rounded a hair in front of the centre, comes back as -180°.
+      az: az < -90 ? az + 360 : az,
       el: THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(d.y / Math.max(r, 1e-9), -1, 1))),
       r,
     });

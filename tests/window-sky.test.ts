@@ -227,4 +227,34 @@ describe('the sky behind the window, from every angle the orbit allows', () => {
     const far = new THREE.Vector3(mask.min.x + 100, frame.centre.y + 600, frame.centre.z - 400);
     expect(skyColour(far, frame)[2]).toBeGreaterThan(0.2);
   });
+
+  /**
+   * Catches a whole dome (the next export's: the build no longer culls the sky) left without its skirt, floor and fin:
+   * its far edge at 180°, rounded a hair in front of the centre, came back from atan2 as -180° and the grid was refused.
+   */
+  it('completes a whole dome too, its far edge at 180° included', () => {
+    const f: SkyFrame = { centre: new THREE.Vector3(), eye: new THREE.Vector3(0, 0, 3000), out: new THREE.Vector3(0, 0, -1), right: new THREE.Vector3(1, 0, 0), band: 620 };
+    const rings = [-3, 2, 6, 10, 15, 21, 28, 36, 45, 55, 66, 78, 88];
+    const positions: number[] = [];
+    for (const el of rings)
+      for (let c = 0; c <= 48; c++) {
+        const [a, e] = [THREE.MathUtils.degToRad(c * 3.75), THREE.MathUtils.degToRad(el)];
+        const back = c === 48 ? -1e-6 : Math.cos(e) * Math.sin(a);
+        positions.push(2000 * Math.cos(e) * Math.cos(a), 2000 * Math.sin(e), -2000 * back);
+      }
+    positions.push(0, 2000, 0);
+    const index: number[] = [];
+    for (let k = 0; k + 1 < rings.length; k++)
+      for (let c = 0; c < 48; c++) {
+        const at = (kk: number, cc: number) => kk * 49 + cc;
+        index.push(at(k, c), at(k, c + 1), at(k + 1, c + 1), at(k, c), at(k + 1, c + 1), at(k + 1, c));
+      }
+    for (let c = 0; c < 48; c++) index.push((rings.length - 1) * 49 + c, (rings.length - 1) * 49 + c + 1, rings.length * 49);
+    const dome = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)).setIndex(index);
+    const box = new THREE.Box3(new THREE.Vector3(-5000, -300, -4000), new THREE.Vector3(5000, 2500, 100));
+    const { filledCells, addedTriangles } = completeDome(dome, new THREE.Matrix4(), f, box);
+    expect(filledCells).toBe(0);
+    // The skirt (2 a column), the floor (32 x 6 cells) and the fin and slot (4 a step up each edge).
+    expect(addedTriangles).toBeGreaterThan(48 * 2 + 32 * 6 * 2);
+  });
 });
