@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { clearOf, parseEquation } from '../src/scene/World/StickyNotes';
-import { NOTE_SLOTS, readNotes, STICKY_NOTES } from '../src/scene/World/stickyContent';
+import { NOTE_SLOTS, readNotes, STICKY_NOTES, todoItem } from '../src/scene/World/stickyContent';
 
 describe('the sticky notes on the monitor', () => {
   // Catches the notes growing back past three (the owner: fewer, and each with a reason), two notes on one slot, or a
@@ -13,6 +13,13 @@ describe('the sticky notes on the monitor', () => {
     // A to-do's hover label reads out what is still open.
     expect(STICKY_NOTES[2].label).toMatch(/^To do: /);
     expect(STICKY_NOTES[2].label).not.toContain('idempotent');
+  });
+
+  // Catches an item written twice on the to-do: "make it idempotent" done twice reads as a bug, not the joke.
+  it('writes each to-do item once', () => {
+    const items = STICKY_NOTES[2].lines.map((line) => todoItem(line).text);
+    expect(items.filter((text) => text === 'make it idempotent')).toHaveLength(1);
+    expect(new Set(items).size).toBe(items.length);
   });
 
   // Catches a content edit that would draw a blank or garbled note instead of failing the build.
