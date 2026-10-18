@@ -4,6 +4,8 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { WORLD_SCALE } from '../src/scene/Application/RoomModel';
 import { BLEND_HALF_WIDTH_M, completeDome, skyColour, type SkyFrame } from '../src/scene/World/sky';
+import type { TextureStore } from '../src/scene/World/textures';
+import { WindowView } from '../src/scene/World/WindowView';
 
 // The sky behind the window as the orbit sees it, on the shipped room (public/room/room.glb, read here without the
 // site's loader): its dome, the mask round the view, the pane, the back wall and the orbit's limits. World units are
@@ -165,12 +167,13 @@ let halves: THREE.Mesh[] | null = null;
  * How many of the eyes see the void somewhere on the pane: a ray through it that meets no front face of the sky, nor
  * (asked only then, they are big) either city's land and water.
  */
-function unfilled(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) {
+function unfilled(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, cities?: THREE.Mesh[]) {
   const mesh = placed(geometry, matrix, THREE.FrontSide);
   halves ??= ['window_view_sf', 'window_view_delhi'].map((name) => {
     const half = meshNode(name);
     return placed(half.geometry, half.matrix, THREE.DoubleSide);
   });
+  const lands = cities?.map((city) => placed(city.geometry, city.matrixWorld, THREE.DoubleSide)) ?? halves;
   const raycaster = new THREE.Raycaster();
   const panes = panePoints();
   const { min, max } = pane();
@@ -184,12 +187,34 @@ function unfilled(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) {
       const back = eye.clone().addScaledVector(d, (mask.max.z - eye.z) / d.z);
       if (back.x < min.x || back.x > max.x || back.y < min.y || back.y > max.y) continue;
       raycaster.set(eye, d);
-      if (!raycaster.intersectObject(mesh, false).length && !raycaster.intersectObjects(halves, false).length) {
+      if (!raycaster.intersectObject(mesh, false).length && !raycaster.intersectObjects(lands, false).length) {
         missed.push(eye.toArray().map(Math.round).join(','));
         break;
       }
     }
   return { eyes: eyes.length, missed };
+}
+
+let built: { wall: THREE.Mesh; sky: THREE.Mesh; cities: THREE.Mesh[] } | null = null;
+
+/** The window as the site builds it (WindowView, on the shipped meshes under one group): the back wall, the sky, the cities. */
+function builtWindow() {
+  if (built) return built;
+  const group = new THREE.Group();
+  const add = (name: string) => {
+    const { geometry, matrix } = meshNode(name);
+    const mesh = new THREE.Mesh(geometry.clone(), new THREE.MeshBasicMaterial());
+    mesh.name = name;
+    matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
+    group.add(mesh);
+    return mesh;
+  };
+  const [wall, sky] = [add('wall_back'), add('window_sky'), add('window_view_mask')];
+  const views = (['sf', 'delhi'] as const).map((city) => ({ city, mesh: add(`window_view_${city}`), dayFile: null }));
+  group.updateMatrixWorld(true);
+  new WindowView(views, { mesh: sky, centre: frame.centre, eye: frame.eye }, null, {} as TextureStore);
+  built = { wall, sky, cities: views.map((v) => v.mesh) };
+  return built;
 }
 
 describe('the sky behind the window, from every angle the orbit allows', () => {
@@ -199,12 +224,30 @@ describe('the sky behind the window, from every angle the orbit allows', () => {
    * completeDome, 215 of its 918 eyes see the void (sky, land and water as shipped, 2026-10-18).
    */
   it('fills the pane from every eye where the back wall stands whole', () => {
-    const { geometry, filledCells } = completeDome(sky.geometry, sky.matrix, frame, mask);
-    const { eyes, missed } = unfilled(geometry, sky.matrix);
+    const { filledCells } = completeDome(sky.geometry, sky.matrix, frame, mask);
+    const window = builtWindow();
+    const { eyes, missed } = unfilled(window.sky.geometry, window.sky.matrixWorld, window.cities);
     expect(eyes).toBeGreaterThan(500);
     expect(missed, `${missed.length} of ${eyes} eyes see past the sky, e.g. ${missed.slice(0, 3).join(' | ')}`).toEqual([]);
     // The shipped dome has holes today; a dome built whole needs nothing filled, and this test still holds for it.
     expect(filledCells).toBeGreaterThanOrEqual(0);
+  });
+
+  /**
+   * Catches the hairline in the void at the set's right edge when zoomed out (T98, T95): the sky reached 1 cm past the
+   * back wall's free end (x 3.46 m against 3.45), Delhi's half 1.4 cm and the added sky out to the mask (3.48), and past
+   * the wall's end they showed edge-on as a light line. As the site builds the window, nothing of the sky or either city
+   * comes within 2 cm of an end of the wall.
+   */
+  it('keeps the sky and both cities 2 cm short of the back wall’s ends', () => {
+    const { wall, sky: dome, cities } = builtWindow();
+    const ends = new THREE.Box3().setFromObject(wall, true);
+    const inset = 0.02 * WORLD_SCALE;
+    for (const part of [dome, ...cities]) {
+      const box = new THREE.Box3().setFromObject(part, true);
+      expect(box.max.x, `${part.name} on the free end`).toBeLessThanOrEqual(ends.max.x - inset + 0.5);
+      expect(box.min.x, `${part.name} on the corner's end`).toBeGreaterThanOrEqual(ends.min.x + inset - 0.5);
+    }
   });
 
   /**
