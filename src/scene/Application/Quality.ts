@@ -42,6 +42,9 @@ export const FULL: QualityLadder = {
     { resolution: 0.4, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1, dither: false },
     // At the DPR cap of 2 this is the old bottom tier's 0.6 device pixels per CSS pixel.
     { resolution: 0.3, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1, dither: false },
+    // 0.4 device pixels per CSS pixel: round 9's wide view does about a third more work than round 8's at 0.6
+    // and fell to 30 fps on a software renderer; here it does less than round 8's did at 0.6 (T9H).
+    { resolution: 0.2, msaa: 0, grade: false, bloom: false, film: false, halos: false, shine: false, anisotropy: 1, dither: false },
   ],
   dprCap: 2,
 };
