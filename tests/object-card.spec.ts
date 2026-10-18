@@ -165,6 +165,8 @@ test('the keyboard reaches the card, Enter opens the window and takes focus into
   await clickProp(page, 'hit_nas');
   await atObject(page, 'hit_nas');
   await expect(card(page)).toBeVisible();
+  // axe reads colours: wait out the card's 0.3 s fade-in, or it measures a blend (T9C's full-suite run).
+  await expect(card(page)).toHaveCSS('opacity', '1');
   const { violations } = await new AxeBuilder({ page }).include('[data-room-card]').analyze();
   expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([]);
   const more = card(page).getByRole('button', { name: 'Learn more' });
