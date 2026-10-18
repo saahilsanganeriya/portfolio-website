@@ -411,17 +411,14 @@ export class Application implements RoomHandle {
     this.resize();
     this.observe();
 
-    // SaahilOS loads behind the dark screen while the atlases arrive, so it is ready when the camera reaches the glass;
-    // so does the live shine on the CRT glass and the desk, which would otherwise appear on them after the landing.
+    // SaahilOS loads behind the dark screen while the atlases arrive, so it is ready when the camera reaches the glass.
     // The CSS3D layer puts the OS's frame into the page only when it is first laid out, so that happens now.
     this.renderer.css.render(this.cssScene, this.camera.instance);
     const os = Promise.race([this.monitor.load(), new Promise((resolve) => setTimeout(resolve, OS_LOAD_TIMEOUT_MS))]).then(() => {
       progress.step();
       this.options.onOsLoaded?.();
     });
-    const shine = this.shine.start();
     await this.world.load();
-    await shine;
     progress.step();
     // Every atlas the wide view and the flight show, full size and on the GPU before the room is first drawn.
     await this.atlases.install(deadline);
@@ -436,6 +433,10 @@ export class Application implements RoomHandle {
     await os;
     await this.osWallpaper(deadline);
     await this.calibrate();
+    // The live shine on the CRT glass and the desk, at a tier that keeps it, made now rather than after the landing,
+    // where it appeared on the glass as the visitor arrived.
+    await this.shine.start();
+    await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
     progress.step();
     this.installProbe();
     // Behind the dark screen until the room starts; the ladder measures on from here.

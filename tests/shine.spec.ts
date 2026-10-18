@@ -24,7 +24,7 @@ async function difference(a: Buffer, b: Buffer) {
 
 /**
  * Catches the shine loading but never drawing (a shader that fails to compile draws nothing, and three only logs it)
- * and shine on a surface the A/B turned down: at the top tier the probe loads once the room is interactive, only the
+ * and shine on a surface the A/B turned down: at the top tier the probe loads before the room is shown, only the
  * desk top and the CRT glass shine, and turning the shine on changes the desk's pixels.
  */
 test('the top tier loads the probe, and the desk top and the CRT glass shine', async ({ page }) => {
@@ -55,8 +55,8 @@ test('the top tier loads the probe, and the desk top and the CRT glass shine', a
 
 /**
  * Catches the probe downloading on a machine the ladder has stepped down (its bytes and the prefiltering pass spent
- * for nothing): the load starts in the same step that makes the room interactive, so on a tier without shine the
- * shine is still waiting then, with no request for the probe.
+ * for nothing): the load starts once the room's tier is measured, so on a tier without shine the shine is still
+ * waiting when the room lands, with no request for the probe.
  */
 test('a tier without shine never fetches the probe', async ({ page }) => {
   const probeRequests: string[] = [];

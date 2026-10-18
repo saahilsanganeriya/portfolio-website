@@ -365,7 +365,7 @@ async function loadProbe(gl: THREE.WebGLRenderer): Promise<{ target: THREE.WebGL
 
 /**
  * Turns the shine on and off with the quality tier (`QualityTier.shine`), loading the probe the first time a tier asks
- * for it once the room has started loading it (behind the dark screen). Reduced motion leaves it on: nothing in it moves.
+ * for it once the room's tier is measured (behind the dark screen). Reduced motion leaves it on: nothing in it moves.
  */
 export class Shine {
   private state: ShineState = 'waiting';
