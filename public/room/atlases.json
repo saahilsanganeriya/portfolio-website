@@ -35,7 +35,7 @@
     "full": {
       "uri": "atlas/bezel.ktx2",
       "px": 1792,
-      "bytes": 1871294,
+      "bytes": 1783043,
       "format": "ktx2-uastc"
     }
   },
@@ -88,7 +88,7 @@
     "full": {
       "uri": "atlas/props.avif",
       "px": 4096,
-      "bytes": 1133508,
+      "bytes": 1029823,
       "format": "avif"
     }
   },
