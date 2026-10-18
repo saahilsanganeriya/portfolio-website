@@ -37,7 +37,7 @@ describe('atlas streaming', () => {
     const fetches: string[] = [];
     vi.stubGlobal('window', {});
     vi.stubGlobal('fetch', async (url: string) => (fetches.push(url), new Response('[]')));
-    const stream = (light: boolean) => new AtlasStreamer(new THREE.Scene(), {} as RoomRenderer, {} as KTX2Loader, { light, onSwap() {} }).start();
+    const stream = (light: boolean) => new AtlasStreamer(new THREE.Scene(), {} as RoomRenderer, {} as KTX2Loader, { light, onSwap() {} }).load();
     await stream(true);
     expect(fetches).toEqual([]);
     await stream(false);

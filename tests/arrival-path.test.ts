@@ -3,13 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Framing, RoomNodes } from '../src/scene/Application/RoomModel';
 import { RoomCamera } from '../src/scene/Camera/RoomCamera';
 
-// Room v3's framings (millimetres, as the room shows them): the boot framing, three arrival waypoints, the desk.
+// Room v3's framings (millimetres, as the room shows them): the boot framing, the wide view, the desk, the monitor.
 const framing = (position: number[], target: number[]): Framing => ({
   position: new THREE.Vector3(...position).multiplyScalar(1000),
   target: new THREE.Vector3(...target).multiplyScalar(1000),
   fov: 35,
 });
-const WAYPOINTS = [framing([2.75, 1.95, 2.85], [1.85, 1.45, -0.42]), framing([1.3, 1.45, 1.1], [1.44, 1.1, -0.35]), framing([0.4, 1.42, 1.8], [0, 1.05, 0])];
 const nodes = {
   root: new THREE.Object3D(),
   framings: {
@@ -25,39 +24,47 @@ const ASPECT = 1440 / 900;
 
 afterEach(() => vi.restoreAllMocks());
 
-/** Catches an arrival that skips its waypoints (straight to the desk) or lands early, late, or somewhere else. */
-describe('the arrival path', () => {
-  it('passes through every waypoint and lands at the desk when its time is up, whatever the frame rate', () => {
-    let now = 0;
-    vi.spyOn(performance, 'now').mockImplementation(() => now);
-    const camera = new RoomCamera(nodes, ASPECT);
-    let landedAt: number | null = null;
-    camera.flyPath(WAYPOINTS, 'desk', 4.8, () => (landedAt = now));
-    const pointer = new THREE.Vector2();
-    const path: THREE.Vector3[] = [];
-    // Frames 5 ms apart, so the closest frame to each waypoint is within a few millimetres of it.
-    while (camera.moving && now < 10_000) {
-      now += 5;
-      camera.update(0.005, 0, pointer);
-      path.push(camera.instance.position.clone());
-    }
-    expect(landedAt).toBe(4800);
-    expect(camera.phase).toBe('desk');
-    expect(camera.instance.position.distanceTo(nodes.framings.desk.position)).toBeLessThan(1);
-    for (const w of WAYPOINTS) expect(Math.min(...path.map((p) => p.distanceTo(w.position)))).toBeLessThan(15);
+/** Flies from the wide view into the monitor, as the arrival does, with frames `dt` seconds apart; returns the eyes. */
+function flyIn(dt: number) {
+  let now = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  const camera = new RoomCamera(nodes, ASPECT);
+  camera.fly('idle', 'fast', undefined, true);
+  let landed = false;
+  camera.fly('monitor', 'monitor', () => (landed = true));
+  const eyes = [camera.instance.position.clone()];
+  while (camera.moving && now < 20_000) {
+    now += dt * 1000;
+    camera.update(dt, 0, new THREE.Vector2());
+    eyes.push(camera.instance.position.clone());
+  }
+  return { camera, eyes, landed };
+}
+
+const monitorAt = nodes.monitor.position;
+
+/**
+ * Catches an arrival that arcs, detours (round 8 passed the window and the mango plant) or overshoots into the glass:
+ * from the wide view the camera's distance to the monitor shrinks at every frame and the eye stays on one straight line.
+ */
+describe('the arrival into the monitor', () => {
+  it('is one straight move from the wide view that never steps away from the glass', () => {
+    const { camera, eyes, landed } = flyIn(1 / 60);
+    expect(landed).toBe(true);
+    expect(camera.phase).toBe('monitor');
+    for (let i = 1; i < eyes.length; i++) expect(eyes[i].distanceTo(monitorAt)).toBeLessThanOrEqual(eyes[i - 1].distanceTo(monitorAt) + 1e-6);
+    const line = new THREE.Line3(eyes[0], eyes.at(-1)!);
+    const off = Math.max(...eyes.map((eye) => line.closestPointToPoint(eye, true, new THREE.Vector3()).distanceTo(eye)));
+    // World units are millimetres: within a millimetre of the straight line.
+    expect(off).toBeLessThan(1);
   });
 
-  /** Catches a glide stretched by slow frames: a 4 fps machine still lands on time, it only sees fewer frames. */
-  it('keeps its time at four frames a second', () => {
-    let now = 0;
-    vi.spyOn(performance, 'now').mockImplementation(() => now);
-    const camera = new RoomCamera(nodes, ASPECT);
-    let landedAt: number | null = null;
-    camera.flyPath(WAYPOINTS, 'desk', 4.8, () => (landedAt = now));
-    while (camera.moving && now < 10_000) {
-      now += 250;
-      camera.update(0.1, 0, new THREE.Vector2());
-    }
-    expect(landedAt).toBe(5000);
+  /** Catches a flight that bends or overshoots when frames come slowly (a loaded machine): the same line at 4 fps. */
+  it('keeps to the same line at four frames a second', () => {
+    const fast = flyIn(1 / 60);
+    const slow = flyIn(0.25);
+    expect(slow.landed).toBe(true);
+    expect(slow.eyes.at(-1)!.distanceTo(fast.eyes.at(-1)!)).toBeLessThan(1);
+    for (let i = 1; i < slow.eyes.length; i++) expect(slow.eyes[i].distanceTo(monitorAt)).toBeLessThanOrEqual(slow.eyes[i - 1].distanceTo(monitorAt) + 1e-6);
   });
 });

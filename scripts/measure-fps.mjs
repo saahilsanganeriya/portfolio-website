@@ -104,7 +104,7 @@ try {
     if (!row.pass) failed = true;
   };
 
-  // The arrival glide on /, from the boot framing to the desk, measured while nothing touches the page.
+  // The arrival on /, its flight from the wide view into the monitor, measured while nothing touches the page.
   record('arrival', await count(30_000, 'arrival'));
   await settle('desk');
   // The full-quality atlases stream in after the arrival; the phases measure the room with them.

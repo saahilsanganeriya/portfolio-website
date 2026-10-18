@@ -1,16 +1,17 @@
 // The room's payload (PLAN 3.9, 11.3, brief §1.3): the transfer size of every request `/` makes after the first
 // contentful paint, on the production build, split in two.
-//   initial:   everything requested before the room became interactive (the intro glide ended, no input yet):
-//              models, the first-frame atlases room.glb embeds, posters, decoders, scene code, the monitor's OS.
-//              Budget 6,000,000 B (the first room frame).
-//   on demand: everything a visit then pulls in: the full-quality atlases streamed after the first frame
-//              (public/room/atlases.json), the photographs and the photography chunk, the room's sound and music (first
+//   initial:   everything requested before the room was first shown (the dark screen began to fade, no input yet):
+//              models, the full-quality atlases the arrival shows (public/room/atlases.json, on the GPU before the
+//              first frame), posters, decoders, scene code, the monitor's OS. Budget 16,000,000 B (PLAN-ROUND-9 §2.1:
+//              the arrival never shows a small atlas, so the first frame is past round 8's 6,000,000 B).
+//   on demand: everything a visit then pulls in: an atlas that missed the arrival's deadline, the photographs and the
+//              photography chunk, the room's sound and music (they load once the room is shown, and play at the first
 //              input; here a press of the Sound button) and a look out of the window close up. Caps: music
 //              1,200,000 B (PLAN 11.3), the photographs' prints 1,500,000 B (PLAN-ROUND-7 §7), each sound effect
 //              150,000 B. Each on-demand request is put in a kind by its path, and pictures by the step of the visit
 //              that asked for them. Window pictures this visit never asked for are listed with their file sizes.
-// --full also waits, before the visit, until the streamed atlases have all arrived (window.__roomStats.done) and
-// checks the full room (initial + streamed atlases) against 25,000,000 B.
+// --full also waits, before the visit, until every atlas has arrived (window.__roomStats.done) and checks the full
+// room (initial + any streamed atlases) against 25,000,000 B.
 // Also checks "text before 3D": first contentful paint happens before the first .glb/.ktx2 response ends (PLAN 3.9),
 // and before the first byte of any 3D response arrives (PLAN 12.3): the models, textures, the Basis transcoder and the
 // scene's code chunk.
@@ -40,7 +41,7 @@ async function roomRecordingCount() {
 
 const args = process.argv.slice(2);
 const option = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
-const BUDGET = 6_000_000;
+const BUDGET = 16_000_000;
 const FULL_BUDGET = 25_000_000;
 const full = args.includes('--full');
 const MUSIC_CAP = 1_200_000;
@@ -81,9 +82,9 @@ try {
   const step = async (name) => steps.push({ name, at: await now() });
 
   await page.goto(new URL('/', server.url).href);
-  // Set as the arrival lands at the desk and kept: the desk's one-second hold itself is easy to miss on a slow frame.
+  // The first frame the visitor sees: the room's start, when the dark screen begins to fade.
   await page.waitForFunction(() => window.__room?.interactiveAt != null, null, { timeout: 180_000 });
-  const { origin, interactiveAt } = await page.evaluate(() => ({ origin: performance.timeOrigin, interactiveAt: window.__room.interactiveAt }));
+  const { origin, interactiveAt } = await page.evaluate(() => ({ origin: performance.timeOrigin, interactiveAt: window.__room.startedAt }));
   const interactiveEpoch = origin + interactiveAt;
   steps.push({ name: 'by itself', at: interactiveEpoch });
   let streamedEpoch = null;
@@ -208,7 +209,7 @@ try {
   console.log(`  ${'window, never needed'.padEnd(24)} ${String(unneeded).padStart(9)} B  (file sizes; not loaded in this visit)`);
 
   console.log(`requests: ${rows.length} (${initial.length} initial, ${onDemand.length} on demand)`);
-  console.log(`initial bytes (until the room is interactive, no input): ${sum(initial)} (budget ${BUDGET})`);
+  console.log(`initial bytes (until the room is first shown, no input): ${sum(initial)} (budget ${BUDGET})`);
   console.log(`on-demand bytes (this visit): ${sum(onDemand)}; of which music ${music} (cap ${MUSIC_CAP}), photographs ${board} (cap ${BOARD_CAP}), largest sound effect ${biggestSfx} (cap ${SFX_CAP})`);
   const fullRoom = sum(initial) + sum(streamed);
   if (full) {
@@ -220,7 +221,7 @@ try {
     }
   }
   console.log(`total bytes: ${sum(rows)}`);
-  console.log(`first contentful paint: ${fcp.toFixed(0)} ms; room interactive: ${interactiveAt.toFixed(0)} ms`);
+  console.log(`first contentful paint: ${fcp.toFixed(0)} ms; room first shown: ${interactiveAt.toFixed(0)} ms`);
   console.log(`first .glb/.ktx2 response end: ${Number.isFinite(firstModelEnd) ? (firstModelEnd - origin).toFixed(0) + ' ms' : 'none'}`);
   console.log(`first 3D byte: ${Number.isFinite(first3dByte.at) ? `${(first3dByte.at - origin).toFixed(0)} ms (${first3dByte.pathname})` : 'none'}`);
   console.log(`text-before-3D: ${textFirst}; text before the first 3D byte: ${textBeforeFirstByte}`);

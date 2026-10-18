@@ -38,18 +38,18 @@ const entry = (materials: string[], uri: string, format: string, bytes: number) 
   full: { uri, px: 2048, bytes, format },
 });
 
-/** Serves atlases.json and one atlas file; the file waits for `release` so the test can look before the swap. */
-async function serveAtlas(page: Page, json: object, uri: string, body: Buffer, contentType: string) {
+/** Serves atlases.json and one atlas file; the file waits for `release`, when given, so the test can look before the swap. */
+async function serveAtlas(page: Page, json: object, uri: string, body: Buffer, contentType: string, held = false) {
   let release!: () => void;
-  const released = new Promise<void>((resolve) => (release = resolve));
+  const released = held ? new Promise<void>((resolve) => (release = resolve)) : Promise.resolve();
   const requested: number[] = [];
   await page.route('**/room/atlases.json', (route) => route.fulfill({ json }));
   await page.route(`**${uri}`, async (route: Route) => {
-    requested.push(Date.now());
+    requested.push(await page.evaluate(() => performance.now()).catch(() => -1));
     await released;
     await route.fulfill({ body, contentType });
   });
-  return { release, requested };
+  return { release: () => release?.(), requested };
 }
 
 /** At the desk, motion paused: two shots differ only if the room's pixels did. */
@@ -74,44 +74,23 @@ async function meanRgb(png: Buffer) {
 const done = (page: Page) => page.waitForFunction(() => window.__roomStats?.done === true, null, { timeout: 120_000 });
 
 /**
- * Catches the full atlases loading before the first frame (they would count against the 6 MB first-frame budget),
- * a swap that leaves a material on the small texture or keeps both on the GPU, and a visible jump when the same
- * picture arrives at full size (wrong colour space, orientation or UV set on the streamed texture).
+ * Catches an atlas that is fetched only after the room is shown (the owner saw the desk sharpen as he arrived), and an
+ * image atlas (AVIF, WebP, JPEG) that never reaches the materials, or reaches them upside down or unlit: the room's
+ * very first frame already shows the full picture.
  */
-test('a KTX2 atlas streams after the room is interactive and swaps in without a jump', async ({ page }) => {
-  const { materials, ktx2 } = embeddedAtlas();
-  const uri = '/room/atlas/test.ktx2';
-  const atlas = await serveAtlas(page, [entry(materials, uri, 'ktx2-etc1s', ktx2.length)], uri, ktx2, 'image/ktx2');
-  const clip = await stillAtDesk(page);
-  const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
-  const texturesBefore = await page.evaluate(() => window.__roomStats!.gpu.info.textures);
-  const before = await page.screenshot({ clip });
-  atlas.release();
-  await done(page);
-
-  expect(atlas.requested.length, 'the atlas was requested').toBe(1);
-  expect(atlas.requested[0], 'not before the room is interactive').toBeGreaterThanOrEqual(interactive);
-  const stats = await page.evaluate(() => ({ atlases: window.__roomStats!.atlases, textures: window.__roomStats!.gpu.info.textures }));
-  expect(stats.atlases[0].state).toBe('full');
-  expect(stats.textures, 'the GPU holds as many textures as before: the first-frame one was freed').toBe(texturesBefore);
-  const after = await page.screenshot({ clip });
-  const [a, b] = [await meanRgb(before), await meanRgb(after)];
-  for (let c = 0; c < 3; c++) expect(Math.abs(a[c] - b[c]), `channel ${c} holds its level`).toBeLessThan(1.5);
-});
-
-/** Catches an image atlas (AVIF, WebP, JPEG) never reaching the materials, or reaching them upside down or unlit. */
-test('an image atlas decoded off the main thread replaces the first-frame texture on screen', async ({ page }) => {
+test('an image atlas is fetched with the room and is on screen from the first frame', async ({ page }) => {
   const { materials } = embeddedAtlas();
   const uri = '/room/atlas/test.png';
   const magenta = await sharp({ create: { width: 2048, height: 2048, channels: 3, background: '#ff00ff' } }).png().toBuffer();
   const atlas = await serveAtlas(page, [entry(materials, uri, 'png', magenta.length)], uri, magenta, 'image/png');
   const clip = await stillAtDesk(page);
-  const [r0, g0] = await meanRgb(await page.screenshot({ clip }));
-  atlas.release();
-  await done(page);
-  const [r1, g1, b1] = await meanRgb(await page.screenshot({ clip }));
-  expect(r1 - g1, 'the desk shows the streamed picture').toBeGreaterThan(r0 - g0 + 40);
-  expect(b1 - g1).toBeGreaterThan(40);
+  const stats = await page.evaluate(() => ({ started: window.__room!.startedAt!, atlases: window.__roomStats!.atlases, arrival: window.__roomStats!.arrival }));
+  expect(atlas.requested[0], 'requested before the room was shown').toBeLessThan(stats.started);
+  expect(stats.atlases[0]).toMatchObject({ state: 'full', beforeFirstFrame: true });
+  expect(stats.arrival?.timedOut).toBe(false);
+  const [r, g, b] = await meanRgb(await page.screenshot({ clip }));
+  expect(r - g, 'the desk shows the full picture').toBeGreaterThan(40);
+  expect(b - g).toBeGreaterThan(40);
   const texture = await page.evaluate(() => window.__roomStats!.gpu.textures.find((t) => t.width === 2048 && t.format === 'RGBA8'));
   expect(texture?.bytes, 'GPU memory counts the full atlas with its mipmaps').toBe(Math.round(2048 * 2048 * 4 * (4 / 3)));
 });
@@ -133,4 +112,31 @@ test('once the shipped atlases have streamed, nothing in the room draws a first-
     const held = textures.filter((t) => (t.name === atlas.name || t.name === `room_${atlas.name}`) && t.width === atlas.low.px);
     expect(held, `${atlas.name}: no material still holds its ${atlas.low.px} px first-frame atlas`).toEqual([]);
   }
+});
+
+/**
+ * Catches a room left dark for ever by a slow atlas (the 15 s deadline shows it with what has arrived), and a late
+ * swap that leaves a material on the small texture, keeps both on the GPU, or jumps when the same picture arrives at
+ * full size (wrong colour space, orientation or UV set on the streamed texture).
+ */
+test('an atlas that misses the deadline swaps in later without a jump', async ({ page }) => {
+  test.setTimeout(300_000);
+  const { materials, ktx2 } = embeddedAtlas();
+  const uri = '/room/atlas/test.ktx2';
+  const atlas = await serveAtlas(page, [entry(materials, uri, 'ktx2-etc1s', ktx2.length)], uri, ktx2, 'image/ktx2', true);
+  const clip = await stillAtDesk(page);
+  expect(await page.evaluate(() => window.__roomStats!.arrival)).toMatchObject({ timedOut: true });
+  expect(await page.evaluate(() => window.__roomStats!.atlases[0].state)).toBe('loading');
+  const texturesBefore = await page.evaluate(() => window.__roomStats!.gpu.info.textures);
+  const before = await page.screenshot({ clip });
+  atlas.release();
+  await done(page);
+
+  expect(atlas.requested.length, 'the atlas was requested once').toBe(1);
+  const stats = await page.evaluate(() => ({ atlases: window.__roomStats!.atlases, textures: window.__roomStats!.gpu.info.textures }));
+  expect(stats.atlases[0]).toMatchObject({ state: 'full', beforeFirstFrame: false });
+  expect(stats.textures, 'the GPU holds as many textures as before: the first-frame one was freed').toBe(texturesBefore);
+  const after = await page.screenshot({ clip });
+  const [a, b] = [await meanRgb(before), await meanRgb(after)];
+  for (let c = 0; c < 3; c++) expect(Math.abs(a[c] - b[c]), `channel ${c} holds its level`).toBeLessThan(1.5);
 });
