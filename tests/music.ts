@@ -35,6 +35,8 @@ export function strictAutoplay() {
 }
 
 const graph = (page: Page) => page.evaluate(() => window.__room!.audio!.graph());
+// The same sound from the moment it is made, while the room still loads (window.__room comes once it has loaded).
+const soundGraph = (page: Page) => page.evaluate(() => window.__roomAudio?.graph() ?? null);
 const os = (page: Page) => page.frameLocator('.room-monitor iframe');
 const FIRST_FADE_S = 1.5;
 const curve = powerCurve(0, 1);
@@ -53,13 +55,29 @@ export async function arrived(page: Page, path = '/') {
 async function fadesUpFromSilence(page: Page) {
   const first = (await (
     await page.waitForFunction(() => {
-      const g = window.__room!.audio!.graph() as { context: string; master: number | null; time?: number };
-      return g.context === 'running' ? { master: g.master ?? 0, time: g.time ?? 0 } : null;
+      const g = window.__roomAudio?.graph() as { context: string; master: number | null; time?: number } | undefined;
+      return g?.context === 'running' ? { master: g.master ?? 0, time: g.time ?? 0 } : null;
     }, null, { timeout: 15_000 })
   ).jsonValue())!;
+  // The fade starts when the sound is made, at the context's time 0 when a press makes both, later when the sound takes
+  // over a context a press made before it (so the fade is then at most this far in).
   expect(first.master, `the master at ${first.time.toFixed(2)} s into the fade`).toBeLessThanOrEqual(fadeAt(first.time + 0.15) + 0.02);
-  await page.waitForFunction(() => ((window.__room!.audio!.graph() as { time?: number }).time ?? 0) > 1.6, null, { timeout: 30_000 });
-  expect((await graph(page)).master).toBeGreaterThan(0.99);
+  await page.waitForFunction((from) => ((window.__roomAudio?.graph() as { time?: number } | undefined)?.time ?? 0) > from + 1.6, first.time, { timeout: 30_000 });
+  expect((await soundGraph(page))!.master).toBeGreaterThan(0.99);
+}
+
+/** Holds back the responses matching `url` until released; resolves `requested` once the page has asked for one. */
+async function holdBack(page: Page, url: string) {
+  let release = () => {};
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let requested = () => {};
+  const asked = new Promise<void>((resolve) => (requested = resolve));
+  await page.route(url, async (route) => {
+    requested();
+    await released;
+    await route.continue();
+  });
+  return { requested: asked, release };
 }
 
 /** The places a first press must start the music from, each a different path to the sound. */
@@ -117,6 +135,64 @@ export function musicTests() {
       await fadesUpFromSilence(page);
     });
   }
+
+  /**
+   * Catches a key on the BIOS screen that starts nothing (the music waited for the room), one that starts the sound at
+   * full level instead of the fade, and one that shows the room before its atlases are on the GPU.
+   */
+  test('a key on the BIOS screen starts the music, fading up from silence, and the room still waits for its atlases', async ({ page }) => {
+    await page.addInitScript(strictAutoplay);
+    const desk = await holdBack(page, '**/room/atlas/desk.*');
+    await page.goto('/');
+    const boot = page.locator('[data-boot]');
+    // The room's sound is made once room.glb has loaded; the desk atlas is still on its way.
+    await page.waitForFunction(() => window.__roomAudio != null, null, { timeout: 60_000 });
+    await desk.requested;
+    await expect(boot.getByText('Press any key for sound')).toBeVisible();
+    expect((await soundGraph(page))!.context).not.toBe('running');
+    await page.keyboard.press('KeyA');
+    await fadesUpFromSilence(page);
+    await expect(boot.getByText('Sound on')).toBeVisible();
+    // The music has run its whole fade and the room has not been shown: the press asked for sound, not for the room.
+    await expect(boot).toBeVisible();
+    expect(await page.evaluate(() => window.__room?.startedAt ?? null)).toBeNull();
+    desk.release();
+    await page.waitForFunction(() => window.__room?.startedAt != null, null, { timeout: 120_000 });
+    const atlases = await page.evaluate(() => window.__roomStats!.atlases);
+    for (const atlas of atlases) expect(atlas, `${atlas.name} full before the first visible frame`).toMatchObject({ state: 'full', beforeFirstFrame: true });
+    await expect(page.locator('[data-room-status]')).toHaveText(/Music is on/);
+    await expect(page.getByRole('button', { name: 'Sound' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  /**
+   * Catches a press that comes before the room's sound exists (room.glb still loading) being lost, as Safari loses a
+   * gesture's permission outside its own handler, and a second sound context made beside the one that press started.
+   */
+  test('a key before room.glb has loaded is not lost: the music starts once the room’s sound is made', async ({ page }) => {
+    await page.addInitScript(strictAutoplay);
+    await page.addInitScript(() => {
+      if (window !== window.top) return;
+      const Native = window.AudioContext;
+      const made = { count: 0 };
+      (window as unknown as { contextsMade: typeof made }).contextsMade = made;
+      window.AudioContext = class extends Native {
+        constructor(options?: AudioContextOptions) {
+          super(options);
+          made.count++;
+        }
+      };
+    });
+    const room = await holdBack(page, '**/room/room.glb');
+    await page.goto('/');
+    const boot = page.locator('[data-boot]');
+    await room.requested;
+    await page.keyboard.press('KeyA');
+    await expect(boot.getByText('Sound on')).toBeVisible();
+    expect(await page.evaluate(() => window.__roomAudio ?? null), 'the room’s sound is not made yet').toBeNull();
+    room.release();
+    await fadesUpFromSilence(page);
+    expect(await page.evaluate(() => (window as unknown as { contextsMade: { count: number } }).contextsMade.count)).toBe(1);
+  });
 
   /** Catches a volume or mute that resets on the next visit, and a remembered mute that autoplay or a first input overrides. */
   test('volume and mute are remembered; a remembered mute stays off until Sound is pressed', async ({ page }) => {

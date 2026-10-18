@@ -19,11 +19,23 @@ import { AtlasStreamer, createKtx2Loader, halveTextures, loadRoom, loadVoidColor
 import { readRoom, WORLD_SCALE, type RoomNodes, type StationName } from './RoomModel';
 import { RoomRenderer } from './Renderer';
 
+/** One line of the loading log: a file by its bytes, or a step of the load once it is done. */
+export interface LoadLine {
+  /** The file's name (`room.glb`, `desk.ktx2`) or the step's (`Shaders`). */
+  name: string;
+  /** A file's bytes so far and its size (0 while unknown); a step has none. */
+  bytes?: { loaded: number; total: number };
+  done: boolean;
+}
+
 export interface RoomOptions {
   /** The OS page shown on the monitor, e.g. `/os?embed=1`. */
   osUrl: string;
-  /** How far the room has loaded, in [0, 1]: its files by bytes, then the steps after them. Never goes back. */
-  onProgress(progress: number): void;
+  /**
+   * How far the room has loaded, in [0, 1] (its files by bytes, then the steps after them; never goes back), and the
+   * line of the log that moved it.
+   */
+  onProgress(progress: number, line: LoadLine): void;
   /** room.glb's size in bytes, for when the server sends it compressed (with no length). */
   roomBytes?: number;
   /** Cut between framings instead of gliding (prefers-reduced-motion). */
@@ -38,8 +50,12 @@ export interface RoomOptions {
   onLost?(): void;
   /** The arrival has ended (the camera at rest at the monitor, or taken over by the visitor): the ways on begin here. */
   onLanded?(): void;
-  /** SaahilOS has loaded on the monitor, behind the dark screen: it may load its full-size pictures now. */
+  /** SaahilOS has loaded on the monitor, behind the loading screen: it may load its full-size pictures now. */
   onOsLoaded?(): void;
+  /** The room's sound is made (room.glb has loaded, the rest still loads): the page's controls may drive it now. */
+  onAudio?(audio: AudioHandle): void;
+  /** A sound context the page made inside a gesture before the room's sound existed; the sound takes it over. */
+  audioContext?(): AudioContext | null;
 }
 
 export interface StartOptions {
@@ -144,10 +160,10 @@ export interface RoomHandle {
   dispose(): void;
 }
 
-// The OS iframe must not hold the room back for ever; past this it keeps loading behind the dark screen.
+// The OS iframe must not hold the room back for ever; past this it keeps loading behind the loading screen.
 const OS_LOAD_TIMEOUT_MS = 8000;
-// The room waits this long at most for its full atlases before it is shown with what has arrived (never a dark screen
-// for ever); the rest swap in as they land.
+// The room waits this long at most for its full atlases before it is shown with what has arrived (never a loading
+// screen for ever); the rest swap in as they land.
 const ARRIVAL_DEADLINE_MS = 15_000;
 // SaahilOS's full-size wallpaper gets this long after the OS has loaded (a renamed or missing picture never holds the
 // room back further).
@@ -157,8 +173,8 @@ const ARRIVAL_HOLD_MS = 500;
 // On a phone the arrival hands over to SaahilOS with this window; on the desktop the OS opens it by itself (its default),
 // so the room never moves the visitor's keyboard focus into the monitor while it flies.
 const ARRIVAL_WINDOW = 'about';
-// The loading line: the files' bytes fill this share of it, the steps after them (the posters and the window, the
-// shaders, SaahilOS, the measured tier, the GPU upload) the rest.
+// The loading screen's line: the files' bytes fill this share of it, the steps after them (the posters and the window,
+// the shaders, SaahilOS, the measured tier, the GPU upload) the rest.
 const BYTES_SHARE = 0.85;
 const LOAD_STEPS = 5;
 // A click this soon after the press that skipped the arrival belongs to that press.
@@ -207,7 +223,7 @@ export interface RoomProbe {
   /** performance.now() when the intro ended and the room became interactive; null before. */
   readonly interactiveAt: number | null;
   /**
-   * performance.now() when the room started (the dark screen began to fade, input reaches the room), and when the
+   * performance.now() when the room started (the loading screen began to fade, input reaches the room), and when the
    * arrival ended: the camera at rest at the monitor, or the visitor taking it over on the way; null before.
    */
   readonly startedAt: number | null;
@@ -243,6 +259,8 @@ export interface Calibration {
 declare global {
   interface Window {
     __room?: RoomProbe;
+    /** The room's sound from the moment it is made, while the room still loads (window.__room comes once it has). */
+    __roomAudio?: Pick<RoomAudio, 'graph'>;
   }
 }
 
@@ -342,9 +360,12 @@ export class Application implements RoomHandle {
     const deadline = new Promise<void>((resolve) => setTimeout(resolve, ARRIVAL_DEADLINE_MS));
     // The full atlases start downloading with room.glb (the desktop; phones keep the small set room.glb embeds).
     this.atlases = new AtlasStreamer(this.scene, this.renderer, this.ktx2, { light: this.light, onSwap: () => (this.dirty = true) });
-    void this.atlases.load((name, loaded, total) => progress.bytes(`atlas ${name}`, loaded, total));
+    const roomFile = ROOM_URL.split('/').pop()!;
+    progress.bytes(roomFile, 0, this.options.roomBytes ?? 0);
+    void this.atlases.load((file, loaded, total) => progress.bytes(file, loaded, total));
     const undefer = deferWindowPictures(this.ktx2);
-    const root = await loadRoom(ROOM_URL, this.renderer.gl, (loaded, total) => progress.bytes('room', loaded, total || this.options.roomBytes || 0), this.ktx2).finally(undefer);
+    const root = await loadRoom(ROOM_URL, this.renderer.gl, (loaded, total) => progress.bytes(roomFile, loaded, total || this.options.roomBytes || 0), this.ktx2).finally(undefer);
+    progress.loaded(roomFile);
     // Before anything is uploaded: dropping the largest mip level quarters the GPU memory the atlases take.
     if (this.light) halveTextures(root);
     this.nodes = readRoom(root);
@@ -370,7 +391,9 @@ export class Application implements RoomHandle {
     if (this.light) this.addMonitorProxy();
     this.effects = new Effects(this.nodes, this.scene);
     this.effects.setTier(this.renderer.effective(this.quality.tier));
-    this.audio = new RoomAudio({ crt: this.nodes.monitor.position, desk: this.nodes.framings.desk.target }, root);
+    this.audio = new RoomAudio({ crt: this.nodes.monitor.position, desk: this.nodes.framings.desk.target }, root, () => this.options.audioContext?.() ?? null);
+    window.__roomAudio = this.audio;
+    this.options.onAudio?.(this.audio);
     // Before the hover reactions: the world names and adds proxies (posters by slot, one per print, the dial's).
     this.world = new World(this.nodes, this.scene, this.container, this.ktx2, {
       fly: (station) => this.fly(station),
@@ -418,19 +441,19 @@ export class Application implements RoomHandle {
     this.resize();
     this.observe();
 
-    // SaahilOS loads behind the dark screen while the atlases arrive, so it is ready when the camera reaches the glass.
+    // SaahilOS loads behind the loading screen while the atlases arrive, so it is ready when the camera reaches the glass.
     // The CSS3D layer puts the OS's frame into the page only when it is first laid out, so that happens now.
     this.renderer.css.render(this.cssScene, this.camera.instance);
     const os = Promise.race([this.monitor.load(), new Promise((resolve) => setTimeout(resolve, OS_LOAD_TIMEOUT_MS))]).then(() => {
-      progress.step();
+      progress.step('SaahilOS');
       this.options.onOsLoaded?.();
     });
     await this.world.load();
-    progress.step();
+    progress.step('Posters, prints and window');
     this.renderer.prepareTextures(this.scene);
     // Compile every shader now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
-    progress.step();
+    progress.step('Shaders');
     // SaahilOS's boot would share the main thread with the frames being timed; its wallpaper is the last thing the
     // arrival shows, so it must be at full size when the camera reaches the glass.
     await os;
@@ -438,7 +461,7 @@ export class Application implements RoomHandle {
     // The tier is measured on the small set room.glb embeds while the full atlases still download: a tier with other
     // filtering would upload every full atlas a second time.
     await this.calibrate();
-    progress.step();
+    progress.step('GPU test');
     // Every atlas the wide view and the flight show, full size and on the GPU at the measured tier's filtering before
     // the room is first drawn; then the live shine on the CRT glass and the desk, made now rather than after the
     // landing, where it appeared on the glass as the visitor arrived.
@@ -447,14 +470,14 @@ export class Application implements RoomHandle {
     await this.shine.start();
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
     this.warmUp();
-    progress.step();
+    progress.step('Upload to GPU');
     this.installProbe();
-    // Behind the dark screen until the room starts; the ladder measures on from here.
+    // Behind the loading screen until the room starts; the ladder measures on from here.
     this.loop();
   }
 
   /**
-   * One frame with the full set, drawn and waited for behind the dark screen: whatever a GPU does the first time it
+   * One frame with the full set, drawn and waited for behind the loading screen: whatever a GPU does the first time it
    * samples a new texture happens here, not in the first frames the visitor sees (on software WebGL they were slow
    * enough to stretch the wide view's hold from 1 s to 2.2 s).
    */
@@ -497,12 +520,15 @@ export class Application implements RoomHandle {
     });
   }
 
-  /** The loading line's value: bytes of every download against their sizes, then whole steps; it only ever rises. */
+  /**
+   * The loading screen's value and log: bytes of every download against their sizes, then whole steps. The value only
+   * ever rises; each file's line and each step's are reported as they move.
+   */
   private progress() {
     const downloads = new Map<string, { loaded: number; total: number }>();
     let steps = 0;
     let shown = 0;
-    const report = () => {
+    const report = (line: LoadLine) => {
       let loaded = 0;
       let total = 0;
       for (const d of downloads.values()) {
@@ -510,22 +536,30 @@ export class Application implements RoomHandle {
         total += d.total || d.loaded;
       }
       const value = (total ? (loaded / total) * BYTES_SHARE : 0) + (steps / LOAD_STEPS) * (1 - BYTES_SHARE);
-      if (value > shown) this.options.onProgress((shown = Math.min(1, value)));
+      shown = Math.max(shown, Math.min(1, value));
+      this.options.onProgress(shown, line);
     };
     return {
       bytes(name: string, loaded: number, total: number) {
         downloads.set(name, { loaded, total });
-        report();
+        report({ name, bytes: { loaded, total }, done: total > 0 && loaded >= total });
       },
-      step() {
+      /** The file has arrived whole, whatever its byte events said (a server may send no usable length). */
+      loaded(name: string) {
+        const d = downloads.get(name);
+        if (!d) return;
+        d.loaded = d.total = Math.max(d.loaded, d.total);
+        report({ name, bytes: { ...d }, done: true });
+      },
+      step(name: string) {
         steps = Math.min(LOAD_STEPS, steps + 1);
-        report();
+        report({ name, done: true });
       },
     };
   }
 
   /**
-   * The tier the arrival starts at, measured on frames of the room behind the dark screen, each timed until the GPU
+   * The tier the arrival starts at, measured on frames of the room behind the loading screen, each timed until the GPU
    * has finished it. The time between two animation frames is no measure here: the browser queues a dozen frames for
    * the GPU before it holds the next one back, and the glide then waited for those queued top-tier frames (T82).
    */
@@ -741,6 +775,7 @@ export class Application implements RoomHandle {
     this.renderer.dispose();
     for (const el of this.layers) el.remove();
     delete window.__room;
+    delete window.__roomAudio;
   }
 
   private onHotspot(hotspot: Hotspot, proxy: THREE.Object3D) {

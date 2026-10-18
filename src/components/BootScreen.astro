@@ -1,0 +1,217 @@
+---
+// The computer's power-on self-test, shown while the room loads; it hands over to the room once everything the arrival
+// shows is on the GPU. The page script (layouts/Room.astro) writes its log from the room's own loading, dates it, says
+// what a key does for the sound and fades it out; this is markup and style.
+---
+
+<div class="boot" data-boot data-room-ui>
+  <div class="boot-screen">
+    <header class="boot-head">
+      <div>
+        <p class="boot-mark">SAAHIL BIOS</p>
+        <p>(C) 2026 Saahil Sanganeriya</p>
+      </div>
+      <p class="boot-release">Room BIOS rev. 2026</p>
+    </header>
+
+    <div class="boot-body" aria-hidden="true">
+      <p class="boot-device">GPU    : <span data-boot-gpu>WebGL</span></p>
+      <p class="boot-device">Screen : <span data-boot-screen></span></p>
+      <p class="boot-gap" data-boot-status>LOADING RESOURCES</p>
+      <ol class="boot-log" data-boot-log></ol>
+    </div>
+
+    <div class="boot-thread" role="progressbar" aria-label="Loading the room" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-boot-progress>
+      <span data-boot-bar></span>
+    </div>
+
+    <footer class="boot-foot" aria-hidden="true">
+      <p class="boot-sound" data-boot-sound="waiting">
+        <span class="boot-sound-key">Press any key for sound</span><span class="boot-sound-tap">Tap for sound</span><span class="boot-sound-on">Sound on</span><span class="boot-sound-off">Sound off</span>
+      </p>
+      <p><time data-boot-today></time></p>
+    </footer>
+  </div>
+</div>
+
+<style>
+  .boot {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    overflow: hidden;
+    /* The void the room floats in, so the room fades in out of the same colour. */
+    background: var(--room-void, var(--ink));
+    color: var(--paper);
+    font-family: var(--font-mono);
+    font-size: clamp(0.8125rem, 0.6rem + 1.1vw, 1rem);
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    /* The page sets --room-reveal-ms to the time the room's fade-in takes. */
+    transition: opacity var(--room-reveal-ms, 500ms) ease-out;
+  }
+
+  /* Faint scanlines, the tube's own texture. */
+  .boot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.22) 0 1px, transparent 1px 3px);
+  }
+
+  .boot[data-state='gone'] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .boot-screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: clamp(1.5rem, 5vw, 3.5rem);
+    /* The room's Sound and Pause controls sit over the bottom edge; the footer's lines stay above them. */
+    padding-bottom: max(clamp(1.5rem, 5vw, 3.5rem), calc(var(--space-3) + 3rem));
+    animation: gate-weave 0.5s steps(1) infinite;
+  }
+
+  /* Film gate weave: the frame never sits quite still in the projector. Only here, never over reading text. */
+  @keyframes gate-weave {
+    0% { transform: translate(0, 0); }
+    20% { transform: translate(0.5px, -0.4px); }
+    40% { transform: translate(-0.4px, 0.6px); }
+    60% { transform: translate(0.3px, 0.2px); }
+    80% { transform: translate(-0.5px, -0.3px); }
+  }
+
+  /* The projector settles once the room takes over, when motion is paused, and for a visitor who asks for less motion. */
+  .boot[data-state='gone'] .boot-screen,
+  :global(html.room-paused) .boot-screen {
+    animation: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .boot {
+      transition: none;
+    }
+
+    .boot-screen {
+      animation: none;
+    }
+
+    .boot-thread span {
+      transition: none;
+    }
+  }
+
+  .boot-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 4rem;
+  }
+
+  .boot-mark {
+    color: var(--paper);
+    font-size: 1.3125em;
+    letter-spacing: 0.12em;
+  }
+
+  .boot-release,
+  .boot-body,
+  .boot-foot {
+    color: var(--dust);
+  }
+
+  .boot-body {
+    margin-top: 2rem;
+  }
+
+  .boot-device {
+    white-space: pre;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .boot-gap {
+    margin-top: 1.5rem;
+  }
+
+  .boot-log {
+    max-width: 38.5rem;
+    margin: 0.5rem 0 0;
+    padding-left: clamp(1rem, 3vw, 2rem);
+    list-style: none;
+  }
+
+  /* One line a file or step: its name, a dot leader, its size, then its percent or OK. */
+  .boot-log :global(li) {
+    display: grid;
+    grid-template-columns: max-content minmax(2ch, 1fr) 7ch 4ch;
+    gap: 1ch;
+    white-space: nowrap;
+  }
+
+  .boot-log :global(.leader) {
+    overflow: hidden;
+  }
+
+  .boot-log :global(.leader)::before {
+    content: '................................................................................';
+  }
+
+  .boot-log :global(.size),
+  .boot-log :global(.state) {
+    text-align: right;
+  }
+
+  .boot-log :global(.state) {
+    color: var(--projector);
+  }
+
+  /* The loading line is the site's thread: it runs out as the room arrives. */
+  .boot-thread {
+    position: relative;
+    height: 1px;
+    margin-top: 1.5rem;
+    max-width: 38.5rem;
+    background: rgb(168 159 145 / 0.2);
+  }
+
+  .boot-thread span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    background: var(--thread);
+    transition: width 0.3s ease-out;
+  }
+
+  .boot-foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 2rem;
+    margin-top: auto;
+  }
+
+  /* The footer says what a key or tap does for the sound now: start it, nothing (it is on), or nothing (turned off). */
+  .boot-sound span {
+    display: none;
+  }
+
+  .boot-sound[data-boot-sound='waiting'] .boot-sound-key,
+  .boot-sound[data-boot-sound='on'] .boot-sound-on,
+  .boot-sound[data-boot-sound='off'] .boot-sound-off {
+    display: inline;
+  }
+
+  /* A touch screen has no keys to press. */
+  @media (pointer: coarse) {
+    .boot-sound[data-boot-sound='waiting'] .boot-sound-key {
+      display: none;
+    }
+
+    .boot-sound[data-boot-sound='waiting'] .boot-sound-tap {
+      display: inline;
+    }
+  }
+</style>

@@ -2,8 +2,10 @@ import type { AudioHandle } from './RoomAudio';
 import { readSettings, writeSettings, type SoundSettings } from './state';
 
 export interface SoundControls {
-  /** Hands the controls the room's sound once it has loaded; they apply the remembered volume and mute to it. */
+  /** Hands the controls the room's sound once it is made; they apply the remembered volume and mute to it. */
   attach(audio: AudioHandle): void;
+  /** The visitor's remembered choice: the sound stays off until the toggle turns it on. */
+  readonly muted: boolean;
 }
 
 const storage = () => {
@@ -35,7 +37,14 @@ export function mountSoundControls(toggle: HTMLButtonElement, slider: HTMLInputE
   };
 
   toggle.addEventListener('click', () => {
-    if (!audio) return;
+    if (!audio) {
+      // Before the room's sound is made (the room still loading) the toggle is not playing, so its press means on; the
+      // page keeps that press's permission for the sound (src/scene/audio/gesture.ts).
+      settings.muted = false;
+      writeSettings(store, settings);
+      show();
+      return;
+    }
     // Pressed while it plays, it turns the sound off; otherwise on (its own press is a gesture, so the browser allows it).
     settings.muted = audio.unlocked && !settings.muted;
     audio.setMuted(settings.muted);
@@ -53,6 +62,9 @@ export function mountSoundControls(toggle: HTMLButtonElement, slider: HTMLInputE
 
   show();
   return {
+    get muted() {
+      return settings.muted;
+    },
     attach(handle) {
       audio = handle;
       handle.setVolume(settings.volume);

@@ -46,3 +46,17 @@ export function listenInFrame(frame: HTMLIFrameElement, onGesture: (event: Event
     remove();
   };
 }
+
+/**
+ * A sound context made inside a gesture that comes before the room's sound exists (room.glb still loading), so the
+ * permission that gesture carries is kept: the context runs, and the room's sound takes it over once made. Null where
+ * the browser has no Web Audio.
+ */
+export function gestureContext(): AudioContext | null {
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return null;
+  const ctx = new Ctor();
+  // Safari may still hold a context made in a gesture as `interrupted`; resuming it in the same handler counts.
+  if (ctx.state !== 'running') void ctx.resume().catch(() => {});
+  return ctx;
+}

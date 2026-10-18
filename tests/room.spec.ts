@@ -42,22 +42,31 @@ async function seriousAxeViolations(page: Page): Promise<string[]> {
 }
 
 /**
- * Catches the BIOS screen coming back (its words, its log, "press any key"), a loading screen with more than its one
- * line, a line that runs backwards, and a room shown before every full atlas is on the GPU: the owner saw the desk and
- * the monitor blocky for a moment, then sharpen. The wide view the room opens on also holds the darkroom line and the
- * Pale Blue Dot, which once showed bare strings and a black square in that first frame.
+ * Catches a loading screen whose log or line is not the room's own loading (a fixed script, a line that runs back, a file
+ * that never shows its bytes arriving), one that offers to skip to a room that is not ready, and a room shown before
+ * every full atlas is on the GPU: the owner saw the desk and the monitor blocky for a moment, then sharpen. The wide view
+ * the room opens on also holds the darkroom line and the Pale Blue Dot, which once showed bare strings and a black
+ * square in that first frame.
  */
-test('a dark screen with one progress line hands over to the room only once every full atlas is on the GPU', async ({ page }) => {
-  // In the page: the line's values as they change, and the moment the dark screen first starts to fade.
+test('the BIOS screen logs the room’s real loading and hands over only once every full atlas is on the GPU', async ({ page }) => {
+  // In the page: the line's values as they change, the desk atlas's line as it changes, and the moment the screen fades.
   await page.addInitScript(() => {
-    const marks = { values: [] as number[], revealAt: null as number | null, shown: null as { prints: number[]; paleBlueDot: number | null } | null };
+    const marks = {
+      values: [] as number[],
+      desk: [] as string[],
+      revealAt: null as number | null,
+      shown: null as { prints: number[]; paleBlueDot: number | null } | null,
+    };
     (window as unknown as { marks: typeof marks }).marks = marks;
     const watch = () => {
-      const loader = document.querySelector('[data-room-loader]');
-      if (loader) {
-        const value = Number(loader.querySelector('[data-room-progress]')?.getAttribute('aria-valuenow'));
+      const boot = document.querySelector('[data-boot]');
+      if (boot) {
+        const value = Number(boot.querySelector('[data-boot-progress]')?.getAttribute('aria-valuenow'));
         if (marks.values.at(-1) !== value) marks.values.push(value);
-        if (marks.revealAt === null && Number(getComputedStyle(loader).opacity) < 1) {
+        const desk = [...boot.querySelectorAll('[data-boot-log] li')].find((li) => li.querySelector('.name')?.textContent?.startsWith('desk.'));
+        const state = desk?.querySelector('.state')?.textContent ?? null;
+        if (state !== null && marks.desk.at(-1) !== state) marks.desk.push(state);
+        if (marks.revealAt === null && Number(getComputedStyle(boot).opacity) < 1) {
           marks.revealAt = performance.now();
           const world = window.__room?.world;
           marks.shown = { prints: world?.darkroom?.prints.map((p) => p.shown) ?? [], paleBlueDot: world?.paleBlueDot ?? null };
@@ -67,21 +76,36 @@ test('a dark screen with one progress line hands over to the room only once ever
     };
     requestAnimationFrame(watch);
   });
+  // A line slow enough for the log to show each file part way: the arrival set (~22 MB) takes about 2 s at 100 Mbit/s.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 5, downloadThroughput: 12.5e6, uploadThroughput: 12.5e6 });
   await page.goto('/');
-  const loader = page.locator('[data-room-loader]');
-  await expect(loader).toBeVisible();
-  await expect(loader).toHaveCSS('background-color', 'rgb(20, 17, 15)');
-  await expect(loader.getByRole('progressbar', { name: 'Loading the room' })).toBeAttached();
-  expect(await loader.innerText(), 'the dark screen has no words').toBe('');
-  expect(await page.content()).not.toMatch(/BIOS|press any key|tap to skip|data-boot/i);
+  const boot = page.locator('[data-boot]');
+  await expect(boot).toBeVisible();
+  await expect(boot).toHaveCSS('background-color', 'rgb(20, 17, 15)');
+  await expect(boot.getByRole('progressbar', { name: 'Loading the room' })).toBeAttached();
+  await expect(boot).toContainText('SAAHIL BIOS');
+  await expect(boot).toContainText('(C) 2026 Saahil Sanganeriya');
+  await expect(boot.getByText('Press any key for sound')).toBeVisible();
+  expect(await boot.innerText(), 'nothing to skip to: the room shows itself once it is ready').not.toMatch(/skip|intro/i);
+  // The footer asks for the key, so the Sound button does not glow over the BIOS screen as well (T98).
+  await expect(page.getByRole('button', { name: 'Sound' })).toHaveCSS('box-shadow', 'none');
 
   await settled(page, 'monitor');
-  await expect(loader).toBeHidden();
-  const { values, revealAt, shown } = await page.evaluate(
-    () => (window as unknown as { marks: { values: number[]; revealAt: number; shown: { prints: number[]; paleBlueDot: number | null } } }).marks,
+  await expect(boot).toBeHidden();
+  const { values, desk, revealAt, shown } = await page.evaluate(
+    () =>
+      (window as unknown as { marks: { values: number[]; desk: string[]; revealAt: number; shown: { prints: number[]; paleBlueDot: number | null } } })
+        .marks,
   );
   expect(values.at(-1)).toBe(100);
   expect(values, 'the line never goes back').toEqual([...values].sort((x, y) => x - y));
+  const percents = desk.filter((d) => /^\d+%$/.test(d)).map((d) => parseInt(d, 10));
+  expect(percents.filter((n) => n > 0 && n < 100).length, `the desk atlas's line followed its bytes: ${desk.join(' ')}`).toBeGreaterThan(1);
+  expect(percents, 'its percent never goes back').toEqual([...percents].sort((x, y) => x - y));
+  expect(desk.at(-1)).toBe('OK');
+
   const atlases = await page.evaluate(() => window.__roomStats!.atlases);
   expect(atlases.length).toBeGreaterThan(0);
   for (const atlas of atlases) {
@@ -91,6 +115,18 @@ test('a dark screen with one progress line hands over to the room only once ever
   expect(shown.prints.length, 'the darkroom prints hung before the first visible frame').toBeGreaterThan(0);
   expect(shown.prints, 'every print drawn before the first visible frame').toEqual(shown.prints.map(() => 1));
   expect(shown.paleBlueDot, 'the Pale Blue Dot drawn before the first visible frame').toBe(1);
+  // Every file the arrival loads and every step after them has its line, and each one is done.
+  const log = await boot.evaluate((el) => [...el.querySelectorAll('[data-boot-log] li')].map((li) => [li.querySelector('.name')!.textContent, li.querySelector('.state')!.textContent]));
+  const files = await page.evaluate(async () => ((await (await fetch('/room/atlases.json')).json()) as { full: { uri: string } }[]).map((a) => a.full.uri.split('/').pop()!));
+  expect(Object.fromEntries(log)).toEqual({
+    'room.glb': 'OK',
+    ...Object.fromEntries(files.map((file) => [file, 'OK'])),
+    SaahilOS: 'OK',
+    'Posters, prints and window': 'OK',
+    Shaders: 'OK',
+    'GPU test': 'OK',
+    'Upload to GPU': 'OK',
+  });
   await expect(page.locator('[data-room-status]')).toHaveText(/^The room has loaded\./);
 });
 
@@ -143,6 +179,10 @@ test('/ is the room alone: nothing to scroll to and no links beside it', async (
 test('a project address flies in like the arrival and lands in front of the monitor with that project open', async ({ page }) => {
   await page.goto(`/projects/${PROJECT.slug}`);
   await expect(page).toHaveTitle(new RegExp(`^${PROJECT.title}`));
+  // The same BIOS screen while the room loads; a key there only asks for the sound, it skips nothing.
+  await expect(page.locator('[data-boot]')).toContainText('SAAHIL BIOS');
+  await page.keyboard.press('KeyA');
+  await expect(page.locator('[data-boot]')).toBeVisible();
   await settled(page, 'monitor', 120_000);
   await expect(os(page).getByRole('dialog', { name: PROJECT.title })).toBeVisible();
   // The window focused itself inside SaahilOS; that is not the visitor moving, so the camera stays where it landed.
@@ -485,7 +525,7 @@ test('tabbing out of SaahilOS backs out to the desk, and tabbing back in and out
 /** Catches WCAG failures on the loading screen and the room's own controls (the OS's windows are checked with it open). */
 test('the room has no axe violations, while loading and in the room', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('[data-room-loader]')).toBeVisible();
+  await expect(page.locator('[data-boot]')).toBeVisible();
   const check = async (when: string) => {
     const { violations } = await new AxeBuilder({ page }).withTags(AXE_TAGS).exclude('iframe').analyze();
     expect(violations.map((v) => `${when}: ${v.id} (${v.nodes.length})`)).toEqual([]);
@@ -495,10 +535,14 @@ test('the room has no axe violations, while loading and in the room', async ({ p
   await check('room');
 });
 
-/** Catches the reduced-motion visitor getting camera glides or running effects. */
+/** Catches the reduced-motion visitor getting camera glides, running effects, a weaving BIOS screen or a fade. */
 test('with reduced motion the room starts paused and lands at the monitor with the window', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/about');
+  // The BIOS screen sits still (no gate weave over its scanlines) and leaves by a cut, not a fade.
+  await expect(page.locator('[data-boot] .boot-screen')).toHaveCSS('animation-name', 'none');
+  const fade = await page.locator('[data-boot]').evaluate((el) => parseFloat(getComputedStyle(el).transitionDuration));
+  expect(fade, 'the hand-over is a cut (the site shortens any transition left to 0.01 ms)').toBeLessThan(0.001);
   await page.waitForFunction(() => window.__room?.phase === 'monitor', null, { timeout: 120_000 });
   expect(await page.evaluate(() => window.__room!.moving)).toBe(false);
   await expect(page.getByRole('button', { name: 'Pause motion' })).toHaveAttribute('aria-pressed', 'true');
@@ -516,7 +560,7 @@ test('without WebGL the drawn monitor shows SaahilOS with the window open', asyn
     await page.goto(`/projects/${PROJECT.slug}`);
     await expect(page.locator('html')).toHaveClass(/room-2d/);
     await expect(drawnOs(page).getByRole('dialog', { name: PROJECT.title })).toBeVisible();
-    await expect(page.locator('[data-room-loader]')).toBeHidden();
+    await expect(page.locator('[data-boot]')).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(900);
     expect(await seriousAxeViolations(page)).toEqual([]);
     expect(sceneRequests).toEqual([]);
