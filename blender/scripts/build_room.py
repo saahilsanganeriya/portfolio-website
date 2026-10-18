@@ -66,7 +66,8 @@ CREDENZA_TOP = 0.60  # the low walnut credenza under the posters that carries th
 PROPS = {
     "fujifilm_x100": ((-0.60, -0.29, 0.7345), 18, (0.128, 0.055, 0.075)),
     "nas_4bay": ((0.545, 0.135, 0.7325), 30, (0.27, 0.31, 0.23)),
-    "mango_plant": ((1.44, 0.345, WIN_Z0), 0, (0.45, 0.40, 0.45)),
+    # x 1.37: the leaves clear the Painted Ladies in the window framing; the canopy stays inside the opening
+    "mango_plant": ((1.37, 0.345, WIN_Z0), 0, (0.45, 0.40, 0.45)),
     # Kitchen nook on the counter at the left wall's front end, fronts turned to the room (+X).
     "espresso_machine": ((X_LEFT + 0.28, -2.43, KITCHEN_TOP), 90, (0.23, 0.38, 0.55)),
     "countertop_oven": ((X_LEFT + 0.30, -3.02, KITCHEN_TOP), 90, (0.40, 0.33, 0.23)),
