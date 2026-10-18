@@ -377,10 +377,14 @@ export class Navigation {
     else this.stepOut();
   }
 
-  /** Escape backs out: from the monitor to the desk, from anywhere else to the wide view. */
+  /**
+   * Escape backs out: from the monitor to the desk, from anywhere else to the wide view; turned about the set, by Home's
+   * way round it rather than a straight line through the walls.
+   */
   private stepOut() {
     const here = this.camera.destination;
     if (here === 'monitor') this.handlers.fly('desk', 'step');
+    else if (here === 'orbit') this.handlers.home();
     else if (here !== 'idle') this.handlers.fly('idle', 'step');
   }
 
