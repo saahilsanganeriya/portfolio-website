@@ -404,20 +404,34 @@ test.describe('desktop', () => {
   });
 
   /**
-   * Catches About losing the owner's lead (or leading on a project's number again), the résumé line opening nothing,
-   * or the page printing his address where the Contact window should be.
+   * Catches About losing the owner's lead (or leading on a project's number again), a résumé line whose "Click here"
+   * opens nothing (or the file instead of the window) or does not answer the keyboard, a "PDF" link that is not the
+   * file in a new tab, and links whose names mean nothing read out of context.
    */
-  test('About leads with what he does, opens the résumé from its line, and sends mail through Contact', async ({ page }) => {
+  test('About leads with what he does; its résumé line opens the Résumé window or the PDF', async ({ page }) => {
     await page.goto('/os?embed=1');
     const about = page.getByRole('dialog', { name: 'About' });
     // The owner's words (2026-10-16), not one project's number.
     await expect(about.locator('.os-about-lead')).toHaveText(
       'Builder, engineer, researcher, tinkerer — a software engineer at Mercor, where I work on anonymization.',
     );
-    await expect(about.locator('.os-about-resume')).toHaveText('Looking for my resume? Click here to open it.');
-    await expect(about).not.toContainText('@');
-    await about.getByRole('link', { name: 'Click here' }).click();
+    const line = about.locator('.os-about-resume');
+    // What a reader sees; the hidden words only name the two links for a screen reader.
+    const seen = await line.evaluate((el) => {
+      const copy = el.cloneNode(true) as HTMLElement;
+      copy.querySelectorAll('.visually-hidden').forEach((hidden) => hidden.remove());
+      return copy.textContent!.replace(/\s+/g, ' ').trim();
+    });
+    expect(seen).toBe('Looking for my resume? Click here to open it (PDF).');
+    const pdf = line.getByRole('link', { name: 'PDF of my résumé, in a new tab' });
+    await expect(pdf).toHaveAttribute('href', '/resume.pdf');
+    await expect(pdf).toHaveAttribute('target', '_blank');
+    await expect(pdf).toHaveAttribute('rel', 'noopener');
+    // "Click here" from the keyboard: the same window, at the same address, as the desktop's Résumé icon.
+    await line.getByRole('link', { name: 'Click here to open my résumé' }).focus();
+    await page.keyboard.press('Enter');
     await expect(page.getByRole('dialog', { name: 'Résumé' })).toBeVisible();
+    await expect(page).toHaveURL(/\/os\?embed=1#resume$/);
     await page.goto('/os?embed=1');
     await about.getByRole('link', { name: 'contact form' }).click();
     await expect(page.getByRole('dialog', { name: 'Contact' })).toBeVisible();

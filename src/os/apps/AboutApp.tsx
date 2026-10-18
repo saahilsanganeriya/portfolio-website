@@ -72,11 +72,20 @@ export function AboutApp({ os }: { os: OsApi }) {
       </nav>
 
       {page && <p className="os-reader-lead os-about-lead">{page.summary}</p>}
-      {/* Opens the Résumé window, on a phone too. */}
+      {/* "Click here" opens the Résumé window (on a phone too); "PDF" opens the file in a new tab. The hidden words give
+          each link a name that still makes sense read out of context. */}
       <p className="os-about-resume">
         <PixelIcon name="resume" size={32} />
         <span>
-          <strong>Looking for my resume?</strong> <a href="#resume">Click here</a> to open it.
+          <strong>Looking for my resume?</strong>{' '}
+          <a href="#resume">
+            Click here<span className="visually-hidden"> to open my résumé</span>
+          </a>{' '}
+          to open it (
+          <a href={RESUME_PDF} target="_blank" rel="noopener">
+            PDF<span className="visually-hidden"> of my résumé, in a new tab</span>
+          </a>
+          ).
         </span>
       </p>
       <Body content={content} what="About" />
