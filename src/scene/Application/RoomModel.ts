@@ -31,7 +31,7 @@ export interface RoomNodes {
   framings: Record<(typeof REQUIRED_FRAMINGS)[number], Framing> & Partial<Record<StationName, Framing>>;
   /** The tour's stops (`cam_tour_<n>`) in their numbered order. */
   tour: Extract<StationName, `tour_${number}`>[];
-  /** The waypoints the arrival on `/` passes between the boot framing and the desk (`cam_arrival_<n>`), in order. */
+  /** Round 8's arrival waypoints (`cam_arrival_<n>`), in order: room.glb still has them; the arrival no longer flies them. */
   arrival: Framing[];
   monitor: MonitorPose;
   proxies: THREE.Mesh[];

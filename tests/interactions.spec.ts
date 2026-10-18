@@ -226,13 +226,31 @@ test.describe('room v3 interactions with reduced motion', () => {
     expect(await sounds(page)).toContain('espresso-pour');
   });
 
-  /** Catches the oven door swinging for a reduced-motion visitor. */
+  /**
+   * Catches the oven door swinging for a reduced-motion visitor, and a door that waits frames after the cut for the
+   * camera's eye to stop moving (on a slow, loaded machine those frames add up to seconds).
+   */
   test('the oven door is open at once', async () => {
     await fromIdle(page);
+    // Counts frames from the click to the first one with the door open.
+    await page.evaluate(() => {
+      const count = { frame: 0, clicked: -1, opened: -1 };
+      (window as unknown as { ovenFrames: typeof count }).ovenFrames = count;
+      addEventListener('click', () => (count.clicked = count.frame), { capture: true, once: true });
+      const watch = () => {
+        count.frame++;
+        if (count.clicked >= 0 && window.__room!.world.oven?.open) count.opened = count.frame;
+        else requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+    });
     await clickProp(page, 'hit_oven');
     await settledAt(page, 'oven');
-    // The first probe after the click already has the door at its stop: no frames in between.
-    await expect.poll(async () => (await world(page)).oven?.open, { timeout: 5_000 }).toBe(true);
+    const frames = () => page.evaluate(() => (window as unknown as { ovenFrames: { clicked: number; opened: number } }).ovenFrames);
+    await expect.poll(async () => (await frames()).opened, { timeout: 5_000 }).toBeGreaterThan(0);
+    const { clicked, opened } = await frames();
+    // Open in the first frame at the oven (this counter may run just before the room's own frame).
+    expect(opened - clicked, 'frames from the click to the open door').toBeLessThanOrEqual(2);
     expect((await world(page)).oven!.doorDeg).toBe(82);
   });
 

@@ -371,6 +371,7 @@ export class Application implements RoomHandle {
     this.world = new World(this.nodes, this.scene, this.container, this.ktx2, {
       fly: (station) => this.fly(station),
       station: () => this.camera.destination,
+      landed: () => this.camera.phase === this.camera.destination && !this.camera.moving,
       openWindow: (target) => this.openWindow(target),
       sfx: (name, at) => this.audio.sfx(name, at),
       audio: this.audio,

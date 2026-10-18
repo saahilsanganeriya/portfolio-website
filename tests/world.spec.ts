@@ -10,7 +10,7 @@ test.describe.configure({ timeout: 240_000 });
 const os = (page: Page) => page.frameLocator('.room-monitor iframe');
 const world = (page: Page) => page.evaluate(() => window.__room!.world);
 
-/** The room after the arrival, stepped back from the desk to the wide view, where every prop is in sight. */
+/** The room after the arrival, stepped back from the monitor to the wide view, where every prop is in sight. */
 async function inRoom(page: Page, path = '/') {
   await page.goto(path);
   await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 150_000 });
