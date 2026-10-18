@@ -58,17 +58,17 @@ async function watchDestinations(page: Page) {
 const destinations = (page: Page) => page.evaluate(() => (window as unknown as { seen: string[] }).seen);
 
 /**
- * Catches a click during the arrival that also sends the camera on from the desk (to the wide view) instead of only
- * landing it, and a skip that strands the visitor at the desk instead of going on into the monitor (T52 fix 1).
+ * Catches a click during the arrival that also sends the camera on from the monitor (to the desk, as a click on empty
+ * space does once the visitor is there) instead of only landing it, and a skip that lands anywhere but the monitor.
  */
-test('a click on empty space during the arrival lands it at the desk, and the landing goes on into the monitor', async ({ page }) => {
+test('a click on empty space during the arrival lands it at the monitor, and the camera stays there', async ({ page }) => {
   await page.goto('/');
-  await page.waitForFunction(() => window.__room?.moving && window.__room.startedAt != null, null, { timeout: 120_000 });
+  await page.waitForFunction(() => window.__room?.moving && window.__room.landedAt == null, null, { timeout: 120_000, polling: 50 });
   await page.mouse.click(5, 5);
-  expect(await room(page)).toMatchObject({ phase: 'desk', destination: 'desk', moving: false });
+  expect(await room(page)).toMatchObject({ phase: 'monitor', destination: 'monitor', moving: false });
   await watchDestinations(page);
-  await settledAt(page, 'monitor');
-  expect(await destinations(page)).toEqual(['desk', 'monitor']);
+  await page.waitForTimeout(1500);
+  expect(await destinations(page)).toEqual(['monitor']);
 });
 
 /**
@@ -404,22 +404,20 @@ test.describe('on a phone', () => {
     await touch('touchEnd');
     await expect.poll(async () => (await room(page)).destination).toBe('orbit');
     expect(await page.evaluate(() => scrollX + scrollY)).toBe(0);
-    // Past the 1.2 s the phone would hold the desk before going in by itself.
+    // Past the moment the arrival would have flown into the monitor by itself.
     await page.waitForTimeout(3000);
     expect(await room(page)).toMatchObject({ phase: 'orbit', destination: 'orbit' });
     await expect(page.locator('html')).not.toHaveClass(/room-os/);
   });
 
-  /** Catches a boot screen that asks a phone for a key press, or hides its date under the room's controls (T52 fix 5). */
-  test('on a phone the boot screen says Tap to skip, and its date sits above the controls', async ({ page }) => {
+  /** Catches a loading screen that asks a phone for anything (the BIOS screen's "Tap to skip") or says more than its line. */
+  test('on a phone the dark screen asks for nothing and shows only its progress line', async ({ page }) => {
     await page.goto('/');
-    const boot = page.locator('[data-boot]');
-    await expect(boot.getByText('Tap to skip')).toBeVisible();
-    await expect(boot.getByText('Press any key to skip the intro')).toBeHidden();
-    await expect(boot.locator('[data-boot-today]')).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
-    const date = (await boot.locator('[data-boot-today]').boundingBox())!;
-    const controls = (await page.locator('.room-controls').boundingBox())!;
-    expect(date.y + date.height).toBeLessThanOrEqual(controls.y);
+    const loader = page.locator('[data-room-loader]');
+    await expect(loader).toBeVisible();
+    expect(await loader.innerText()).toBe('');
+    await expect(loader.getByRole('progressbar', { name: 'Loading the room' })).toBeAttached();
+    await expect(page.getByText(/tap to skip|press any key/i)).toHaveCount(0);
   });
 
   /** Catches an address on a phone that loses its window on the way into the monitor. */
