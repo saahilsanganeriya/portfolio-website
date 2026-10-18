@@ -137,9 +137,18 @@ interface Slot {
   top: number;
 }
 
+interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
 /**
- * Beside the object: to its right, left, below or above it, the first side that covers no other object; failing that,
- * to its right, else its left, else at the stage's right edge. On a narrow stage, above the bottom row.
+ * Beside the object: to its right, left, below or above it, the first side with room for the card clear of every other
+ * object. Along a side the card may slide from centred on the object to just clear of what is in its way, as long as
+ * its middle stays within the object's span; failing every side, to its right, else its left, else at the stage's right
+ * edge. On a narrow stage, above the bottom row.
  */
 function place(card: HTMLElement, { rect, avoid }: RoomCard, stage: HTMLElement) {
   const box = stage.getBoundingClientRect();
@@ -150,20 +159,34 @@ function place(card: HTMLElement, { rect, avoid }: RoomCard, stage: HTMLElement)
   if (box.width < CARD_DOCK_BELOW || !rect) {
     slot = box.width < CARD_DOCK_BELOW ? { left: CARD_EDGE, top: bottom } : { left: box.width - width - CARD_EDGE, top: (box.height - height) / 2 };
   } else {
-    const object = { left: rect.left - box.left, right: rect.right - box.left, top: rect.top - box.top, bottom: rect.bottom - box.top };
+    const object: Box = { left: rect.left - box.left, right: rect.right - box.left, top: rect.top - box.top, bottom: rect.bottom - box.top };
     const others = avoid
       .map((r) => ({ left: r.left - box.left - CARD_CLEAR, right: r.right - box.left + CARD_CLEAR, top: r.top - box.top - CARD_CLEAR, bottom: r.bottom - box.top + CARD_CLEAR }))
       .filter((r) => (r.right - r.left) * (r.bottom - r.top) < BACKDROP_SHARE * box.width * box.height);
-    const across = clamp((object.top + object.bottom) / 2 - height / 2, highest, bottom);
-    const along = clamp((object.left + object.right) / 2 - width / 2, CARD_EDGE, box.width - width - CARD_EDGE);
-    const sides: Record<(typeof CARD_SIDES)[number], Slot | null> = {
-      right: object.right + CARD_GAP + width <= box.width - CARD_EDGE ? { left: object.right + CARD_GAP, top: across } : null,
-      left: object.left - CARD_GAP - width >= CARD_EDGE ? { left: object.left - CARD_GAP - width, top: across } : null,
-      below: object.bottom + CARD_GAP <= bottom ? { left: along, top: object.bottom + CARD_GAP } : null,
-      above: object.top - CARD_GAP - height >= highest ? { left: along, top: object.top - CARD_GAP - height } : null,
+    const clear = ({ left, top }: Slot) => others.every((r) => left >= r.right || left + width <= r.left || top >= r.bottom || top + height <= r.top);
+    /** The clear spot nearest the middle along a side of the object (`vertical`: its right or left); `at` makes the slot. */
+    const along = (vertical: boolean, at: (spot: number) => Slot) => {
+      const [size, low, high] = vertical ? [height, highest, bottom] : [width, CARD_EDGE, box.width - width - CARD_EDGE];
+      const [from, to] = vertical ? [object.top, object.bottom] : [object.left, object.right];
+      const middle = (from + to) / 2;
+      const spots = [middle - size / 2, ...others.flatMap((r) => (vertical ? [r.top - size, r.bottom] : [r.left - size, r.right]))]
+        .map((spot) => clamp(spot, low, high))
+        .filter((spot) => spot + size / 2 >= from && spot + size / 2 <= to)
+        .sort((a, b) => Math.abs(a + size / 2 - middle) - Math.abs(b + size / 2 - middle));
+      return spots.map(at).find(clear) ?? null;
     };
-    const clear = (s: Slot) => others.every((r) => s.left >= r.right || s.left + width <= r.left || s.top >= r.bottom || s.top + height <= r.top);
-    slot = CARD_SIDES.map((side) => sides[side]).find((s): s is Slot => s !== null && clear(s)) ?? sides.right ?? sides.left ?? { left: box.width - width - CARD_EDGE, top: across };
+    const sides: Record<(typeof CARD_SIDES)[number], () => Slot | null> = {
+      right: () => (object.right + CARD_GAP + width <= box.width - CARD_EDGE ? along(true, (top) => ({ left: object.right + CARD_GAP, top })) : null),
+      left: () => (object.left - CARD_GAP - width >= CARD_EDGE ? along(true, (top) => ({ left: object.left - CARD_GAP - width, top })) : null),
+      below: () => (object.bottom + CARD_GAP <= bottom ? along(false, (left) => ({ left, top: object.bottom + CARD_GAP })) : null),
+      above: () => (object.top - CARD_GAP - height >= highest ? along(false, (left) => ({ left, top: object.top - CARD_GAP - height })) : null),
+    };
+    const across = clamp((object.top + object.bottom) / 2 - height / 2, highest, bottom);
+    const fallback = object.right + CARD_GAP + width <= box.width - CARD_EDGE ? object.right + CARD_GAP : object.left - CARD_GAP - width;
+    slot = CARD_SIDES.reduce<Slot | null>((found, side) => found ?? sides[side](), null) ?? {
+      left: fallback >= CARD_EDGE ? fallback : box.width - width - CARD_EDGE,
+      top: across,
+    };
   }
   const top = clamp(slot.top, highest, bottom);
   card.style.transform = `translate(${Math.round(slot.left)}px, ${Math.round(top)}px)`;
