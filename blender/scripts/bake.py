@@ -56,8 +56,11 @@ SHIP_PX = 4096
 # 16 px; once its top was cut into the rectangles the views see (build_room.split_desk_top_by_view), that margin round
 # ~150 islands left it 52 % full, and 8 px brought it back to 64 % (round eight's fill with one desk-top island).
 MARGIN_PX = {"desk": 12, "bezel": 12, "art": 8, "props": 8, "env": 6, "window_sf": 6, "window_delhi": 6}
+# Margins copy texels from the face across a UV seam (Extend left a sawtooth along slanted island edges, which the site
+# sampled as beads wherever one surface is split into islands: the CRT bezel's creases, the desk top's rectangles).
+MARGIN_TYPE = "ADJACENT_FACES"
 # Islands of the desk atlas stay axis-aligned: its desk-top rectangles pack tighter (52 % vs 50 % at 16 px).
-PACK_ROTATE = {"desk": "AXIS_ALIGNED", "bezel": "AXIS_ALIGNED"}
+PACK_ROTATE = {"desk": "AXIS_ALIGNED"}
 # The world seen through the open front of the view while it bakes: a pale day sky.
 VIEW_WORLD = ((0.62, 0.70, 0.82, 1.0), 0.35)
 GUIDE_SAMPLES = 4  # the albedo and normal guides for OIDN (they barely change within a texel)
@@ -141,12 +144,15 @@ def make_bake_uvs(objs, size: int, margin_px: int, rotate: str = "ANY"):
         mesh.uv_layers.active = bake_uv
         if source is not None:
             source.active_render = True
-    if to_project:
-        select_only(to_project)
+    # An object may ask for a wider projection angle (extra project_angle): islands cut at a crease bake beaded edges
+    # there, each side sampling the other face's shadow on its border texels.
+    for angle in sorted({float(o.get("project_angle", 60.0)) for o in to_project}):
+        group = [o for o in to_project if float(o.get("project_angle", 60.0)) == angle]
+        select_only(group)
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.reveal()
         bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.0, area_weight=0.0,
+        bpy.ops.uv.smart_project(angle_limit=math.radians(angle), island_margin=0.0, area_weight=0.0,
                                  correct_aspect=False, scale_to_bounds=False)
         bpy.ops.object.mode_set(mode="OBJECT")
     print(f"bake: {len(objs) - len(to_project)} objects keep their UVs, {len(to_project)} smart-projected")
@@ -303,7 +309,7 @@ def bake_pass(objs, image, kind, samples, margin, fill=True, **extra):
     attach_target(objs, image)
     select_only(objs)
     bpy.context.scene.cycles.samples = samples
-    bpy.ops.object.bake(type=kind, margin=margin, margin_type="EXTEND", use_clear=False, target="IMAGE_TEXTURES",
+    bpy.ops.object.bake(type=kind, margin=margin, margin_type=MARGIN_TYPE, use_clear=False, target="IMAGE_TEXTURES",
                         uv_layer="bake", **extra)
     if fill:
         fill_gaps(image)
@@ -526,7 +532,7 @@ def bake_atlas(atlas: str, size: int, samples: int, out_name: str | None = None,
     # Cycles bakes object by object and dilates each one on its own, so its margin must stay under half the gap
     # between islands or it paints over a neighbour; fill_gaps() fills the rest of the atlas afterwards.
     margin = max(1, MARGIN_PX[atlas] * size // ATLAS_SIZES[atlas] // 2)
-    scene.render.bake.margin, scene.render.bake.margin_type, scene.render.bake.use_clear = margin, "EXTEND", False
+    scene.render.bake.margin, scene.render.bake.margin_type, scene.render.bake.use_clear = margin, MARGIN_TYPE, False
     image = float_image(f"bake_{out_name}", size)
     # The set bakes its view-independent light; the window's view, seen only from in front, keeps its sheen.
     light = {"EMIT", "DIRECT", "INDIRECT", "DIFFUSE"} | ({"GLOSSY"} if atlas.startswith("window_") else set())
