@@ -89,6 +89,8 @@ test('the BIOS screen logs the room’s real loading and hands over only once ev
   await expect(boot).toContainText('(C) 2026 Saahil Sanganeriya');
   await expect(boot.getByText('Press any key for sound')).toBeVisible();
   expect(await boot.innerText(), 'nothing to skip to: the room shows itself once it is ready').not.toMatch(/skip|intro/i);
+  // The footer asks for the key, so the Sound button does not glow over the BIOS screen as well (T98).
+  await expect(page.getByRole('button', { name: 'Sound' })).toHaveCSS('box-shadow', 'none');
 
   await settled(page, 'monitor');
   await expect(boot).toBeHidden();

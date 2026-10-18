@@ -672,4 +672,12 @@ const roomBytes = statSync('public/room/room.glb').size;
       box-shadow: 0 0 10px 1px rgb(237 228 211 / 0.35);
     }
   }
+
+  /* While the BIOS screen shows, its footer says what a key does for the sound, so the toggle keeps its neighbours'
+     hairline until the room starts. */
+  :global(html:not(.room-started)) .room-controls .room-sound[data-hint] {
+    border-color: rgb(168 159 145 / 0.5);
+    animation: none;
+    box-shadow: none;
+  }
 </style>
