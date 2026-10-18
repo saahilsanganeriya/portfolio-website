@@ -126,24 +126,37 @@ test('a bare /os lands at the monitor with SaahilOS', async ({ page }) => {
   await expect(os(page).locator('.os-desktop')).toBeVisible();
 });
 
-/** Records, every frame from the room's start until shortly after its landing, the camera: where it is and where it heads. */
+type ArrivalFrame = { t: number; phase: string; destination: string; moving: boolean; eye: number[]; d: number };
+/**
+ * Records the camera every frame from the room's start until half a second after it first rests at the monitor (or
+ * 30 s): where it is, how far from the glass, and where it heads.
+ */
 async function watchArrival(page: Page) {
   await page.addInitScript(() => {
     const frames: { t: number; phase: string; destination: string; moving: boolean; eye: number[]; d: number }[] = [];
     (window as unknown as { frames: typeof frames }).frames = frames;
+    let restedAt: number | null = null;
     const watch = () => {
       const room = window.__room;
+      const now = performance.now();
       if (room?.startedAt != null) {
         const eye = room.eye;
         const d = Math.hypot(...eye.map((v, i) => v - room.monitorAt[i]));
-        frames.push({ t: performance.now(), phase: room.phase, destination: room.destination, moving: room.moving, eye, d });
+        frames.push({ t: now, phase: room.phase, destination: room.destination, moving: room.moving, eye, d });
+        if (restedAt === null && room.phase === 'monitor' && !room.moving) restedAt = now;
       }
-      if (room?.landedAt == null || performance.now() - room.landedAt < 500) requestAnimationFrame(watch);
+      const stop = (restedAt !== null && now - restedAt > 500) || (room?.startedAt != null && now - room.startedAt > 30_000);
+      if (!stop) requestAnimationFrame(watch);
     };
     requestAnimationFrame(watch);
   });
 }
-type ArrivalFrame = { t: number; phase: string; destination: string; moving: boolean; eye: number[]; d: number };
+/** The frames from the one that leaves the wide view to the first at rest at the monitor. */
+const flightOf = (frames: ArrivalFrame[]) => {
+  const from = frames.findIndex((f) => f.destination !== 'idle');
+  const to = frames.findIndex((f, i) => i >= from && f.phase === 'monitor' && !f.moving);
+  return frames.slice(from, to + 1);
+};
 const arrivalFrames = (page: Page) => page.evaluate(() => (window as unknown as { frames: ArrivalFrame[] }).frames);
 
 /**
@@ -178,8 +191,11 @@ test('the arrival is one direct move from the wide view to the monitor', async (
   await watchArrival(page);
   await page.goto('/');
   await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
-  const frames = (await arrivalFrames(page)).filter((f) => f.destination === 'monitor');
+  await page.waitForFunction(() => window.__room?.phase === 'monitor' && !window.__room.moving, null, { timeout: 60_000 });
+  await page.waitForTimeout(600);
+  const frames = flightOf(await arrivalFrames(page));
   expect(frames.length, 'frames drawn in flight').toBeGreaterThan(5);
+  expect(new Set(frames.map((f) => f.destination)), 'the only place it heads for').toEqual(new Set(['monitor']));
   for (let i = 1; i < frames.length; i++) expect(frames[i].d, `frame ${i}: no step away from the glass (m)`).toBeLessThanOrEqual(frames[i - 1].d + 0.001);
   const [a, b] = [frames[0].eye, frames.at(-1)!.eye];
   const ab = b.map((v, i) => v - a[i]);
