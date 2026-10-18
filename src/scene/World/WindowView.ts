@@ -225,9 +225,9 @@ const HALO = 'rgba(255, 255, 255, 0.4)';
 // centre lies STAMP_DROP of the motif's height below the end, its radius STAMP_RADIUS of its width.
 const STAMP_DROP = 0.2;
 const STAMP_RADIUS = 0.046;
-const STAMPS: Record<CityId, { ring: string; ink: string; turn: number; departs: boolean }> = {
-  delhi: { ring: 'NEW DELHI · DEL · ', ink: '#1f5c45', turn: -0.16, departs: true },
-  sf: { ring: 'SAN FRANCISCO · SFO · ', ink: '#3a3a8c', turn: 0.12, departs: false },
+const STAMPS: Record<CityId, { city: string; code: string; ink: string; turn: number; departs: boolean }> = {
+  delhi: { city: 'NEW DELHI', code: 'DEL', ink: '#1f5c45', turn: -0.16, departs: true },
+  sf: { city: 'SAN FRANCISCO', code: 'SFO', ink: '#3a3a8c', turn: 0.12, departs: false },
 };
 const STAMP_FAMILY = 'Room Stamp';
 let stampFontLoading: Promise<void> | null = null;
@@ -491,7 +491,7 @@ function trailRibbon(path: ReturnType<typeof flightPath>) {
 
 /** A passport stamp of radius `r` px centred at (x, y): the double ring, the ring's text, a plane, the worn ink. */
 function drawStamp(ctx: CanvasRenderingContext2D, stamp: (typeof STAMPS)[CityId], x: number, y: number, r: number) {
-  const random = seeded(seedOf(stamp.ring));
+  const random = seeded(seedOf(stamp.city));
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(stamp.turn);
@@ -504,18 +504,21 @@ function drawStamp(ctx: CanvasRenderingContext2D, stamp: (typeof STAMPS)[CityId]
     ctx.arc(0, 0, r * radius, 0, Math.PI * 2);
     ctx.stroke();
   }
-  // The ring's letters, upright to the ring, evenly round it, starting at the top left.
+  // The city along the top of the ring and the airport along the bottom, both reading left to right.
   ctx.font = `${Math.round(r * 0.21)}px "${STAMP_FAMILY}", ui-monospace, monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const letters = [...stamp.ring];
-  letters.forEach((letter, i) => {
-    const a = -Math.PI / 2 - Math.PI * 0.62 + (2 * Math.PI * i) / letters.length;
-    ctx.save();
-    ctx.rotate(a + Math.PI / 2);
-    ctx.fillText(letter, 0, -r * 0.775);
-    ctx.restore();
-  });
+  const STEP = 0.205;
+  const around = (text: string, middle: number, sign: 1 | -1) =>
+    [...text].forEach((letter, i) => {
+      const a = middle + sign * (i - (text.length - 1) / 2) * STEP;
+      ctx.save();
+      ctx.rotate(a + (sign * Math.PI) / 2);
+      ctx.fillText(letter, 0, -sign * r * 0.775);
+      ctx.restore();
+    });
+  around(stamp.city, -Math.PI / 2, 1);
+  around(`· ${stamp.code} ·`, Math.PI / 2, -1);
   // The plane in the middle, climbing out of Delhi, descending into San Francisco, over a short runway.
   ctx.save();
   ctx.translate(0, -r * 0.04);
