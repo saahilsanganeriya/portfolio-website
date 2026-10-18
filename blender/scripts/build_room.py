@@ -1408,7 +1408,7 @@ TEXEL_WEIGHTS = {
     "tonearm": 2.2, "record_crate": 1.0, "props_kitchen_spices": 1.6, "props_kitchen_mugs": 1.4,
     "props_pour_over": 1.6, "props_bakery_board": 2.0, "props_cinnamon_rolls": 2.0, "props_under_shelf_light": 1.0,
     "props_bookcase_books": 1.0, "props_bookend": 1.0, "props_kitchen_jars": 1.4, "props_kitchen_pendant": 1.2,
-    "props_chopping_board": 1.0, "props_jacket": 0.8, "props_lounge_chair": 0.8, "props_lantern": 0.8,
+    "props_chopping_board": 1.0, "props_lounge_chair": 0.8, "props_lantern": 0.8,
     "props_reading_mug": 1.4, "props_floor_books": 0.9, "espresso_machine": 1.6, "espresso_cup": 2.2,
     "espresso_coffee": 1.0, "countertop_oven": 1.6, "oven_door": 1.8, "croissant": 3.0, "lava_lamp": 1.6,
     "lava_lamp_glass": 1.8, "oven_glow": 1.6, "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_desk": 0.6,
