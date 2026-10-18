@@ -31,12 +31,14 @@ const TURN_PER_STAGE_HEIGHT = Math.PI * 1.6;
 // The view follows the goal with this time constant: long enough to even out 60 Hz pointer events on a 120 Hz screen,
 // short enough (three frames at 60 fps) that a drag never feels late.
 const FOLLOW_TAU_S = 0.05;
-// Let go, the turn loses its speed with this time constant: a flick at 3 rad/s coasts about 65° and stops in about 2 s.
-// OrbitControls' default damping (0.05 a frame at 60 fps) is 0.33 s; a little longer reads as a heavier turntable.
-const INERTIA_TAU_S = 0.38;
+// Let go, the turn loses its speed with this time constant (OrbitControls' default damping, 0.05 a frame at 60 fps, is
+// 0.33 s): a gentle throw at 1 rad/s coasts 20° and stops in about 1.4 s.
+const INERTIA_TAU_S = 0.35;
 // A coast below this speed stops (about a degree a second), and so does a view this close behind its goal.
 const REST_RAD_S = 0.02;
-const MAX_TURN_RAD_S = 5;
+// Any real flick on a trackpad or a mouse is faster than this, so this sets the longest coast: 80°, enough to show a
+// side of the set, never enough to spin the visitor round behind the walls.
+const MAX_TURN_RAD_S = 4;
 // The speed a drag hands to the inertia: an average over its last few moves, forgotten if the pointer rested.
 const VELOCITY_WINDOW_MS = 80;
 // The radius follows its goal this fast (in log space, so every step in or out takes the same time); the pivot too.
