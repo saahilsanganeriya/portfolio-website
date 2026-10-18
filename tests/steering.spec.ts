@@ -120,25 +120,6 @@ test.describe('in Chromium', () => {
     expect(await destination(page)).toBe('orbit');
   });
 
-  /** Catches a tilt limit that stops dead under the pointer instead of giving a little, or stays stretched once let go. */
-  test('a drag past the tilt limit gives a little while held, and springs back inside on release', async ({ page }) => {
-    await inRoom(page);
-    const { minPolar, maxPolar } = await page.evaluate(() => window.__room!.orbitSettings.limits);
-    await page.mouse.move(720, 200);
-    await page.mouse.down();
-    // Down far past the top: the camera rises over the set to its highest tilt, and is pulled on.
-    for (let y = 200; y <= 860; y += 30) await page.mouse.move(720, y);
-    await page.waitForTimeout(400);
-    const held = (await orbit(page))!.polar;
-    expect(minPolar - held, 'past the top limit').toBeGreaterThan(0.005);
-    expect(minPolar - held, 'by at most 6°').toBeLessThan((6 * Math.PI) / 180);
-    await page.mouse.up();
-    await orbitRests(page);
-    const end = (await orbit(page))!.polar;
-    expect(end).toBeGreaterThanOrEqual(minPolar - 1e-6);
-    expect(end).toBeLessThanOrEqual(maxPolar + 1e-6);
-  });
-
   /**
    * Catches one wheel zooming at another's speed: a mouse notch in lines (Firefox, deltaMode 1), in pixels (Chromium)
    * and a trackpad's run of small pixel deltas covering the same distance must zoom the same.

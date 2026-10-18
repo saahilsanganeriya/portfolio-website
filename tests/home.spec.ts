@@ -72,16 +72,16 @@ const orbitRests = (page: Page) => page.waitForFunction(() => window.__room!.orb
 /** Records the camera's plan position every frame from now on; `stop` returns them with their times (ms). */
 async function trackCamera(page: Page) {
   await page.evaluate(() => {
-    const track: { t: number; x: number; z: number; destination: string }[] = [];
+    const track: { x: number; z: number }[] = [];
     (window as unknown as { track: typeof track }).track = track;
     const sample = () => {
       const { view } = window.__room!;
-      track.push({ t: performance.now(), x: view.x, z: view.z, destination: view.destination });
+      track.push({ x: view.x, z: view.z });
       requestAnimationFrame(sample);
     };
     sample();
   });
-  return () => page.evaluate(() => (window as unknown as { track: { t: number; x: number; z: number; destination: string }[] }).track.slice());
+  return () => page.evaluate(() => (window as unknown as { track: { x: number; z: number }[] }).track.slice());
 }
 
 /**
@@ -140,50 +140,35 @@ test('Home in the middle of a drag cancels the drag and its coast, and lands at 
 });
 
 /**
- * Catches Home that cuts straight through the set from behind it (or snaps there), leaves a see-through wall faded once
- * it is back in front, and a glide home whose length does not grow with the way it has to go.
+ * Catches Home that cuts straight through the set from behind it (or snaps there), and a see-through wall left faded once
+ * the camera is back in front. (How long the glide takes for how far it goes is orbit.test's.)
  */
-test('Home from behind a wall swings round the set, the walls come back, and a longer way takes longer', async ({ page }) => {
+test('Home from behind a wall swings round the set, smoothly, and the walls come back', async ({ page }) => {
   const home = await inRoom(page);
-  // A short turn first: the time home from nearby.
-  await drag(page, -120);
-  await orbitRests(page);
-  let stop = await trackCamera(page);
-  await homeButton(page).click();
-  await expectHome(page, home);
-  const near = await stop();
-  const nearMs = near.findLast((s) => s.destination === 'idle')!.t - near[0].t;
-
   // Half a turn round: behind the back wall, which fades.
   const perRad = 900 / (Math.PI * 1.6);
   for (let k = 0; k < 3; k++) {
     await drag(page, -(Math.PI / 3) * perRad);
     await orbitRests(page);
   }
-  const behind = await room(page);
-  const back = behind.walls.find((w) => w.name === 'back')!;
+  const back = (await room(page)).walls.find((w) => w.name === 'back')!;
   expect(back.opacity, 'the back wall from behind').toBeLessThan(0.05);
-  stop = await trackCamera(page);
-  const begun = Date.now();
+  const stop = await trackCamera(page);
   await homeButton(page).click();
   await expectHome(page, home);
-  const far = await stop();
-  const tookMs = Date.now() - begun;
+  const way = await stop();
   for (const wall of (await room(page)).walls) expect(wall.opacity, `the ${wall.name} wall, in front again`).toBe(1);
 
   // The eye stays out of the set on the way: never nearer the orbit's centre than the closest it started or ended.
   const { center } = await page.evaluate(() => window.__room!.orbitSettings);
   const fromCentre = (s: { x: number; z: number }) => Math.hypot(s.x - center.x / 1000, s.z - center.z / 1000);
-  const ends = Math.min(fromCentre(far[0]), fromCentre(far.at(-1)!));
-  expect(Math.min(...far.map(fromCentre)), 'it swung round the set, not through it').toBeGreaterThan(ends * 0.85);
+  const ends = Math.min(fromCentre(way[0]), fromCentre(way.at(-1)!));
+  expect(Math.min(...way.map(fromCentre)), 'it swung round the set, not through it').toBeGreaterThan(ends * 0.85);
   // Smooth: many frames, none jumping more than a fifth of the way.
-  const total = far.slice(1).reduce((sum, s, i) => sum + Math.hypot(s.x - far[i].x, s.z - far[i].z), 0);
-  const jumps = far.slice(1).map((s, i) => Math.hypot(s.x - far[i].x, s.z - far[i].z));
-  expect(jumps.filter((d) => d > 0).length, 'frames that moved').toBeGreaterThan(5);
-  expect(Math.max(...jumps) / total, 'the largest step, as a share of the way').toBeLessThan(0.2);
-  const farMs = far.findLast((s) => s.destination === 'idle')!.t - far[0].t;
-  test.info().annotations.push({ type: 'home durations', description: `near ${nearMs.toFixed(0)} ms, from behind ${farMs.toFixed(0)} ms (wall clock ${tookMs} ms)` });
-  expect(farMs, 'from behind takes longer than from nearby').toBeGreaterThan(nearMs);
+  const steps = way.slice(1).map((s, i) => Math.hypot(s.x - way[i].x, s.z - way[i].z));
+  const total = steps.reduce((sum, d) => sum + d, 0);
+  expect(steps.filter((d) => d > 0).length, 'frames that moved').toBeGreaterThan(5);
+  expect(Math.max(...steps) / total, 'the largest step, as a share of the way').toBeLessThan(0.2);
 });
 
 /** Catches Home from far out (zoomed out to the limit) that stays out there, or lands short. */

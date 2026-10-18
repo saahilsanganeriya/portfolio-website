@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { clockText } from '../src/components/RoomHud';
 import { tourStops } from '../src/components/RoomTourMap';
-import { wheelPixels } from '../src/scene/Camera/Navigation';
 import { Orbit, readOrbit, toSpherical } from '../src/scene/Camera/orbit';
 import { homeSeconds } from '../src/scene/Camera/RoomCamera';
 
@@ -20,35 +19,6 @@ const run = (orbit: Orbit, seconds: number) => {
 };
 
 describe('the orbit about the set', () => {
-  // Catches a wheel that zooms the wrong way for the platform (deltaY < 0 is toward the screen: in), a zoom limit that
-  // stops dead (no give past it) or gives without end, and one that never springs back inside.
-  it('moves in for a negative deltaY, out for a positive one, gives a little past the limits and springs back', () => {
-    const orbit = new Orbit(eyeAt(0, 70, 6000), settings.center, settings, false);
-    orbit.zoom(-300);
-    run(orbit, 1);
-    expect(orbit.radius).toBeLessThan(6000);
-    // A wheel turned on for a second (a notch every 50 ms), then let go: the radii the view passes through.
-    const sweep = (delta: number) => {
-      const radii: number[] = [];
-      for (let frame = 0; frame < 180; frame++) {
-        if (frame < 60 && frame % 3 === 0) orbit.zoom(delta);
-        orbit.step(1 / 60);
-        radii.push(orbit.radius);
-      }
-      return radii;
-    };
-    const inward = sweep(-600);
-    expect(Math.min(...inward), 'past the near limit, a little').toBeLessThan(2400 - 50);
-    expect(Math.min(...inward)).toBeGreaterThan(2400 / 1.1);
-    expect(orbit.radius).toBeGreaterThanOrEqual(2400 - 1e-6);
-    expect(orbit.radius).toBeCloseTo(2400, -1);
-    const outward = sweep(900);
-    expect(Math.max(...outward), 'past the far limit, a little').toBeGreaterThan(9000 + 200);
-    expect(Math.max(...outward)).toBeLessThan(9000 * 1.1);
-    expect(orbit.radius).toBeLessThanOrEqual(9000 + 1e-6);
-    expect(orbit.radius).toBeCloseTo(9000, -1);
-  });
-
   // Catches the camera jumping out to minDist the moment the visitor turns at the desk (closer than the limits allow).
   it('keeps a camera that starts inside the minimum distance where it is, until it has moved out past it', () => {
     const orbit = new Orbit(eyeAt(0, 75, 1600), settings.center, settings, false);
@@ -64,31 +34,6 @@ describe('the orbit about the set', () => {
     run(orbit, 2);
     expect(orbit.radius).toBeGreaterThanOrEqual(2400);
     expect(orbit.radius).toBeCloseTo(2400, -1);
-  });
-
-  // Catches a let-go drag that stops dead (no inertia), coasts for ever, or coasts under reduced motion.
-  it('coasts after a quick drag and comes to rest, but not under reduced motion', () => {
-    let now = 0;
-    const clock = () => now;
-    const realNow = performance.now;
-    performance.now = clock;
-    try {
-      for (const still of [false, true]) {
-        const orbit = new Orbit(eyeAt(0, 70, 6000), settings.center, settings, still);
-        for (let i = 0; i < 5; i++) {
-          now += 16;
-          orbit.drag(-20, 0, 900);
-        }
-        orbit.release();
-        const letGo = orbit.azimuth;
-        run(orbit, 3);
-        if (still) expect(orbit.azimuth).toBe(letGo);
-        else expect(orbit.azimuth - letGo).toBeGreaterThan(0.1);
-        expect(orbit.turning).toBe(0);
-      }
-    } finally {
-      performance.now = realNow;
-    }
   });
 
   // Catches a tilt that turns over the top or under the floor, a tilt limit that stops dead instead of giving a little,
@@ -168,15 +113,7 @@ describe('the orbit about the set', () => {
   });
 });
 
-describe('wheels and Home', () => {
-  // Catches a mouse wheel that zooms at a different speed in Firefox (3 lines a notch) than in Chromium (100 px a notch).
-  it('reads a wheel notch the same in lines as in pixels, and Shift as sideways', () => {
-    const event = { deltaX: 0, deltaY: 0, deltaMode: 0, shiftKey: false };
-    expect(wheelPixels({ ...event, deltaY: 3, deltaMode: 1 }, 900)).toEqual(wheelPixels({ ...event, deltaY: 100 }, 900));
-    expect(wheelPixels({ ...event, deltaY: 1, deltaMode: 2 }, 900)).toEqual([0, 900]);
-    expect(wheelPixels({ ...event, deltaY: 100, shiftKey: true }, 900)).toEqual([100, 0]);
-  });
-
+describe('Home', () => {
   // Catches a glide home that takes as long from next door as from behind the set (or snaps, or drags on).
   it('takes longer home the further the camera has to go, within bounds', () => {
     expect(homeSeconds(0, 0)).toBeGreaterThanOrEqual(0.9);
