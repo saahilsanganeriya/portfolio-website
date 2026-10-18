@@ -82,7 +82,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
     href: '/about',
     card: { title: 'The mango plant', line: 'For the mango seed my mother and I planted in Delhi when I was in kindergarten.' },
   },
-  // The window's label shows the time in both cities (World); there is nothing in it to read, so it opens nothing.
+  // There is nothing in the window to read, so it opens nothing.
   {
     proxies: ['hit_window'],
     prop: 'The window',
@@ -109,7 +109,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
     label: 'My family name and a thread spool, for my father’s spinning mill',
     target: 'about',
     href: '/about',
-    card: { title: 'The badge', line: 'My family name and a thread spool, for the spinning mill my father built in Delhi.' },
+    card: { title: 'Sanganeriya', line: 'My family name and a thread spool, for the spinning mill my father built in Delhi.' },
   },
   {
     proxies: ['hit_books'],
@@ -126,7 +126,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
     label: 'Books',
     target: 'books',
     href: '/#books',
-    card: { title: 'Japanese literature print', line: 'For the Murakami and Yoshimoto on the shelf below it.' },
+    card: { title: 'Japanese literature print', line: 'It hangs over the Murakami and Yoshimoto on the shelf.' },
   },
   {
     proxies: ['hit_voyager'],
@@ -180,7 +180,7 @@ export const HOTSPOTS: readonly Hotspot[] = [
     target: 'recipes',
     fly: 'oven',
     href: '/#recipes',
-    card: { title: 'Croissant', line: 'The recipe is with the others: croissants, bagels, cinnamon rolls, ratatouille.' },
+    card: { title: 'Croissant', line: 'My croissant recipe, with bagels, cinnamon rolls and ratatouille.' },
   },
   { proxies: ['hit_lava_lamp'], prop: 'The lava lamp', label: 'Lava lamp', target: null, action: 'lava', href: '/' },
   { proxies: ['hit_record_player'], prop: 'The record player', label: 'Records', target: null, fly: 'record_player', action: 'records', href: '/' },
