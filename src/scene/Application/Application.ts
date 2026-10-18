@@ -156,7 +156,7 @@ const ARRIVAL_HOLD_MS = 500;
 // so the room never moves the visitor's keyboard focus into the monitor while it flies.
 const ARRIVAL_WINDOW = 'about';
 // The loading line: the files' bytes fill this share of it, the steps after them (the posters and the window, the
-// GPU upload, the shaders, SaahilOS, the measured tier) the rest.
+// shaders, SaahilOS, the measured tier, the GPU upload) the rest.
 const BYTES_SHARE = 0.85;
 const LOAD_STEPS = 5;
 // A click this soon after the press that skipped the arrival belongs to that press.
@@ -420,11 +420,7 @@ export class Application implements RoomHandle {
     });
     await this.world.load();
     progress.step();
-    // Every atlas the wide view and the flight show, full size and on the GPU before the room is first drawn.
-    await this.atlases.install(deadline);
     this.renderer.prepareTextures(this.scene);
-    this.uploadTextures();
-    progress.step();
     // Compile every shader now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
     progress.step();
@@ -432,9 +428,15 @@ export class Application implements RoomHandle {
     // arrival shows, so it must be at full size when the camera reaches the glass.
     await os;
     await this.osWallpaper(deadline);
+    // The tier is measured on the small set room.glb embeds while the full atlases still download: a tier with other
+    // filtering would upload every full atlas a second time.
     await this.calibrate();
-    // The live shine on the CRT glass and the desk, at a tier that keeps it, made now rather than after the landing,
-    // where it appeared on the glass as the visitor arrived.
+    progress.step();
+    // Every atlas the wide view and the flight show, full size and on the GPU at the measured tier's filtering before
+    // the room is first drawn; then the live shine on the CRT glass and the desk, made now rather than after the
+    // landing, where it appeared on the glass as the visitor arrived.
+    await this.atlases.install(deadline);
+    this.uploadTextures();
     await this.shine.start();
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
     progress.step();
