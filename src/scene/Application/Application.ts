@@ -36,7 +36,7 @@ export interface RoomOptions {
   onMonitor?(target: string | null): void;
   /** The browser took the GL context away (memory pressure): the page should show the drawn monitor instead. */
   onLost?(): void;
-  /** The camera has come to rest where the room starts (the desk; the monitor on a window address): the ways on begin here. */
+  /** The arrival has ended (the camera at rest at the monitor, or taken over by the visitor): the ways on begin here. */
   onLanded?(): void;
   /** SaahilOS has loaded on the monitor, behind the dark screen: it may load its full-size pictures now. */
   onOsLoaded?(): void;
@@ -503,7 +503,7 @@ export class Application implements RoomHandle {
   }
 
   /**
-   * The tier the arrival starts at, measured on frames of the room behind the boot screen, each timed until the GPU
+   * The tier the arrival starts at, measured on frames of the room behind the dark screen, each timed until the GPU
    * has finished it. The time between two animation frames is no measure here: the browser queues a dozen frames for
    * the GPU before it holds the next one back, and the glide then waited for those queued top-tier frames (T82).
    */
