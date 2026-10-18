@@ -35,7 +35,7 @@ OUT = build_room.REPO / "public" / "room" / "floorplan.json"
 FURNITURE = [
     # label, objects whose bounds make the footprint
     ("Desk", ["desk_desk", "desk_desk_top"]),
-    ("Desk chair", ["desk_chair_base", "desk_chair_seat"]),
+    ("Desk chair", ["desk_chair", "desk_chair_base"]),
     ("Credenza", ["env_credenza"]),
     ("Kitchen counter", ["kitchen_counter", "env_kitchen_top"]),
     ("Darkroom lines", ["darkroom_line_0", "darkroom_line_1", "darkroom_line_2"]),

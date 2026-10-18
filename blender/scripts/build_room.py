@@ -373,10 +373,7 @@ def sky_material() -> bpy.types.Material:
 
 HENRY_MATERIALS = {
     "desk_desk": ["walnut"],
-    "desk_chair_base": ["black_metal"],
-    "desk_chair_seat": ["leather"],
     "desk_computer": ["cream_plastic"],
-    "desk_crt": ["cream_plastic"],
     "desk_keyboard": ["cream_plastic"],
     "desk_mouse": ["cream_plastic"],
     "desk_cables": ["rubber"],
@@ -405,6 +402,28 @@ def place_henry(mats):
         smooth_by_angle(obj, 40)
         if obj.name in HERO_NAMES:
             obj.name = obj.data.name = HERO_NAMES[obj.name]
+
+
+# The CRT's case and the desk chair are prop files in place of Henry's: the case stands on the computer as desk_crt,
+# placed before the glass, the sticky notes and the badge are fitted to its face; the chair takes his chair's spot
+# and turn. name: (name in the room, location, z turn in degrees).
+DESK_PROPS = {
+    "crt_shell": ("desk_crt", (0.0, 0.040, 0.865), 0.0),
+    "desk_chair": ("desk_chair", (0.199, -0.681, 0.0), -130.0),
+}
+DESK_PROP_ANCHORS: dict[str, Vector] = {}  # the empties they bring (crt_screen, crt_badge_seat), in world space
+
+
+def place_desk_props(mats):
+    for name, (room_name, loc, turn) in DESK_PROPS.items():
+        if not (PROPS_DIR / f"{name}.blend").exists():
+            raise SystemExit(f"build_room: no prop file {name}.blend")
+        root = Matrix.Translation(loc) @ Matrix.Rotation(math.radians(turn), 4, "Z")
+        meshes, anchors = place_one(name, root, "desk", "desk", mats)
+        for obj in meshes:
+            if obj.name.split(".")[0] == name:
+                obj.name = obj.data.name = room_name
+        DESK_PROP_ANCHORS.update(anchors)
 
 
 # ---- The corner: two walls and the floor ----
@@ -752,10 +771,12 @@ def crt_opening():
     crt = bpy.data.objects["desk_crt"]
     depsgraph = bpy.context.evaluated_depsgraph_get()
     step, cz = 0.002, 1.137
+    to_local = crt.matrix_world.inverted()  # Object.ray_cast works in the object's own space
 
     def inside(x, z):
-        hit, loc, *_ = crt.ray_cast(Vector((x, -1.0, z)), Vector((0, 1, 0)), depsgraph=depsgraph)
-        return hit and loc.y > -0.09
+        hit, loc, *_ = crt.ray_cast(to_local @ Vector((x, -1.0, z)), to_local.to_3x3() @ Vector((0, 1, 0)),
+                                    depsgraph=depsgraph)
+        return hit and (crt.matrix_world @ loc).y > -0.09
 
     def run(axis):
         ends = []
@@ -770,8 +791,18 @@ def crt_opening():
     return Vector(((x0 + x1) / 2, -0.085, cz + (z0 + z1) / 2)), x1 - x0, z1 - z0
 
 
+# The site sizes and places SaahilOS's hole from monitor_screen, so the screen stays where round eight put it whatever
+# CRT case stands round it; a case whose opening no longer matches (to the 2 mm the measurement steps) stops the build.
+MONITOR_SCREEN = (Vector((0.0, -0.085, 1.14)), 0.344, 0.27)
+
+
 def build_crt_glass(mats):
-    centre, width, height = crt_opening()
+    measured, width_seen, height_seen = crt_opening()
+    centre, width, height = MONITOR_SCREEN
+    off = max((measured - centre).length, abs(width_seen - width), abs(height_seen - height))
+    if off > 0.003:
+        raise SystemExit(f"build_room: the CRT opening measures {width_seen:.4f} x {height_seen:.4f} m at "
+                         f"{tuple(round(v, 4) for v in measured)}, {off * 1000:.1f} mm from monitor_screen")
     tilt = Matrix.Rotation(math.radians(-3), 4, "X")
     bm = bmesh.new()
     nx, nz = 16, 12
@@ -1411,7 +1442,7 @@ TEXEL_WEIGHTS = {
     "props_chopping_board": 1.0, "props_lounge_chair": 0.8, "props_lantern": 0.8,
     "props_reading_mug": 1.4, "props_floor_books": 0.9, "espresso_machine": 1.6, "espresso_cup": 2.2,
     "espresso_coffee": 1.0, "countertop_oven": 1.6, "oven_door": 1.8, "croissant": 3.0, "lava_lamp": 1.6,
-    "lava_lamp_glass": 1.8, "oven_glow": 1.6, "desk_chair_base": 0.5, "desk_chair_seat": 0.7, "desk_desk": 0.6,
+    "lava_lamp_glass": 1.8, "oven_glow": 1.6, "desk_chair_base": 0.6, "desk_chair": 0.9, "desk_desk": 0.6,
     "desk_crt": 2.0, "desk_computer": 1.5, "props_mango_plant_leaves": 1.4,
 }
 # Heights things rest on (their bottoms there are hidden): floor, desk, record cabinet, credenza, sill, counter,
@@ -1770,6 +1801,7 @@ def main():
     subprocess.run(["node", str(REPO / "blender" / "scripts" / "room_art.mjs"), str(CACHE / "art")], check=True)
     mats = build_materials()
     place_henry(mats)
+    place_desk_props(mats)
     build_shell(mats)
     build_window(mats)
     if not QUICK:
