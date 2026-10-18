@@ -393,8 +393,30 @@ test.describe('on a phone', () => {
     await expect(page.locator('html')).toHaveClass(/room-os/, { timeout: 30_000 });
   });
 
+  /**
+   * A phone that draws 60 frames a second, however slowly this machine draws them: the light room measures its frame
+   * rate before it starts and below 30 fps falls back to the drawn monitor (tested below), which on a loaded machine
+   * left a test that needs the room nothing to turn. Only the frames' timestamps are steady; timers keep real time.
+   */
+  async function steadyFrames(page: Page) {
+    await page.addInitScript(() => {
+      const native = window.requestAnimationFrame.bind(window);
+      let nativeAt = -1;
+      let at = performance.now();
+      window.requestAnimationFrame = (callback) =>
+        native((now) => {
+          if (now !== nativeAt) {
+            nativeAt = now;
+            at += 1000 / 60;
+          }
+          callback(at);
+        });
+    });
+  }
+
   /** Catches a phone page that pans or zooms under a finger instead of turning the set, or that goes into the monitor anyway. */
   test('a finger turns the set on a phone, and the room then stays out of the monitor', async ({ page }) => {
+    await steadyFrames(page);
     await page.goto('/');
     // The room has started its arrival (polled on a timer: a slow phone page draws too few frames to poll on them).
     await page.waitForFunction(() => window.__room?.startedAt != null, null, { timeout: 120_000, polling: 100 });
