@@ -84,6 +84,30 @@ test('a dark screen with one progress line hands over to the room only once ever
   await expect(page.locator('[data-room-status]')).toHaveText(/^The room has loaded\./);
 });
 
+/**
+ * Catches SaahilOS's wallpaper sharpening as the camera reaches the glass (it used to wait for the landing): at the
+ * room's first visible frame the monitor already holds the full-size picture, loaded.
+ */
+test('SaahilOS has its full-size wallpaper from the room’s first visible frame', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (window !== window.top) return;
+    const watch = () => {
+      if (window.__room?.startedAt != null) {
+        const img = document.querySelector<HTMLIFrameElement>('.room-monitor iframe')?.contentDocument?.querySelector<HTMLImageElement>('.os-wallpaper img');
+        (window as unknown as { wallpaper: unknown }).wallpaper = img ? { full: img.closest('[data-full]') !== null, complete: img.complete, src: img.currentSrc } : null;
+        return;
+      }
+      requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => (window as unknown as { wallpaper?: unknown }).wallpaper !== undefined, null, { timeout: 120_000 });
+  const wallpaper = await page.evaluate(() => (window as unknown as { wallpaper: { full: boolean; complete: boolean; src: string } | null }).wallpaper);
+  expect(wallpaper).toMatchObject({ full: true, complete: true });
+  expect(wallpaper!.src).not.toMatch(/preview-/);
+});
+
 /** Catches a scroll-down site, a link list or any other page content around the room on `/`. */
 test('/ is the room alone: nothing to scroll to and no links beside it', async ({ page }) => {
   await page.goto('/');

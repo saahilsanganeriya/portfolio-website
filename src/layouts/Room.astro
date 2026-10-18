@@ -318,6 +318,8 @@ const roomBytes = statSync('public/room/room.glb').size;
         onMonitor: showPhoneOs,
         onLost: () => fallBack('the GL context was lost'),
         onLanded,
+        // SaahilOS is loaded behind the dark screen: its full-size pictures may load now (src/os/wm/Wallpaper.tsx).
+        onOsLoaded: () => root.classList.add('room-ready'),
       });
       const frame = monitor();
       if (frame) listenInFrame(frame, startSound);
@@ -331,8 +333,6 @@ const roomBytes = statSync('public/room/room.glb').size;
       }
       room.setPaused(paused);
       soundControls.attach(room.audio);
-      // Everything the arrival shows is loaded (SaahilOS's full-size pictures may load now too).
-      root.classList.add('room-ready');
       enter();
     } catch (error) {
       console.error('room: failed to load', error);

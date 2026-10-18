@@ -38,6 +38,8 @@ export interface RoomOptions {
   onLost?(): void;
   /** The camera has come to rest where the room starts (the desk; the monitor on a window address): the ways on begin here. */
   onLanded?(): void;
+  /** SaahilOS has loaded on the monitor, behind the dark screen: it may load its full-size pictures now. */
+  onOsLoaded?(): void;
 }
 
 export interface StartOptions {
@@ -145,6 +147,9 @@ const OS_LOAD_TIMEOUT_MS = 8000;
 // The room waits this long at most for its full atlases before it is shown with what has arrived (never a dark screen
 // for ever); the rest swap in as they land.
 const ARRIVAL_DEADLINE_MS = 15_000;
+// SaahilOS's full-size wallpaper gets this long after the OS has loaded (a renamed or missing picture never holds the
+// room back further).
+const OS_WALLPAPER_WAIT_MS = 4000;
 // Without a hold from the page, the wide view holds this long before the flight to the monitor.
 const ARRIVAL_HOLD_MS = 500;
 // On a phone the arrival hands over to SaahilOS with this window; on the desktop the OS opens it by itself (its default),
@@ -327,8 +332,8 @@ export class Application implements RoomHandle {
   }
 
   async load() {
-    const begun = performance.now();
     const progress = this.progress();
+    const deadline = new Promise<void>((resolve) => setTimeout(resolve, ARRIVAL_DEADLINE_MS));
     // The full atlases start downloading with room.glb (the desktop; phones keep the small set room.glb embeds).
     this.atlases = new AtlasStreamer(this.scene, this.renderer, this.ktx2, { light: this.light, onSwap: () => (this.dirty = true) });
     void this.atlases.load((name, loaded, total) => progress.bytes(`atlas ${name}`, loaded, total));
@@ -410,26 +415,47 @@ export class Application implements RoomHandle {
     // so does the live shine on the CRT glass and the desk, which would otherwise appear on them after the landing.
     // The CSS3D layer puts the OS's frame into the page only when it is first laid out, so that happens now.
     this.renderer.css.render(this.cssScene, this.camera.instance);
-    const os = Promise.race([this.monitor.load(), new Promise((resolve) => setTimeout(resolve, OS_LOAD_TIMEOUT_MS))]).then(() => progress.step());
+    const os = Promise.race([this.monitor.load(), new Promise((resolve) => setTimeout(resolve, OS_LOAD_TIMEOUT_MS))]).then(() => {
+      progress.step();
+      this.options.onOsLoaded?.();
+    });
     const shine = this.shine.start();
     await this.world.load();
     await shine;
     progress.step();
     // Every atlas the wide view and the flight show, full size and on the GPU before the room is first drawn.
-    await this.atlases.install(new Promise((resolve) => setTimeout(resolve, Math.max(0, begun + ARRIVAL_DEADLINE_MS - performance.now()))));
+    await this.atlases.install(deadline);
     this.renderer.prepareTextures(this.scene);
     this.uploadTextures();
     progress.step();
     // Compile every shader now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
     progress.step();
-    // SaahilOS's boot would share the main thread with the frames being timed.
+    // SaahilOS's boot would share the main thread with the frames being timed; its wallpaper is the last thing the
+    // arrival shows, so it must be at full size when the camera reaches the glass.
     await os;
+    await this.osWallpaper(deadline);
     await this.calibrate();
     progress.step();
     this.installProbe();
     // Behind the dark screen until the room starts; the ladder measures on from here.
     this.loop();
+  }
+
+  /** Until SaahilOS's full-size wallpaper has loaded and decoded (it starts once onOsLoaded has run), or a time limit. */
+  private async osWallpaper(deadline: Promise<void>) {
+    const view = this.monitor.iframe?.contentWindow;
+    if (!view) return;
+    let waiting = true;
+    const arrived = async () => {
+      while (waiting) {
+        const img = view.document.querySelector<HTMLImageElement>('.os-wallpaper[data-full] img');
+        if (img?.complete && img.naturalWidth > 0 && img.currentSrc && !/preview-/.test(img.currentSrc)) return img.decode().catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    };
+    await Promise.race([arrived(), deadline, new Promise((resolve) => setTimeout(resolve, OS_WALLPAPER_WAIT_MS))]);
+    waiting = false;
   }
 
   /** Every texture the room holds on the GPU now (the atlases are already there), so no first draw uploads one. */

@@ -6,8 +6,8 @@ import type { OsWallpaper } from '../types';
 const SIZES = '(max-aspect-ratio: 2560/1981) 129.3vh, 100vw';
 
 /**
- * The room's <html> while it shows the 3D room; it gains `room-ready` once everything the arrival shows has loaded,
- * behind the dark screen, and `room-landed` when the arrival ends and a visitor can act.
+ * The room's <html> while it shows the 3D room; it gains `room-ready` once SaahilOS has loaded on its monitor, behind
+ * the dark screen, and `room-landed` when the arrival ends and a visitor can act.
  */
 function roomRoot(): HTMLElement | null {
   try {
