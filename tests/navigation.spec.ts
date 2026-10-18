@@ -436,14 +436,15 @@ test.describe('on a phone', () => {
     await expect(page.locator('html')).not.toHaveClass(/room-os/);
   });
 
-  /** Catches a loading screen that asks a phone for anything (the BIOS screen's "Tap to skip") or says more than its line. */
-  test('on a phone the dark screen asks for nothing and shows only its progress line', async ({ page }) => {
+  /** Catches a phone's BIOS screen asking for a key it has not got, or offering to skip to a room that is not ready. */
+  test('on a phone the BIOS screen offers a tap for sound and nothing to skip', async ({ page }) => {
     await page.goto('/');
-    const loader = page.locator('[data-room-loader]');
-    await expect(loader).toBeVisible();
-    expect(await loader.innerText()).toBe('');
-    await expect(loader.getByRole('progressbar', { name: 'Loading the room' })).toBeAttached();
-    await expect(page.getByText(/tap to skip|press any key/i)).toHaveCount(0);
+    const boot = page.locator('[data-boot]');
+    await expect(boot).toBeVisible();
+    await expect(boot.getByRole('progressbar', { name: 'Loading the room' })).toBeAttached();
+    await expect(boot.getByText('Tap for sound')).toBeVisible();
+    await expect(boot.getByText('Press any key for sound')).toBeHidden();
+    expect(await boot.innerText()).not.toMatch(/skip/i);
   });
 
   /** Catches an address on a phone that loses its window on the way into the monitor. */

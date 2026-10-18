@@ -3,8 +3,8 @@ import { readFileSync, statSync } from 'node:fs';
 import MonitorFrame from '../components/MonitorFrame.astro';
 import RecordCrate from '../components/RecordCrate.astro';
 import RoomHud from '../components/RoomHud.astro';
-import RoomLoader from '../components/RoomLoader.astro';
 import RoomTour from '../components/RoomTour.astro';
+import BootScreen from '../components/BootScreen.astro';
 import Base from './Base.astro';
 
 interface Props {
@@ -17,10 +17,10 @@ interface Props {
 }
 
 const { title, description, open = '', ogType, publishedTime } = Astro.props;
-// The loading screen is the void the room floats in, so the room fades in out of the same colour.
+// The loading screen's background is the void the room floats in, so the room fades in out of the same colour.
 const { voidColor: planVoid } = JSON.parse(readFileSync('public/room/floorplan.json', 'utf8')) as { voidColor?: unknown };
 const voidColor = typeof planVoid === 'string' && /^#[0-9a-f]{6}$/i.test(planVoid) ? planVoid : undefined;
-// room.glb's size: the loading line counts its bytes when the server sends it compressed, without a length.
+// room.glb's size: the loading screen counts its bytes when the server sends it compressed, without a length.
 const roomBytes = statSync('public/room/room.glb').size;
 ---
 
@@ -53,6 +53,11 @@ const roomBytes = statSync('public/room/room.glb').size;
           gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
         } catch (e) {}
         if (gl) {
+          // The BIOS screen names the graphics chip: the browser's own name for it, else the unmasked one.
+          var gpu = gl.getParameter(gl.RENDERER);
+          var info = /^WebKit WebGL$/.test(gpu) && gl.getExtension('WEBGL_debug_renderer_info');
+          if (info) gpu = gl.getParameter(info.UNMASKED_RENDERER_WEBGL);
+          if (typeof gpu === 'string') root.dataset.gpu = gpu;
           var lose = gl.getExtension('WEBGL_lose_context');
           if (lose) lose.loseContext();
         }
@@ -73,7 +78,7 @@ const roomBytes = statSync('public/room/room.glb').size;
     <RoomTour />
     <RecordCrate />
     <div class="room-world" data-room-world></div>
-    <RoomLoader />
+    <BootScreen />
     <MonitorFrame />
     <div class="room-controls">
       <button type="button" class="room-sound" aria-pressed="false" data-room-sound>
@@ -98,18 +103,19 @@ const roomBytes = statSync('public/room/room.glb').size;
   import { mountHud } from '../components/RoomHud';
   import { loadFloorPlan, mountTour } from '../components/RoomTourMap';
   import { mountSoundControls } from '../scene/audio/controls';
-  import { FOCUS_KEYS, listenForGestures, listenInFrame } from '../scene/audio/gesture';
-  import type { RoomHandle } from '../scene/main';
+  import { FOCUS_KEYS, gestureContext, listenForGestures, listenInFrame } from '../scene/audio/gesture';
+  import type { AudioHandle } from '../scene/audio/RoomAudio';
+  import type { LoadLine, RoomHandle } from '../scene/main';
 
   // The window the skip link opens when the address names none.
   const DEFAULT_WINDOW = 'projects';
   // `/#os` (where a bare /os lands): the monitor with SaahilOS's desktop, no window named.
   const DESKTOP = 'os';
-  // Once everything the arrival shows is on the GPU, the dark screen fades out over this long, then the wide view holds
+  // Once everything the arrival shows is on the GPU, the BIOS screen fades out over this long, then the wide view holds
   // this long before the flight to the monitor.
   const REVEAL_MS = 500;
   const HOLD_MS = 500;
-  // The light tier measures itself behind the dark screen; below this frame rate the drawn monitor takes over.
+  // The light tier measures itself behind the BIOS screen; below this frame rate the drawn monitor takes over.
   const LIGHT_PROBE_MS = 2000;
   const LIGHT_MIN_FPS = 30;
   // A press or key on these is the page's own control, not a move in the room: it does not land the arrival.
@@ -118,7 +124,7 @@ const roomBytes = statSync('public/room/room.glb').size;
   const root = document.documentElement;
   const stage = document.querySelector<HTMLElement>('[data-room]')!;
   const world = stage.querySelector<HTMLElement>('[data-room-world]')!;
-  const loader = stage.querySelector<HTMLElement>('[data-room-loader]')!;
+  const boot = stage.querySelector<HTMLElement>('[data-boot]')!;
   const status = stage.querySelector<HTMLElement>('[data-room-status]')!;
   const glass = stage.querySelector<HTMLElement>('[data-monitor-glass]')!;
   const target = windowTarget(stage.dataset.open ?? '', location.hash);
@@ -158,22 +164,95 @@ const roomBytes = statSync('public/room/room.glb').size;
   function showDrawnMonitor() {
     root.classList.remove('room', 'room-light', 'room-os');
     root.classList.add('room-2d');
-    loader.hidden = true;
+    boot.hidden = true;
     drawnScreen();
   }
 
-  /** The loading line: its width and value follow the room's progress, which never goes back. */
-  function loaderUi(el: HTMLElement) {
-    const line = el.querySelector<HTMLElement>('[data-room-progress]')!;
-    const bar = el.querySelector<HTMLElement>('[data-room-progress-bar]')!;
+  /** A file's size as the log prints it: one decimal in MB, whole KB below that. */
+  function size(bytes: number) {
+    return bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`;
+  }
+
+  /** The graphics chip's name without ANGLE's wrapping: `ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, …)`. */
+  function gpuName(raw: string) {
+    let name = raw.trim();
+    const angle = /^ANGLE \((.*)\)$/.exec(name);
+    if (angle) {
+      // ANGLE (vendor, renderer, backend): the renderer is the second part at the brackets' top level.
+      const parts = [''];
+      let depth = 0;
+      for (const ch of angle[1]) {
+        if (ch === ',' && depth === 0) parts.push('');
+        else {
+          depth += ch === '(' ? 1 : ch === ')' ? -1 : 0;
+          parts[parts.length - 1] += ch;
+        }
+      }
+      name = (parts[1] ?? parts[0]).trim();
+    }
+    return name.replace(/^ANGLE Metal Renderer: /, '').replace(/\s*\(0x[0-9a-f]+\)/gi, '').replace(/\s+(Direct3D|vs_\d).*$/, '');
+  }
+
+  /**
+   * The BIOS screen: the room's own loading as its log (each file by its bytes, then each step as it is done), the thread
+   * filling with the room's progress (it never goes back), and the footer saying what a key does for the sound.
+   */
+  function bootUi(el: HTMLElement) {
+    const log = el.querySelector<HTMLOListElement>('[data-boot-log]')!;
+    const statusLine = el.querySelector<HTMLElement>('[data-boot-status]')!;
+    const progress = el.querySelector<HTMLElement>('[data-boot-progress]')!;
+    const bar = el.querySelector<HTMLElement>('[data-boot-bar]')!;
+    const sound = el.querySelector<HTMLElement>('[data-boot-sound]')!;
     el.style.setProperty('--room-reveal-ms', `${REVEAL_MS}ms`);
+    // The visitor's own date and screen, as a BIOS shows its clock and display; the page itself is built ahead of time.
+    const today = el.querySelector<HTMLTimeElement>('[data-boot-today]')!;
+    const now = new Date();
+    today.dateTime = today.textContent = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
+    el.querySelector('[data-boot-screen]')!.textContent = `${Math.round(innerWidth * devicePixelRatio)} x ${Math.round(innerHeight * devicePixelRatio)}`;
+    const gpu = gpuName(root.dataset.gpu ?? '');
+    if (gpu) el.querySelector('[data-boot-gpu]')!.textContent = gpu;
+
+    const rows = new Map<string, { size: HTMLElement; state: HTMLElement }>();
+    const row = (name: string) => {
+      let found = rows.get(name);
+      if (!found) {
+        const li = document.createElement('li');
+        const cell = (kind: string, text = '') => {
+          const span = document.createElement('span');
+          span.className = kind;
+          span.textContent = text;
+          li.append(span);
+          return span;
+        };
+        cell('name', name);
+        cell('leader');
+        found = { size: cell('size'), state: cell('state') };
+        log.append(li);
+        rows.set(name, found);
+      }
+      return found;
+    };
     return {
-      progress(p: number) {
+      progress(p: number, line: LoadLine) {
         const pct = Math.round(p * 100);
         bar.style.width = `${pct}%`;
-        line.setAttribute('aria-valuenow', String(pct));
+        progress.setAttribute('aria-valuenow', String(pct));
+        statusLine.textContent = pct >= 100 ? 'FINISHED LOADING RESOURCES' : `LOADING RESOURCES (${pct}%)`;
+        const { size: sizeCell, state } = row(line.name);
+        const { loaded = 0, total = 0 } = line.bytes ?? {};
+        if (line.bytes) sizeCell.textContent = size(total || loaded);
+        state.textContent = line.done ? 'OK' : total ? `${Math.min(99, Math.floor((loaded / total) * 100))}%` : '';
       },
-      /** The room is ready to be seen: the dark screen fades out, then leaves the page. */
+      /** A line the page itself measures (the light tier's frame rate): its value, and OK once done. */
+      note(name: string, value: string, done: boolean) {
+        const cells = row(name);
+        cells.size.textContent = value;
+        cells.state.textContent = done ? 'OK' : '';
+      },
+      sound(state: 'waiting' | 'on' | 'off') {
+        sound.dataset.bootSound = state;
+      },
+      /** The room is ready to be seen: the BIOS screen fades out (a cut under reduced motion), then leaves the page. */
       reveal() {
         el.dataset.state = 'gone';
         el.setAttribute('aria-hidden', 'true');
@@ -183,7 +262,7 @@ const roomBytes = statSync('public/room/room.glb').size;
   }
 
   async function bootRoom() {
-    const ui = loaderUi(loader);
+    const ui = bootUi(boot);
     const sound = stage.querySelector<HTMLButtonElement>('[data-room-sound]')!;
     const pause = stage.querySelector<HTMLButtonElement>('[data-room-pause]')!;
     const skipLink = document.querySelector<HTMLAnchorElement>('.skip-link');
@@ -199,6 +278,12 @@ const roomBytes = statSync('public/room/room.glb').size;
     pause.setAttribute('aria-pressed', String(paused));
     // The Sound toggle and the volume, remembered across visits.
     const soundControls = mountSoundControls(sound, stage.querySelector<HTMLInputElement>('[data-room-volume]')!);
+    // The room's sound once the scene has made it (room.glb has loaded, the rest still loading), and the context a
+    // gesture made before that, which the sound takes over.
+    let audio: AudioHandle | null = null;
+    let early: AudioContext | null = null;
+    const showSound = () => ui.sound(soundControls.muted ? 'off' : audio?.unlocked || early?.state === 'running' ? 'on' : 'waiting');
+    showSound();
 
     const monitor = () => world.querySelector('iframe');
 
@@ -236,9 +321,9 @@ const roomBytes = statSync('public/room/room.glb').size;
       room.start({ open: open ?? undefined, hold: REVEAL_MS + HOLD_MS, fast: osRequested });
       if (osRequested) monitor()?.focus({ preventScroll: true });
       // The music starts now where the browser allows it, else with the visitor's first press, tap or key.
-      const audio = room.audio;
-      void audio.autoplay().then((playing) => {
-        status.textContent = audio.muted
+      const roomSound = room.audio;
+      void roomSound.autoplay().then((playing) => {
+        status.textContent = roomSound.muted
           ? 'The room has loaded. Sound is off, as you left it; the Sound button turns it on.'
           : playing
             ? 'The room has loaded. Music is on; the Sound button turns it off.'
@@ -255,12 +340,31 @@ const roomBytes = statSync('public/room/room.glb').size;
       void loadFloorPlan().then((plan) => plan && room && mountTour(tourButton, tourPanel, room, plan));
     };
 
-    // The music: inside the visitor's first press, tap or key anywhere (the room, its controls, the start of a drag,
-    // the OS's frames), as every browser requires. The Sound button decides for itself, so its first press turns the
-    // sound on rather than on and off again.
+    // The music: inside the visitor's first press, tap or key anywhere (the BIOS screen, the room, its controls, the
+    // start of a drag, the OS's frames), as every browser requires. A press while the room loads only starts the sound;
+    // it never shows the room before it is ready.
     const startSound = (event: Event) => {
-      if ((event.target as Element | null)?.closest?.('[data-room-sound]')) return;
-      room?.audio.unlock();
+      const onToggle = Boolean((event.target as Element | null)?.closest?.('[data-room-sound]'));
+      if (audio) {
+        // The Sound button decides for itself, so its first press turns the sound on rather than on and off again.
+        if (!onToggle) audio.unlock();
+        return;
+      }
+      // The sound is not made yet (room.glb still loading): this gesture's permission is kept in a context the sound
+      // takes over. A remembered mute holds, except on the Sound button, whose press turns the sound on.
+      if (early) {
+        // A tap grants the permission at its release, so a context made at the touch's start resumes here.
+        if (early.state !== 'running') void early.resume().catch(() => {});
+        return;
+      }
+      if (soundControls.muted && !onToggle) return;
+      early = gestureContext();
+      early?.addEventListener('statechange', showSound);
+      showSound();
+    };
+    // The room failed to load before its sound was made: the context a press made for it is closed.
+    const dropEarly = () => {
+      if (!audio) void early?.close();
     };
     listenForGestures(window, startSound);
     soundGesture = startSound;
@@ -290,7 +394,7 @@ const roomBytes = statSync('public/room/room.glb').size;
       const typed = (data?.type === 'keydown' || data?.type === 'press') && key !== null && !FOCUS_KEYS.has(key);
       if (!pressed && !typed) return;
       if (entered) room?.skipIntro();
-      room?.audio.unlock();
+      audio?.unlock();
     });
 
     pause.addEventListener('click', () => {
@@ -321,25 +425,36 @@ const roomBytes = statSync('public/room/room.glb').size;
         onMonitor: showPhoneOs,
         onLost: () => fallBack('the GL context was lost'),
         onLanded,
-        // SaahilOS is loaded behind the dark screen: its full-size pictures may load now (src/os/wm/Wallpaper.tsx).
+        // SaahilOS is loaded behind the BIOS screen: its full-size pictures may load now (src/os/wm/Wallpaper.tsx).
         onOsLoaded: () => root.classList.add('room-ready'),
+        onAudio: (made) => {
+          audio = made;
+          soundControls.attach(made);
+          made.subscribe(showSound);
+          // A press before the sound was made starts it now, in the context that press made.
+          if (early) made.unlock();
+          showSound();
+        },
+        audioContext: () => early,
       });
       const frame = monitor();
       if (frame) listenInFrame(frame, startSound);
       if (light) {
-        // Load the phone's SaahilOS behind the dark screen, so it is ready when the camera reaches the glass.
+        // Load the phone's SaahilOS behind the BIOS screen, so it is ready when the camera reaches the glass.
         drawnScreen();
+        ui.note('Frame rate', '', false);
         const fps = await room.measureFps(LIGHT_PROBE_MS);
+        ui.note('Frame rate', `${Math.round(fps)} fps`, true);
         probing = false;
         if (fps < LIGHT_MIN_FPS) fallBack(`${fps.toFixed(0)} fps on the light tier`);
         if (!room) return;
       }
       room.setPaused(paused);
-      soundControls.attach(room.audio);
       enter();
     } catch (error) {
       console.error('room: failed to load', error);
       room = null;
+      dropEarly();
       showDrawnMonitor();
     }
   }
@@ -390,7 +505,7 @@ const roomBytes = statSync('public/room/room.glb').size;
 
   .room-world,
   .room-controls,
-  .room-stage :global(.room-loader) {
+  .room-stage :global(.boot) {
     display: none;
   }
 
@@ -402,8 +517,8 @@ const roomBytes = statSync('public/room/room.glb').size;
     display: flex;
   }
 
-  :global(html.room) .room-stage :global(.room-loader:not([hidden])) {
-    display: grid;
+  :global(html.room) .room-stage :global(.boot:not([hidden])) {
+    display: block;
   }
 
   :global(html.room) .room-stage :global(.monitor-frame) {
