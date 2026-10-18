@@ -75,8 +75,11 @@ export class Wind {
     uWindStrength: { value: STRENGTH_M * WORLD_SCALE },
     uWindFrequency: { value: FREQUENCY_PER_M / WORLD_SCALE },
   };
-  /** Each swaying mesh's own copy of its material, and the room's material it follows (the atlas may be swapped later). */
-  private readonly swaying: { mesh: THREE.Mesh; own: THREE.MeshBasicMaterial; room: THREE.MeshBasicMaterial }[] = [];
+  /**
+   * Each swaying mesh's own copy of its material. The copy is what the scene draws, so the atlas streamer swaps the full
+   * atlas into it directly; the room's material it was copied from hangs off the scene with the first-frame atlas.
+   */
+  private readonly swaying: { mesh: THREE.Mesh; own: THREE.MeshBasicMaterial }[] = [];
 
   constructor(private readonly still: boolean) {
     if (still) this.uniforms.uWindStrength.value = 0;
@@ -108,19 +111,13 @@ export class Wind {
     };
     own.customProgramCacheKey = () => 'room-wind';
     mesh.material = own;
-    this.swaying.push({ mesh, own, room });
+    this.swaying.push({ mesh, own });
     return true;
   }
 
   update(dt: number) {
     if (this.still) return;
     this.uniforms.uWindTime.value += Math.max(dt, 0) * DRIFT_PER_S;
-    for (const s of this.swaying) {
-      if (s.own.map !== s.room.map) {
-        s.own.map = s.room.map;
-        s.own.needsUpdate = true;
-      }
-    }
   }
 
   state() {
