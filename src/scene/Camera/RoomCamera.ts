@@ -87,6 +87,8 @@ const POINTER_SHIFT = { x: 0.03, y: 0.02 };
 const LOOK_SPRING = springFor(0.45);
 const SWAY_IN = springFor(5);
 const SWAY_OUT = springFor(1.2);
+// Steady enough for a card beside an object: the sway's last trace and the lean's speed below what a pixel would show.
+const STEADY = { sway: 1e-4, leanRadS: 1e-4 };
 // Home takes longer the further it has to go: a base, plus time per metre the eye travels and per radian the view turns.
 // From the monitor (8.4 m back) it is about 1.8 s, from behind the set (half a turn round) 2.4 s, from nearby 0.9 s.
 const HOME_SECONDS = { base: 0.7, perMetre: 0.12, perRadian: 0.3, min: 0.9, max: 2.4 };
@@ -157,6 +159,12 @@ export class RoomCamera {
 
   get moving() {
     return this.flight !== null || (this.orbit !== null && this.orbit.settling);
+  }
+
+  /** Whether the view holds quite still: not moving, the wide view's sway faded out and the pointer's lean at rest. */
+  get steady() {
+    const [yaw, pitch] = this.look.velocity;
+    return !this.moving && this.swayWeight.value[0] < STEADY.sway && Math.hypot(yaw, pitch) < STEADY.leanRadS;
   }
 
   /** The station the camera is at or flying to ('orbit' while the visitor turns the set). */

@@ -797,7 +797,8 @@ export class Application implements RoomHandle {
       this.focus = null;
       return null;
     }
-    if (this.camera.moving || this.camera.phase !== focus.station) return null;
+    // Only once the view holds still (the sway from the wide view fades out after the flight lands), so the card never drifts.
+    if (!this.camera.steady || this.camera.phase !== focus.station) return null;
     const { hotspot, proxy } = focus;
     const box = new THREE.Box3().setFromObject(proxy);
     return {
@@ -828,7 +829,7 @@ export class Application implements RoomHandle {
   /** The object whose card shows now: the camera rests at its framing. */
   private carded() {
     const focus = this.focus;
-    return focus && this.camera.phase === focus.station && this.camera.destination === focus.station && !this.camera.moving ? focus.proxy : null;
+    return focus && this.camera.phase === focus.station && this.camera.destination === focus.station && this.camera.steady ? focus.proxy : null;
   }
 
   learnMore() {
