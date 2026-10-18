@@ -1565,6 +1565,16 @@ def landing_views():
 
 
 def split_crt_bezel_by_landing(front):
+    shown = landing_shown()
+    bezel = split_by_faces(front, lambda c, n, m: shown(c, n), "desk_crt_bezel")
+    if bezel is None:
+        return
+    mark_bezel_sides(bezel)
+
+
+def landing_shown():
+    """Whether a face (world centre, normal) shows in a landing view. The sticky notes do not hide it: faces under a
+    note left in the desk atlas showed a seam where they reached past the note's edge."""
     bpy.context.view_layer.update()
     scene, depsgraph = bpy.context.scene, bpy.context.evaluated_depsgraph_get()
     half_v = math.tan(math.radians(CAMERA_FOV_DEG) / 2)
@@ -1580,14 +1590,11 @@ def split_crt_bezel_by_landing(front):
             v = p - eye
             depth = v.dot(forward)
             if (depth > 0.05 and abs(v.dot(right)) <= half_h * depth and abs(v.dot(up)) <= half_v * depth
-                    and normal.dot(eye - p) > 0 and seen_from(p, eye, scene, depsgraph)):
+                    and normal.dot(eye - p) > 0 and seen_from(p, eye, scene, depsgraph, ("sticky_note_",))):
                 return True
         return False
 
-    bezel = split_by_faces(front, lambda c, n, m: shown(c, n), "desk_crt_bezel")
-    if bezel is None:
-        return
-    mark_bezel_sides(bezel)
+    return shown
 
 
 def mark_bezel_sides(bezel):
@@ -1639,8 +1646,9 @@ def desk_top_views():
     return views
 
 
-def seen_from(point, eye, scene, depsgraph):
-    """No surface a camera renders lies between point and eye (proxies, ghosts and glass let the ray through)."""
+def seen_from(point, eye, scene, depsgraph, see_through=()):
+    """No surface a camera renders lies between point and eye (proxies, ghosts, glass and names starting with one of
+    see_through let the ray through)."""
     ray = eye - point
     left = ray.length
     ray.normalize()
@@ -1650,7 +1658,7 @@ def seen_from(point, eye, scene, depsgraph):
         if not hit:
             return True
         if not (obj.hide_render or not obj.visible_camera or obj.name.startswith(("hit_", "ghost_", "env_sky"))
-                or obj.name in ("window_glass", "crt_glow")):
+                or obj.name in ("window_glass", "crt_glow") or obj.name.startswith(tuple(see_through))):
             return False
         left -= (loc - origin).length + 0.001
         origin = loc + ray * 0.001
