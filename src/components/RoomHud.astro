@@ -2,7 +2,8 @@
 // The room's corner label (brief §6, after Henry's): his name, what he does and the visitor's own time, top left, in
 // the room's type on ink chips like the hover labels. Quiet: it appears once the camera has landed, steps aside while
 // the monitor is being read (or wherever the glass would sit under it), and phones go without it. In its place at the
-// monitor, the way back to the room. Behaviour is in RoomHud.ts.
+// monitor, the way back to the room. Beside an object a click has flown to, its card: the title, one plain line, and
+// Learn more, which opens its window on the monitor (round 9 §10.2). Behaviour is in RoomHud.ts.
 ---
 
 <div class="room-hud" data-room-hud data-room-ui>
@@ -16,6 +17,16 @@
   Back to the room
   <kbd aria-hidden="true">Esc</kbd>
 </button>
+
+<div class="room-card" role="group" aria-labelledby="room-card-title" tabindex="-1" data-room-card data-room-ui hidden>
+  <h2 class="room-card-title" id="room-card-title" data-room-card-title></h2>
+  <p class="room-card-line" data-room-card-line></p>
+  <button type="button" class="room-card-more" data-room-card-more>
+    Learn more
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6.5 3.5 11 8l-4.5 4.5"></path></svg>
+  </button>
+</div>
+<p class="visually-hidden" aria-live="polite" data-room-card-status></p>
 
 <style>
   .room-hud,
@@ -117,9 +128,96 @@
     outline-offset: 2px;
   }
 
+  /* An object's card: an ink plate beside the object, its title in the room's serif, one line, and the way in. */
+  .room-card {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 4;
+    width: min(17.5rem, calc(100vw - 2 * var(--space-3)));
+    padding: 0.7rem 0.8rem 0.75rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-sans);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  :global(html.room-os) .room-card {
+    display: none;
+  }
+
+  .room-card[data-shown] {
+    opacity: 1;
+  }
+
+  .room-card:focus {
+    outline: none;
+  }
+
+  .room-card-title {
+    margin: 0 0 0.3rem;
+    font-family: var(--font-serif);
+    font-size: 1.0625rem;
+    font-weight: 400;
+    line-height: 1.25;
+  }
+
+  .room-card-line {
+    margin: 0 0 0.6rem;
+    color: var(--dust);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  .room-card-more {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.5rem 0.25rem 0.65rem;
+    border: 1px solid rgb(168 159 145 / 0.5);
+    border-radius: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font: inherit;
+    font-size: var(--size-meta);
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .room-card-more[hidden] {
+    display: none;
+  }
+
+  .room-card-more svg {
+    width: 0.85rem;
+    height: 0.85rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: square;
+  }
+
+  .room-card-more:hover,
+  .room-card-more:focus-visible {
+    border-color: var(--paper);
+    background: var(--walnut);
+  }
+
+  .room-card-more:focus-visible {
+    outline: 2px solid var(--paper);
+    outline-offset: 2px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .room-hud,
-    .room-back {
+    .room-back,
+    .room-card,
+    .room-card-more {
       transition: none;
     }
   }

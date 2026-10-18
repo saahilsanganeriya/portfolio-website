@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { RoomNodes, StationName } from '../Application/RoomModel';
 import type { Orbit } from './orbit';
-import type { Motion, RoomCamera } from './RoomCamera';
+import type { Motion, RoomCamera, Station } from './RoomCamera';
 
 export interface NavigationHandlers {
   /** Moves the camera (the room applies reduced motion and what reaching the monitor means). */
@@ -191,9 +191,12 @@ export class Navigation {
     if (next !== here) this.handlers.fly(next, 'step');
   }
 
-  private nearestStop(station: StationName | 'orbit'): StationName {
-    const at = station === 'orbit' ? this.camera.lookAt : this.nodes.framings[station]?.target;
-    if ((station !== 'orbit' && this.tour.includes(station)) || !at) return station === 'orbit' ? 'idle' : station;
+  /** The walk's stop nearest what the camera looks at: from the orbit or an object's own framing, by where it looks. */
+  private nearestStop(station: Station | 'orbit'): StationName {
+    const named = station === 'orbit' || station.startsWith('object:') ? null : (station as StationName);
+    if (named && this.tour.includes(named)) return named;
+    const at = named ? this.nodes.framings[named]?.target : this.camera.lookAt;
+    if (!at) return named ?? 'idle';
     const distance = (s: StationName) => at.distanceTo(this.nodes.framings[s]?.target ?? at);
     return this.tour.filter((s) => s !== 'monitor').reduce((best, s) => (distance(s) < distance(best) ? s : best));
   }

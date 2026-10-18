@@ -5,8 +5,12 @@ import { brakedTime, fromGlidePose, glidePose, glideRate, glideTime, planGlide, 
 import { fromSpherical, Orbit, readOrbit, toSpherical, wrapAngle, type OrbitSettings } from './orbit';
 import { Spring, springFor, type SpringSettings } from './spring';
 
+/** A framing fitted to one object (a click flies to the object first), named after the object's proxy box. */
+export type ObjectStation = `object:${string}`;
+/** Anywhere the camera can fly to and rest: the room's framings and the objects' own. */
+export type Station = StationName | ObjectStation;
 /** Where the camera is: a framing, the boot framing, or turned freely about the set (the orbit). */
-export type CameraPhase = 'loading' | 'orbit' | StationName;
+export type CameraPhase = 'loading' | 'orbit' | Station;
 
 /** How a move feels: each is a spring tuned to land in about the time named. */
 export const MOTIONS = {
@@ -46,7 +50,7 @@ interface Glide {
 
 /** Where a braked glide came to rest: the stop it was nearest on the way, and the pose it rests in. */
 interface Held {
-  station: StationName;
+  station: Station;
   pose: Float64Array;
 }
 
@@ -60,7 +64,7 @@ interface HomeSwing {
 }
 
 interface Flight {
-  to: StationName;
+  to: Station;
   spring: SpringSettings;
   path?: Path;
   glide?: Glide;
@@ -118,6 +122,7 @@ export class RoomCamera {
   phase: CameraPhase = 'loading';
   private flight: Flight | null = null;
   private readonly framings: RoomNodes['framings'];
+  private readonly objects = new Map<ObjectStation, Framing>();
   private readonly monitorCenter: THREE.Vector3;
   private readonly monitorNormal: THREE.Vector3;
   private readonly monitorSize: { width: number; height: number };
@@ -172,9 +177,20 @@ export class RoomCamera {
     return this.flight?.to ?? this.phase;
   }
 
-  /** Whether the room has this framing (window, projector, shelf and photos are optional). */
-  has(station: StationName) {
-    return station === 'monitor' || Boolean(this.framings[station]);
+  /** Whether the room has this framing (window, projector, shelf and photos are optional), or the object one. */
+  has(station: Station) {
+    return station === 'monitor' || Boolean(this.framingOf(station));
+  }
+
+  /** Keeps a framing fitted to an object, flown to as `object:<name>`; refitted each time (the window may have resized). */
+  frameObject(name: string, framing: Framing): ObjectStation {
+    const station: ObjectStation = `object:${name}`;
+    this.objects.set(station, framing);
+    return station;
+  }
+
+  private framingOf(station: Station): Framing | undefined {
+    return station.startsWith('object:') ? this.objects.get(station as ObjectStation) : this.framings[station as StationName];
   }
 
   resize(aspect: number) {
@@ -187,7 +203,7 @@ export class RoomCamera {
    * Flies to a station on a spring; `cut` jumps there (reduced motion, a skipped intro). `distance` stands the camera
    * that many times further from what the framing looks at, along the framing's own line. False if the room lacks it.
    */
-  fly(station: StationName, motion: Motion, onDone?: () => void, cut = false, distance = 1): boolean {
+  fly(station: Station, motion: Motion, onDone?: () => void, cut = false, distance = 1): boolean {
     if (!this.has(station)) return false;
     this.orbit = null;
     const wasHeld = this.held !== null;
@@ -563,12 +579,16 @@ export class RoomCamera {
       return;
     }
     if (phase === 'monitor') ({ position, target, fov } = this.monitorPose());
-    else if (phase === 'loading') {
+    else if (phase.startsWith('object:')) {
+      // Fitted to the window's shape already, when it was made.
+      const framing = this.objects.get(phase as ObjectStation) ?? this.framings.idle;
+      ({ position, target, fov } = this.fromFraming(framing, this.distanceAt(phase)));
+    } else if (phase === 'loading') {
       // The arrival starts from the wide view, which fills the frame with the room: from the boot framing, 14 m out,
       // the set floated as a small box in black.
       ({ position, target, fov } = this.fromFraming(this.framings.idle, 1));
     } else {
-      const framing = this.framings[phase] ?? this.framings.idle;
+      const framing = this.framings[phase as StationName] ?? this.framings.idle;
       ({ position, target, fov } = this.fromFraming(framing, this.aspectFit() * this.distanceAt(phase)));
     }
     this.goal[0] = position.x;

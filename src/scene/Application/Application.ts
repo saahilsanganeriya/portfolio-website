@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { RoomAudio, type AudioHandle, type OfflineOptions } from '../audio/RoomAudio';
 import { HOME_EVENT } from '../Camera/events';
+import { frameObject } from '../Camera/focus';
 import { Navigation } from '../Camera/Navigation';
 import type { RoomPlan } from '../Camera/glide';
-import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
+import { RoomCamera, type CameraPhase, type Motion, type Station } from '../Camera/RoomCamera';
 import type { Hotspot } from '../hotspots';
 import { Diorama } from '../World/Diorama';
 import { deferWindowPictures } from '../World/textures';
@@ -71,6 +72,18 @@ export interface ScreenRect {
   bottom: number;
 }
 
+/** The card beside an object the camera has flown to (round 9 §10.2). */
+export interface RoomCard {
+  /** The object's proxy box, which names it. */
+  id: string;
+  title: string;
+  line: string;
+  /** Whether Learn more opens a window on the monitor. */
+  more: boolean;
+  /** Where the object is on the page now, or null when it is out of view. */
+  rect: ScreenRect | null;
+}
+
 export interface RoomHandle {
   /** Leaves the boot framing: the arrival glide to the desk and on into the monitor, or with `open` the monitor at once. */
   start(options?: StartOptions): void;
@@ -106,6 +119,10 @@ export interface RoomHandle {
    * monitor, turned behind the walls); a cut under reduced motion. False before the room has started.
    */
   home(): boolean;
+  /** The card for the object the camera rests at, or null (none, or still flying there). */
+  card(): RoomCard | null;
+  /** Learn more on the card: into the monitor with that object's window open; false when there is none to open. */
+  learnMore(): boolean;
   /** Where the monitor's glass is on the page now, or null when it is not in view. */
   monitorRect(): ScreenRect | null;
   /** The room's sound: unlock() on the first gesture, mute, volume, setState(state), sfx(name, position?). */
@@ -243,6 +260,10 @@ export class Application implements RoomHandle {
   private stepIn = 0;
   private skippedAt = -Infinity;
   private leftMonitorAt = -Infinity;
+  /** The object a click flew the camera to, whose card shows once the camera rests there. */
+  private focus: { hotspot: Hotspot; proxy: THREE.Object3D; station: Station } | null = null;
+  /** The walls' inner faces, which a framing fitted to an object keeps its eye in front of. */
+  private wallFaces: { leftWallX?: number; backWallZ?: number } = {};
   private frameSink: ((frameMs: number) => void) | null = null;
   private clock = 0;
   private last = 0;
@@ -295,6 +316,9 @@ export class Application implements RoomHandle {
     // Before anything is uploaded: dropping the largest mip level quarters the GPU memory the atlases take.
     if (this.light) halveTextures(root);
     this.nodes = readRoom(root);
+    const wall = (side: string) => root.getObjectByName(`wall_${side}`) ?? root.getObjectByName(`env_wall_${side}`);
+    const [left, back] = [wall('left'), wall('back')].map((w) => (w ? new THREE.Box3().setFromObject(w) : null));
+    this.wallFaces = { leftWallX: left?.max.x, backWallZ: back?.max.z };
     this.scene.add(root);
     void loadVoidColor().then((color) => {
       this.renderer.setVoidColor(color);
@@ -610,10 +634,81 @@ export class Application implements RoomHandle {
     this.hover.pulse(proxy);
     if (hotspot.labelOnly) return;
     this.audio.hotspot({ proxies: [proxy.name] });
+    if (hotspot.card) {
+      this.focusOn(hotspot, proxy);
+      return;
+    }
     if (this.world.activate(hotspot)) return;
     if (hotspot.fly && this.camera.destination !== hotspot.fly && this.camera.has(hotspot.fly)) this.fly(hotspot.fly);
     else if (hotspot.target) this.openWindow(hotspot.target);
     else if (!hotspot.fly) this.enterMonitor();
+  }
+
+  /**
+   * An object with a card: the camera flies to the object itself (its own framing, or one fitted to it) and the card
+   * shows once it is there. A second click on it opens its window, as Learn more does; on a prop that acts in the room
+   * (the espresso pours, the oven door opens and shuts) it acts again, and Learn more opens the window.
+   */
+  private focusOn(hotspot: Hotspot, proxy: THREE.Object3D) {
+    const current = this.focus;
+    const acts = hotspot.action !== undefined && hotspot.action !== 'print';
+    if (current?.hotspot === hotspot && this.camera.destination === current.station) {
+      if (acts) this.world.activate(hotspot);
+      else this.learnMore();
+      return;
+    }
+    const station = this.stationFor(hotspot, proxy);
+    this.focus = { hotspot, proxy, station };
+    // The props that act once the camera is there (the espresso pours, the oven opens) fly there themselves.
+    if (acts && this.world.activate(hotspot)) return;
+    this.glide(station, 'travel');
+  }
+
+  /** The hotspot's own framing when the room has one, else a framing fitted to its proxy box. */
+  private stationFor(hotspot: Hotspot, proxy: THREE.Object3D): Station {
+    if (hotspot.fly && this.camera.has(hotspot.fly)) return hotspot.fly;
+    const idle = this.nodes.framings.idle;
+    const box = new THREE.Box3().setFromObject(proxy);
+    return this.camera.frameObject(proxy.name, frameObject(box, { fov: idle.fov, aspect: this.aspect(), toward: idle.position, ...this.wallFaces }));
+  }
+
+  card(): RoomCard | null {
+    const focus = this.focus;
+    if (!focus) return null;
+    if (this.camera.destination !== focus.station) {
+      this.focus = null;
+      return null;
+    }
+    if (this.camera.moving || this.camera.phase !== focus.station) return null;
+    const { hotspot, proxy } = focus;
+    return {
+      id: proxy.name,
+      title: hotspot.card?.title ?? hotspot.label,
+      line: hotspot.card?.line ?? `${hotspot.prop}.`,
+      more: Boolean(hotspot.target),
+      rect: this.screenRect(new THREE.Box3().setFromObject(proxy)),
+    };
+  }
+
+  learnMore() {
+    const focus = this.focus;
+    if (!focus?.hotspot.target || this.camera.destination !== focus.station) return false;
+    this.focus = null;
+    this.openWindow(focus.hotspot.target);
+    return true;
+  }
+
+  /** A box's outline on the page (CSS pixels from the viewport's top left), or null when it is behind or off screen. */
+  private screenRect(box: THREE.Box3): ScreenRect | null {
+    const rect = this.container.getBoundingClientRect();
+    const corners = [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
+      new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(this.camera.instance),
+    );
+    if (corners.some((p) => p.z > 1)) return null;
+    const xs = corners.map((p) => rect.left + ((p.x + 1) / 2) * rect.width);
+    const ys = corners.map((p) => rect.top + ((1 - p.y) / 2) * rect.height);
+    const out = { left: Math.min(...xs), top: Math.min(...ys), right: Math.max(...xs), bottom: Math.max(...ys) };
+    return out.right < rect.left || out.left > rect.right || out.bottom < rect.top || out.top > rect.bottom ? null : out;
   }
 
   private enterMonitor(rested = false) {
@@ -687,7 +782,7 @@ export class Application implements RoomHandle {
     this.options.onMonitor?.(target);
   }
 
-  private glide(station: StationName, motion: Motion, onDone?: () => void, cut = false, distance = 1) {
+  private glide(station: Station, motion: Motion, onDone?: () => void, cut = false, distance = 1) {
     this.takeOver();
     this.intro = false;
     if (station !== 'monitor') this.handedOver = false;
