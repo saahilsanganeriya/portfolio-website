@@ -117,6 +117,11 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   const markers = q<HTMLElement>('[data-tour-markers]');
 
   const placed = placeStops(room, plan);
+  // A camera off the plan (the wide view stands 8 m in front of the set) is marked on the floor's edge, looking in.
+  const floorXs = plan.outline.map(([x]) => x);
+  const floorZs = plan.outline.map(([, z]) => z);
+  const onPlan = (x: number, z: number) =>
+    [clamp(x, Math.min(...floorXs), Math.max(...floorXs)), clamp(z, Math.min(...floorZs), Math.max(...floorZs))] as const;
   const points = [...plan.outline, ...placed.map((s) => s.position)];
   const minX = Math.min(...points.map(([x]) => x)) - PLAN_MARGIN_M;
   const minZ = Math.min(...points.map(([, z]) => z)) - PLAN_MARGIN_M;
@@ -296,13 +301,15 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
   // ---- opening, closing and the keyboard ----
   let frame = 0;
   let current: Stop | undefined;
+  let atWide = false;
   // A played tour that came home keeps its last line ("Back at the desk.") until the camera moves again.
   let ended = false;
   const follow = () => {
     frame = requestAnimationFrame(follow);
     const view = room.view();
     const angle = (Math.atan2(view.dirZ, view.dirX) * 180) / Math.PI;
-    here.setAttribute('transform', `translate(${view.x} ${view.z}) rotate(${angle}) scale(${width * HERE_SCALE})`);
+    const [hereX, hereZ] = onPlan(view.x, view.z);
+    here.setAttribute('transform', `translate(${hereX} ${hereZ}) rotate(${angle}) scale(${width * HERE_SCALE})`);
     let at: Stop | undefined;
     if (playing?.mode === 'glide') {
       // Braked by the visitor, or the camera sent somewhere else: they lead now.
@@ -318,6 +325,12 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
       at = view.moving ? undefined : (stops.find((s) => s.station === view.destination) ?? nearestStop(view.targetX, view.targetZ));
     }
     if (view.moving) ended = false;
+    const wide = !playing && !ended && !view.moving && view.destination === 'idle';
+    if (wide !== atWide) {
+      atWide = wide;
+      if (wide) say('You are here: the wide view.');
+      else if (!at && !playing && !ended) caption.textContent = '';
+    }
     if (at === current) return;
     current?.item.removeAttribute('aria-current');
     current?.marker.removeAttribute('data-current');
@@ -384,6 +397,8 @@ export function mountTour(open: HTMLButtonElement, panel: HTMLElement, room: Roo
 
   open.hidden = stops.length === 0;
 }
+
+const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 
 /** Pushes points closer than `gap` apart (a few rounds, each pair half each way), kept inside `bounds`. */
 function spread(points: readonly [number, number][], gap: number, [x0, z0, x1, z1]: [number, number, number, number]) {
