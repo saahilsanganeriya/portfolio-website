@@ -15,10 +15,11 @@ const storage = () => {
 };
 
 /**
- * The Sound toggle (pressed = sound on) and the volume slider, both remembered across visits. A remembered mute holds:
- * the visitor's first click or key no longer starts the sound, only the toggle does. Until the sound first starts, the
- * toggle is marked `data-hint` (it glows gently) so a visitor knows the room has sound; one who turned it off is not
- * nagged.
+ * The Sound toggle and the volume slider, both remembered across visits. The toggle is pressed only while the sound
+ * really plays (the browser let it run, and it is not muted); its title says which of on, off or waiting it is. A
+ * remembered mute holds: no autoplay, and the visitor's first click or key no longer starts the sound, only the toggle
+ * does. While the sound waits for the browser's permission the toggle is marked `data-hint` (it glows gently) so a
+ * visitor knows the room has sound; one who turned it off is not nagged.
  */
 export function mountSoundControls(toggle: HTMLButtonElement, slider: HTMLInputElement, store: Storage | null = storage()): SoundControls {
   const settings: SoundSettings = readSettings(store);
@@ -26,16 +27,18 @@ export function mountSoundControls(toggle: HTMLButtonElement, slider: HTMLInputE
   slider.value = String(Math.round(settings.volume * 100));
 
   const show = () => {
-    toggle.setAttribute('aria-pressed', String(Boolean(audio?.unlocked) && !settings.muted));
+    const playing = Boolean(audio?.unlocked) && !settings.muted;
+    toggle.setAttribute('aria-pressed', String(playing));
     toggle.toggleAttribute('data-hint', !audio?.unlocked && !settings.muted);
+    toggle.title = playing ? 'Sound is on' : settings.muted ? 'Sound is off' : 'Sound starts with your first click or key press';
     slider.setAttribute('aria-valuetext', `${slider.value} percent`);
   };
 
   toggle.addEventListener('click', () => {
     if (!audio) return;
+    // Pressed while it plays, it turns the sound off; otherwise on (its own press is a gesture, so the browser allows it).
     settings.muted = audio.unlocked && !settings.muted;
     audio.setMuted(settings.muted);
-    // The toggle's own press is a gesture, so it may start the sound the first time.
     if (!settings.muted) audio.unlock();
     writeSettings(store, settings);
     show();

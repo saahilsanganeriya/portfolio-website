@@ -13,8 +13,11 @@ const AUDIO_URL = '/audio/';
 const OFFLINE_RATE = 48000;
 const UPDATE_MS = 50;
 const MASTER_FADE_S = 0.25;
-// The first click, tap or key brings the whole room up from silence over this long.
-const FIRST_FADE_S = 1;
+// The first time the sound runs (at once where the browser allows it, else at the first press or key), the whole room
+// comes up from silence over this long.
+const FIRST_FADE_S = 1.5;
+// The browser answers an autoplay attempt at once; one that has not answered by now waits for a gesture.
+const AUTOPLAY_ANSWER_MS = 300;
 // Without a tonearm to watch (reduced motion, or a room without the player), the needle meets the groove this soon.
 const QUICK_CUE_S = 0.3;
 const SUSPEND_AFTER_MUTE_MS = 400;
@@ -82,7 +85,13 @@ const BED_ANCHORS: Record<BedName, readonly string[]> = {
 
 /** What the rest of the page holds of the room's sound. */
 export interface AudioHandle {
-  /** Starts the sound inside a user gesture (a click, tap or key); does nothing while muted or without a gesture. */
+  /**
+   * Starts the sound without a gesture, where the browser's autoplay policy allows it (Chrome does for a site the
+   * visitor often plays media on); elsewhere the sound waits, made but suspended, for `unlock()`. Nothing while muted.
+   * Resolves with whether it runs.
+   */
+  autoplay(): Promise<boolean>;
+  /** Starts (or resumes) the sound from inside a press, tap or key, which every browser allows; nothing while muted. */
   unlock(): void;
   setMuted(muted: boolean): void;
   /** 0–1, the slider's position; the gain is its square. */
@@ -97,6 +106,7 @@ export interface AudioHandle {
    */
   setMusicSource(record: RecordId | null, cue?: number): void;
   readonly musicSource: RecordId | null;
+  /** The sound runs: the browser let it start, and it is not suspended (muted a moment, or the tab hidden). */
   readonly unlocked: boolean;
   readonly muted: boolean;
   readonly volume: number;
@@ -139,6 +149,8 @@ export class RoomAudio implements AudioHandle {
   private deckReady: RecordDeck | null = null;
   private level = 1;
   private lastUpdate = 0;
+  /** The master has made its first fade up from silence. */
+  private faded = false;
   private resting = 0;
   private readonly nextEvent = new Map<string, number>();
   private suspendTimer = 0;
@@ -149,7 +161,7 @@ export class RoomAudio implements AudioHandle {
   ) {}
 
   get unlocked() {
-    return this.ctx !== null;
+    return this.ctx?.state === 'running';
   }
 
   get muted() {
@@ -173,29 +185,55 @@ export class RoomAudio implements AudioHandle {
     return () => void this.listeners.delete(listener);
   }
 
-  /** Nothing is fetched before this: the first gesture creates the context and loads the sound. */
+  async autoplay() {
+    if (this.isMuted || !this.create()) return false;
+    const ctx = this.ctx!;
+    if (ctx.state !== 'running') await Promise.race([ctx.resume(), new Promise((resolve) => setTimeout(resolve, AUTOPLAY_ANSWER_MS))]).catch(() => {});
+    return this.unlocked;
+  }
+
   unlock() {
-    if (this.ctx || this.isMuted) return;
-    if (typeof navigator !== 'undefined' && navigator.userActivation && !navigator.userActivation.isActive) return;
-    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return;
+    if (this.isMuted || !this.create()) return;
+    const ctx = this.ctx!;
+    if (ctx.state === 'suspended' && document.visibilityState !== 'hidden') void ctx.resume().catch(() => {});
+  }
+
+  /** Makes the sound once: its graph, at silence, and its files loading. False where the browser has no Web Audio. */
+  private create() {
+    if (this.ctx) return true;
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return false;
+    // Made inside a gesture it runs at once; made outside one it starts suspended until a gesture resumes it.
     const ctx = new Ctor();
     this.ctx = ctx;
-    void ctx.resume();
     this.master = ctx.createGain();
-    this.master.gain.setValueAtTime(0, ctx.currentTime);
-    this.master.gain.setValueCurveAtTime(powerCurve(0, volumeGain(this.level)), ctx.currentTime, FIRST_FADE_S);
+    this.master.gain.value = 0;
     this.master.connect(ctx.destination);
     const mix = new RoomMix(ctx, this.positions);
     mix.output.connect(this.master);
     this.mix = mix;
     mix.setState(this.current, true);
+    ctx.addEventListener('statechange', this.onState);
     document.addEventListener('visibilitychange', this.onVisibility);
     this.loaded = this.load(ctx, mix);
     // A record chosen while the sound was off starts now.
     if (this.source) this.applySource(QUICK_CUE_S);
-    this.notify();
+    this.onState();
+    return true;
   }
+
+  /** The context began to run (or stopped): the first time, the room fades up from silence. */
+  private readonly onState = () => {
+    const ctx = this.ctx;
+    if (ctx?.state === 'running' && this.master && !this.faded) {
+      this.faded = true;
+      const t = ctx.currentTime;
+      this.master.gain.cancelScheduledValues(t);
+      this.master.gain.setValueAtTime(0, t);
+      this.master.gain.setValueCurveAtTime(powerCurve(0, this.isMuted ? 0 : volumeGain(this.level)), t, FIRST_FADE_S);
+    }
+    this.notify();
+  };
 
   setMuted(muted: boolean) {
     if (muted === this.isMuted) return;
@@ -381,7 +419,7 @@ export class RoomAudio implements AudioHandle {
    * with the music and beds set to `state` from 0 s. Resolves once the sounds have loaded.
    */
   async renderOffline(seconds: number, listener: Listener, options: OfflineOptions = {}): Promise<Float32Array[]> {
-    if (!this.loaded) throw new Error('room audio: no gesture has unlocked sound yet');
+    if (!this.loaded) throw new Error('room audio: the sound has not been made yet (muted, or before the room started)');
     await this.loaded;
     const { state = 'room', startup = false, fadeIn = false, clicks = [], effects = [] } = options;
     const ctx = new OfflineAudioContext(2, Math.round(seconds * OFFLINE_RATE), OFFLINE_RATE);
@@ -426,6 +464,7 @@ export class RoomAudio implements AudioHandle {
   dispose() {
     clearTimeout(this.suspendTimer);
     this.deckReady?.dispose();
+    this.ctx?.removeEventListener('statechange', this.onState);
     document.removeEventListener('visibilitychange', this.onVisibility);
     void this.ctx?.close();
     this.ctx = null;
@@ -497,7 +536,8 @@ export class RoomAudio implements AudioHandle {
   }
 
   private fadeMaster() {
-    if (!this.ctx || !this.master) return;
+    // Before the first fade the master stays silent; that fade goes to the level set by then.
+    if (!this.ctx || !this.master || !this.faded) return;
     const to = this.isMuted ? 0 : volumeGain(this.level);
     this.master.gain.cancelScheduledValues(this.ctx.currentTime);
     this.master.gain.setTargetAtTime(to, this.ctx.currentTime, MASTER_FADE_S / 3);
