@@ -359,7 +359,6 @@ def sky_material() -> bpy.types.Material:
 
 HENRY_MATERIALS = {
     "desk_desk": ["walnut"],
-    "desk_computer": ["cream_plastic"],
     "desk_keyboard": ["cream_plastic"],
     "desk_mouse": ["cream_plastic"],
     "desk_cables": ["rubber"],
@@ -390,12 +389,13 @@ def place_henry(mats):
             obj.name = obj.data.name = HERO_NAMES[obj.name]
 
 
-# The CRT's case and the desk chair are prop files in place of Henry's: the case stands on the computer as desk_crt,
-# placed before the glass, the sticky notes and the badge are fitted to its face; the chair takes his chair's spot
-# and turn. name: (name in the room, location, z turn in degrees).
+# The CRT's case, the computer under it and the desk chair are prop files in place of Henry's: the CRT stands on the
+# computer as desk_crt, placed before the glass, the sticky notes and the badge are fitted to its face; the chair takes
+# his chair's spot and turn. name: (name in the room, location, z turn in degrees).
 DESK_PROPS = {
     "crt_shell": ("desk_crt", (0.0, 0.040, 0.865), 0.0),
     "desk_chair": ("desk_chair", (0.199, -0.681, 0.0), -130.0),
+    "computer_case": ("desk_computer", (0.0058, 0.0170, 0.7316), 0.0),
 }
 DESK_PROP_ANCHORS: dict[str, Vector] = {}  # the empties they bring (crt_screen, crt_badge_seat), in world space
 
@@ -1431,7 +1431,7 @@ TEXEL_WEIGHTS = {
     # desk: the desk top by what the views see of it (split_desk_top_by_view); the small things on it carry the detail
     "desk_desk_top": 1.2, "desk_desk_top_mid": 0.44, "desk_desk_top_rest": 0.02, "keyboard": 1.3, "mouse": 1.0,
     "coffee_mug": 1.0, "desk_crt_front": 1.0, "crt_badge": 1.4, "coffee_mug_coffee": 0.8, "props_keyboard_cable": 0.3,
-    "props_mouse_cable": 0.3, "desk_computer_front": 0.85, "crt_glow": 0.3, "props_fujifilm_x100": 1.0,
+    "props_mouse_cable": 0.3, "desk_computer_front": 1.2, "crt_glow": 0.3, "props_fujifilm_x100": 1.0,
     # the rest of the desk sits in the props atlas, a little above its average: the desk view sees it
     "desk_notebook": 1.8, "desk_lamp_shade": 1.6, "desk_lamp": 1.4, "desk_lamp_neck": 1.4, "props_nas_4bay": 1.6,
     "desk_tray_bottom": 1.2, "desk_tray_top": 1.2, "desk_cables": 0.8, "desk_papers_a": 1.4,
@@ -1508,8 +1508,24 @@ def split_desk_heroes():
     front = split_by_faces(bpy.data.objects["desk_crt"], lambda c, n, m: c.y < CRT_PARTING_Y, "desk_crt_front")
     front["bake_uv"] = "project"
     split_crt_bezel_by_landing(front)
-    split_by_faces(bpy.data.objects["desk_computer"], lambda c, n, m: n.y < -0.3 or n.z > 0.7, "desk_computer_front")
+    split_computer_front()
     split_desk_top_by_view()
+
+
+def split_computer_front():
+    """The computer's front panel and the strip of its lid in front of the CRT's foot go to the desk atlas; the rest of
+    the lid (under the CRT, out of sight from the desk), the sides and the back to props."""
+    comp, crt = bpy.data.objects["desk_computer"], bpy.data.objects["desk_crt"]
+    foot_y = min((crt.matrix_world @ v.co).y for v in crt.data.vertices if (crt.matrix_world @ v.co).z < 0.88)
+    bm = bmesh.new()
+    bm.from_mesh(comp.data)
+    to_world = comp.matrix_world
+    bm.transform(to_world)
+    bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], plane_co=(0, foot_y, 0), plane_no=(0, 1, 0))
+    bm.transform(to_world.inverted())
+    bm.to_mesh(comp.data)
+    bm.free()
+    split_by_faces(comp, lambda c, n, m: n.y < -0.3 or (n.z > 0.7 and c.y < foot_y), "desk_computer_front")
 
 
 # The landing view (the monitor framing every visit ends in) fills about a quarter of its frame with the bezel round
