@@ -341,11 +341,6 @@ export class Darkroom {
     return this.hung;
   }
 
-  /** The lines' bounds with every print's box, for loading once they come into view. */
-  get box() {
-    return this.bounds;
-  }
-
   /** Hangs the set on the clips in order (the first on the hero clip) and names each print's hotspot after its photograph. */
   hang(photos: readonly Photograph[]) {
     if (this.hung) return;
@@ -417,10 +412,10 @@ export class Darkroom {
   }
 
   /**
-   * Fades prints in, follows the wall's atlas if it is swapped for a sharper one, and asks for the close-up set once the
-   * line shows more than UPGRADE_PX_PER_M (`viewportPx`: the canvas height in device pixels).
+   * Fades prints in, follows the wall's atlas if it is swapped for a sharper one, and, when `onDemand` allows it, asks
+   * for the close-up set once the line shows more than UPGRADE_PX_PER_M (`viewportPx`: the canvas height in device pixels).
    */
-  update(dt: number, camera: THREE.PerspectiveCamera, viewportPx: number, textures: TextureStore) {
+  update(dt: number, camera: THREE.PerspectiveCamera, viewportPx: number, textures: TextureStore, onDemand = true) {
     this.changed = this.arrived;
     this.arrived = false;
     for (const print of this.prints) {
@@ -432,7 +427,7 @@ export class Darkroom {
     }
     this.followWallMap();
     this.sinceCheck += dt;
-    if (this.sinceCheck < CHECK_EVERY_S || this.wanted !== 'small' || !this.prints.length) return;
+    if (!onDemand || this.sinceCheck < CHECK_EVERY_S || this.wanted !== 'small' || !this.prints.length) return;
     this.sinceCheck = 0;
     if (this.densityFor(camera, viewportPx) === 'large') void this.load(textures, 'large', this.reducedMotion);
   }

@@ -44,19 +44,24 @@ async function seriousAxeViolations(page: Page): Promise<string[]> {
 /**
  * Catches the BIOS screen coming back (its words, its log, "press any key"), a loading screen with more than its one
  * line, a line that runs backwards, and a room shown before every full atlas is on the GPU: the owner saw the desk and
- * the monitor blocky for a moment, then sharpen.
+ * the monitor blocky for a moment, then sharpen. The wide view the room opens on also holds the darkroom line and the
+ * Pale Blue Dot, which once showed bare strings and a black square in that first frame.
  */
 test('a dark screen with one progress line hands over to the room only once every full atlas is on the GPU', async ({ page }) => {
   // In the page: the line's values as they change, and the moment the dark screen first starts to fade.
   await page.addInitScript(() => {
-    const marks = { values: [] as number[], revealAt: null as number | null };
+    const marks = { values: [] as number[], revealAt: null as number | null, shown: null as { prints: number[]; paleBlueDot: number | null } | null };
     (window as unknown as { marks: typeof marks }).marks = marks;
     const watch = () => {
       const loader = document.querySelector('[data-room-loader]');
       if (loader) {
         const value = Number(loader.querySelector('[data-room-progress]')?.getAttribute('aria-valuenow'));
         if (marks.values.at(-1) !== value) marks.values.push(value);
-        if (marks.revealAt === null && Number(getComputedStyle(loader).opacity) < 1) marks.revealAt = performance.now();
+        if (marks.revealAt === null && Number(getComputedStyle(loader).opacity) < 1) {
+          marks.revealAt = performance.now();
+          const world = window.__room?.world;
+          marks.shown = { prints: world?.darkroom?.prints.map((p) => p.shown) ?? [], paleBlueDot: world?.paleBlueDot ?? null };
+        }
       }
       if (marks.revealAt === null) requestAnimationFrame(watch);
     };
@@ -72,7 +77,9 @@ test('a dark screen with one progress line hands over to the room only once ever
 
   await settled(page, 'monitor');
   await expect(loader).toBeHidden();
-  const { values, revealAt } = await page.evaluate(() => (window as unknown as { marks: { values: number[]; revealAt: number } }).marks);
+  const { values, revealAt, shown } = await page.evaluate(
+    () => (window as unknown as { marks: { values: number[]; revealAt: number; shown: { prints: number[]; paleBlueDot: number | null } } }).marks,
+  );
   expect(values.at(-1)).toBe(100);
   expect(values, 'the line never goes back').toEqual([...values].sort((x, y) => x - y));
   const atlases = await page.evaluate(() => window.__roomStats!.atlases);
@@ -81,6 +88,9 @@ test('a dark screen with one progress line hands over to the room only once ever
     expect(atlas, `${atlas.name} full before the first visible frame`).toMatchObject({ state: 'full', beforeFirstFrame: true });
     expect(atlas.uploadedAt!, `${atlas.name} uploaded before the fade`).toBeLessThan(revealAt);
   }
+  expect(shown.prints.length, 'the darkroom prints hung before the first visible frame').toBeGreaterThan(0);
+  expect(shown.prints, 'every print drawn before the first visible frame').toEqual(shown.prints.map(() => 1));
+  expect(shown.paleBlueDot, 'the Pale Blue Dot drawn before the first visible frame').toBe(1);
   await expect(page.locator('[data-room-status]')).toHaveText(/^The room has loaded\./);
 });
 

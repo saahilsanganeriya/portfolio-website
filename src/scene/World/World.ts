@@ -92,8 +92,6 @@ export class World {
   private readonly steam: Steam | null;
   private readonly oven: Oven | null;
   private readonly status: HTMLElement;
-  private readonly frustum = new THREE.Frustum();
-  private readonly viewProjection = new THREE.Matrix4();
   private readonly lastCamera = new THREE.Vector3();
   private collectionPromise: Promise<Photograph[]> | null = null;
   private landing: Landing | null = null;
@@ -101,7 +99,6 @@ export class World {
   private recordsLoading: Promise<RecordPlayer | null> | null = null;
   private everything = false;
   private interactive = false;
-  private printsWanted = false;
   private sinceLabels = LABELS_EVERY_S;
   private steamAt = -1;
   /** The camera of the last frame, to project the window's motif and the coffee's steam for tests. */
@@ -150,7 +147,15 @@ export class World {
 
   /** What the first view needs, before the room is shown: the posters, the window's pictures and motif, the sticky notes. */
   async load() {
-    await Promise.all([this.posters.load(this.textures), this.windowView?.load(), this.stickies?.load()]);
+    await Promise.all([this.posters.load(this.textures), this.windowView?.load(), this.stickies?.load(), this.loadPaleBlueDot(), this.hangPrints()]);
+  }
+
+  /** The darkroom's prints at their small size, hung before the room is shown: the wide view the room opens on has them. */
+  private async hangPrints() {
+    const darkroom = this.darkroom;
+    if (!darkroom) return;
+    darkroom.hang(await this.collection());
+    await darkroom.load(this.textures, 'small', true);
   }
 
   /** The intro is over and the visitor can act: on-demand loading may start. */
@@ -158,11 +163,6 @@ export class World {
     if (this.interactive) return;
     this.timer = window.setTimeout(() => {
       this.interactive = true;
-      this.loadPaleBlueDot();
-      if (this.darkroom) {
-        this.printsWanted = true;
-        void this.collection().then((photos) => this.darkroom?.hang(photos));
-      }
     }, ON_DEMAND_DELAY_MS);
   }
 
@@ -261,19 +261,9 @@ export class World {
     this.oven?.update(ambient, realDt, still);
     this.records?.update(realDt, running);
 
-    // The darkroom's prints draw once the line is in view, at the density the view asks for.
+    // The darkroom's close-up prints load on demand, once the room is interactive and the view comes close.
     const darkroom = this.darkroom;
-    if (darkroom?.isHung) {
-      const viewportPx = this.container.clientHeight * pixelRatio;
-      if (this.printsWanted) {
-        this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-        this.frustum.setFromProjectionMatrix(this.viewProjection);
-        if (this.frustum.intersectsBox(darkroom.box)) {
-          this.printsWanted = false;
-          void darkroom.load(this.textures, darkroom.densityFor(camera, viewportPx), still);
-        }
-      } else darkroom.update(realDt, camera, viewportPx, this.textures);
-    }
+    if (darkroom?.isHung) darkroom.update(realDt, camera, this.container.clientHeight * pixelRatio, this.textures, this.interactive);
 
     this.sinceLabels += realDt;
     if (this.sinceLabels >= LABELS_EVERY_S) this.refreshLabels();
@@ -361,15 +351,16 @@ export class World {
     if (audio) void this.recordPlayer(audio).then((records) => records?.open());
   }
 
-  /** The Pale Blue Dot's picture (NASA/JPL, public/room/pale-blue-dot.ktx2) loads on demand, after the first view. */
-  private loadPaleBlueDot() {
+  /** The Pale Blue Dot's picture (NASA/JPL, public/room/pale-blue-dot.ktx2), loaded with the first view: it hangs in it. */
+  private async loadPaleBlueDot() {
     const dot = this.paleBlueDot;
     const file = this.nodes.paleBlueDot?.file;
     if (!dot || !file) return;
-    this.textures
-      .ktx2(`/room/${file}`)
-      .then((texture) => dot.show(texture, false))
-      .catch((error) => console.warn('room: the Pale Blue Dot print did not load', error));
+    try {
+      dot.show(await this.textures.ktx2(`/room/${file}`), true);
+    } catch (error) {
+      console.warn('room: the Pale Blue Dot print did not load', error);
+    }
   }
 
   /** The record player and its crate load the first time the visitor reaches them. */
