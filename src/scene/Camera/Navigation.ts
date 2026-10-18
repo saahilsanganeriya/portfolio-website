@@ -14,6 +14,14 @@ export interface NavigationHandlers {
   interrupt(): boolean;
   /** The visitor turns or zooms the set: the camera leaves its framing (or the monitor) for the orbit. */
   orbit(): Orbit | null;
+  /** Home (the H or Home key): back to the wide view, from anywhere. */
+  home(): void;
+}
+
+/** Where pinches arrive besides the stage: the room's whole page area, and the OS's frame on the monitor. */
+export interface PinchSources {
+  host?: HTMLElement | null;
+  frame?: HTMLIFrameElement | null;
 }
 
 // A drag starts once the pointer has travelled this far; anything shorter is a click or a tap.
@@ -29,15 +37,25 @@ const ORBIT_KEYS: Record<string, [azimuth: number, polar: number]> = {
   ArrowDown: [0, KEY_TILT_RAD],
 };
 const ZOOM_KEYS: Record<string, number> = { '+': KEY_ZOOM, '=': KEY_ZOOM, '-': 1 / KEY_ZOOM, _: 1 / KEY_ZOOM };
+const HOME_KEYS = new Set(['Home', 'h', 'H']);
 // Page Up and Page Down still step between the framings, in the walk's order.
 const STEP_KEYS: Record<string, 1 | -1> = { PageDown: 1, PageUp: -1 };
 // Two framings this close (eye and look-at point, millimetres) are one stop: a tour stop authored at the desk is the desk.
 const SAME_STOP_MM = 250;
 // Moving focus is not input to the room (the page's own rule): these keys leave the tour's glide gliding.
 const FOCUS_KEYS = new Set(['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock']);
-// A wheel's line and page modes, in pixels.
-const LINE_PX = 16;
-const PAGE_PX = 400;
+// A wheel's line mode in pixels: one notch is 3 lines in Firefox and 100 px in Chromium, so a notch zooms the same in
+// both (three.js's OrbitControls takes 16 px a line, and Firefox zoomed at half Chromium's speed). A page is the stage.
+const LINE_PX = 100 / 3;
+// A trackpad gesture's events come this close together; a longer gap starts a new gesture, which picks its axis again
+// once it has moved this far: sideways turns the set, up and down zooms, never both at once.
+const WHEEL_GESTURE_GAP_MS = 200;
+const WHEEL_AXIS_PX = 4;
+// A trackpad pinch arrives as a wheel with Control held (Chromium, Firefox): deltaY is about -100 ln(scale), so the
+// room follows the fingers at exp(deltaY / 100). One event moves at most as far as a wheel notch (a mouse wheel turned
+// with Control held is not a pinch, and must not jump).
+const PINCH_PX = 100;
+const PINCH_MAX_PX = 12;
 
 /**
  * The stations in the order Page Up and Page Down step through them: left to right as seen from the wide view, the
@@ -78,18 +96,38 @@ interface Press {
   lastY: number;
 }
 
+/** A wheel event's deltas in CSS pixels, whatever its mode; Shift turns a plain wheel sideways, as browsers do. */
+export function wheelPixels(event: Pick<WheelEvent, 'deltaMode' | 'deltaX' | 'deltaY' | 'shiftKey'>, pagePx: number): [number, number] {
+  // deltaMode first: Firefox reports pixels to a page that reads deltaY before it.
+  const mode = event.deltaMode;
+  const scale = mode === 1 ? LINE_PX : mode === 2 ? pagePx : 1;
+  const [dx, dy] = [event.deltaX * scale, event.deltaY * scale];
+  return event.shiftKey && dx === 0 ? [dy, 0] : [dx, dy];
+}
+
+/** Safari's pinch: `scale` since the gesture began. */
+type GestureEvent = UIEvent & { scale?: number };
+
 /**
  * Drags, the wheel, pinches and keys steer the camera. A drag turns the whole set about its centre (the orbit), the
- * wheel or a pinch moves in and out, arrow keys turn it, + and - zoom, Escape backs out. At the monitor nothing here
- * moves the camera except a drag or Escape: the wheel there belongs to the OS window under the pointer.
+ * wheel or a pinch moves in and out, a sideways swipe on a trackpad turns it, arrow keys turn it, + and - zoom, H or
+ * Home goes home, Escape backs out. Every direction is the platform's own: the set follows the pointer and the
+ * fingers, and the wheel zooms the way the page would scroll. At the monitor nothing here moves the camera except a
+ * drag, a pinch outward, Home or Escape: the wheel there belongs to the OS window under the pointer.
  */
 export class Navigation {
   readonly tour: StationName[];
   /** Pointers down on the stage, by id: one turns the set, two pinch. */
   private readonly presses = new Map<number, Press>();
+  /** Pointers still down after Home cancelled their drag: they do nothing until they lift. */
+  private readonly cancelled = new Set<number>();
   private dragging = false;
   private pinch = 0;
   private dragEndedAt = -Infinity;
+  /** The trackpad gesture under way: its axis once known, what it has moved before that, its last event. */
+  private wheel = { axis: null as 'x' | 'y' | null, dx: 0, dy: 0, at: -Infinity };
+  /** Safari's pinch under way: its scale at the last event. */
+  private gestureScale: number | null = null;
   private readonly abort = new AbortController();
 
   constructor(
@@ -97,6 +135,7 @@ export class Navigation {
     private readonly camera: RoomCamera,
     private readonly nodes: RoomNodes,
     private readonly handlers: NavigationHandlers,
+    { host = stage, frame = null }: PinchSources = {},
   ) {
     this.tour = tourOrder(nodes);
     const signal = this.abort.signal;
@@ -106,6 +145,42 @@ export class Navigation {
     stage.addEventListener('pointercancel', (e) => this.onPointerUp(e), { signal });
     stage.addEventListener('wheel', (e) => this.onWheel(e), { signal, passive: false });
     window.addEventListener('keydown', (e) => this.onKey(e), { signal });
+    // A pinch anywhere on the room's page zooms the room, never the page: over the controls too, and over the OS on the
+    // monitor, whose frame has a document of its own (same origin; listened to again each time it loads).
+    this.listenForPinches(host ?? stage, signal);
+    if (frame) {
+      const attach = () => frame.contentWindow && this.listenForPinches(frame.contentWindow, signal);
+      frame.addEventListener('load', attach, { signal });
+      if (frame.contentDocument?.readyState === 'complete' && frame.contentWindow?.location.href !== 'about:blank') attach();
+    }
+  }
+
+  private listenForPinches(target: EventTarget, signal: AbortSignal) {
+    const options = { signal, passive: false };
+    target.addEventListener('wheel', (e) => this.onPinchWheel(e as WheelEvent), options);
+    target.addEventListener('gesturestart', (e) => this.onGesture(e as GestureEvent), options);
+    target.addEventListener('gesturechange', (e) => this.onGesture(e as GestureEvent), options);
+    target.addEventListener('gestureend', (e) => this.onGesture(e as GestureEvent), options);
+  }
+
+  /**
+   * Home took the camera: a drag or pinch under way is dropped (its pointers do nothing more until they lift, and the
+   * click that ends it clicks nothing), and the set's coast with it.
+   */
+  cancel() {
+    for (const id of this.presses.keys()) {
+      this.cancelled.add(id);
+      try {
+        this.stage.releasePointerCapture?.(id);
+      } catch {
+        // not captured
+      }
+    }
+    this.presses.clear();
+    if (this.dragging) this.dragEndedAt = performance.now();
+    this.dragging = false;
+    this.pinch = 0;
+    this.gestureScale = null;
   }
 
   /** Steps along the walk from where the camera is (or is heading); from a close-up or the orbit, from the nearest stop. */
@@ -131,6 +206,8 @@ export class Navigation {
   private onPointerDown(event: PointerEvent) {
     if (!event.isPrimary && event.pointerType !== 'touch') return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    // A press stops the set's coast where it is, as a hand on a turntable would.
+    this.camera.stopCoast();
     this.presses.set(event.pointerId, { x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY });
     if (this.presses.size === 2) this.pinch = this.spread();
   }
@@ -159,6 +236,7 @@ export class Navigation {
       press.lastX = event.clientX;
       press.lastY = event.clientY;
       const spread = this.spread();
+      orbit.holdZoom(true);
       if (this.pinch > 0 && spread > 0) orbit.zoomBy(this.pinch / spread);
       this.pinch = spread;
       return;
@@ -169,12 +247,21 @@ export class Navigation {
   }
 
   private onPointerUp(event: PointerEvent) {
+    if (this.cancelled.delete(event.pointerId)) {
+      this.dragEndedAt = performance.now();
+      return;
+    }
     if (!this.presses.delete(event.pointerId)) return;
-    if (this.presses.size === 1) this.pinch = 0;
+    if (this.presses.size === 1) {
+      this.pinch = 0;
+      if (this.dragging) this.handlers.orbit()?.holdZoom(false);
+    }
     if (this.presses.size || !this.dragging) return;
     this.dragging = false;
     this.dragEndedAt = performance.now();
-    this.handlers.orbit()?.release();
+    const orbit = this.handlers.orbit();
+    orbit?.holdZoom(false);
+    orbit?.release();
   }
 
   /** The distance between the two fingers of a pinch, in CSS pixels. */
@@ -184,18 +271,76 @@ export class Navigation {
   }
 
   private onWheel(event: WheelEvent) {
-    // A pinch on a trackpad arrives as a wheel with Control held: that is the browser's zoom, left to the browser.
+    // A pinch (Control held) bubbles on to the room's own pinch handler.
     if (event.ctrlKey) return;
     event.preventDefault();
     // The tour's glide brakes on any wheel; at the monitor the wheel scrolls the OS, never the camera.
     if (this.handlers.interrupt() || !this.handlers.canSteer() || this.camera.destination === 'monitor') return;
+    const [dx, dy] = wheelPixels(event, this.stage.clientHeight);
+    const now = performance.now();
+    const gesture = this.wheel;
+    if (now - gesture.at > WHEEL_GESTURE_GAP_MS) Object.assign(gesture, { axis: null, dx: 0, dy: 0 });
+    gesture.at = now;
+    gesture.dx += dx;
+    gesture.dy += dy;
+    // Until the gesture has a direction, what it moved is kept for it.
+    if (!gesture.axis) {
+      if (Math.max(Math.abs(gesture.dx), Math.abs(gesture.dy)) < WHEEL_AXIS_PX) return;
+      gesture.axis = Math.abs(gesture.dx) > Math.abs(gesture.dy) ? 'x' : 'y';
+    }
+    const [moveX, moveY] = [gesture.dx, gesture.dy];
+    gesture.dx = gesture.dy = 0;
     this.handlers.takeOver();
     const orbit = this.handlers.orbit();
     if (!orbit) return;
     this.camera.touchOrbit();
-    // deltaY as the platform gives it (its own natural direction): positive moves out, as in three.js's OrbitControls.
-    const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? LINE_PX : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? PAGE_PX : 1;
-    orbit.zoom(event.deltaY * scale);
+    // Sideways, the set follows the fingers: a swipe to the right (deltaX < 0 where content follows the fingers) turns
+    // it as a drag to the right does. Up and down, deltaY as the platform gives it: positive moves out, as a page would
+    // scroll on (and as in three.js's OrbitControls).
+    if (gesture.axis === 'x') orbit.swipe(-moveX, 0, this.stage.clientHeight);
+    else orbit.zoom(moveY);
+  }
+
+  /** A trackpad pinch in Chromium and Firefox (a wheel with Control held): the room zooms, the page never does. */
+  private onPinchWheel(event: WheelEvent) {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    // Safari's own gesture events carry this pinch.
+    if (this.gestureScale !== null) return;
+    const [, dy] = wheelPixels(event, this.stage.clientHeight);
+    this.pinchBy(Math.exp(THREE.MathUtils.clamp(dy, -PINCH_MAX_PX, PINCH_MAX_PX) / PINCH_PX));
+  }
+
+  /** A trackpad pinch in Safari: gesturestart, gesturechange with the scale since the start, gestureend. */
+  private onGesture(event: GestureEvent) {
+    event.preventDefault();
+    const scale = event.scale ?? 1;
+    if (event.type === 'gesturestart') {
+      this.gestureScale = scale;
+      return;
+    }
+    if (event.type === 'gestureend') {
+      this.gestureScale = null;
+      this.camera.holdZoom(false);
+      return;
+    }
+    const last = this.gestureScale ?? 1;
+    this.gestureScale = scale;
+    // On a phone the same pinch also arrives as two touches, which zoom the room already.
+    if (this.presses.size >= 2 || !(scale > 0) || !(last > 0)) return;
+    this.pinchBy(last / scale, true);
+  }
+
+  /** Zooms by `factor` on the radius (below 1 is in). At the monitor only a pinch outward counts: it leaves the screen. */
+  private pinchBy(factor: number, held = false) {
+    if (this.handlers.interrupt() || !this.handlers.canSteer()) return;
+    if (this.camera.destination === 'monitor' && factor <= 1) return;
+    this.handlers.takeOver();
+    const orbit = this.handlers.orbit();
+    if (!orbit) return;
+    this.camera.touchOrbit();
+    orbit.holdZoom(held);
+    orbit.zoomBy(factor);
   }
 
   private onKey(event: KeyboardEvent) {
@@ -210,13 +355,17 @@ export class Navigation {
     const turn = ORBIT_KEYS[event.key];
     const zoom = ZOOM_KEYS[event.key];
     const step = STEP_KEYS[event.key];
-    const home = event.key === 'Home';
+    const home = HOME_KEYS.has(event.key);
     const out = event.key === 'Escape';
     if (!turn && !zoom && !step && !home && !out) return;
     if (!this.handlers.canSteer()) return;
-    // At the monitor the OS is being read: only Escape leaves it.
-    if (this.camera.destination === 'monitor' && !out) return;
+    // At the monitor the OS is being read: only Escape and Home leave it.
+    if (this.camera.destination === 'monitor' && !out && !home) return;
     event.preventDefault();
+    if (home) {
+      if (!event.repeat) this.handlers.home();
+      return;
+    }
     this.handlers.takeOver();
     if (turn || zoom) {
       const orbit = this.handlers.orbit();
@@ -225,7 +374,6 @@ export class Navigation {
       if (turn) orbit.nudge(...turn);
       else orbit.zoomBy(zoom);
     } else if (step) this.step(step);
-    else if (home) this.handlers.fly('idle', 'step');
     else this.stepOut();
   }
 

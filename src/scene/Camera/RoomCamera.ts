@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Framing, RoomNodes, StationName } from '../Application/RoomModel';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import { brakedTime, fromGlidePose, glidePose, glideRate, glideTime, planGlide, toGlidePose, type GlidePlan, type RoomPlan } from './glide';
-import { Orbit, readOrbit, type OrbitSettings } from './orbit';
+import { fromSpherical, Orbit, readOrbit, toSpherical, wrapAngle, type OrbitSettings } from './orbit';
 import { Spring, springFor, type SpringSettings } from './spring';
 
 /** Where the camera is: a framing, the boot framing, or turned freely about the set (the orbit). */
@@ -50,14 +50,30 @@ interface Held {
   pose: Float64Array;
 }
 
+/**
+ * Home from the orbit: a spring over where the camera stands about the set (azimuth, polar, ln radius, the pivot's xyz,
+ * the field of view), so it swings round the set to the wide view instead of cutting through it.
+ */
+interface HomeSwing {
+  spring: Spring;
+  goal: Float64Array;
+}
+
 interface Flight {
   to: StationName;
   spring: SpringSettings;
   path?: Path;
   glide?: Glide;
+  home?: HomeSwing;
   onDone?: () => void;
   /** How far back from its framing the camera stands at `to`, as a multiple of the framing's distance. */
   distance: number;
+}
+
+/** How long the glide home takes for this much travel of the eye (metres) and turn of the view (radians). */
+export function homeSeconds(travelM: number, turnRad: number) {
+  const { base, perMetre, perRadian, min, max } = HOME_SECONDS;
+  return THREE.MathUtils.clamp(base + travelM * perMetre + turnRad * perRadian, min, max);
 }
 
 /** Slow out of the boot framing, an even pace past the room, a gentle landing (zero speed at both ends). */
@@ -81,9 +97,14 @@ const POINTER_SHIFT = { x: 0.03, y: 0.02 };
 const LOOK_SPRING = springFor(0.45);
 const SWAY_IN = springFor(5);
 const SWAY_OUT = springFor(1.2);
+// Home takes longer the further it has to go: a base, plus time per metre the eye travels and per radian the view turns.
+// From the monitor (8.4 m back) it is about 1.8 s, from behind the set (half a turn round) 2.4 s, from nearby 0.9 s.
+const HOME_SECONDS = { base: 0.7, perMetre: 0.12, perRadian: 0.3, min: 0.9, max: 2.4 };
 // A flight has landed once it is this close (a share of the viewing distance, at least half a millimetre).
 const LAND_SHARE = 0.0025;
 const FOV_TOLERANCE_DEG = 0.05;
+// A home swing has landed once its angles (radians, and ln radius) are this close and its pivot within a millimetre.
+const SWING_LAND = { angle: 5e-4, pivot: 1 };
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -142,7 +163,7 @@ export class RoomCamera {
   }
 
   get moving() {
-    return this.flight !== null || (this.orbit !== null && this.orbit.turning > 0);
+    return this.flight !== null || (this.orbit !== null && this.orbit.settling);
   }
 
   /** The station the camera is at or flying to ('orbit' while the visitor turns the set). */
@@ -240,6 +261,59 @@ export class RoomCamera {
     return true;
   }
 
+  /**
+   * Glides home to the wide view from wherever the camera is, in a time that grows with the way it has to go. Turned
+   * about the set, it swings round the set to the front (a straight line from behind would cut through the walls and
+   * the desk); from a framing, a flight or the tour's glide it flies straight back, keeping the speed it had. A turn
+   * under way hands its speed on, so nothing stops dead. `cut` (reduced motion) jumps there.
+   */
+  home(onDone?: () => void, cut = false) {
+    if (cut || this.still) return this.fly('idle', 'step', onDone, true);
+    const end = this.fromFraming(this.framings.idle, this.aspectFit());
+    const orbit = this.orbit;
+    if (!orbit) {
+      const v = this.rig.value;
+      const eye = new THREE.Vector3(v[0], v[1], v[2]);
+      const look = new THREE.Vector3(v[3], v[4], v[5]).sub(eye).normalize();
+      const turn = look.angleTo(end.target.clone().sub(end.position).normalize());
+      const seconds = homeSeconds(eye.distanceTo(end.position) / WORLD_SCALE, turn);
+      if (!this.fly('idle', 'travel', onDone)) return false;
+      if (this.flight) this.flight.spring = springFor(seconds);
+      return true;
+    }
+    const to = toSpherical(end.position.clone().sub(end.target));
+    const azimuth = orbit.azimuth + wrapAngle(to.azimuth - orbit.azimuth);
+    const start = [orbit.azimuth, orbit.polar, Math.log(orbit.radius), orbit.pivot.x, orbit.pivot.y, orbit.pivot.z, this.rig.value[6]];
+    const goal = Float64Array.from([azimuth, to.polar, Math.log(to.radius), end.target.x, end.target.y, end.target.z, end.fov]);
+    // The eye's way round (an arc at the mean radius, the tilt, the change of distance, the pivot's slide) and its turn.
+    const meanRadius = (orbit.radius + to.radius) / 2;
+    const arc = Math.abs(goal[0] - start[0]) * Math.sin(Math.max(start[1], goal[1])) * meanRadius + Math.abs(goal[1] - start[1]) * meanRadius;
+    const travel = arc + Math.abs(to.radius - orbit.radius) + orbit.pivot.distanceTo(end.target);
+    const settings = springFor(homeSeconds(travel / WORLD_SCALE, Math.abs(goal[0] - start[0])));
+    const spring = new Spring(7);
+    spring.set(start);
+    // The turn's own speed carries on into the swing, never so fast toward home that it would overshoot.
+    const rates = orbit.rates();
+    [rates.azimuth, rates.polar, rates.logRadius].forEach((rate, i) => {
+      const toward = goal[i] - start[i];
+      spring.velocity[i] = Math.sign(rate) === Math.sign(toward) ? Math.sign(rate) * Math.min(Math.abs(rate), Math.abs(toward) * settings.omega) : rate;
+    });
+    this.orbit = null;
+    this.held = null;
+    this.flight = { to: 'idle', spring: settings, onDone, distance: 1, home: { spring, goal } };
+    return true;
+  }
+
+  /** A press on the set while it coasts: the coast stops where it is (flights and glides carry on). */
+  stopCoast() {
+    this.orbit?.hold();
+  }
+
+  /** A pinch has ended (Safari's gestureend): a zoom left past a limit may spring back now. */
+  holdZoom(held: boolean) {
+    this.orbit?.holdZoom(held);
+  }
+
   /** Slows the glide to rest where it is, over about a second; false when no glide is cruising. */
   brake() {
     const glide = this.flight?.glide;
@@ -326,6 +400,8 @@ export class RoomCamera {
     this.writeGoal(station);
     if (this.orbit) {
       this.followOrbit(this.orbit, dt);
+    } else if (this.flight?.home) {
+      this.followHome(this.flight.home, this.flight.spring, dt);
     } else if (this.flight?.glide) {
       this.followGlide(this.flight.glide);
     } else if (this.flight?.path) {
@@ -362,6 +438,26 @@ export class RoomCamera {
     for (let i = 0; i < next.length; i++) {
       if (dt > 0) this.rig.velocity[i] = (next[i] - this.rig.value[i]) / dt;
       this.rig.value[i] = next[i];
+    }
+  }
+
+  /** One frame of the swing home round the set; the rig keeps its speed, so a re-aim curves away from it. */
+  private followHome(home: HomeSwing, settings: SpringSettings, dt: number) {
+    home.spring.step(home.goal, dt, settings);
+    const [azimuth, polar, logRadius, px, py, pz, fov] = home.spring.value;
+    const eye = fromSpherical(azimuth, polar, Math.exp(logRadius), this.position).add(this.target.set(px, py, pz));
+    const next = [eye.x, eye.y, eye.z, px, py, pz, fov];
+    for (let i = 0; i < next.length; i++) {
+      if (dt > 0) this.rig.velocity[i] = (next[i] - this.rig.value[i]) / dt;
+      this.rig.value[i] = next[i];
+    }
+    const off = (i: number) => Math.abs(home.spring.value[i] - home.goal[i]);
+    const slow = (i: number) => Math.abs(home.spring.velocity[i]);
+    const angles = [0, 1, 2].every((i) => off(i) < SWING_LAND.angle && slow(i) < SWING_LAND.angle * 3);
+    const pivot = [3, 4, 5].every((i) => off(i) < SWING_LAND.pivot && slow(i) < SWING_LAND.pivot * 3);
+    if (angles && pivot && off(6) < FOV_TOLERANCE_DEG) {
+      this.rig.set(this.goal);
+      this.land();
     }
   }
 

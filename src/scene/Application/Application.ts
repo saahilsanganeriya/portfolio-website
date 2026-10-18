@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoomAudio, type AudioHandle, type OfflineOptions } from '../audio/RoomAudio';
+import { HOME_EVENT } from '../Camera/events';
 import { Navigation } from '../Camera/Navigation';
 import type { RoomPlan } from '../Camera/glide';
 import { RoomCamera, type CameraPhase, type Motion } from '../Camera/RoomCamera';
@@ -100,6 +101,11 @@ export interface RoomHandle {
   takeOver(): void;
   /** Out of the monitor, back to the desk (the room's back control). */
   back(): void;
+  /**
+   * Home: a glide back to the wide view every visit starts from, from anywhere (a drag, a flight, the tour, the
+   * monitor, turned behind the walls); a cut under reduced motion. False before the room has started.
+   */
+  home(): boolean;
   /** Where the monitor's glass is on the page now, or null when it is not in view. */
   monitorRect(): ScreenRect | null;
   /** The room's sound: unlock() on the first gesture, mute, volume, setState(state), sfx(name, position?). */
@@ -325,13 +331,20 @@ export class Application implements RoomHandle {
     // After the world: it names and adds the proxies the walls' hotspots are found among.
     this.diorama = new Diorama(root, this.nodes.proxies, this.camera.orbitSettings.center, still);
     this.hover = new HoverReactions(root, this.nodes.proxies, this.camera.instance, still);
-    this.navigation = new Navigation(this.container, this.camera, this.nodes, {
-      fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
-      canSteer: () => this.started && !this.handedOver,
-      takeOver: () => this.takeOver(),
-      interrupt: () => this.camera.brake(),
-      orbit: () => this.enterOrbit(),
-    });
+    this.navigation = new Navigation(
+      this.container,
+      this.camera,
+      this.nodes,
+      {
+        fly: (station, motion, onDone) => this.flyTo(station, motion, onDone),
+        canSteer: () => this.started && !this.handedOver,
+        takeOver: () => this.takeOver(),
+        interrupt: () => this.camera.brake(),
+        orbit: () => this.enterOrbit(),
+        home: () => this.home(),
+      },
+      { host: this.container.closest<HTMLElement>('[data-room]'), frame: this.monitor.iframe },
+    );
     this.interaction = new Interaction(this.container, this.monitor.iframe, this.camera.instance, this.nodes.proxies, this.label, {
       hotspot: (hotspot, proxy) => this.onHotspot(hotspot, proxy),
       toggle: () => this.toggle(),
@@ -489,6 +502,20 @@ export class Application implements RoomHandle {
 
   back() {
     if (this.camera.destination === 'monitor') this.leaveMonitor();
+  }
+
+  home() {
+    if (!this.started || this.handedOver) return false;
+    this.navigation.cancel();
+    // Out of the monitor as Escape leaves it: the press that took focus off the glass does not also step back.
+    if (this.camera.destination === 'monitor') this.leftMonitorAt = performance.now();
+    this.takeOver();
+    this.intro = false;
+    this.dirty = true;
+    const going = this.camera.home(undefined, this.options.reducedMotion);
+    // The tour's map closes and its played glide ends (the camera has already left it).
+    this.container.dispatchEvent(new CustomEvent(HOME_EVENT, { bubbles: true }));
+    return going;
   }
 
   monitorRect(): ScreenRect | null {

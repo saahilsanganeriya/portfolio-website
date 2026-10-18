@@ -25,6 +25,7 @@ export async function startRoom(container: HTMLElement, opts: RoomOptions): Prom
     skipIntro: () => app.skipIntro(),
     takeOver: () => app.takeOver(),
     back: () => app.back(),
+    home: () => app.home(),
     monitorRect: () => app.monitorRect(),
     audio: app.audio,
     setPaused: (paused) => app.setPaused(paused),
