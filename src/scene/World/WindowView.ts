@@ -7,7 +7,7 @@ import skyVert from '../shaders/window_sky.vert.glsl?raw';
 import { WORLD_SCALE } from '../Application/RoomModel';
 import { CITIES, type CityId } from './daylight';
 import { loadHand, seedOf, writeHand } from './handwriting';
-import { BLEND_HALF_WIDTH_M, horizons, skyColour, type SkyFrame } from './sky';
+import { BLEND_HALF_WIDTH_M, completeDome, horizons, skyColour, type SkyFrame } from './sky';
 import type { WindowMotifNode, WindowSkyNode, WindowViewNode } from './nodes';
 import type { TextureStore } from './textures';
 
@@ -47,6 +47,8 @@ export class WindowView {
   private readonly views: View[];
   private readonly frame: SkyFrame;
   private readonly skyMaterial: THREE.ShaderMaterial | null;
+  /** Grid cells of the dome the build had culled and this filled, and the triangles added (0 for a whole dome). */
+  private readonly skyFilled = { cells: 0, triangles: 0 };
   private readonly motif: Motif | null;
 
   constructor(
@@ -81,6 +83,16 @@ export class WindowView {
       node.mesh.material = material;
       return { node, material, day };
     });
+    if (skyNode) {
+      const mask = skyNode.mesh.parent?.getObjectByName('window_view_mask');
+      skyNode.mesh.updateWorldMatrix(true, false);
+      const done = completeDome(skyNode.mesh.geometry, skyNode.mesh.matrixWorld, this.frame, mask ? new THREE.Box3().setFromObject(mask) : null);
+      if (done.geometry !== skyNode.mesh.geometry) {
+        skyNode.mesh.geometry.dispose();
+        skyNode.mesh.geometry = done.geometry;
+      }
+      Object.assign(this.skyFilled, { cells: done.filledCells, triangles: done.addedTriangles });
+    }
     this.skyMaterial = skyNode ? paintSky(skyNode.mesh, this.frame) : null;
     this.motif = motifNode ? new Motif(motifNode, options.reducedMotion ?? false) : null;
   }
@@ -99,9 +111,9 @@ export class WindowView {
     return CITY_ORDER.map((id) => CITIES[id].name).join(' and ');
   }
 
-  state(): { sf?: CityState; delhi?: CityState; motif: MotifState | null; sky: boolean } {
+  state(): { sf?: CityState; delhi?: CityState; motif: MotifState | null; sky: boolean; skyFilled: { cells: number; triangles: number } } {
     const cities = Object.fromEntries(this.views.map((v) => [v.node.city, { name: CITIES[v.node.city].name, loaded: v.day != null }]));
-    return { ...cities, motif: this.motif?.state() ?? null, sky: this.skyMaterial != null };
+    return { ...cities, motif: this.motif?.state() ?? null, sky: this.skyMaterial != null, skyFilled: { ...this.skyFilled } };
   }
 
   dispose() {
