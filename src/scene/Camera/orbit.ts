@@ -215,9 +215,15 @@ export class Orbit {
     return Math.hypot(this.azimuthGoal - this.azimuth, this.polarGoal - this.polar) / FOLLOW_TAU_S;
   }
 
-  /** Whether anything still moves: the turn, the zoom or the pivot. */
+  /** Whether anything still moves: the turn, a rubber band springing back, the zoom or the pivot. */
   get settling() {
-    return this.turning > 0 || this.logRadius !== this.logRadiusGoal || !this.pivot.equals(this.pivotGoal);
+    return (
+      this.turning > 0 ||
+      this.polars.beyond(this.polarGoal) !== null ||
+      this.radii.beyond(this.logRadiusGoal) !== null ||
+      this.logRadius !== this.logRadiusGoal ||
+      !this.pivot.equals(this.pivotGoal)
+    );
   }
 
   /** The view's rates now: radians a second of azimuth and polar, and of ln(radius) (for a glide that takes over). */
