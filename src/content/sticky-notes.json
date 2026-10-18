@@ -10,6 +10,6 @@
   },
   {
     "kind": "todo",
-    "lines": ["[x] make it idempotent", "[x] make it idempotent", "[ ] delete the last bash script", "[ ] water the mango"]
+    "lines": ["[x] make it idempotent", "[ ] delete the last bash script", "[ ] water the mango"]
   }
 ]

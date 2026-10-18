@@ -123,22 +123,30 @@ test('every new hotspot does what it says', async ({ page }) => {
 });
 
 /**
- * Catches on-demand media (prints, photographs, the Pale Blue Dot's picture) creeping into the room's
- * initial load, and a Pale Blue Dot print left as the bare white paper the room bakes under it.
+ * Catches on-demand media (the close-up prints, the films data) creeping into the room's initial load. The small prints
+ * and the Pale Blue Dot hang in the wide view the room opens on, so they load with it (the first frame is the arrival
+ * test's).
  */
-test('the prints and the photographs load only after the room is interactive', async ({ page }) => {
+test('the close-up prints and the films data load only after the room is interactive', async ({ page }) => {
+  // The top tier, as on an M-series Mac: software WebGL would lower the pixel ratio below the close-up set's threshold.
+  await page.addInitScript(() => ((window as unknown as { __roomTier: number }).__roomTier = 0));
   const started: { url: string; at: number }[] = [];
   page.on('request', (request) => started.push({ url: request.url(), at: Date.now() }));
   await inRoom(page);
-  await page.evaluate(() => window.__room!.goto('photos'));
-  await page.waitForFunction(() => window.__room!.world.darkroom!.prints.every((p) => p.shown > 0), null, { timeout: 30_000 });
   const interactive = await page.evaluate(() => performance.timeOrigin + window.__room!.interactiveAt!);
-  await page.waitForFunction(() => window.__room!.world.paleBlueDot! > 0, null, { timeout: 30_000 });
-  // The darkroom's pictures by the URLs its prints were drawn from (About's photos of him are in the first view).
+  // The close-up set loads once the line is seen up close: at a print's own framing.
+  await page.evaluate(() => window.__room!.goto('photos'));
+  await settledAt(page, 'photos');
+  const hero = await page.evaluate(() => window.__room!.point('hit_darkroom_print_0'));
+  await page.mouse.click(hero!.x, hero!.y);
+  await settledAt(page, 'object:hit_darkroom_print_0');
+  await page.waitForFunction(() => window.__room!.world.darkroom!.prints.every((p) => p.size === 'large' && p.shown === 1), null, { timeout: 60_000 });
+  // The darkroom's close-up pictures by the URLs its prints were drawn from (About's photos of him are in the first view).
   const pictures = new Set((await world(page)).darkroom!.prints.map((p) => new URL(p.picture!, page.url()).href));
-  const onDemand = started.filter(({ url }) => pictures.has(url) || /photographs\.[^/]*\.js|api\/films\.json|pale-blue-dot\.ktx2/.test(url));
+  const onDemand = started.filter(({ url }) => pictures.has(url) || /api\/films\.json/.test(url));
   expect(onDemand.length).toBeGreaterThan(3);
   expect(onDemand.filter(({ at }) => at < interactive).map(({ url }) => url)).toEqual([]);
-  // The posters hang in the first view, so they are part of it.
+  // The posters and the Pale Blue Dot hang in the first view, so they are part of it.
   expect((await world(page)).posters).toEqual([true, true, true, true]);
+  expect((await world(page)).paleBlueDot).toBe(1);
 });

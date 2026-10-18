@@ -1,6 +1,7 @@
 // The room posters, drawn as one set: a 600 x 900 sheet (2:3), one graphic idea per film in the top two thirds,
 // and the same title and credit baselines on every sheet so they read as a set on the wall. The room hangs the
 // four in src/content/favorites.json; the older sheets stay for the Films app.
+import favorites from '../../src/content/favorites.json' with { type: 'json' };
 import { composeSheet, INKS, mix, SHEET } from '../../src/lib/posters.ts';
 import { setLine } from './type.mjs';
 
@@ -24,11 +25,14 @@ const circle = (cx, cy, r, clockwise = true) =>
   `A${n(r)} ${n(r)} 0 1 ${clockwise ? 1 : 0} ${n(cx + r)} ${n(cy)}Z`;
 const poly = (points) => `M${points.map(([x, y]) => `${n(x)} ${n(y)}`).join('L')}Z`;
 
+// The credit says what it is: favorites.json marks the one that is not a film, and its room card reads the same.
+const creditFor = (id) => (favorites.films.find((film) => film.slug === id)?.kind === 'mini-series' ? 'a mini-series by' : 'a film by');
+
 function frame({ id, label, ground, titleLines, titleInk, creditInk, director, year, art, overlay = '' }) {
   const title = titleLines
     .map((line, i) => setLine('gothic', line, { x: M - 2, y: TITLE_BASE + i * TITLE_LEAD, size: TITLE_SIZE, tracking: 8 }).d)
     .join('');
-  const byline = setLine('serifItalic', 'a film by', { x: M, y: CREDIT_BASE, size: CREDIT_SIZE });
+  const byline = setLine('serifItalic', creditFor(id), { x: M, y: CREDIT_BASE, size: CREDIT_SIZE });
   const name = setLine('serif', director, { x: M + byline.width + 7, y: CREDIT_BASE, size: CREDIT_SIZE });
   const yearLine = setLine('serif', String(year), { x: W - M, y: CREDIT_BASE, size: CREDIT_SIZE, anchor: 'end', features: ['onum'] });
   return composeSheet({
@@ -512,7 +516,7 @@ function normalPeople() {
 
   return frame({
     id: 'normal-people-2020',
-    label: 'Normal People (2020), directed by Lenny Abrahamson and Hettie Macdonald: a silver chain in a loop that does not close',
+    label: 'Normal People (2020), a mini-series by Lenny Abrahamson and Hettie Macdonald: a silver chain in a loop that does not close',
     ground: PAPER,
     titleLines: ['NORMAL', 'PEOPLE'],
     titleInk: INK,

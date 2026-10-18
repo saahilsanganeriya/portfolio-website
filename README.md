@@ -113,8 +113,9 @@ date: "2022-02-05"        # optional; the day it was posted
 igCaption: "-\nKodak gold 200\nCanon A-1, 50mm f/1.4"   # optional; my own Instagram caption, as posted
 ```
 
-The room hangs the set on the darkroom lines in `order`, one print per clip, so keep about as many photographs as the
-lines have clips (17 on set v4).
+The room hangs the set on the darkroom lines in `order`, one print per clip. A set larger than the lines' clips (17 on
+set v4) gets a clip added on the line with the fewest, and that line's prints spread evenly along it, so keep the set
+within a print or two of the clips.
 
 `src/content/photography/` is for photography only, never photos of me. Those go through `--me`:
 

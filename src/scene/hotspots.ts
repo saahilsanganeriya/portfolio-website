@@ -45,7 +45,7 @@ const posters: Hotspot[] = favorites.films.slice(0, POSTER_SLOTS).map((film, slo
   label: film.title,
   target: `films/${film.slug}`,
   href: `/films#${film.slug}`,
-  card: { line: `${film.director}, ${film.year}. One of the four favourites on my Letterboxd profile.` },
+  card: { line: 'kind' in film && film.kind === 'mini-series' ? `A ${film.year} mini-series by ${film.director}.` : `${film.director}, ${film.year}.` },
 }));
 
 /** The darkroom's prints; World swaps in each photograph's marker line and window once it knows which hangs where. */
@@ -57,7 +57,7 @@ const prints: Hotspot[] = Array.from({ length: PRINT_SLOTS }, (_, slot) => ({
   fly: 'photos',
   action: 'print',
   href: '/#photography',
-  // Darkroom names each print once it hangs: its caption is the title, "A print of …" the line.
+  // Darkroom names each print once it hangs: its photograph's title and place, and its caption.
   card: {},
 }));
 

@@ -68,6 +68,12 @@ const SHADOW_DROP_M = 0.015;
 const SWAY_SHARE = 0.6;
 // The wall's bake is read where its light is brightest: this far below the darkroom's lamp.
 const REFERENCE_BELOW_LAMP_M = 0.25;
+// A clip the set lacks (a larger set than the room has clips for): its print's box, how far a print stays in from the
+// string's screw eyes, and how near its clip, and how small, the parts of a peg are.
+const NEW_CLIP = { maxW: 0.28, maxH: 0.22 };
+const STRING_END_M = 0.015;
+const PEG_REACH_M = 0.045;
+const PEG_PART_M = 0.08;
 const PAPER = '#f1eee6';
 const INK = ['#141414', '#17181c', '#1a1916'];
 
@@ -98,6 +104,14 @@ export function printSize(maxW: number, maxH: number, aspect: number): PrintSize
   const photoW = Math.max(0, Math.min(maxW - 2 * border, (maxH - border - bottom) * aspect));
   const photoH = photoW / aspect;
   return { paperW: photoW + 2 * border, paperH: photoH + border + bottom, photoW, photoH, border, bottom };
+}
+
+/** The print's card title: the photograph's title and its place (unless the title names it), capitalised. */
+export function cardTitle(photo: Pick<Photograph, 'title' | 'place'>) {
+  const title = photo.title.trim();
+  const place = photo.place?.trim();
+  const named = place && title.toLowerCase().includes(place.toLowerCase());
+  return [title.charAt(0).toUpperCase() + title.slice(1), named ? null : place].filter(Boolean).join(', ');
 }
 
 /** What the marker says on the border: his line, else the title, else the day he posted it. */
@@ -163,6 +177,42 @@ export function affineUv(positions: ArrayLike<number>, uvs: ArrayLike<number>, c
   return { u, v };
 }
 
+// ---- A clip the set does not have ----
+
+/** One print on a line as the layout sees it: its place along the line and its paper's width (metres). */
+export interface Slot {
+  along: number;
+  width: number;
+  hero: boolean;
+}
+
+/**
+ * Where a line's prints go when it takes one more print `width` wide, between the string's usable ends: the new print
+ * goes into the widest gap, and every print then hangs the same distance from the next, in the same order, the first
+ * and the last at the string's ends (a negative distance is an overlap). Returns each slot's new place (in the given
+ * order), the new print's, and the gap it took (pass it back to keep it).
+ */
+export function makeRoom(slots: readonly Slot[], ends: readonly [number, number], width: number, at?: number) {
+  const order = slots.map((slot, i) => ({ ...slot, i })).sort((a, b) => a.along - b.along);
+  const gaps = [...order, null].map((s, k) => {
+    const before = k ? order[k - 1].along + order[k - 1].width / 2 : ends[0];
+    return (s ? s.along - s.width / 2 : ends[1]) - before;
+  });
+  const gap = at ?? gaps.indexOf(Math.max(...gaps));
+  const row = [...order.slice(0, gap), { width, i: -1 }, ...order.slice(gap)];
+  const joint = (ends[1] - ends[0] - row.reduce((sum, s) => sum + s.width, 0)) / Math.max(1, row.length - 1);
+  const placed = slots.map((s) => s.along);
+  let added = 0;
+  let edge = ends[0];
+  for (const s of row) {
+    const centre = edge + s.width / 2;
+    if (s.i < 0) added = centre;
+    else placed[s.i] = centre;
+    edge = centre + s.width / 2 + joint;
+  }
+  return { placed, added, at: gap };
+}
+
 interface Clip extends ClipSpec {
   anchor: THREE.Object3D;
 }
@@ -209,7 +259,7 @@ export function readClips(root: THREE.Object3D): Clip[] {
 }
 
 export class Darkroom {
-  private readonly clips: Clip[];
+  private clips: Clip[];
   private readonly prints: Print[] = [];
   private readonly bounds = new THREE.Box3();
   private readonly wall: THREE.Mesh | null;
@@ -220,9 +270,12 @@ export class Darkroom {
   private loading: Promise<void> | null = null;
   private sinceCheck = CHECK_EVERY_S;
   private hung = false;
+  /** A picture arrived since the last frame; and whether the last update changed what the prints show. */
+  private arrived = false;
+  private changed = false;
 
   constructor(
-    root: THREE.Object3D,
+    private readonly root: THREE.Object3D,
     private readonly proxies: THREE.Mesh[],
     private readonly hotspots: readonly Hotspot[],
     lamp: LampUniforms,
@@ -274,6 +327,11 @@ export class Darkroom {
     return this.pxPerMetre(camera, viewportPx) > UPGRADE_PX_PER_M ? 'large' : 'small';
   }
 
+  /** A picture arrived or a print is fading in: the room draws a frame even while motion is paused (reduced motion). */
+  get changing() {
+    return this.changed;
+  }
+
   /** The room has a darkroom line to hang prints on. */
   get hasClips() {
     return this.clips.length > 0;
@@ -283,17 +341,13 @@ export class Darkroom {
     return this.hung;
   }
 
-  /** The lines' bounds with every print's box, for loading once they come into view. */
-  get box() {
-    return this.bounds;
-  }
-
   /** Hangs the set on the clips in order (the first on the hero clip) and names each print's hotspot after its photograph. */
   hang(photos: readonly Photograph[]) {
     if (this.hung) return;
     this.hung = true;
     // The full atlases may have replaced the wall's since the line was built: the prints start from what it shows now.
     this.followWallMap();
+    for (let extra = photos.length - this.clips.length; extra > 0 && this.addClip(photos); extra--);
     this.clips.forEach((clip, index) => {
       const photo = photos[index];
       if (!photo) return;
@@ -305,6 +359,7 @@ export class Darkroom {
       if (!hotspot) return;
       hotspot.label = sharpieOf(photo) || photo.title;
       hotspot.prop = `A print of “${photo.title}”`;
+      hotspot.card = { title: cardTitle(photo), line: photo.caption };
       hotspot.target = `photography/${photo.slug}`;
       hotspot.href = `/#photography/${photo.slug}`;
     });
@@ -345,6 +400,7 @@ export class Darkroom {
             print.picture = url;
             print.mesh.material.uniforms.uMap.value = texture;
             print.shadow.visible = true;
+            this.arrived = true;
             if (instantly) print.mesh.material.uniforms.uShown.value = 1;
           } catch (error) {
             console.warn(`room: the print of ${print.photo.slug} did not load`, error);
@@ -356,17 +412,22 @@ export class Darkroom {
   }
 
   /**
-   * Fades prints in, follows the wall's atlas if it is swapped for a sharper one, and asks for the close-up set once the
-   * line shows more than UPGRADE_PX_PER_M (`viewportPx`: the canvas height in device pixels).
+   * Fades prints in, follows the wall's atlas if it is swapped for a sharper one, and, when `onDemand` allows it, asks
+   * for the close-up set once the line shows more than UPGRADE_PX_PER_M (`viewportPx`: the canvas height in device pixels).
    */
-  update(dt: number, camera: THREE.PerspectiveCamera, viewportPx: number, textures: TextureStore) {
+  update(dt: number, camera: THREE.PerspectiveCamera, viewportPx: number, textures: TextureStore, onDemand = true) {
+    this.changed = this.arrived;
+    this.arrived = false;
     for (const print of this.prints) {
       const shown = print.mesh.material.uniforms.uShown;
-      if (print.texture && shown.value < 1) shown.value = Math.min(1, shown.value + dt / FADE_S);
+      if (print.texture && shown.value < 1) {
+        shown.value = Math.min(1, shown.value + dt / FADE_S);
+        this.changed = true;
+      }
     }
     this.followWallMap();
     this.sinceCheck += dt;
-    if (this.sinceCheck < CHECK_EVERY_S || this.wanted !== 'small' || !this.prints.length) return;
+    if (!onDemand || this.sinceCheck < CHECK_EVERY_S || this.wanted !== 'small' || !this.prints.length) return;
     this.sinceCheck = 0;
     if (this.densityFor(camera, viewportPx) === 'large') void this.load(textures, 'large', this.reducedMotion);
   }
@@ -404,6 +465,68 @@ export class Darkroom {
       print.mesh.removeFromParent();
       print.shadow.removeFromParent();
     }
+  }
+
+  /**
+   * One more clip, for a set larger than the room's clips: on the line with the fewest (the hero's on a tie), where
+   * makeRoom finds room. The line's prints move along the string with their pegs (the pegs are part of the baked
+   * string), following the string's sag, and the new clip gets a copy of a peg. False when the line cannot be read.
+   */
+  private addClip(photos: readonly Photograph[]) {
+    const lines = new Map<number, Clip[]>();
+    for (const clip of this.clips) lines.set(clip.line, [...(lines.get(clip.line) ?? []), clip]);
+    const heroLine = this.clips.find((c) => c.hero)?.line;
+    const [line, clips] = [...lines].sort(([a, x], [b, y]) => x.length - y.length || Number(b === heroLine) - Number(a === heroLine) || a - b)[0] ?? [];
+    const string = this.root.getObjectByName(`darkroom_line_${line}`);
+    if (!clips || !(string instanceof THREE.Mesh)) return false;
+
+    const right = rightOf(clips[0].anchor);
+    const box = new THREE.Box3().setFromObject(string);
+    const alongs = boxCorners(box).map((p) => p.dot(right) / WORLD_SCALE);
+    const ends: [number, number] = [Math.min(...alongs) + STRING_END_M, Math.max(...alongs) - STRING_END_M];
+    const paper = (clip: Pick<Clip, 'maxW' | 'maxH'>, photo: Photograph | undefined) =>
+      photo ? printSize(clip.maxW, clip.maxH, photo.medium.width / photo.medium.height).paperW : clip.maxW;
+    const slots = () => clips.map((clip) => ({ along: clip.along, width: paper(clip, photos[this.clips.indexOf(clip)]), hero: clip.hero }));
+    // Where it goes is decided on the line as it hangs now; the spread uses the photographs that hang once it is in.
+    const first = makeRoom(slots(), ends, NEW_CLIP.maxW);
+    const before = clips.filter((c) => c.along < first.added).at(-1);
+    const after = clips.find((c) => c.along > first.added);
+    const parity = [before, after].find((c) => c && !c.hero)?.k ?? 1;
+    const used = new Set(clips.map((c) => c.k));
+    let k = (parity + 1) % 2;
+    while (used.has(k)) k += 2;
+    const template = clips.filter((c) => c.k % 2 === k % 2).sort((a, b) => Math.abs(a.along - first.added) - Math.abs(b.along - first.added))[0] ?? clips[0];
+    const anchor = new THREE.Object3D();
+    anchor.name = `darkroom_clip_${line}_${k}`;
+    anchor.quaternion.copy(template.anchor.quaternion);
+    anchor.position.copy(template.anchor.position);
+    Object.assign(anchor.userData, { maxW_m: NEW_CLIP.maxW, maxH_m: NEW_CLIP.maxH, tiltDeg: template.tiltDeg });
+    template.anchor.parent?.add(anchor);
+    const clip: Clip = { ...NEW_CLIP, name: anchor.name, line, k, tiltDeg: template.tiltDeg, hero: false, y: template.y, along: template.along, anchor };
+    this.clips = hangOrder([...this.clips, clip]);
+    const final = makeRoom(slots(), ends, paper(clip, photos[this.clips.indexOf(clip)]), first.at);
+
+    // The string sags as a parabola, and every clip hangs the same drop below it: fit its height along the line.
+    const sag = fitParabola(clips.map((c) => [c.along, c.y]));
+    const pegs = pegParts(string);
+    const shift = (c: Clip, along: number) => {
+      const from = c.anchor.getWorldPosition(new THREE.Vector3());
+      const to = from.clone().addScaledVector(right, (along - c.along) * WORLD_SCALE);
+      to.y += (sag(along) - sag(c.along)) * WORLD_SCALE;
+      return { from, to };
+    };
+    copyPeg(string, pegs, shift(template, template.along).from, shift(template, final.added).to, `darkroom_peg_${line}_${k}`);
+    [...clips, clip].forEach((c, i) => {
+      const along = c === clip ? final.added : final.placed[i];
+      const { from, to } = shift(c, along);
+      if (c !== clip) movePeg(string, pegs, from, to);
+      c.anchor.position.copy(c.anchor.parent!.worldToLocal(to.clone()));
+      c.anchor.updateMatrixWorld(true);
+      c.y += sag(along) - sag(c.along);
+      c.along = along;
+    });
+    this.bounds.union(this.clipBox(clip));
+    return true;
   }
 
   private buildPrint(clip: Clip, index: number, photo: Photograph, size: PrintSize): Print {
@@ -571,6 +694,109 @@ export class Darkroom {
 }
 
 const vec3 = (v: THREE.Vector4) => new THREE.Vector3(v.x, v.y, v.z);
+
+/** A clip's left-to-right direction along its line as seen from the room (world). */
+function rightOf(anchor: THREE.Object3D) {
+  const out = new THREE.Vector3(0, 0, 1).applyQuaternion(anchor.getWorldQuaternion(new THREE.Quaternion()));
+  return new THREE.Vector3(0, 1, 0).cross(out).normalize();
+}
+
+const boxCorners = (box: THREE.Box3) =>
+  [0, 1, 2, 3, 4, 5, 6, 7].map((i) => new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z));
+
+/** The least-squares parabola y = a s² + b s + c through (s, y) points, as a function of s. */
+export function fitParabola(points: readonly (readonly [number, number])[]) {
+  const m = new THREE.Matrix3().set(0, 0, 0, 0, 0, 0, 0, 0, 0);
+  const rhs = new THREE.Vector3();
+  const mean = points.reduce((sum, [s]) => sum + s, 0) / Math.max(1, points.length);
+  for (const [s0, y] of points) {
+    const s = s0 - mean;
+    const row = [s * s, s, 1];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) m.elements[c * 3 + r] += row[r] * row[c];
+    rhs.x += row[0] * y;
+    rhs.y += row[1] * y;
+    rhs.z += row[2] * y;
+  }
+  if (points.length < 3 || Math.abs(m.determinant()) < 1e-12) {
+    const flat = points.reduce((sum, [, y]) => sum + y, 0) / Math.max(1, points.length);
+    return () => flat;
+  }
+  const [a, b, c] = rhs.applyMatrix3(m.invert()).toArray();
+  return (s0: number) => a * (s0 - mean) ** 2 + b * (s0 - mean) + c;
+}
+
+/** The small parts of a baked string's mesh (its pegs' halves and springs), each a set of triangles, with its centre. */
+function pegParts(string: THREE.Mesh) {
+  const geometry = string.geometry;
+  const position = geometry.getAttribute('position');
+  const index = geometry.getIndex();
+  const corner = (i: number) => (index ? index.getX(i) : i);
+  const triangles = (index ? index.count : position.count) / 3;
+  const parent = Int32Array.from({ length: position.count }, (_, i) => i);
+  const find = (a: number) => {
+    while (parent[a] !== a) a = parent[a] = parent[parent[a]];
+    return a;
+  };
+  for (let t = 0; t < triangles; t++) {
+    const a = find(corner(t * 3));
+    parent[find(corner(t * 3 + 1))] = a;
+    parent[find(corner(t * 3 + 2))] = a;
+  }
+  const groups = new Map<number, number[]>();
+  for (let t = 0; t < triangles; t++) {
+    const root = find(corner(t * 3));
+    groups.set(root, [...(groups.get(root) ?? []), t]);
+  }
+  string.updateWorldMatrix(true, false);
+  const v = new THREE.Vector3();
+  return [...groups.values()].flatMap((tris) => {
+    const box = new THREE.Box3();
+    for (const t of tris) for (let j = 0; j < 3; j++) box.expandByPoint(v.fromBufferAttribute(position, corner(t * 3 + j)).applyMatrix4(string.matrixWorld));
+    const size = box.getSize(new THREE.Vector3());
+    return Math.max(size.x, size.y, size.z) < PEG_PART_M * WORLD_SCALE ? [{ tris, centre: box.getCenter(new THREE.Vector3()) }] : [];
+  });
+}
+
+type PegParts = ReturnType<typeof pegParts>;
+const near = (parts: PegParts, at: THREE.Vector3) => parts.filter((part) => part.centre.distanceTo(at) < PEG_REACH_M * WORLD_SCALE);
+
+/** Moves the peg at the clip point `from` (world) to `to`: its vertices shift in the string's own geometry. */
+function movePeg(string: THREE.Mesh, parts: PegParts, from: THREE.Vector3, to: THREE.Vector3) {
+  const geometry = string.geometry;
+  const position = geometry.getAttribute('position');
+  const index = geometry.getIndex();
+  const delta = string.worldToLocal(to.clone()).sub(string.worldToLocal(from.clone()));
+  const moved = new Set<number>();
+  for (const part of near(parts, from)) {
+    for (const t of part.tris) for (let j = 0; j < 3; j++) moved.add(index ? index.getX(t * 3 + j) : t * 3 + j);
+    part.centre.add(to.clone().sub(from));
+  }
+  for (const i of moved) position.setXYZ(i, position.getX(i) + delta.x, position.getY(i) + delta.y, position.getZ(i) + delta.z);
+  position.needsUpdate = true;
+  geometry.computeBoundingSphere();
+}
+
+/** A copy of the peg at the clip point `from` hung at `to`: its own mesh, drawn with the string's material. */
+function copyPeg(string: THREE.Mesh, parts: PegParts, from: THREE.Vector3, to: THREE.Vector3, name: string) {
+  const geometry = string.geometry;
+  const index = geometry.getIndex();
+  const corners = near(parts, from).flatMap((part) => part.tris.flatMap((t) => [0, 1, 2].map((j) => (index ? index.getX(t * 3 + j) : t * 3 + j))));
+  if (!corners.length) return null;
+  const copy = new THREE.BufferGeometry();
+  for (const [key, attribute] of Object.entries(geometry.attributes)) {
+    const Array_ = attribute.array.constructor as new (length: number) => THREE.TypedArray;
+    const out = new THREE.BufferAttribute(new Array_(corners.length * attribute.itemSize), attribute.itemSize, attribute.normalized);
+    corners.forEach((i, n) => {
+      for (let c = 0; c < attribute.itemSize; c++) out.setComponent(n, c, attribute.getComponent(i, c));
+    });
+    copy.setAttribute(key, out);
+  }
+  copy.translate(...string.worldToLocal(to.clone()).sub(string.worldToLocal(from.clone())).toArray());
+  const peg = new THREE.Mesh(copy, string.material);
+  peg.name = name;
+  string.add(peg);
+  return peg;
+}
 const round = (metres: number) => Number(metres.toFixed(4));
 
 /** One print: paper with a faint fibre, the photograph inside its border, and his marker line on the bottom border. */
