@@ -4,6 +4,7 @@ import { clockText } from '../src/components/RoomHud';
 import { tourStops } from '../src/components/RoomTourMap';
 import { Orbit, readOrbit, toSpherical } from '../src/scene/Camera/orbit';
 import { homeSeconds } from '../src/scene/Camera/RoomCamera';
+import tour from '../src/scene/tour.json';
 
 // The corner set's orbit_center (public/room/room.glb, world units): 2.4-9 m, 38-80° from straight up.
 const settings = {
@@ -177,5 +178,11 @@ describe('the HUD and the tour', () => {
   it('tours the plan’s stops in the plan’s order, only those with a caption', () => {
     const plan = { stops: ['desk', 'projector', 'window', 'space'].map((id, i) => ({ id, label: id, camera: `cam_tour_${i}`, position: [0, 0] as [number, number] })) };
     expect(tourStops(plan).map((s) => s.id)).toEqual(['desk', 'window', 'space']);
+  });
+
+  // Catches a caption that promises what a click no longer does: a click on an object now shows its card first, and only
+  // Learn more (or a second click) opens its window (T98: "Click the shelf for the list", "Click a print to open it").
+  it('never tells the visitor that a click opens something', () => {
+    for (const { id, caption } of tour.stops) expect(caption, id).not.toMatch(/\bclick\b[^.]*\b(?:open|for the)\b/i);
   });
 });
