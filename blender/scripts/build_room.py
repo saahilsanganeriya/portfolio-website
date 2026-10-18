@@ -1398,6 +1398,21 @@ def tone_room_emitters():
     mat.node_tree.links.new(dim.outputs[0], emit.inputs["Strength"])
 
 
+# The computer case's power and disk lights, (emission colour, strength): at the room's exposure (+2.8 stops, AgX) the
+# prop studio's 3.0 and 1.5 bake to pale cream; these keep them green and amber. Baked, not a bloom practical.
+CASE_LIGHTS = {"case_power_led": ((0.10, 1.0, 0.22), 0.09), "case_hdd_led": ((1.0, 0.42, 0.04), 0.07)}
+
+
+def tone_case_lights():
+    for name, (colour, strength) in CASE_LIGHTS.items():
+        mat = bpy.data.materials[name]
+        bsdf = next(n for n in mat.node_tree.nodes if n.bl_idname == "ShaderNodeBsdfPrincipled")
+        if bsdf.inputs["Emission Color"].is_linked or bsdf.inputs["Emission Strength"].is_linked:
+            raise SystemExit(f"build_room: {name}'s emission is driven by nodes; tone_case_lights expects plain values")
+        bsdf.inputs["Emission Color"].default_value = (*colour, 1.0)
+        bsdf.inputs["Emission Strength"].default_value = strength
+
+
 def reduce_geometry():
     for name, ratio in DECIMATE.items():
         obj = bpy.data.objects.get(name)
@@ -1550,6 +1565,16 @@ def landing_views():
 
 
 def split_crt_bezel_by_landing(front):
+    shown = landing_shown()
+    bezel = split_by_faces(front, lambda c, n, m: shown(c, n), "desk_crt_bezel")
+    if bezel is None:
+        return
+    mark_bezel_sides(bezel)
+
+
+def landing_shown():
+    """Whether a face (world centre, normal) shows in a landing view. The sticky notes do not hide it: faces under a
+    note left in the desk atlas showed a seam where they reached past the note's edge."""
     bpy.context.view_layer.update()
     scene, depsgraph = bpy.context.scene, bpy.context.evaluated_depsgraph_get()
     half_v = math.tan(math.radians(CAMERA_FOV_DEG) / 2)
@@ -1565,16 +1590,19 @@ def split_crt_bezel_by_landing(front):
             v = p - eye
             depth = v.dot(forward)
             if (depth > 0.05 and abs(v.dot(right)) <= half_h * depth and abs(v.dot(up)) <= half_v * depth
-                    and normal.dot(eye - p) > 0 and seen_from(p, eye, scene, depsgraph)):
+                    and normal.dot(eye - p) > 0 and seen_from(p, eye, scene, depsgraph, ("sticky_note_",))):
                 return True
         return False
 
-    bezel = split_by_faces(front, lambda c, n, m: shown(c, n), "desk_crt_bezel")
-    if bezel is None:
-        return
-    bezel["bake_uv"] = "project"
-    # One ring of a projection round the glass packs like a frame with nothing inside: cut it into its top, bottom,
-    # left and right sides (along the screen's diagonals), each its own island.
+    return shown
+
+
+def mark_bezel_sides(bezel):
+    """One ring round the glass packs like a frame with nothing inside, so the bezel unwraps as its top, bottom, left
+    and right sides, parted by UV seams along the screen's diagonals and nowhere else. Seams, not a split: a split
+    mesh smooths each side's normals on its own (up to 44 degrees apart across the cut), which baked a lit seam, and
+    smart projection broke the lip into islands whose borders ran along its highlight."""
+    bezel["bake_uv"] = "unwrap"
     screen = bpy.data.objects["monitor_screen"]
     centre, half_w, half_h = screen.matrix_world.translation, screen["width_m"] / 2, screen["height_m"] / 2
     bm = bmesh.new()
@@ -1587,8 +1615,8 @@ def split_crt_bezel_by_landing(front):
         return ("top" if dz > 0 else "bottom") if abs(dz) > abs(dx) else ("right" if dx > 0 else "left")
 
     sides = {f.index: side(f) for f in bm.faces}
-    bmesh.ops.split_edges(bm, edges=[e for e in bm.edges if len(e.link_faces) == 2
-                                     and sides[e.link_faces[0].index] != sides[e.link_faces[1].index]])
+    for e in bm.edges:
+        e.seam = len(e.link_faces) == 2 and sides[e.link_faces[0].index] != sides[e.link_faces[1].index]
     bm.to_mesh(bezel.data)
     bm.free()
 
@@ -1618,8 +1646,9 @@ def desk_top_views():
     return views
 
 
-def seen_from(point, eye, scene, depsgraph):
-    """No surface a camera renders lies between point and eye (proxies, ghosts and glass let the ray through)."""
+def seen_from(point, eye, scene, depsgraph, see_through=()):
+    """No surface a camera renders lies between point and eye (proxies, ghosts, glass and names starting with one of
+    see_through let the ray through)."""
     ray = eye - point
     left = ray.length
     ray.normalize()
@@ -1629,7 +1658,7 @@ def seen_from(point, eye, scene, depsgraph):
         if not hit:
             return True
         if not (obj.hide_render or not obj.visible_camera or obj.name.startswith(("hit_", "ghost_", "env_sky"))
-                or obj.name in ("window_glass", "crt_glow")):
+                or obj.name in ("window_glass", "crt_glow") or obj.name.startswith(tuple(see_through))):
             return False
         left -= (loc - origin).length + 0.001
         origin = loc + ray * 0.001
@@ -1917,6 +1946,7 @@ def main():
     build_lights(mats)
     build_practical_lights(dressing)
     tone_room_emitters()
+    tone_case_lights()
     reduce_geometry()
     split_desk_heroes()
     build_plant_sway()

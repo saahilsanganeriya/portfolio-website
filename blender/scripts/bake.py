@@ -45,7 +45,7 @@ BAKE_DIR = REPO / "blender" / ".cache" / "bake"
 BLEND = REPO / "blender" / "room.blend"
 
 # Bake sizes (coordinator ruling, 2026-10-17 08:00Z, for a night-long budget): the desk hero atlas bakes at 1.5x the
-# 4096 px it ships at, so every shipped texel averages a couple of baked ones, and so does the bezel's (3072 for 1792);
+# 4096 px it ships at, so every shipped texel averages a couple of baked ones, and so does the bezel's (3072 for 2304);
 # art and props bake at their 4096 ship size, and the walls and floor, smooth diffuse light, at 3072. The view's halves
 # ship at their bake size: San Francisco's larger, for the Painted Ladies' trim and windows, each half's KTX2 kept under
 # about 0.6 MB.
@@ -135,7 +135,7 @@ def make_bake_uvs(objs, size: int, margin_px: int, rotate: str = "ANY"):
         mesh = obj.data
         source = next((uv for uv in mesh.uv_layers if uv.active_render and uv.name != "bake"), None)
         bake_uv = mesh.uv_layers.get("bake") or mesh.uv_layers.new(name="bake")
-        if source is not None and obj.get("bake_uv") != "project" and overlap_fraction(mesh, source) < 0.01:
+        if source is not None and obj.get("bake_uv") not in ("project", "unwrap") and overlap_fraction(mesh, source) < 0.01:
             coords = np.empty(len(mesh.loops) * 2, dtype=np.float32)
             source.data.foreach_get("uv", coords)
             bake_uv.data.foreach_set("uv", coords)
@@ -144,6 +144,19 @@ def make_bake_uvs(objs, size: int, margin_px: int, rotate: str = "ANY"):
         mesh.uv_layers.active = bake_uv
         if source is not None:
             source.active_render = True
+    # bake_uv "unwrap": the object's marked seams alone part its islands (the CRT bezel: build_room.mark_bezel_sides).
+    unwrap = [o for o in to_project if o.get("bake_uv") == "unwrap"]
+    if unwrap:
+        select_only(unwrap)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.reveal()
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.unwrap(method="ANGLE_BASED", fill_holes=True, correct_aspect=False, margin_method="FRACTION",
+                          margin=0.0)
+        bpy.ops.uv.select_all(action="SELECT")
+        bpy.ops.uv.average_islands_scale()
+        bpy.ops.object.mode_set(mode="OBJECT")
+    to_project = [o for o in to_project if o.get("bake_uv") != "unwrap"]
     # An object may ask for a wider projection angle (extra project_angle): islands cut at a crease bake beaded edges
     # there, each side sampling the other face's shadow on its border texels.
     for angle in sorted({float(o.get("project_angle", 60.0)) for o in to_project}):
@@ -155,7 +168,8 @@ def make_bake_uvs(objs, size: int, margin_px: int, rotate: str = "ANY"):
         bpy.ops.uv.smart_project(angle_limit=math.radians(angle), island_margin=0.0, area_weight=0.0,
                                  correct_aspect=False, scale_to_bounds=False)
         bpy.ops.object.mode_set(mode="OBJECT")
-    print(f"bake: {len(objs) - len(to_project)} objects keep their UVs, {len(to_project)} smart-projected")
+    print(f"bake: {len(objs) - len(to_project) - len(unwrap)} objects keep their UVs, {len(unwrap)} unwrapped, "
+          f"{len(to_project)} smart-projected")
     normalise_texel_density(objs)
     select_only(objs)
     bpy.ops.object.mode_set(mode="EDIT")

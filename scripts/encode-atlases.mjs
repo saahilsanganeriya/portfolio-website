@@ -25,11 +25,13 @@ import { fileURLToPath } from 'node:url';
  * (`--codec env=uastc:q2:l2:d32768:z22`, optionally `--px env=2048`) holds a quarter of its GPU memory for +2.9 MB.
  * With the bezel's own atlas the full room measured 26.0 MB: desk, art and the bezel take RDO level 2 (-0.85 MB, about
  * 2 dB PSNR against the resampled bake), the bezel ships at 1792 px (-0.47 MB) and props at crf 16 (-0.10 MB), which
- * keeps the full room under 25 MB once the darkroom's small prints load before the reveal.
+ * keeps the full room under 25 MB once the darkroom's small prints load before the reveal. The bezel's 4,096-sample
+ * re-bake has far less noise to encode, and its four long sides pack at 38 %: at 2304 px it holds the 1792 px
+ * bezel's texel density in about the same bytes.
  */
 export const ATLASES = {
   desk: { px: 4096, codec: 'uastc:q2:l2:d32768:z22' },
-  bezel: { px: 1792, codec: 'uastc:q2:l2:d32768:z22' }, // the CRT bezel the landing view shows
+  bezel: { px: 2304, codec: 'uastc:q2:l2:d32768:z22' }, // the CRT bezel the landing view shows
   art: { px: 4096, codec: 'uastc:q2:l2:d32768:z22' },
   props: { px: 4096, codec: 'avif:16' },
   env: { px: 3072, codec: 'avif:14' },
