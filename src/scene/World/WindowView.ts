@@ -124,10 +124,13 @@ export class WindowView {
     this.motif?.update(Math.max(dt, 0));
   }
 
-  /** A feature in the world by name, for tests: the plane (`window_plane`, `_nose`, `_tail`) and the pane's corners (`window_pane_0`..`3`). */
+  /**
+   * A feature in the world by name, for tests: the plane (`window_plane`, `_nose`, `_tail`; with `@<u>`, where it would
+   * be at route fraction u) and the pane's corners (`window_pane_0`..`3`).
+   */
   point(name: string): THREE.Vector3 | null | undefined {
-    const plane = /^window_plane(?:_(nose|tail))?$/.exec(name);
-    if (plane) return this.motif?.planeWorld((plane[1] as 'nose' | 'tail' | undefined) ?? 'centre') ?? null;
+    const plane = /^window_plane(?:_(nose|tail))?(?:@([\d.]+))?$/.exec(name);
+    if (plane) return this.motif?.planeWorld((plane[1] as 'nose' | 'tail' | undefined) ?? 'centre', plane[2] === undefined ? undefined : Number(plane[2])) ?? null;
     const corner = /^window_pane_([0-3])$/.exec(name);
     if (corner) return this.pane[Number(corner[1])]?.clone() ?? null;
     return undefined;
@@ -215,8 +218,10 @@ function paintSky(mesh: THREE.Mesh, frame: SkyFrame) {
 // ---- the motif: a plane on a dotted arc from New Delhi to San Francisco ----
 
 // The arc on the motif's canvas (fractions of its width and height): New Delhi's end, the control point, San
-// Francisco's end. A route fraction (0 over New Delhi, 1 over San Francisco) measures along the arc's length.
-const ARC: [number, number][] = [[0.87, 0.64], [0.5, -0.04], [0.13, 0.64]];
+// Francisco's end. A route fraction (0 over New Delhi, 1 over San Francisco) measures along the arc's length. Its apex
+// sits 0.383 of the height down, 4 cm (the airliner's height and a margin) below where round 8's small plane flew, so
+// the plane's fin stays inside the window framing even with the view leaned furthest down.
+const ARC: [number, number][] = [[0.87, 0.64], [0.5, 0.127], [0.13, 0.64]];
 // The arc's dots and end rings are geometry (sizes as fractions of the motif's width); only the stamps are pictures,
 // STAMP_PX square each, about 1.5 texels a device pixel at the window framing (1512x982 at DPR 2).
 const DOT = 0.0017;
@@ -699,10 +704,14 @@ class Motif {
     };
   }
 
-  /** The plane's centre, nose or tail in the world, for tests (null while it is off the arc). */
-  planeWorld(part: 'centre' | 'nose' | 'tail' = 'centre') {
-    if (this.u < 0 || !this.plane.visible) return null;
+  /** The plane's centre, nose or tail in the world, for tests: where it is (null while off the arc), or would be at route fraction `at`. */
+  planeWorld(part: 'centre' | 'nose' | 'tail' = 'centre', at?: number) {
     const x = part === 'nose' ? this.planeLength / 2 : part === 'tail' ? -this.planeLength / 2 : 0;
+    if (at !== undefined) {
+      const { position, quaternion } = this.pose(at);
+      return this.plane.parent!.localToWorld(new THREE.Vector3(x, 0, 0).applyQuaternion(quaternion).add(position));
+    }
+    if (this.u < 0 || !this.plane.visible) return null;
     return this.plane.localToWorld(new THREE.Vector3(x, 0, 0));
   }
 
@@ -718,6 +727,16 @@ class Motif {
   /** Puts the plane at route fraction `u`, heading along the arc as it turns and banks, at opacity `fade`. */
   private place(u: number, fade: number) {
     this.u = u;
+    const { position, quaternion, bank } = this.pose(u);
+    this.bank = bank;
+    this.plane.quaternion.copy(quaternion);
+    this.plane.position.copy(position);
+    this.plane.visible = true;
+    this.plane.material.uniforms.uOpacity.value = this.drawn ? fade : 0;
+  }
+
+  /** The plane's pose on the motif at route fraction `u`: on the arc, heading along it, turned and banked (degrees). */
+  private pose(u: number) {
     const p = this.path.point(u);
     const along = this.path.heading(u);
     const progress = THREE.MathUtils.clamp((u - ROUTE[0]) / (ROUTE[1] - ROUTE[0]), 0, 1);
@@ -726,14 +745,12 @@ class Motif {
     const up = new THREE.Vector3(along.y, -along.x, 0);
     if (up.y < 0) up.negate();
     // Heading a little toward the room at take-off and away at landing; banked into that turn, most at mid-route.
-    this.bank = BANK_DEG * Math.sin(Math.PI * progress);
+    const bank = BANK_DEG * Math.sin(Math.PI * progress);
     forward.applyAxisAngle(up, THREE.MathUtils.degToRad(YAW_DEG) * Math.cos(Math.PI * progress));
-    up.applyAxisAngle(forward, THREE.MathUtils.degToRad(this.bank));
+    up.applyAxisAngle(forward, THREE.MathUtils.degToRad(bank));
     const right = new THREE.Vector3().crossVectors(forward, up).normalize();
     up.crossVectors(right, forward).normalize();
-    this.plane.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, up, right));
-    this.plane.position.set(p.x, p.y, LIFT_M);
-    this.plane.visible = true;
-    this.plane.material.uniforms.uOpacity.value = this.drawn ? fade : 0;
+    const quaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, up, right));
+    return { position: new THREE.Vector3(p.x, p.y, LIFT_M), quaternion, bank };
   }
 }

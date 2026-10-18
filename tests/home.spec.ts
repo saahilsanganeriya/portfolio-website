@@ -109,7 +109,7 @@ test('Home sits beside Take the tour, answers Tab, Enter and H, and leaves the m
   await expect(home).toBeFocused();
   await page.keyboard.press('Enter');
   await settledAt(page, 'idle');
-  await expect(page.getByRole('button', { name: 'Back to the room' })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'To the desk' })).toBeHidden();
   await expect(home, 'focus stays on Home').toBeFocused();
   const pose = poseOf(await room(page));
 
@@ -146,7 +146,7 @@ test('Home in the middle of a drag cancels the drag and its coast, and lands at 
 test('Home from behind a wall swings round the set, smoothly, and the walls come back', async ({ page }) => {
   const home = await inRoom(page);
   // Half a turn round: behind the back wall, which fades.
-  const perRad = 900 / (Math.PI * 1.6);
+  const perRad = 900 / (Math.PI * 1.1);
   for (let k = 0; k < 3; k++) {
     await drag(page, -(Math.PI / 3) * perRad);
     await orbitRests(page);

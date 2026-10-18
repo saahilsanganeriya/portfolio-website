@@ -87,6 +87,8 @@ const POINTER_SHIFT = { x: 0.03, y: 0.02 };
 const LOOK_SPRING = springFor(0.45);
 const SWAY_IN = springFor(5);
 const SWAY_OUT = springFor(1.2);
+// Steady enough for a card beside an object: the sway's last trace and the lean's speed below what a pixel would show.
+const STEADY = { sway: 1e-4, leanRadS: 1e-4 };
 // Home takes longer the further it has to go: a base, plus time per metre the eye travels and per radian the view turns.
 // From the monitor (8.4 m back) it is about 1.8 s, from behind the set (half a turn round) 2.4 s, from nearby 0.9 s.
 const HOME_SECONDS = { base: 0.7, perMetre: 0.12, perRadian: 0.3, min: 0.9, max: 2.4 };
@@ -138,10 +140,11 @@ export class RoomCamera {
   constructor(
     nodes: RoomNodes,
     aspect: number,
-    /** Reduced motion: no inertia, no glides and no sway (each move lands at once). */
+    /** Reduced motion: no inertia, no glides, no sway and no lean (each move lands at once). */
     private readonly still = false,
   ) {
-    this.orbitSettings = readOrbit(nodes.root);
+    const orbit = readOrbit(nodes.root);
+    this.orbitSettings = { ...orbit, front: toSpherical(nodes.framings.idle.position.clone().sub(orbit.center)).azimuth };
     this.framings = nodes.framings;
     this.monitorCenter = nodes.monitor.position.clone();
     this.monitorNormal = new THREE.Vector3(0, 0, 1).applyQuaternion(nodes.monitor.quaternion);
@@ -156,6 +159,12 @@ export class RoomCamera {
 
   get moving() {
     return this.flight !== null || (this.orbit !== null && this.orbit.settling);
+  }
+
+  /** Whether the view holds quite still: not moving, the wide view's sway faded out and the pointer's lean at rest. */
+  get steady() {
+    const [yaw, pitch] = this.look.velocity;
+    return !this.moving && this.swayWeight.value[0] < STEADY.sway && Math.hypot(yaw, pitch) < STEADY.leanRadS;
   }
 
   /** The station the camera is at or flying to ('orbit' while the visitor turns the set). */
@@ -387,8 +396,9 @@ export class RoomCamera {
       this.rig.set(this.goal);
     }
 
-    // The pointer leans the view at a framing; at the monitor, in the boot framing and while orbiting it does not.
-    if (station === 'monitor' || station === 'loading' || station === 'orbit') this.pointer.set(0, 0);
+    // The pointer leans the view at a framing; never under reduced motion, nor at the monitor, in the boot framing or
+    // while orbiting (nor where a card shows: the room passes no pointer then).
+    if (this.still || station === 'monitor' || station === 'loading' || station === 'orbit') this.pointer.set(0, 0);
     else this.pointer.copy(pointer);
     const lean = station === 'idle' ? WIDE_LEAN : 1;
     this.lookGoal[0] = -this.pointer.x * POINTER_LOOK.yaw * lean;

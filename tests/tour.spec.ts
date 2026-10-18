@@ -266,6 +266,29 @@ test('the map has no serious axe violations', async ({ page }) => {
   expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id} (${v.nodes.length})`)).toEqual([]);
 });
 
+/**
+ * Catches the you-are-here mark drawn off the plan, on top of Play the tour (T98): the wide view stands 8 m in front of
+ * the set, below the plan, and every visit opens the map from there now. The mark stays on the plan's edge and the
+ * caption says where the visitor is.
+ */
+test('from the wide view the map marks the visitor on the plan’s edge, clear of Play the tour', async ({ page }) => {
+  await arrived(page);
+  await page.evaluate(() => window.__room!.goto('idle'));
+  await settledAt(page, 'idle');
+  await page.getByRole('button', { name: 'Take the tour' }).click();
+  await expect(map(page)).toBeVisible();
+  const [dot, plan, play] = await Promise.all(
+    [page.locator('.room-tour-dot'), page.locator('[data-tour-plan]'), map(page).getByRole('button', { name: 'Play the tour' })].map(async (l) => (await l.boundingBox())!),
+  );
+  const centre = { x: dot.x + dot.width / 2, y: dot.y + dot.height / 2 };
+  expect(centre.x, 'on the plan across').toBeGreaterThanOrEqual(plan.x);
+  expect(centre.x).toBeLessThanOrEqual(plan.x + plan.width);
+  expect(centre.y, 'and up and down').toBeGreaterThanOrEqual(plan.y);
+  expect(centre.y).toBeLessThanOrEqual(plan.y + plan.height);
+  expect(dot.y + dot.height <= play.y || dot.x + dot.width <= play.x || dot.x >= play.x + play.width, 'not on Play the tour').toBe(true);
+  await expect(map(page).locator('[data-tour-caption]')).toHaveText('You are here: the wide view.');
+});
+
 /** Catches a tour the keyboard cannot reach, see or drive: Tab to the button (warmed), Enter, arrows and Tab through stops, Enter, Escape. */
 test('the keyboard reaches the tour, walks its stops, flies to one and closes the map', async ({ page }) => {
   await arrived(page);
@@ -273,7 +296,7 @@ test('the keyboard reaches the tour, walks its stops, flies to one and closes th
   await expect(page.getByRole('link', { name: 'Open SaahilOS' })).toBeFocused();
   // The arrival ends at the monitor, where the HUD's way back out comes first.
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Back to the room' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'To the desk' })).toBeFocused();
   await page.keyboard.press('Tab');
   const open = page.getByRole('button', { name: 'Take the tour' });
   await expect(open).toBeFocused();

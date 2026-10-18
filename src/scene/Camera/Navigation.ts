@@ -52,10 +52,13 @@ const LINE_PX = 100 / 3;
 const WHEEL_GESTURE_GAP_MS = 200;
 const WHEEL_AXIS_PX = 4;
 // A trackpad pinch arrives as a wheel with Control held (Chromium, Firefox): deltaY is about -100 ln(scale), so the
-// room follows the fingers at exp(deltaY / 100). One event moves at most as far as a wheel notch (a mouse wheel turned
-// with Control held is not a pinch, and must not jump).
+// room follows the fingers at exp(deltaY / 100). It moves at most PINCH_MAX_PX a 16 ms frame since the pinch's last
+// event, so a lone event (a mouse wheel turned with Control held is not a pinch) moves no more than a wheel notch, and
+// one Chromium merged on a busy frame moves as far as the events it stands for, up to PINCH_CATCH_UP frames' worth.
 const PINCH_PX = 100;
 const PINCH_MAX_PX = 12;
+const PINCH_FRAME_MS = 16;
+const PINCH_CATCH_UP = 4;
 
 /**
  * The stations in the order Page Up and Page Down step through them: left to right as seen from the wide view, the
@@ -128,6 +131,8 @@ export class Navigation {
   private wheel = { axis: null as 'x' | 'y' | null, dx: 0, dy: 0, at: -Infinity };
   /** Safari's pinch under way: its scale at the last event. */
   private gestureScale: number | null = null;
+  /** When the last Control+wheel pinch event came. */
+  private pinchAt = -Infinity;
   private readonly abort = new AbortController();
 
   constructor(
@@ -311,7 +316,12 @@ export class Navigation {
     // Safari's own gesture events carry this pinch.
     if (this.gestureScale !== null) return;
     const [, dy] = wheelPixels(event, this.stage.clientHeight);
-    this.pinchBy(Math.exp(THREE.MathUtils.clamp(dy, -PINCH_MAX_PX, PINCH_MAX_PX) / PINCH_PX));
+    const now = performance.now();
+    const since = now - this.pinchAt;
+    this.pinchAt = now;
+    const frames = since > WHEEL_GESTURE_GAP_MS ? 1 : THREE.MathUtils.clamp(since / PINCH_FRAME_MS, 1, PINCH_CATCH_UP);
+    const cap = PINCH_MAX_PX * frames;
+    this.pinchBy(Math.exp(THREE.MathUtils.clamp(dy, -cap, cap) / PINCH_PX));
   }
 
   /** A trackpad pinch in Safari: gesturestart, gesturechange with the scale since the start, gestureend. */

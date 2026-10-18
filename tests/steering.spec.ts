@@ -44,19 +44,22 @@ async function sampleOrbit(page: Page) {
 }
 
 /**
- * A flick: a press, eight moves 60 px apart and the let-go, dispatched in the page in one go, as a hand's flick arrives
+ * A flick: a press, four moves 60 px apart and the let-go, dispatched in the page in one go, as a hand's flick arrives
  * (Playwright's own moves come more than 80 ms apart on a loaded machine, which the room rightly reads as a slow drag).
- * Pointer 1 is the mouse's, so the stage's pointer capture takes it.
+ * 240 px turns the set about 50°, so from the wide view (and back from the side) it lets go inside the coast's edge,
+ * 95° round, and coasts. `sign` 1 drags to the left, -1 to the right. Pointer 1 is the mouse's, so the stage's pointer
+ * capture takes it.
  */
-const flick = (page: Page) =>
-  page.evaluate(() => {
+const flick = (page: Page, sign: 1 | -1 = 1) =>
+  page.evaluate((s) => {
     const stage = document.querySelector('[data-room-world]')!;
     const fire = (type: string, x: number) =>
       stage.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: 500 }));
-    fire('pointerdown', 900);
-    for (let x = 840; x >= 420; x -= 60) fire('pointermove', x);
-    fire('pointerup', 420);
-  });
+    const from = s > 0 ? 900 : 660;
+    fire('pointerdown', from);
+    for (let k = 1; k <= 4; k++) fire('pointermove', from - s * 60 * k);
+    fire('pointerup', from - s * 240);
+  }, sign);
 
 /** Wheel events as a browser would send them, on the room's stage (deltaMode 1 = lines, which Playwright cannot send). */
 const wheelOnStage = (page: Page, events: { deltaX?: number; deltaY: number; deltaMode?: number; ctrlKey?: boolean }[]) =>
@@ -88,8 +91,8 @@ test.describe('in Chromium', () => {
     after.slice(1).forEach((s, i) => expect(s.turning, `frame ${i + 1} of the coast`).toBeLessThanOrEqual(after[i].turning + 1e-9));
     expect(after.at(-1)!.turning).toBe(0);
 
-    // A second flick, then a press: the coast stops where it is.
-    await flick(page);
+    // A second flick, back the other way, then a press: the coast stops where it is.
+    await flick(page, -1);
     await expect.poll(async () => (await orbit(page))!.turning).toBeGreaterThan(0.1);
     await page.mouse.down();
     expect((await orbit(page))!.turning, 'stopped by the press').toBe(0);
@@ -208,6 +211,46 @@ test.describe('in Chromium', () => {
    * room, that zooms the wrong way, that the page controls let through, and one at the monitor that zooms the page or
    * pulls the camera in through the glass.
    */
+  /**
+   * Catches a pinch cut short when Chromium merges its events on a busy frame (T98: the same pinch zoomed 7.68 → 4.16 m
+   * in Chromium and to the 2.4 m limit in WebKit): the cap is per time, not per event, so a merged event moves as far as
+   * the events it stands for, while a lone Control+wheel notch still moves no more than a frame's worth.
+   */
+  test('a pinch zooms as far when its events arrive merged as when they arrive frame by frame', async ({ page }) => {
+    await inRoom(page);
+    /** The radius's change (ln) for ctrl+wheel events at the page clock's [gap ms, deltaY] steps, from the wide view. */
+    const pinch = async (steps: [number, number][]) => {
+      await page.evaluate(() => window.__room!.goto('idle'));
+      await settledAt(page, 'idle');
+      await wheelOnStage(page, [{ deltaY: -5 }]);
+      await orbitRests(page);
+      const start = (await orbit(page))!.radius;
+      await page.evaluate((list) => {
+        const stage = document.querySelector('[data-room-world]')!;
+        const realNow = performance.now.bind(performance);
+        let at = realNow();
+        performance.now = () => at;
+        try {
+          for (const [gap, deltaY] of list) {
+            at += gap;
+            stage.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 720, clientY: 520, ctrlKey: true, deltaY }));
+          }
+        } finally {
+          performance.now = realNow;
+        }
+      }, steps);
+      await orbitRests(page);
+      return Math.log((await orbit(page))!.radius / start);
+    };
+    const everyFrame = await pinch(Array.from({ length: 9 }, () => [16, -10] as [number, number]));
+    const merged = await pinch([[16, -10], [48, -30], [48, -30], [32, -20]]);
+    test.info().annotations.push({ type: 'ln(radius ratio)', description: JSON.stringify({ everyFrame, merged }) });
+    expect(everyFrame).toBeLessThan(-0.5);
+    expect(Math.abs(merged / everyFrame - 1), 'merged vs frame by frame').toBeLessThan(0.02);
+    const notch = await pinch([[400, -100]]);
+    expect(notch, 'a lone notch with Control held moves a frame’s worth').toBeCloseTo(-0.12, 2);
+  });
+
   test('a trackpad pinch zooms the room, never the page, over the room, its controls and the OS on the monitor', async ({ page }) => {
     await page.goto('/about');
     await settledAt(page, 'monitor', 120_000);

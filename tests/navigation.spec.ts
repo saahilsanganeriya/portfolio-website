@@ -25,8 +25,8 @@ const room = (page: Page) =>
     };
   });
 const TURN = Math.PI * 2;
-/** Radians per CSS pixel of drag on the 900 px stage (the orbit turns 1.6 pi per stage height). */
-const RAD_PER_PX = (Math.PI * 1.6) / 900;
+/** Radians per CSS pixel of drag on the 900 px stage (the orbit turns 1.1 pi per stage height). */
+const RAD_PER_PX = (Math.PI * 1.1) / 900;
 
 async function settledAt(page: Page, station: string, timeout = 30_000) {
   await page.waitForFunction((s) => window.__room?.phase === s && !window.__room.moving, station, { timeout });
@@ -184,8 +184,9 @@ test('a drag turns the set all the way round, and each wall turns see-through fr
     sectors.add(Math.floor((((azimuth % TURN) + TURN) % TURN) / (TURN / 8)));
     for (const wall of await page.evaluate(() => window.__room!.walls)) {
       (walls[wall.name] ??= []).push(wall.opacity);
-      // What lies outside a wall (the window's city view and sky) never shows while that wall is faded at all.
-      if (wall.opacity < 1) expect(wall.outside.filter((o) => o.shown).map((o) => o.name), `outside the faded ${wall.name} wall`).toEqual([]);
+      // What lies outside a wall (the window's city view and sky) never shows while that wall is faded, below 0.9 when
+      // a mask holds it (from there it fades in under its cover with the wall; diorama.test owns that).
+      if (wall.opacity < (wall.masked ? 0.9 : 1)) expect(wall.outside.filter((o) => o.shown).map((o) => o.name), `outside the faded ${wall.name} wall`).toEqual([]);
     }
     // From a wall's outside, its hotspots are not in the way of the pointer.
     const faded = (await page.evaluate(() => window.__room!.walls)).filter((w) => w.opacity < 0.5);
@@ -300,7 +301,7 @@ test('the monitor is left by the back control or a drag, not by the pointer slip
   await page.mouse.move(25, 450);
   await page.waitForTimeout(1200);
   expect(await room(page)).toMatchObject({ destination: 'monitor' });
-  const back = page.getByRole('button', { name: 'Back to the room' });
+  const back = page.getByRole('button', { name: 'To the desk' });
   await expect(back).toBeVisible();
   await back.click();
   await settledAt(page, 'desk');

@@ -3,11 +3,12 @@
 Saahil Sanganeriya's personal site, at https://saahilsanganeriya.com. On a desktop, it opens on a vintage room built in
 Blender: the room fades in at the wide view, then the camera flies straight into the CRT, which runs SaahilOS, a small
 retro desktop, with About open.
-A drag turns the whole set round and it coasts after you let go (a wall turns see-through while the camera is behind it).
+A drag turns the whole set round and it coasts after you let go, easing to rest by the side walls (a wall turns
+see-through while the camera is behind it).
 The wheel, a trackpad pinch or a touch pinch zooms in and out, and a sideways trackpad swipe turns the set. Arrow keys
 turn it and + and - zoom. A click on an object flies the camera to it and shows a short card; Learn more, or a second
 click, opens its window on the monitor. Home, or the H key, takes the camera back to the wide view from anywhere. At the monitor the
-wheel scrolls the window under the pointer, and Escape, Home, a drag or "Back to the room" leaves. The top left carries
+wheel scrolls the window under the pointer; Escape or "To the desk" steps back to the desk, and Home or a drag leaves too. The top left carries
 his name, Software Engineer and the visitor's time.
 "Take the tour" shows a map of the room, and its "Play the tour" glides through every stop in one slow camera move. Every post, project and app has its own address, and
 opening one makes the same flight into the monitor with that window open; there are no plain pages. Phones get the room at a lighter tier; a browser without

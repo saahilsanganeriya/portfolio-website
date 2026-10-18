@@ -4,6 +4,7 @@ import { clockText } from '../src/components/RoomHud';
 import { tourStops } from '../src/components/RoomTourMap';
 import { Orbit, readOrbit, toSpherical } from '../src/scene/Camera/orbit';
 import { homeSeconds } from '../src/scene/Camera/RoomCamera';
+import tour from '../src/scene/tour.json';
 
 // The corner set's orbit_center (public/room/room.glb, world units): 2.4-9 m, 38-80° from straight up.
 const settings = {
@@ -97,6 +98,49 @@ describe('the orbit about the set', () => {
     }
   });
 
+  // Catches a flick whose coast carries the visitor round behind the walls (T98: one throw turned the set 209°), a coast
+  // that stops dead at the edge instead of easing into it, and an edge that also stops a drag (the owner's 360°).
+  it('coasts no further than the side walls’ edge, 95° either side of the wide view, while a drag goes anywhere', () => {
+    let now = 0;
+    const realNow = performance.now;
+    performance.now = () => now;
+    try {
+      const front = THREE.MathUtils.degToRad(15);
+      const fronted = { ...settings, front };
+      const turned = (orbit: Orbit) => THREE.MathUtils.radToDeg(orbit.azimuth - front);
+      /** A slow drag to `fromDeg` (no speed left at its end), then a flick of `sign` that lets go while still moving. */
+      const flickFrom = (fromDeg: number, sign: 1 | -1) => {
+        const orbit = new Orbit(eyeAt(15 + fromDeg, 70, 6000), settings.center, fronted, false);
+        for (let i = 0; i < 6; i++) {
+          now += 16;
+          orbit.drag(-25 * sign, 0, 900);
+          orbit.step(0.016);
+        }
+        orbit.release();
+        run(orbit, 4);
+        return orbit;
+      };
+      for (const sign of [1, -1] as const) {
+        const orbit = flickFrom(sign * 20, sign);
+        expect(Math.abs(turned(orbit)), `the coast stopped by the edge (${sign > 0 ? 'right' : 'left'})`).toBeLessThanOrEqual(95.5);
+        // The flick itself ends about 55° round; the coast carries it the rest of the way, easing in.
+        expect(Math.abs(turned(orbit)), 'easing into it, not stopping short').toBeGreaterThan(90);
+      }
+      const dragged = new Orbit(eyeAt(15, 70, 6000), settings.center, fronted, false);
+      for (let i = 0; i < 30; i++) {
+        now += 200;
+        dragged.drag(-40, 0, 900);
+        dragged.step(0.2);
+      }
+      now += 200;
+      dragged.release();
+      run(dragged, 2);
+      expect(turned(dragged), 'a drag turns on past the edge').toBeGreaterThan(150);
+    } finally {
+      performance.now = realNow;
+    }
+  });
+
   // Catches a room without an orbit_center (the first room) giving the orbit nowhere to turn.
   it('reads the limits off orbit_center, and fits them to the floor without one', () => {
     const root = new THREE.Object3D();
@@ -134,5 +178,11 @@ describe('the HUD and the tour', () => {
   it('tours the plan’s stops in the plan’s order, only those with a caption', () => {
     const plan = { stops: ['desk', 'projector', 'window', 'space'].map((id, i) => ({ id, label: id, camera: `cam_tour_${i}`, position: [0, 0] as [number, number] })) };
     expect(tourStops(plan).map((s) => s.id)).toEqual(['desk', 'window', 'space']);
+  });
+
+  // Catches a caption that promises what a click no longer does: a click on an object now shows its card first, and only
+  // Learn more (or a second click) opens its window (T98: "Click the shelf for the list", "Click a print to open it").
+  it('never tells the visitor that a click opens something', () => {
+    for (const { id, caption } of tour.stops) expect(caption, id).not.toMatch(/\bclick\b[^.]*\b(?:open|for the)\b/i);
   });
 });

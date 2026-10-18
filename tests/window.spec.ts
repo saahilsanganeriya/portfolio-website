@@ -118,8 +118,8 @@ async function orbitTo(page: Page, deg: number) {
     const orbit = await page.evaluate(() => window.__room!.orbit);
     const delta = orbit ? wrap((deg * Math.PI) / 180 - orbit.azimuth) : 0.05;
     if (orbit && Math.abs(delta) < 0.02 && !orbit.turning) return;
-    // About 0.0056 rad a pixel of drag (the orbit's default); the loop corrects whatever it really is.
-    const dx = Math.max(-width * 0.4, Math.min(width * 0.4, -delta / ((Math.PI * 1.6) / 900)));
+    // About 0.0038 rad a pixel of drag (the orbit's default); the loop corrects whatever it really is.
+    const dx = Math.max(-width * 0.4, Math.min(width * 0.4, -delta / ((Math.PI * 1.1) / 900)));
     await page.mouse.move(width / 2, height * 0.58);
     await page.mouse.down();
     for (let i = 1; i <= 12; i++) await page.mouse.move(width / 2 + (dx * i) / 12, height * 0.58);
@@ -222,6 +222,75 @@ test.describe('under reduced motion (the plane holds still)', () => {
       expect(share, `void through the pane at ${deg}°`).toBeLessThan(0.01);
     }
   });
+});
+
+/**
+ * Catches the plane flying out of the top of the window framing (T98: at 1512x982 it rode the frame's top edge, at
+ * 2560x1440 its fin was cut off): its nose and tail stay inside the framing, with room for the fin above them, at
+ * every point of the route, on the MacBook's 1.54:1 stage, a 16:9 one and the tests' 16:10, with the pointer at the
+ * bottom of the stage, where the view leans furthest down and the sky's top comes nearest the edge.
+ */
+test('the plane stays inside the window framing all along its route, at every stage shape', async ({ page }) => {
+  await windowAt(page, HOURS[0]);
+  for (const [width, height] of [[1440, 900], [1512, 982], [2560, 1440]]) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => window.__room!.goto('window'));
+    await page.waitForFunction(() => window.__room!.phase === 'window' && !window.__room!.moving, null, { timeout: 60_000 });
+    await page.mouse.move(width / 2, height - 2, { steps: 4 });
+    // The lean follows the pointer on a spring of about half a second.
+    await expect.poll(() => page.evaluate(() => window.__room!.look.pitch), { timeout: 30_000 }).toBeLessThan(-0.033);
+    const route = await page.evaluate(() =>
+      Array.from({ length: 87 }, (_, i) => {
+        const u = 0.07 + i * 0.01;
+        return { u, nose: window.__room!.point(`window_plane_nose@${u}`), tail: window.__room!.point(`window_plane_tail@${u}`) };
+      }),
+    );
+    for (const { u, nose, tail } of route) {
+      expect(nose && tail, `the plane at ${u.toFixed(2)} (${width}x${height})`).toBeTruthy();
+      // The fin stands about a third of the plane's length above its nose-to-tail line.
+      const fin = 0.35 * Math.hypot(nose!.x - tail!.x, nose!.y - tail!.y);
+      for (const [part, p] of [['nose', nose!], ['tail', tail!]] as const) {
+        const where = `${part} at ${u.toFixed(2)} (${width}x${height}): ${p.x.toFixed(0)}, ${p.y.toFixed(0)}`;
+        expect(p.y, where).toBeGreaterThan(fin);
+        expect(p.y, where).toBeLessThan(height);
+        expect(p.x, where).toBeGreaterThan(0);
+        expect(p.x, where).toBeLessThan(width);
+      }
+    }
+  }
+});
+
+/**
+ * Catches the black pane on the way back to the front (T98: Home from behind the set showed the back wall whole and the
+ * window void for about a second): in no frame of the swing round does the wall stand over 0.9 with its view hidden.
+ */
+test('coming home from behind the set, the window shows its view as soon as the wall is back', async ({ page }) => {
+  // A smaller stage draws faster in software; what is tested is the walls' state each frame, not pixels.
+  await page.setViewportSize({ width: 960, height: 600 });
+  await windowAt(page, HOURS[0]);
+  await page.evaluate(() => window.__room!.goto('idle'));
+  await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
+  // Round behind the back wall by the arrow keys (15° a press; four at a time stay under the coast's top speed).
+  for (let round = 0; round < 3; round++) {
+    for (let press = 0; press < 4; press++) await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(() => window.__room!.orbit !== null && !window.__room!.moving, null, { timeout: 60_000 });
+  }
+  await page.evaluate(() => {
+    const seen: { opacity: number; shown: boolean }[] = [];
+    (window as unknown as { seen: typeof seen }).seen = seen;
+    const sample = () => {
+      const back = window.__room!.walls.find((w) => w.name === 'back')!;
+      seen.push({ opacity: back.opacity, shown: back.outside.every((o) => o.shown) });
+      if (window.__room!.phase !== 'idle' || window.__room!.moving) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await page.keyboard.press('h');
+  await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 120_000 });
+  const seen = await page.evaluate(() => (window as unknown as { seen: { opacity: number; shown: boolean }[] }).seen);
+  expect(seen.some((s) => s.opacity < 0.5), 'the swing started behind the wall').toBe(true);
+  const dark = seen.filter((s) => s.opacity > 0.9 && !s.shown);
+  expect(dark.map((s) => s.opacity.toFixed(3)), 'frames with the wall back and the pane void').toEqual([]);
 });
 
 /**
