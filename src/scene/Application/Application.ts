@@ -449,7 +449,7 @@ export class Application implements RoomHandle {
       this.options.onOsLoaded?.();
     });
     await this.world.load();
-    progress.step('Posters and window');
+    progress.step('Posters, prints and window');
     this.renderer.prepareTextures(this.scene);
     // Compile every shader now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);

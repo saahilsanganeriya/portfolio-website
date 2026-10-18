@@ -122,7 +122,7 @@ test('the BIOS screen logs the room’s real loading and hands over only once ev
     'room.glb': 'OK',
     ...Object.fromEntries(files.map((file) => [file, 'OK'])),
     SaahilOS: 'OK',
-    'Posters and window': 'OK',
+    'Posters, prints and window': 'OK',
     Shaders: 'OK',
     'GPU test': 'OK',
     'Upload to GPU': 'OK',
