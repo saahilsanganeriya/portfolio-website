@@ -47,9 +47,6 @@ TEXTURES = {
     "plastered_wall_04": (3.2, {
         "diff": "aaf0e693291d51d13531480625a942f950fed23f6b1d1008ee0e91f2a23a7b1e",
         "rough": "37302048eb2e60be2a73a7f803965097681e652b80b93d6d701cfc7fabc1e0a7"}),
-    "fabric_leather_02": (0.5, {
-        "diff": "d2cd2e14face20b152dffd1d59a48d91bbef7b516242bc39c401c09d018e7eb8",
-        "rough": "36af9f3299a221608de05e4a7e2eac59c70f7a725e7de690361d2e1478d1e16f"}),
     "poly_wool_herringbone": (0.27, {
         "diff": "ca21de8e2e7f43178f8290361bfb2271eb264af0d2887c7c93e76a113ff3cc64",
         "rough": "8678dfb7f474440c12a5f317fe01802dd1aabbb205a6c947bb044ade72294fa7"}),
@@ -222,17 +219,6 @@ def build_materials() -> dict[str, bpy.types.Material]:
     m.set(metal=1.0)
     mats["brass"] = m.mat
 
-    m = Mat("leather")
-    size = TEXTURES["fabric_leather_02"][0]
-    diff = m.image(texture_path("fabric_leather_02", "diff"), scale=size, loc=(-900, 100))
-    rough_tex = m.image(texture_path("fabric_leather_02", "rough"), non_color=True, scale=size, loc=(-900, -300))
-    colour = m.mix(diff.outputs["Color"], srgb("#7A3A2A"), "MULTIPLY", 0.85, (-400, 100))
-    m.link(m.grime(colour, (0.01, 0.005, 0.004, 1), 0.03, 0.5), m.bsdf.inputs["Base Color"])
-    m.link(m.remap(rough_tex.outputs["Color"], 0.35, 0.7), m.bsdf.inputs["Roughness"])
-    m.bump(diff.outputs["Color"], strength=0.2, distance=0.001)
-    mats["leather"] = m.mat
-
-    mats["black_metal"] = Mat("black_metal").set(base=srgb("#1D1B19"), rough=0.45, metal=0.3).mat
     mats["rubber"] = Mat("rubber").set(base=srgb("#3A352E"), rough=0.7).mat
     mats["paper"] = Mat("paper").set(base=srgb("#E6DECD"), rough=0.85).mat
 
