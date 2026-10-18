@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import blendGlsl from '../shaders/window_blend.glsl?raw';
 import landFrag from '../shaders/window.frag.glsl?raw';
 import landVert from '../shaders/window_land.vert.glsl?raw';
@@ -216,10 +217,16 @@ function paintSky(mesh: THREE.Mesh, frame: SkyFrame) {
 // The arc on the motif's canvas (fractions of its width and height): New Delhi's end, the control point, San
 // Francisco's end. A route fraction (0 over New Delhi, 1 over San Francisco) measures along the arc's length.
 const ARC: [number, number][] = [[0.87, 0.64], [0.5, -0.04], [0.13, 0.64]];
-const MOTIF_PX = 2048;
-// Dark slate, as pencil marks read against a day sky, with a faint pale halo where the sky is deep blue.
+// The arc's dots and end rings are geometry (sizes as fractions of the motif's width); only the stamps are pictures,
+// STAMP_PX square each, about 1.5 texels a device pixel at the window framing (1512x982 at DPR 2).
+const DOT = 0.0017;
+const DOT_GAP = 0.0118;
+const RING = 0.0049;
+const HALO_SCALE = 2.4;
+const STAMP_PX = 256;
+// Dark slate, as pencil marks read against the sky, each mark on a faint pale halo.
 const INK = '#1f2b3a';
-const HALO = 'rgba(255, 255, 255, 0.4)';
+const HALO_OPACITY = 0.16;
 // Under each end of the arc, a passport stamp in its own ink (owner): a double ring with the city and its airport round
 // it and a plane in the middle, leaving Delhi and landing in San Francisco, turned a little and unevenly inked. Its
 // centre lies STAMP_DROP of the motif's height below the end, its radius STAMP_RADIUS of its width.
@@ -489,6 +496,22 @@ function trailRibbon(path: ReturnType<typeof flightPath>) {
   return geometry;
 }
 
+/** The arc's dots (every DOT_GAP of the width along it, clear of the ends) and its two end rings, in metres on the motif's plane; `scale` grows each mark into its halo. */
+function routeMarks(path: ReturnType<typeof flightPath>, width: number, scale = 1) {
+  const parts: THREE.BufferGeometry[] = [];
+  const at = (geometry: THREE.BufferGeometry, p: THREE.Vector2) => parts.push(geometry.translate(p.x, p.y, 0));
+  const gap = DOT_GAP * width;
+  for (let d = gap * 2.2; d <= path.length - gap * 2.2; d += gap) at(new THREE.CircleGeometry(DOT * width * scale, 10), path.point(d / path.length));
+  for (const u of [0, 1]) {
+    const end = path.point(u);
+    at(new THREE.RingGeometry((RING - DOT / 2) * width, (RING + DOT / 2 + (scale - 1) * DOT) * width, 28), end);
+    at(new THREE.CircleGeometry(DOT * width * scale, 10), end);
+  }
+  const merged = mergeGeometries(parts)!;
+  for (const g of parts) g.dispose();
+  return merged;
+}
+
 /** A passport stamp of radius `r` px centred at (x, y): the double ring, the ring's text, a plane, the worn ink. */
 function drawStamp(ctx: CanvasRenderingContext2D, stamp: (typeof STAMPS)[CityId], x: number, y: number, r: number) {
   const random = seeded(seedOf(stamp.city));
@@ -560,13 +583,14 @@ function drawStamp(ctx: CanvasRenderingContext2D, stamp: (typeof STAMPS)[CityId]
 }
 
 class Motif {
-  private readonly arc: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  /** The dotted arc and its end rings, over their halo; the two stamps, drawn once the font has loaded. */
+  private readonly marks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[];
+  private readonly stamps: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
   private readonly plane: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   private readonly trail: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   private readonly path: ReturnType<typeof flightPath>;
   private readonly width: number;
   private readonly height: number;
-  private readonly canvasH: number;
   private readonly planeLength: number;
   private clock = 0;
   private drawn = false;
@@ -580,13 +604,22 @@ class Motif {
   ) {
     this.width = node.widthM;
     this.height = node.heightM;
-    this.canvasH = Math.round((MOTIF_PX * this.height) / this.width);
     this.path = flightPath(this.width, this.height);
-    this.arc = new THREE.Mesh(
-      new THREE.PlaneGeometry(this.width, this.height),
-      new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false, opacity: 0 }),
-    );
-    this.arc.name = 'window_motif_arc';
+    const flat = (color: string, opacity: number) => new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, toneMapped: false, opacity });
+    this.marks = [
+      new THREE.Mesh(routeMarks(this.path, this.width, HALO_SCALE), flat('#ffffff', HALO_OPACITY)),
+      new THREE.Mesh(routeMarks(this.path, this.width), flat(INK, 0.85)),
+    ];
+    this.marks.forEach((mesh, i) => {
+      mesh.name = i ? 'window_motif_arc' : 'window_motif_arc_halo';
+      mesh.position.z = 0.0002 * (i + 1);
+    });
+    this.stamps = this.path.stamps.map(({ centre, radius }, i) => {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.1 * radius, 2.1 * radius), flat('#ffffff', 0));
+      mesh.position.set(centre.x, centre.y, 0.0008);
+      mesh.name = `window_motif_stamp_${i ? 'sf' : 'delhi'}`;
+      return mesh;
+    });
     this.planeLength = PLANE_LENGTH_M * (this.width / MOTIF_WIDTH_M);
     this.plane = new THREE.Mesh(
       airliner(this.planeLength),
@@ -616,62 +649,22 @@ class Motif {
     );
     this.trail.name = 'window_motif_trail';
     this.trail.visible = !still;
-    node.anchor.add(this.arc, this.trail, this.plane);
+    node.anchor.add(...this.marks, ...this.stamps, this.trail, this.plane);
     this.clock = ((PARKED_AT - ROUTE[0]) / (ROUTE[1] - ROUTE[0])) * FLIGHT_S;
     this.place(PARKED_AT, 0);
   }
 
   async draw() {
     await loadStampFont();
-    const arc = document.createElement('canvas');
-    arc.width = MOTIF_PX;
-    arc.height = this.canvasH;
-    const ctx = arc.getContext('2d')!;
-    const [w, h] = [arc.width, arc.height];
-    ctx.shadowColor = HALO;
-    ctx.shadowBlur = 6;
-    ctx.fillStyle = INK;
-    ctx.strokeStyle = INK;
-    // Dots every GAP px along the arc, measured along its length, clear of the end markers.
-    const GAP = w * 0.0118;
-    const steps = 2000;
-    let travelled = 0;
-    let next = GAP * 2.2;
-    let [px, py] = arcPoint(0, w, h);
-    let length = 0;
-    for (let i = 1; i <= steps; i++) {
-      const [x, y] = arcPoint(i / steps, w, h);
-      length += Math.hypot(x - px, y - py);
-      [px, py] = [x, y];
-    }
-    [px, py] = arcPoint(0, w, h);
-    for (let i = 1; i <= steps; i++) {
-      const [x, y] = arcPoint(i / steps, w, h);
-      travelled += Math.hypot(x - px, y - py);
-      [px, py] = [x, y];
-      if (travelled >= next && travelled <= length - GAP * 2.2) {
-        ctx.beginPath();
-        ctx.arc(x, y, w * 0.0017, 0, Math.PI * 2);
-        ctx.globalAlpha = 0.85;
-        ctx.fill();
-        next += GAP;
-      }
-    }
-    ctx.globalAlpha = 1;
-    for (const [city, s] of [['delhi', 0], ['sf', 1]] as const) {
-      const [x, y] = arcPoint(s, w, h);
-      ctx.lineWidth = w * 0.0017;
-      ctx.beginPath();
-      ctx.arc(x, y, w * 0.0049, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x, y, w * 0.0017, 0, Math.PI * 2);
-      ctx.fill();
-      drawStamp(ctx, STAMPS[city], x, y + h * STAMP_DROP, w * STAMP_RADIUS);
-    }
-    this.arc.material.map = canvasTexture(arc);
-    this.arc.material.opacity = 1;
-    this.arc.material.needsUpdate = true;
+    (['delhi', 'sf'] as const).forEach((city, i) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = STAMP_PX;
+      drawStamp(canvas.getContext('2d')!, STAMPS[city], STAMP_PX / 2, STAMP_PX / 2, STAMP_PX / 2.1);
+      const material = this.stamps[i].material;
+      material.map = canvasTexture(canvas);
+      material.opacity = 1;
+      material.needsUpdate = true;
+    });
     this.drawn = true;
     this.place(this.u < 0 ? PARKED_AT : this.u, 1);
   }
@@ -714,8 +707,8 @@ class Motif {
   }
 
   dispose() {
-    this.arc.material.map?.dispose();
-    for (const mesh of [this.arc, this.plane, this.trail]) {
+    for (const mesh of this.stamps) mesh.material.map?.dispose();
+    for (const mesh of [...this.marks, ...this.stamps, this.plane, this.trail]) {
       mesh.material.dispose();
       mesh.geometry.dispose();
       mesh.removeFromParent();
