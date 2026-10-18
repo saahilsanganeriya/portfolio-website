@@ -15,8 +15,8 @@ empties, pivots for the parts that turn (oven_door, the turntable's platter and 
 (wall_back_group, wall_left_group) and the monitor, espresso, steam, orbit, camera and anchor empties.
 
 Each of the four atlases (desk, art, props, env) ships twice: a 1024 px first-frame copy embedded in room.glb (KTX2
-ETC1S), and the full 4096 px atlas under public/room/atlas/ in the codec its A/B picked (FULL_CODEC), which the
-site streams in after the first frame (public/room/atlases.json maps each atlas to its materials and files). The
+ETC1S), and the full atlas under public/room/atlas/ at the size and in the codec scripts/encode-atlases.mjs holds
+(its A/B picked them), which the site streams in (public/room/atlases.json maps each atlas to its materials and files). The
 export fails if the first frame or the full set is over its byte budget, a contract node is missing or a removed one
 is back. Stills are Cycles renders of the same scene, the view shown from its day bakes, composited on the void.
 """
@@ -45,11 +45,8 @@ RENDERS = REPO / "blender" / "renders"
 
 ATLASES = ("desk", "art", "props", "env")
 LOW_PX = 1024  # the first-frame copies embedded in room.glb
-FULL_PX = {"desk": 4096, "art": 4096, "props": 4096, "env": 3072}  # the full atlases (desk resampled from 6144)
-# The full atlases' codecs (CRAFT-R8 3, then each atlas's own A/B: bytes, SSIM and a crop; dark ramps especially;
-# evidence/T71/codec-ab-final/). uastc: UASTC level 2 + RDO lambda 1 + zstd 18 in KTX2 (GPU-compressed);
-# ("avif", crf): AVIF at that crf (decoded to RGBA8). UASTC for props too would put the full set over its budget.
-FULL_CODEC = {"desk": "uastc", "art": "uastc", "props": ("avif", 14), "env": ("avif", 14)}
+# The full atlases' sizes and codecs live in the one encoder, which turns the bakes into public/room/atlas/.
+ENCODER = REPO / "scripts" / "encode-atlases.mjs"
 VIEW_ATLASES = {"window_sf": "window_view_sf", "window_delhi": "window_view_delhi"}
 RUNTIME_MESHES = {"crt_glow": "crt_glow", "lamp_bulb": "lamp_bulb", "lava_lamp_glass": "lava_lamp_glass",
                   "oven_glow": "oven_glow"}  # mesh name -> material name
@@ -433,26 +430,16 @@ def export_view_textures() -> dict[str, int]:
     return sizes
 
 
-def encode_full(atlas: str) -> Path:
-    """The full atlas at FULL_PX in its codec: KTX2 UASTC (RDO, zstd) with mipmaps, or AVIF."""
-    src = resized_atlas(atlas, FULL_PX[atlas])
-    ATLAS_DIR.mkdir(parents=True, exist_ok=True)
-    for old in ATLAS_DIR.glob(f"{atlas}.*"):
-        old.unlink()
-    codec = FULL_CODEC[atlas]
-    if codec == "uastc":
-        dst = ATLAS_DIR / f"{atlas}.ktx2"
-        run("nice", "-n", "10", "ktx", "create", "--format", "R8G8B8_SRGB", "--assign-tf", "srgb", "--encode", "uastc",
-            "--uastc-quality", "2", "--uastc-rdo", "--uastc-rdo-l", "1.0", "--zstd", "18", "--generate-mipmap",
-            "--threads", "8", src, dst)
-    else:
-        dst = ATLAS_DIR / f"{atlas}.avif"
-        run("nice", "-n", "10", "ffmpeg", "-v", "error", "-y", "-i", src, "-c:v", "libaom-av1", "-still-picture", "1",
-            "-crf", str(codec[1]), "-cpu-used", "4", "-threads", "8", dst)
-    return dst
+def encode_full() -> dict[str, dict]:
+    """The full atlases from the bakes, through scripts/encode-atlases.mjs: its manifest rows by atlas (uri relative to
+    atlases.json, px, bytes, format)."""
+    manifest = CACHE / "export" / "atlases-full.json"
+    run("node", ENCODER, "--bake", BAKE_DIR, "--out", ATLAS_DIR, "--manifest", manifest, "--work", CACHE / "export",
+        "--threads", "8")
+    return {row["name"]: row for row in json.loads(manifest.read_text())}
 
 
-def write_atlases_json(full: dict[str, Path] | None) -> dict:
+def write_atlases_json(full: dict[str, dict] | None) -> dict:
     """public/room/atlases.json: per atlas, the glb materials that sample it, its first-frame copy (an image inside
     room.glb) and its full file (absent until the full set is exported)."""
     gltf, rest = read_glb(OUT_DIR / "room.glb")
@@ -468,9 +455,7 @@ def write_atlases_json(full: dict[str, Path] | None) -> dict:
         entry = {"name": atlas, "materials": materials,
                  "low": {"uri": "room.glb", "image": image_index, "px": LOW_PX, "bytes": view["byteLength"]}}
         if full and atlas in full:
-            path = full[atlas]
-            entry["full"] = {"uri": f"atlas/{path.name}", "px": FULL_PX[atlas], "bytes": path.stat().st_size,
-                             "format": "ktx2-uastc" if path.suffix == ".ktx2" else "avif"}
+            entry["full"] = {key: full[atlas][key] for key in ("uri", "px", "bytes", "format")}
         entries.append(entry)
     (OUT_DIR / "atlases.json").write_text(json.dumps(entries, indent=2) + "\n")
     return {e["name"]: e for e in entries}
@@ -789,7 +774,7 @@ def main():
         export_pale_blue_dot()
         probe = None if args.no_probe else render_probe()  # before the glb swaps in its unlit materials
         export_glb(merge=args.merge_static)
-        full = None if args.low_only else {atlas: encode_full(atlas) for atlas in ATLASES}
+        full = None if args.low_only else encode_full()
         atlases = write_atlases_json(full)
         check_budgets(view_sizes, atlases, full is not None)
         write_floorplan(probe)

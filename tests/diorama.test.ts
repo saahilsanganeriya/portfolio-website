@@ -61,3 +61,32 @@ describe('the city behind the back wall', () => {
     expect(back(diorama, fromSide).outside.some((o) => o.shown)).toBe(false);
   });
 });
+
+describe('a wall the camera has gone behind', () => {
+  /**
+   * Catches a wall that keeps or gets back its first-frame atlas: the atlas streamer swaps the full atlas into what the
+   * scene draws, which is the fade's copy while the wall is see-through, and the copy then took the source's old atlas
+   * back every frame, and the wall showed it again once whole.
+   */
+  it('keeps an atlas swapped in while it was see-through, and after it is whole again', () => {
+    const root = new THREE.Group();
+    const group = new THREE.Group();
+    group.name = 'wall_back_group';
+    const wall = block('wall_back', [-3270, 0, -540], [3450, 3400, -420]);
+    const [low, full] = [new THREE.Texture(), new THREE.Texture()];
+    (wall.material as THREE.MeshBasicMaterial).map = low;
+    group.add(wall);
+    root.add(group);
+    const diorama = new Diorama(root, [], CENTER, true);
+    // 35 cm behind the wall: about half see-through.
+    const behind = new THREE.Vector3(0, 1500, -830);
+    diorama.update(behind, 0);
+    const copy = wall.material as THREE.MeshBasicMaterial;
+    expect(copy.opacity).toBeLessThan(1);
+    copy.map = full;
+    diorama.update(behind, 0);
+    expect((wall.material as THREE.MeshBasicMaterial).map, 'while see-through').toBe(full);
+    diorama.update(IDLE, 0);
+    expect((wall.material as THREE.MeshBasicMaterial).map, 'whole again').toBe(full);
+  });
+});

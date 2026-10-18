@@ -17,7 +17,7 @@
     "full": {
       "uri": "atlas/desk.ktx2",
       "px": 4096,
-      "bytes": 8573662,
+      "bytes": 8222700,
       "format": "ktx2-uastc"
     }
   },
@@ -40,7 +40,7 @@
     "full": {
       "uri": "atlas/art.ktx2",
       "px": 4096,
-      "bytes": 8055180,
+      "bytes": 7748605,
       "format": "ktx2-uastc"
     }
   },

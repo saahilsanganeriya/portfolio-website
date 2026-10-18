@@ -115,3 +115,22 @@ test('an image atlas decoded off the main thread replaces the first-frame textur
   const texture = await page.evaluate(() => window.__roomStats!.gpu.textures.find((t) => t.width === 2048 && t.format === 'RGBA8'));
   expect(texture?.bytes, 'GPU memory counts the full atlas with its mipmaps').toBe(Math.round(2048 * 2048 * 4 * (4 / 3)));
 });
+
+/**
+ * Catches a first-frame atlas coming back after the full one streamed in: a material that copies its texture from one
+ * the scene no longer draws (the swaying plants' did, every frame) puts the 1024 px atlas back on screen and on the GPU.
+ */
+test('once the shipped atlases have streamed, nothing in the room draws a first-frame atlas', async ({ page }) => {
+  const shipped = JSON.parse(readFileSync('public/room/atlases.json', 'utf8')) as { name: string; low: { px: number }; full?: { px: number } }[];
+  await page.addInitScript(() => (window.__roomTier = 0));
+  await page.goto('/');
+  await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 180_000 });
+  await page.waitForFunction(() => window.__roomStats?.done === true, null, { timeout: 200_000 });
+  // Frames for anything that follows a texture each frame to have done so.
+  await page.evaluate(() => new Promise((resolve) => { let n = 30; const step = () => (--n ? requestAnimationFrame(step) : resolve(null)); requestAnimationFrame(step); }));
+  const textures = await page.evaluate(() => window.__roomStats!.gpu.textures.map((t) => ({ name: t.name, width: t.width })));
+  for (const atlas of shipped.filter((a) => a.full && a.full.px !== a.low.px)) {
+    const held = textures.filter((t) => (t.name === atlas.name || t.name === `room_${atlas.name}`) && t.width === atlas.low.px);
+    expect(held, `${atlas.name}: no material still holds its ${atlas.low.px} px first-frame atlas`).toEqual([]);
+  }
+});

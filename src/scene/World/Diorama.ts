@@ -68,6 +68,8 @@ interface Wall {
 interface Faded {
   source: THREE.Material;
   copy: THREE.Material | null;
+  /** The map the copy was last given here: a different one means the atlas streamer swapped it. */
+  copyMap?: THREE.Texture | null;
   hidden: boolean;
 }
 
@@ -262,6 +264,7 @@ export class Diorama {
       state.source = mesh.material;
       state.copy?.dispose();
       state.copy = null;
+      state.copyMap = undefined;
       if (state.source instanceof THREE.ShaderMaterial) patchShader(state.source);
     }
     // Gone, it is not drawn at all; only a mesh this hid is shown again (the room hides some of its own).
@@ -283,12 +286,18 @@ export class Diorama {
       mesh.material = source;
       return;
     }
-    // A shared material (the room's atlases) fades only on this mesh: through a copy that follows its texture.
+    // A shared material (the room's atlases) fades only on this mesh: through a copy that follows its texture. The atlas
+    // streamer swaps the full atlas into what the scene draws, so a swap that came while the copy was drawn goes back
+    // to the source, rather than the source's first-frame atlas back to the copy.
     const copy = (state.copy ??= Object.assign(source.clone(), { transparent: true, depthWrite: false }));
-    const map = (source as THREE.MeshBasicMaterial).map;
-    if ('map' in copy && copy.map !== map) {
-      (copy as THREE.MeshBasicMaterial).map = map ?? null;
-      copy.needsUpdate = true;
+    if ('map' in copy && 'map' in source) {
+      const [own, shared] = [copy as THREE.MeshBasicMaterial, source as THREE.MeshBasicMaterial];
+      if (state.copyMap !== undefined && own.map !== state.copyMap) shared.map = own.map;
+      else if (own.map !== shared.map) {
+        own.map = shared.map;
+        own.needsUpdate = true;
+      }
+      state.copyMap = own.map;
     }
     copy.opacity = opacity * source.opacity;
     mesh.material = copy;
