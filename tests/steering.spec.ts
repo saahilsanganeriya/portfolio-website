@@ -208,6 +208,46 @@ test.describe('in Chromium', () => {
    * room, that zooms the wrong way, that the page controls let through, and one at the monitor that zooms the page or
    * pulls the camera in through the glass.
    */
+  /**
+   * Catches a pinch cut short when Chromium merges its events on a busy frame (T98: the same pinch zoomed 7.68 → 4.16 m
+   * in Chromium and to the 2.4 m limit in WebKit): the cap is per time, not per event, so a merged event moves as far as
+   * the events it stands for, while a lone Control+wheel notch still moves no more than a frame's worth.
+   */
+  test('a pinch zooms as far when its events arrive merged as when they arrive frame by frame', async ({ page }) => {
+    await inRoom(page);
+    /** The radius's change (ln) for ctrl+wheel events at the page clock's [gap ms, deltaY] steps, from the wide view. */
+    const pinch = async (steps: [number, number][]) => {
+      await page.evaluate(() => window.__room!.goto('idle'));
+      await settledAt(page, 'idle');
+      await wheelOnStage(page, [{ deltaY: -5 }]);
+      await orbitRests(page);
+      const start = (await orbit(page))!.radius;
+      await page.evaluate((list) => {
+        const stage = document.querySelector('[data-room-world]')!;
+        const realNow = performance.now.bind(performance);
+        let at = realNow();
+        performance.now = () => at;
+        try {
+          for (const [gap, deltaY] of list) {
+            at += gap;
+            stage.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 720, clientY: 520, ctrlKey: true, deltaY }));
+          }
+        } finally {
+          performance.now = realNow;
+        }
+      }, steps);
+      await orbitRests(page);
+      return Math.log((await orbit(page))!.radius / start);
+    };
+    const everyFrame = await pinch(Array.from({ length: 9 }, () => [16, -10] as [number, number]));
+    const merged = await pinch([[16, -10], [48, -30], [48, -30], [32, -20]]);
+    test.info().annotations.push({ type: 'ln(radius ratio)', description: JSON.stringify({ everyFrame, merged }) });
+    expect(everyFrame).toBeLessThan(-0.5);
+    expect(Math.abs(merged / everyFrame - 1), 'merged vs frame by frame').toBeLessThan(0.02);
+    const notch = await pinch([[400, -100]]);
+    expect(notch, 'a lone notch with Control held moves a frame’s worth').toBeCloseTo(-0.12, 2);
+  });
+
   test('a trackpad pinch zooms the room, never the page, over the room, its controls and the OS on the monitor', async ({ page }) => {
     await page.goto('/about');
     await settledAt(page, 'monitor', 120_000);
