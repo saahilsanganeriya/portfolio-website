@@ -195,7 +195,8 @@ export class RoomAudio implements AudioHandle {
   unlock() {
     if (this.isMuted || !this.create()) return;
     const ctx = this.ctx!;
-    if (ctx.state === 'suspended' && document.visibilityState !== 'hidden') void ctx.resume().catch(() => {});
+    // Suspended, or WebKit's `interrupted`, which is where Safari holds a context made before any gesture.
+    if (ctx.state !== 'running' && ctx.state !== 'closed' && document.visibilityState !== 'hidden') void ctx.resume().catch(() => {});
   }
 
   /** Makes the sound once: its graph, at silence, and its files loading. False where the browser has no Web Audio. */
