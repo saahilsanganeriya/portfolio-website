@@ -52,7 +52,7 @@ export interface RoomOptions {
   onLanded?(): void;
   /** SaahilOS has loaded on the monitor, behind the loading screen: it may load its full-size pictures now. */
   onOsLoaded?(): void;
-  /** The room's sound is made (room.glb has loaded; the room itself still loads): the page's controls may drive it now. */
+  /** The room's sound is made (room.glb has loaded, the rest still loads): the page's controls may drive it now. */
   onAudio?(audio: AudioHandle): void;
   /** A sound context the page made inside a gesture before the room's sound existed; the sound takes it over. */
   audioContext?(): AudioContext | null;
@@ -160,10 +160,10 @@ export interface RoomHandle {
   dispose(): void;
 }
 
-// The OS iframe must not hold the room back for ever; past this it keeps loading behind the dark screen.
+// The OS iframe must not hold the room back for ever; past this it keeps loading behind the loading screen.
 const OS_LOAD_TIMEOUT_MS = 8000;
-// The room waits this long at most for its full atlases before it is shown with what has arrived (never a dark screen
-// for ever); the rest swap in as they land.
+// The room waits this long at most for its full atlases before it is shown with what has arrived (never a loading
+// screen for ever); the rest swap in as they land.
 const ARRIVAL_DEADLINE_MS = 15_000;
 // SaahilOS's full-size wallpaper gets this long after the OS has loaded (a renamed or missing picture never holds the
 // room back further).
@@ -173,8 +173,8 @@ const ARRIVAL_HOLD_MS = 500;
 // On a phone the arrival hands over to SaahilOS with this window; on the desktop the OS opens it by itself (its default),
 // so the room never moves the visitor's keyboard focus into the monitor while it flies.
 const ARRIVAL_WINDOW = 'about';
-// The loading line: the files' bytes fill this share of it, the steps after them (the posters and the window, the
-// shaders, SaahilOS, the measured tier, the GPU upload) the rest.
+// The loading screen's line: the files' bytes fill this share of it, the steps after them (the posters and the window,
+// the shaders, SaahilOS, the measured tier, the GPU upload) the rest.
 const BYTES_SHARE = 0.85;
 const LOAD_STEPS = 5;
 // A click this soon after the press that skipped the arrival belongs to that press.
@@ -223,7 +223,7 @@ export interface RoomProbe {
   /** performance.now() when the intro ended and the room became interactive; null before. */
   readonly interactiveAt: number | null;
   /**
-   * performance.now() when the room started (the dark screen began to fade, input reaches the room), and when the
+   * performance.now() when the room started (the loading screen began to fade, input reaches the room), and when the
    * arrival ended: the camera at rest at the monitor, or the visitor taking it over on the way; null before.
    */
   readonly startedAt: number | null;
@@ -441,7 +441,7 @@ export class Application implements RoomHandle {
     this.resize();
     this.observe();
 
-    // SaahilOS loads behind the dark screen while the atlases arrive, so it is ready when the camera reaches the glass.
+    // SaahilOS loads behind the loading screen while the atlases arrive, so it is ready when the camera reaches the glass.
     // The CSS3D layer puts the OS's frame into the page only when it is first laid out, so that happens now.
     this.renderer.css.render(this.cssScene, this.camera.instance);
     const os = Promise.race([this.monitor.load(), new Promise((resolve) => setTimeout(resolve, OS_LOAD_TIMEOUT_MS))]).then(() => {
@@ -472,12 +472,12 @@ export class Application implements RoomHandle {
     this.warmUp();
     progress.step('Upload to GPU');
     this.installProbe();
-    // Behind the dark screen until the room starts; the ladder measures on from here.
+    // Behind the loading screen until the room starts; the ladder measures on from here.
     this.loop();
   }
 
   /**
-   * One frame with the full set, drawn and waited for behind the dark screen: whatever a GPU does the first time it
+   * One frame with the full set, drawn and waited for behind the loading screen: whatever a GPU does the first time it
    * samples a new texture happens here, not in the first frames the visitor sees (on software WebGL they were slow
    * enough to stretch the wide view's hold from 1 s to 2.2 s).
    */
@@ -559,7 +559,7 @@ export class Application implements RoomHandle {
   }
 
   /**
-   * The tier the arrival starts at, measured on frames of the room behind the dark screen, each timed until the GPU
+   * The tier the arrival starts at, measured on frames of the room behind the loading screen, each timed until the GPU
    * has finished it. The time between two animation frames is no measure here: the browser queues a dozen frames for
    * the GPU before it holds the next one back, and the glide then waited for those queued top-tier frames (T82).
    */
