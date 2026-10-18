@@ -30,12 +30,12 @@
       "uri": "room.glb",
       "image": 2,
       "px": 1024,
-      "bytes": 99074
+      "bytes": 74693
     },
     "full": {
       "uri": "atlas/bezel.ktx2",
-      "px": 2048,
-      "bytes": 1697715,
+      "px": 2304,
+      "bytes": 1792689,
       "format": "ktx2-uastc"
     }
   },
