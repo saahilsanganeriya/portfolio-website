@@ -292,6 +292,8 @@ export class Darkroom {
   hang(photos: readonly Photograph[]) {
     if (this.hung) return;
     this.hung = true;
+    // The full atlases may have replaced the wall's since the line was built: the prints start from what it shows now.
+    this.followWallMap();
     this.clips.forEach((clip, index) => {
       const photo = photos[index];
       if (!photo) return;
