@@ -755,14 +755,17 @@ test.describe('desktop at 1440 × 900', () => {
 
   /**
    * Catches a window whose text fails colour contrast or naming at the desktop size the brief names: every app on the
-   * desktop, Code's views and a photograph, each alone in a fresh load (stacked windows overlap their controls).
+   * desktop, Code's views, a photograph and Now Playing, each alone in a fresh load (stacked windows overlap their
+   * controls).
    */
   test('axe passes on every window, colour contrast included', async ({ page }) => {
-    // Nineteen fresh loads, each settled and scanned: about 3 s apiece, more on a loaded machine.
+    // Twenty fresh loads, each settled and scanned: about 3 s apiece, more on a loaded machine.
     test.setTimeout(180_000);
     await serveShelves(page, 'sample');
     await serveGithubFiles(page, 'import napari  # the viewer\n');
     await serveFilms(page);
+    // Now Playing frames Spotify's player; a stand-in page answers for it, so the scan stays offline.
+    await page.route(/^https:\/\/open\.spotify\.com\//, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Spotify stand-in</title>' }));
     for (const [hash, name, ready] of [
       ['about', 'About', '.os-prose p'],
       ['projects', 'Projects', '.os-row'],
@@ -783,6 +786,7 @@ test.describe('desktop at 1440 × 900', () => {
       ['books', 'Books', 'li'],
       ['recipes/sample-loaf', 'Kitchen', 'h2'],
       ['voyager', 'Voyager Golden Record', 'h2'],
+      ['now-playing', 'Now Playing', '.os-now-playing-note'],
     ]) {
       await page.goto(`/os?embed=1#${hash}`);
       await page.reload();
