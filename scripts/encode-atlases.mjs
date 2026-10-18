@@ -3,7 +3,7 @@
 // blender/scripts/export.py calls it; the codec A/B runs it with --codec overrides.
 //
 //   node scripts/encode-atlases.mjs --bake blender/.cache/bake --out public/room/atlas [--manifest file.json]
-//     [--only desk,art] [--codec props=etc1s] [--codec desk=uastc:l2:d32768:z22] [--work dir] [--threads 8]
+//     [--only desk,art] [--codec props=etc1s] [--codec desk=uastc:l2:d32768:z22] [--px env=2048] [--work dir] [--threads 8]
 //
 // Codecs (KTX-Software 4.4 `ktx create`, ffmpeg with libaom):
 //   uastc[:q<level>][:l<lambda>][:d<dict bytes>][:z<zstd level>]  KTX2 UASTC (+ RDO when l is given) + zstd, mipmapped;
@@ -18,10 +18,15 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Each atlas's shipped size and codec. */
+/**
+ * Each atlas's shipped size and codec (T93's A/B, BOX/evidence/T93/codec-ab.md). desk and art: UASTC with a larger RDO
+ * dictionary and zstd 22, smaller than round 8's at the same or a higher SSIM. props: AVIF; ETC1S showed blocks at the
+ * desk view, and UASTC would put the full room over its 25 MB budget. env: AVIF while the full set has no room; UASTC
+ * (`--codec env=uastc:q2:l2:d32768:z22`, optionally `--px env=2048`) holds a quarter of its GPU memory for +2.9 MB.
+ */
 export const ATLASES = {
-  desk: { px: 4096, codec: 'uastc:q2:l1:d4096:z18' },
-  art: { px: 4096, codec: 'uastc:q2:l1:d4096:z18' },
+  desk: { px: 4096, codec: 'uastc:q2:l1:d32768:z22' },
+  art: { px: 4096, codec: 'uastc:q2:l1:d32768:z22' },
   props: { px: 4096, codec: 'avif:14' },
   env: { px: 3072, codec: 'avif:14' },
 };
@@ -119,9 +124,9 @@ function resample(src, px, work) {
  * Encodes `names` from `bake` into `out`; returns the manifest rows. Old files of an atlas in another codec go.
  * `table` is ATLASES unless a caller (a test) brings its own.
  * @param {{ bake: string, out: string, table?: Record<string, { px: number, codec: string }>, names?: string[],
- *   codecs?: Record<string, string>, work?: string, threads?: number }} options
+ *   codecs?: Record<string, string>, sizes?: Record<string, number>, work?: string, threads?: number }} options
  */
-export function encodeAtlases({ bake, out, table = ATLASES, names = Object.keys(table), codecs = {}, work = join(tmpdir(), 'encode-atlases'), threads = 8 }) {
+export function encodeAtlases({ bake, out, table = ATLASES, names = Object.keys(table), codecs = {}, sizes = {}, work = join(tmpdir(), 'encode-atlases'), threads = 8 }) {
   mkdirSync(out, { recursive: true });
   const rows = [];
   for (const name of names) {
@@ -129,15 +134,16 @@ export function encodeAtlases({ bake, out, table = ATLASES, names = Object.keys(
     if (!atlas) throw new Error(`unknown atlas ${name} (${Object.keys(table).join(', ')})`);
     const spec = codecs[name] ?? atlas.codec;
     const codec = parseCodec(spec);
-    const src = resample(join(bake, `${name}.png`), atlas.px, work);
+    const px = sizes[name] ?? atlas.px;
+    const src = resample(join(bake, `${name}.png`), px, work);
     for (const file of readdirSync(out)) if (file.startsWith(`${name}.`)) rmSync(join(out, file));
     const dst = join(out, `${name}.${codec.kind === 'avif' ? 'avif' : 'ktx2'}`);
     const started = Date.now();
     const [command, args] = encodeArgs(codec, src, dst, threads);
     run(command, args);
-    const { bytes, levels } = checkEncoded(dst, codec, atlas.px);
-    rows.push({ name, uri: `atlas/${dst.split('/').pop()}`, px: atlas.px, bytes, format: formatOf(codec), levels, codec: spec, seconds: Math.round((Date.now() - started) / 1000) });
-    console.log(`encode-atlases: ${name} ${spec} ${atlas.px}px -> ${dst} ${bytes.toLocaleString('en-US')} B, ${levels} levels`);
+    const { bytes, levels } = checkEncoded(dst, codec, px);
+    rows.push({ name, uri: `atlas/${dst.split('/').pop()}`, px, bytes, format: formatOf(codec), levels, codec: spec, seconds: Math.round((Date.now() - started) / 1000) });
+    console.log(`encode-atlases: ${name} ${spec} ${px}px -> ${dst} ${bytes.toLocaleString('en-US')} B, ${levels} levels`);
   }
   return rows;
 }
@@ -145,15 +151,17 @@ export function encodeAtlases({ bake, out, table = ATLASES, names = Object.keys(
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2);
   const option = (name, fallback) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : fallback);
-  const codecs = Object.fromEntries(argv.flatMap((a, i) => (a === '--codec' ? [argv[i + 1].split('=')] : [])));
+  const pairs = (flag) => Object.fromEntries(argv.flatMap((a, i) => (a === flag ? [argv[i + 1].split('=')] : [])));
+  const codecs = pairs('--codec');
+  const sizes = Object.fromEntries(Object.entries(pairs('--px')).map(([name, px]) => [name, Number(px)]));
   const bake = option('--bake', null);
   const out = option('--out', null);
   if (!bake || !out) {
-    console.error('usage: encode-atlases.mjs --bake <dir> --out <dir> [--manifest f] [--only a,b] [--codec name=spec] [--work dir] [--threads n]');
+    console.error('usage: encode-atlases.mjs --bake <dir> --out <dir> [--manifest f] [--only a,b] [--codec name=spec] [--px name=n] [--work dir] [--threads n]');
     process.exit(2);
   }
   const only = option('--only', null);
-  const rows = encodeAtlases({ bake, out, names: only ? only.split(',') : undefined, codecs, work: option('--work', undefined), threads: Number(option('--threads', '8')) });
+  const rows = encodeAtlases({ bake, out, names: only ? only.split(',') : undefined, codecs, sizes, work: option('--work', undefined), threads: Number(option('--threads', '8')) });
   const manifest = option('--manifest', null);
   if (manifest) writeFileSync(manifest, JSON.stringify(rows, null, 2) + '\n');
 }
