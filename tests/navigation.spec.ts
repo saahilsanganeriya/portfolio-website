@@ -34,7 +34,7 @@ async function settledAt(page: Page, station: string, timeout = 30_000) {
 
 const os = (page: Page) => page.frameLocator('.room-monitor iframe');
 
-/** The room after its arrival at the desk, stepped back to the wide view. */
+/** The room after its arrival at the monitor, stepped back to the wide view. */
 async function inRoom(page: Page) {
   await page.goto('/');
   await page.waitForFunction(() => window.__room?.landedAt != null, null, { timeout: 120_000 });
