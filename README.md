@@ -2,9 +2,11 @@
 
 Saahil Sanganeriya's personal site, at https://saahilsanganeriya.com. On a desktop, it opens on a vintage room built in
 Blender: the camera glides to the desk and into the CRT, which runs SaahilOS, a small retro desktop, with About open.
-A drag turns the whole set round (a wall turns see-through while the camera is behind it), the wheel or a pinch zooms
-in and out, arrow keys turn it and + and - zoom; at the monitor the wheel scrolls the window under the pointer, and
-Escape, a drag or "Back to the room" leaves. The top left carries his name, Software Engineer and the visitor's time.
+A drag turns the whole set round and it coasts after you let go (a wall turns see-through while the camera is behind it).
+The wheel, a trackpad pinch or a touch pinch zooms in and out, and a sideways trackpad swipe turns the set. Arrow keys
+turn it and + and - zoom. Home, or the H key, takes the camera back to the wide view from anywhere. At the monitor the
+wheel scrolls the window under the pointer, and Escape, Home, a drag or "Back to the room" leaves. The top left carries
+his name, Software Engineer and the visitor's time.
 "Take the tour" shows a map of the room, and its "Play the tour" glides through every stop in one slow camera move. Every post, project and app has its own address, and
 opening one loads the room straight at the monitor with that window open; there are no plain pages. Phones get the room at a lighter tier; a browser without
 WebGL gets SaahilOS on a drawn monitor. The site is built with Astro, MDX content collections, React (SaahilOS) and
