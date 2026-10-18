@@ -25,6 +25,8 @@ export const APPS: Record<AppId, { label: string; icon: IconName }> = {
   contact: { label: 'Contact', icon: 'contact' },
   credits: { label: 'Credits', icon: 'credits' },
   browser: { label: 'Browser', icon: 'browser' },
+  // Opened by the record crate's fifth sleeve in the room; not on the desktop or in Start.
+  'now-playing': { label: 'Now Playing', icon: 'record' },
 };
 
 // Windows a visit does not open at boot load when first opened, so the OS's first load holds About and the desktop.
@@ -38,6 +40,7 @@ const CreditsApp = lazy(() => import('./CreditsApp').then((m) => ({ default: m.C
 const BooksApp = lazy(() => import('./ShelfApps').then((m) => ({ default: m.BooksApp })));
 const RecipesApp = lazy(() => import('./ShelfApps').then((m) => ({ default: m.RecipesApp })));
 const VoyagerApp = lazy(() => import('./ShelfApps').then((m) => ({ default: m.VoyagerApp })));
+const NowPlayingApp = lazy(() => import('./NowPlayingApp').then((m) => ({ default: m.NowPlayingApp })));
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -101,6 +104,7 @@ export function describeWindow(route: Route, index: OsIndex): WindowDescription 
     contact: '',
     credits: 'Every file is used under the licence shown',
     browser: '',
+    'now-playing': 'The room’s music is paused while this is open',
   };
   return { title: app.label, icon: app.icon, defaultStatus: defaultStatus[route.app], shareHref, sourceHref: null };
 }
@@ -143,5 +147,7 @@ function AppContent({ route, os }: { route: Route; os: OsApi }): ReactNode {
       return <CodeApp slug={route.slug} />;
     case 'browser':
       return <BrowserApp url={route.slug} />;
+    case 'now-playing':
+      return <NowPlayingApp />;
   }
 }

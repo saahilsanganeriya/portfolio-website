@@ -54,6 +54,7 @@ export function windowHref(route: Route): string | null {
     case 'photography':
     case 'terminal':
     case 'browser':
+    case 'now-playing':
       return null;
   }
 }

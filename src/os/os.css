@@ -1366,6 +1366,24 @@ body.os-moving iframe {
   background: #fff;
 }
 
+/* ---- Now Playing: Spotify's own player for the crate's one streamed record, and a line on what it is ---- */
+
+.os-now-playing-player {
+  display: block;
+  width: 100%;
+  height: 152px;
+  border: 0;
+  /* Spotify draws its player as a rounded card; the frame's corners follow it. */
+  border-radius: 12px;
+}
+
+.os-now-playing-note {
+  margin: 14px 0 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
 /* ---- About: the window SaahilOS opens first. Portrait and name, four big ways on, then the page itself ---- */
 
 .os-about {

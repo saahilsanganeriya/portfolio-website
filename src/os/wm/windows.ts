@@ -140,6 +140,7 @@ const SIZES: Record<AppId | 'reader', AppWindowSize> = {
   films: WIDE,
   photography: WIDE,
   terminal: { width: 760, height: 460 },
+  'now-playing': { width: 520, height: 330 },
 };
 
 // Must match the icon grid in os.css: a caption, then rows of 88 px, columns 88 px wide with 4 px between; the right

@@ -131,13 +131,20 @@ export default function SaahilOS({ index, embedded: embeddedProp }: SaahilOSProp
     return () => window.removeEventListener('hashchange', onHashChange);
   }, [open]);
 
-  // The room posts {type:'open', target} into the monitor; only the same-origin parent is listened to.
+  // The room posts {type:'open', target} into the monitor, and {type:'close', target} when a record goes on in place
+  // of Now Playing; only the same-origin parent is listened to.
   useEffect(() => {
     if (window.parent === window) return;
     const onMessage = (event: MessageEvent) => {
       if (event.source !== window.parent || event.origin !== window.location.origin) return;
       const data = event.data as { type?: unknown; target?: unknown } | null;
-      if (data?.type !== 'open' || typeof data.target !== 'string') return;
+      if (typeof data?.target !== 'string') return;
+      if (data.type === 'close') {
+        const route = parseTarget(data.target);
+        if (route) closeRef.current(windowIdFor(route));
+        return;
+      }
+      if (data.type !== 'open') return;
       if (powerRef.current !== 'on') setPower('on');
       open(data.target, true, null, (data as { first?: unknown }).first === true);
     };

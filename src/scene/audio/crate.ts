@@ -1,6 +1,7 @@
 // The record crate beside the armchair: four records the visitor can put on, each a whole piece (or, for the rāga, the
-// opening of one) under CC0 or CC BY 4.0, streamed only when chosen. The sleeves are drawn here, typographic and
-// graphic in the room's palette; no cover art is copied. Sources and licences are also in blender/ASSETS.md (Credits).
+// opening of one) under CC0 or CC BY 4.0, streamed only when chosen, and a fifth that plays on the monitor through
+// Spotify's player (NOW_PLAYING, below). The sleeves are drawn here, typographic and graphic in the room's palette; no
+// cover art is copied. Sources and licences are also in blender/ASSETS.md (Credits).
 import built from './records.json';
 
 export type RecordId = 'washed-up' | 'night-in-venice' | 'cylinder-five' | 'raga-kiravani';
@@ -78,6 +79,46 @@ export const CRATE: readonly CrateRecord[] = [
 
 export const recordById = (id: string) => CRATE.find((record) => record.id === id) ?? null;
 
+// ---- the one record the site does not host ----
+// Max Richter's recording is copyrighted, so nothing of it is hosted or downloaded here: its sleeve opens SaahilOS's
+// Now Playing window, which loads Spotify's own player. Nothing loads from Spotify before the sleeve is chosen.
+
+export interface NowPlayingRecord {
+  id: 'nature-of-daylight';
+  title: string;
+  artist: string;
+  /** Seconds, as Spotify lists the track. */
+  seconds: number;
+  /** The SaahilOS window the sleeve opens. */
+  window: 'now-playing';
+  /**
+   * Spotify's player for the track. The id was checked on 2026-10-18 through Spotify's oEmbed endpoint and its embed
+   * data: artist spotify:artist:2VZNmg4vCnew4Pavo8zDdW (the profile maxrichtermusic.com links), the 2004 recording by
+   * Louisa Fuller, Natalia Bonner, John Metcalfe, Philip Sheppard and Chris Worsey, 6:11, Deutsche Grammophon's edition.
+   */
+  embedUrl: string;
+  /** The track's own page on Spotify. */
+  sourceUrl: string;
+  /** The window's one line: what it is. */
+  line: string;
+  /** The crate's credit line. */
+  credit: string;
+}
+
+export const NOW_PLAYING: NowPlayingRecord = {
+  id: 'nature-of-daylight',
+  title: 'On the Nature of Daylight',
+  artist: 'Max Richter',
+  seconds: 372,
+  window: 'now-playing',
+  embedUrl: 'https://open.spotify.com/embed/track/5DFUsGW4Cmltv8Spd0u1aV',
+  sourceUrl: 'https://open.spotify.com/track/5DFUsGW4Cmltv8Spd0u1aV',
+  line: 'Max Richter, “On the Nature of Daylight”, from The Blue Notebooks (2004). Arrival (2016) opens and closes with it.',
+  credit: '“On the Nature of Daylight” by Max Richter, from The Blue Notebooks (2004), streamed by Spotify’s player',
+};
+
+export type SleeveId = RecordId | NowPlayingRecord['id'];
+
 // ---- the sleeves: 100 × 100 SVG, drawn from the room's palette ----
 // Roman 400 faces only: an italic or a heavier weight would be one more font file (25-105 KB) loaded with the crate.
 
@@ -132,9 +173,19 @@ const SLEEVES: Record<RecordId, () => string> = {
     <text x="8" y="62" ${MONO} font-size="3.8" letter-spacing="0.5" fill="${WALNUT}">L. RAMAKRISHNAN</text>`,
 };
 
+// The streamed record: a blue notebook's ruled page with its red margin, and daylight coming up over the horizon.
+const NOW_PLAYING_SLEEVE = () => `
+    <rect width="100" height="100" fill="${PROJECTOR}"/>
+    ${[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `<line x1="0" y1="${23 + i * 11}" x2="100" y2="${23 + i * 11}" stroke="${INK}" stroke-width="${i === 3 ? 0.8 : 0.25}"/>`).join('')}
+    <path d="M54 56 A16 16 0 0 1 86 56 Z" fill="${PAPER}"/>
+    <line x1="15" y1="0" x2="15" y2="100" stroke="${THREAD}" stroke-width="0.7"/>
+    <text x="19" y="14" ${MONO} font-size="4.6" letter-spacing="0.6" fill="${INK}">MAX RICHTER</text>
+    <text ${SERIF} font-size="11" fill="${INK}"><tspan x="19" y="78">On the Nature</tspan><tspan x="19" y="89">of Daylight</tspan></text>
+    <text x="19" y="97" ${MONO} font-size="3.6" letter-spacing="0.5" fill="${WALNUT}">THE BLUE NOTEBOOKS · 2004</text>`;
+
 /** The record's sleeve as an inline SVG (decorative: the button around it carries the name). */
-export const sleeveSvg = (id: RecordId) =>
-  `<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">${SLEEVES[id]()}</svg>`;
+export const sleeveSvg = (id: SleeveId) =>
+  `<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">${id === NOW_PLAYING.id ? NOW_PLAYING_SLEEVE() : SLEEVES[id]()}</svg>`;
 
 /** "3:38" */
 export const duration = (seconds: number) => {
