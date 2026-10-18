@@ -1,8 +1,9 @@
 ---
-import BootScreen from '../components/BootScreen.astro';
+import { readFileSync, statSync } from 'node:fs';
 import MonitorFrame from '../components/MonitorFrame.astro';
 import RecordCrate from '../components/RecordCrate.astro';
 import RoomHud from '../components/RoomHud.astro';
+import RoomLoader from '../components/RoomLoader.astro';
 import RoomTour from '../components/RoomTour.astro';
 import Base from './Base.astro';
 
@@ -16,6 +17,11 @@ interface Props {
 }
 
 const { title, description, open = '', ogType, publishedTime } = Astro.props;
+// The loading screen is the void the room floats in, so the room fades in out of the same colour.
+const { voidColor: planVoid } = JSON.parse(readFileSync('public/room/floorplan.json', 'utf8')) as { voidColor?: unknown };
+const voidColor = typeof planVoid === 'string' && /^#[0-9a-f]{6}$/i.test(planVoid) ? planVoid : undefined;
+// room.glb's size: the loading line counts its bytes when the server sends it compressed, without a length.
+const roomBytes = statSync('public/room/room.glb').size;
 ---
 
 <Base {title} {description} {ogType} {publishedTime} bare skipLabel="Open SaahilOS">
@@ -61,13 +67,13 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     })();
   </script>
 
-  <main id="content" class="room-stage" tabindex="-1" aria-label="The room" data-room data-open={open}>
+  <main id="content" class="room-stage" tabindex="-1" aria-label="The room" data-room data-open={open} data-room-bytes={roomBytes} style={voidColor && `--room-void: ${voidColor}`}>
     <h1 class="visually-hidden">{title}</h1>
     <RoomHud />
     <RoomTour />
     <RecordCrate />
     <div class="room-world" data-room-world></div>
-    <BootScreen />
+    <RoomLoader />
     <MonitorFrame />
     <div class="room-controls">
       <button type="button" class="room-sound" aria-pressed="false" data-room-sound>
@@ -92,28 +98,32 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
   import { mountHud } from '../components/RoomHud';
   import { loadFloorPlan, mountTour } from '../components/RoomTourMap';
   import { mountSoundControls } from '../scene/audio/controls';
+  import { FOCUS_KEYS, listenForGestures, listenInFrame } from '../scene/audio/gesture';
   import type { RoomHandle } from '../scene/main';
 
   // The window the skip link opens when the address names none.
   const DEFAULT_WINDOW = 'projects';
   // `/#os` (where a bare /os lands): the monitor with SaahilOS's desktop, no window named.
   const DESKTOP = 'os';
-  // The finished boot log stays on screen this long before the arrival starts by itself: the loading screen, kept short.
-  const BOOT_HOLD_MS = 400;
-  const LOG_LINES = 6;
-  // The light tier measures itself behind the boot screen; below this frame rate the drawn monitor takes over.
+  // Once everything the arrival shows is on the GPU, the dark screen fades out over this long, then the wide view holds
+  // this long before the flight to the monitor.
+  const REVEAL_MS = 500;
+  const HOLD_MS = 500;
+  // The light tier measures itself behind the dark screen; below this frame rate the drawn monitor takes over.
   const LIGHT_PROBE_MS = 2000;
   const LIGHT_MIN_FPS = 30;
-  // Moving focus around the page is not input to the room: these keys neither skip the intro nor start the sound.
-  const NAVIGATION_KEYS = new Set(['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'Escape', 'CapsLock']);
+  // A press or key on these is the page's own control, not a move in the room: it does not land the arrival.
+  const PAGE_CONTROLS = 'a, button, input, select, textarea, [data-room-ui]';
 
   const root = document.documentElement;
   const stage = document.querySelector<HTMLElement>('[data-room]')!;
   const world = stage.querySelector<HTMLElement>('[data-room-world]')!;
-  const boot = stage.querySelector<HTMLElement>('[data-boot]')!;
+  const loader = stage.querySelector<HTMLElement>('[data-room-loader]')!;
   const status = stage.querySelector<HTMLElement>('[data-room-status]')!;
   const glass = stage.querySelector<HTMLElement>('[data-monitor-glass]')!;
   const target = windowTarget(stage.dataset.open ?? '', location.hash);
+  // The room's first-gesture listener for the music, also set inside the phone's drawn monitor once that is made.
+  let soundGesture: ((event: Event) => void) | null = null;
 
   /**
    * The window this address opens on the monitor: '' for the desktop alone, null for the arrival (About). The route
@@ -141,48 +151,39 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     screen.title = 'SaahilOS, on the monitor';
     screen.src = `/os${target ? `#${target}` : ''}`;
     glass.append(screen);
+    if (soundGesture) listenInFrame(screen, soundGesture);
     return screen;
   }
 
   function showDrawnMonitor() {
     root.classList.remove('room', 'room-light', 'room-os');
     root.classList.add('room-2d');
+    loader.hidden = true;
     drawnScreen();
   }
 
-  function bootUi(bootEl: HTMLElement) {
-    const log = bootEl.querySelector<HTMLOListElement>('[data-boot-log]')!;
-    const statusLine = bootEl.querySelector<HTMLElement>('[data-boot-status]')!;
-    const progress = bootEl.querySelector<HTMLElement>('[data-boot-progress]')!;
-    const bar = bootEl.querySelector<HTMLElement>('[data-boot-bar]')!;
-    // The visitor's own date, as a BIOS shows its clock; the page itself is built ahead of time.
-    const today = bootEl.querySelector<HTMLTimeElement>('[data-boot-today]')!;
-    const now = new Date();
-    today.dateTime = today.textContent = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
-      .map((n) => String(n).padStart(2, '0'))
-      .join('-');
-    let lastLabel = '';
+  /** The loading line: its width and value follow the room's progress, which never goes back. */
+  function loaderUi(el: HTMLElement) {
+    const line = el.querySelector<HTMLElement>('[data-room-progress]')!;
+    const bar = el.querySelector<HTMLElement>('[data-room-progress-bar]')!;
+    el.style.setProperty('--room-reveal-ms', `${REVEAL_MS}ms`);
     return {
-      progress(p: number, label: string) {
+      progress(p: number) {
         const pct = Math.round(p * 100);
         bar.style.width = `${pct}%`;
-        progress.setAttribute('aria-valuenow', String(pct));
-        statusLine.textContent = pct >= 100 ? 'FINISHED LOADING RESOURCES' : `LOADING RESOURCES (${pct}%)`;
-        const line = `Loaded ${label.padEnd(26, ' ')} ... `;
-        const item = label === lastLabel && log.lastElementChild ? log.lastElementChild : log.appendChild(document.createElement('li'));
-        item.textContent = line;
-        const pctEl = document.createElement('span');
-        pctEl.className = 'pct';
-        pctEl.textContent = `${pct}%`;
-        item.appendChild(pctEl);
-        lastLabel = label;
-        while (log.children.length > LOG_LINES) log.firstElementChild?.remove();
+        line.setAttribute('aria-valuenow', String(pct));
+      },
+      /** The room is ready to be seen: the dark screen fades out, then leaves the page. */
+      reveal() {
+        el.dataset.state = 'gone';
+        el.setAttribute('aria-hidden', 'true');
+        setTimeout(() => (el.hidden = true), REVEAL_MS);
       },
     };
   }
 
   async function bootRoom() {
-    const ui = bootUi(boot);
+    const ui = loaderUi(loader);
     const sound = stage.querySelector<HTMLButtonElement>('[data-room-sound]')!;
     const pause = stage.querySelector<HTMLButtonElement>('[data-room-pause]')!;
     const skipLink = document.querySelector<HTMLAnchorElement>('.skip-link');
@@ -193,11 +194,10 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     // The light tier checks its frame rate before anyone enters.
     let probing = light;
     let entered = false;
-    let skipped = false;
     let osRequested = false;
     let paused = reduced;
     pause.setAttribute('aria-pressed', String(paused));
-    // The Sound toggle and the volume, remembered across visits; sound itself starts only inside a click, tap or key.
+    // The Sound toggle and the volume, remembered across visits.
     const soundControls = mountSoundControls(sound, stage.querySelector<HTMLInputElement>('[data-room-volume]')!);
 
     const monitor = () => world.querySelector('iframe');
@@ -230,18 +230,23 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     const enter = () => {
       if (!room || probing || entered) return;
       entered = true;
-      boot.dataset.state = 'gone';
+      ui.reveal();
       root.classList.add('room-started');
-      setTimeout(() => (boot.hidden = true), 400);
       const open = target ?? (osRequested ? DEFAULT_WINDOW : null);
-      room.start({ open: open ?? undefined, fast: skipped });
-      status.textContent = room.audio.muted
-        ? 'The room is ready. Its sound is off, as you left it; the Sound button turns it on.'
-        : 'The room is ready. Sound starts with your first click, tap or key press; the Sound button turns it off.';
+      room.start({ open: open ?? undefined, hold: REVEAL_MS + HOLD_MS, fast: osRequested });
       if (osRequested) monitor()?.focus({ preventScroll: true });
+      // The music starts now where the browser allows it, else with the visitor's first press, tap or key.
+      const audio = room.audio;
+      void audio.autoplay().then((playing) => {
+        status.textContent = audio.muted
+          ? 'The room has loaded. Sound is off, as you left it; the Sound button turns it on.'
+          : playing
+            ? 'The room has loaded. Music is on; the Sound button turns it off.'
+            : 'The room has loaded. Music starts with your first click or key press; the Sound button turns it off.';
+      });
     };
 
-    // Landed at the desk: the corner label and the second way on, the tour, appear (the floor plan loads only now).
+    // Landed at the monitor: the corner label and the second way on, the tour, appear (the floor plan loads only now).
     const onLanded = () => {
       root.classList.add('room-landed');
       if (room) mountHud(stage.querySelector('[data-room-hud]')!, stage.querySelector('[data-room-back]')!, room, stage);
@@ -250,27 +255,39 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       void loadFloorPlan().then((plan) => plan && room && mountTour(tourButton, tourPanel, room, plan));
     };
 
-    // Any input skips the intro (or the boot screen's last moment) and starts the sound.
-    const onInput = (key: string | null, onToggle: boolean) => {
-      if (key !== null && NAVIGATION_KEYS.has(key)) return;
-      if (!entered) skipped = true;
-      enter();
-      room?.skipIntro();
-      // The Sound button decides for itself, so its first press turns the sound on rather than on and off again.
-      if (!onToggle) room?.audio.unlock();
+    // The music: inside the visitor's first press, tap or key anywhere (the room, its controls, the start of a drag,
+    // the OS's frames), as every browser requires. The Sound button decides for itself, so its first press turns the
+    // sound on rather than on and off again.
+    const startSound = (event: Event) => {
+      if ((event.target as Element | null)?.closest?.('[data-room-sound]')) return;
+      room?.audio.unlock();
     };
-    const fromPage = (event: Event) =>
-      onInput(event instanceof KeyboardEvent ? event.key : null, Boolean((event.target as Element | null)?.closest?.('[data-room-sound]')));
-    for (const type of ['pointerdown', 'pointerup', 'keydown']) document.addEventListener(type, fromPage, { capture: true });
+    listenForGestures(window, startSound);
+    soundGesture = startSound;
+    const drawn = glass.querySelector('iframe');
+    if (drawn) listenInFrame(drawn, startSound);
+
+    // A click, a tap or a key while the arrival holds or flies lands it at the monitor; a drag takes the camera over
+    // (the room's own navigation does that). Presses on the page's own controls are not moves in the room.
+    const onInput = (event: Event) => {
+      if (!entered) return;
+      if (event.type === 'keydown' && FOCUS_KEYS.has((event as KeyboardEvent).key)) return;
+      if ((event.target as Element | null)?.closest?.(PAGE_CONTROLS)) return;
+      room?.skipIntro();
+    };
+    for (const type of ['pointerup', 'keydown']) document.addEventListener(type, onInput, { capture: true });
     // Input inside the monitor stays in its frame; SaahilOS forwards presses and keys up to the room, from the 3D
-    // monitor and from the phone's drawn one (where a tap counts at pointerup), so a first press there starts the sound.
+    // monitor and from the phone's drawn one, so a press there lands the arrival (and starts the sound in Chrome).
     window.addEventListener('message', (event) => {
       const from = event.source;
       if (event.origin !== location.origin || !from || (from !== monitor()?.contentWindow && from !== glass.querySelector('iframe')?.contentWindow)) return;
       const data = event.data as { type?: unknown; key?: unknown } | null;
       const key = typeof data?.key === 'string' ? data.key : null;
-      if (data?.type === 'mousedown' || (data?.type === 'press' && key === null)) onInput(null, false);
-      else if ((data?.type === 'keydown' || data?.type === 'press') && key !== null) onInput(key, false);
+      const pressed = data?.type === 'mousedown' || (data?.type === 'press' && key === null);
+      const typed = (data?.type === 'keydown' || data?.type === 'press') && key !== null && !FOCUS_KEYS.has(key);
+      if (!pressed && !typed) return;
+      if (entered) room?.skipIntro();
+      room?.audio.unlock();
     });
 
     pause.addEventListener('click', () => {
@@ -283,7 +300,6 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       event.preventDefault();
       osRequested = true;
       if (!entered) {
-        skipped = true;
         enter();
         return;
       }
@@ -296,14 +312,17 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       room = await startRoom(world, {
         osUrl: '/os?embed=1',
         onProgress: ui.progress,
+        roomBytes: Number(stage.dataset.roomBytes) || undefined,
         reducedMotion: reduced,
         light,
         onMonitor: showPhoneOs,
         onLost: () => fallBack('the GL context was lost'),
         onLanded,
       });
+      const frame = monitor();
+      if (frame) listenInFrame(frame, startSound);
       if (light) {
-        // Load the phone's SaahilOS behind the boot screen, so it is ready when the camera reaches the glass.
+        // Load the phone's SaahilOS behind the dark screen, so it is ready when the camera reaches the glass.
         drawnScreen();
         const fps = await room.measureFps(LIGHT_PROBE_MS);
         probing = false;
@@ -312,9 +331,9 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
       }
       room.setPaused(paused);
       soundControls.attach(room.audio);
-      boot.dataset.ready = '';
-      if (target !== null || skipped || reduced) enter();
-      else setTimeout(enter, BOOT_HOLD_MS);
+      // Everything the arrival shows is loaded (SaahilOS's full-size pictures may load now too).
+      root.classList.add('room-ready');
+      enter();
     } catch (error) {
       console.error('room: failed to load', error);
       room = null;
@@ -368,7 +387,7 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
 
   .room-world,
   .room-controls,
-  .room-stage :global(.boot) {
+  .room-stage :global(.room-loader) {
     display: none;
   }
 
@@ -380,8 +399,8 @@ const { title, description, open = '', ogType, publishedTime } = Astro.props;
     display: flex;
   }
 
-  :global(html.room) .room-stage :global(.boot:not([hidden])) {
-    display: block;
+  :global(html.room) .room-stage :global(.room-loader:not([hidden])) {
+    display: grid;
   }
 
   :global(html.room) .room-stage :global(.monitor-frame) {

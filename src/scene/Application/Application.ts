@@ -15,14 +15,17 @@ import { HoverReactions } from './Hover';
 import { Interaction } from './Interaction';
 import { MonitorScreen } from './MonitorScreen';
 import { FULL, LIGHT, Quality, type QualityTier } from './Quality';
-import { AtlasStreamer, createKtx2Loader, halveTextures, loadRoom, loadVoidColor, ROOM_URL, textureWidths, type ProgressReporter } from './Resources';
+import { AtlasStreamer, createKtx2Loader, halveTextures, loadRoom, loadVoidColor, ROOM_URL, textureWidths } from './Resources';
 import { readRoom, WORLD_SCALE, type RoomNodes, type StationName } from './RoomModel';
 import { RoomRenderer } from './Renderer';
 
 export interface RoomOptions {
   /** The OS page shown on the monitor, e.g. `/os?embed=1`. */
   osUrl: string;
-  onProgress: ProgressReporter;
+  /** How far the room has loaded, in [0, 1]: its files by bytes, then the steps after them. Never goes back. */
+  onProgress(progress: number): void;
+  /** room.glb's size in bytes, for when the server sends it compressed (with no length). */
+  roomBytes?: number;
   /** Cut between framings instead of gliding (prefers-reduced-motion). */
   reducedMotion?: boolean;
   /**
@@ -39,12 +42,13 @@ export interface RoomOptions {
 
 export interface StartOptions {
   /**
-   * A window address: land at the monitor at once with this SaahilOS window open (`projects/swe-sim`); '' opens none.
-   * Without it, the arrival glides past the room to the desk, holds there, then goes into the monitor, where SaahilOS
-   * shows its first window (About).
+   * A window address: the arrival lands with this SaahilOS window open (`projects/swe-sim`); '' opens none. Without
+   * it, SaahilOS shows its first window (About).
    */
   open?: string;
-  /** Cut to the end framing (the visitor's input skipped the intro). */
+  /** Milliseconds the wide view holds before the flight to the monitor (the page fades the room in meanwhile). */
+  hold?: number;
+  /** Cut to the monitor at once (the skip link: the visitor asked for SaahilOS). */
   fast?: boolean;
 }
 
@@ -85,7 +89,10 @@ export interface RoomCard {
 }
 
 export interface RoomHandle {
-  /** Leaves the boot framing: the arrival glide to the desk and on into the monitor, or with `open` the monitor at once. */
+  /**
+   * The arrival: the wide view (the one Escape returns to) holds, then the camera makes the same flight as a click on
+   * the monitor and lands with the window open; under reduced motion it cuts there.
+   */
   start(options?: StartOptions): void;
   /** Glides to the monitor and opens that SaahilOS window; `fast` shortens the glide. */
   openWindow(target: string, options?: { fast?: boolean }): void;
@@ -108,7 +115,7 @@ export interface RoomHandle {
   has(station: string): station is StationName;
   /** The camera in plan coordinates, read every frame by the map's you-are-here mark. */
   view(): RoomView;
-  /** Lands the intro glide now; the step into the monitor that follows it still comes. */
+  /** Lands the arrival at the monitor now (a click or key while it holds or flies). */
   skipIntro(): void;
   /** The visitor took over (the map opened, a stop chosen): nothing moves the camera by itself any more. */
   takeOver(): void;
@@ -133,16 +140,20 @@ export interface RoomHandle {
   dispose(): void;
 }
 
-// The OS iframe must not hold the room back for ever; past this it keeps loading behind the boot screen.
+// The OS iframe must not hold the room back for ever; past this it keeps loading behind the dark screen.
 const OS_LOAD_TIMEOUT_MS = 8000;
-// The arrival on `/` (brief §1: 4–6 s): from the boot framing past the window and the mango plant to the desk.
-const ARRIVAL_SECONDS = 4.8;
+// The room waits this long at most for its full atlases before it is shown with what has arrived (never a dark screen
+// for ever); the rest swap in as they land.
+const ARRIVAL_DEADLINE_MS = 15_000;
+// Without a hold from the page, the wide view holds this long before the flight to the monitor.
+const ARRIVAL_HOLD_MS = 500;
 // On a phone the arrival hands over to SaahilOS with this window; on the desktop the OS opens it by itself (its default),
-// so the room never moves the visitor's keyboard focus into the monitor while it glides.
+// so the room never moves the visitor's keyboard focus into the monitor while it flies.
 const ARRIVAL_WINDOW = 'about';
-// The desk holds this long after the arrival, then the camera goes into the monitor by itself: at the desk the OS draws
-// at about 5 px, in front of the monitor at about 12 px, where a first-time visitor can read About.
-const DESK_HOLD_MS = 1000;
+// The loading line: the files' bytes fill this share of it, the steps after them (the posters and the window, the
+// GPU upload, the shaders, SaahilOS, the measured tier) the rest.
+const BYTES_SHARE = 0.85;
+const LOAD_STEPS = 5;
 // A click this soon after the press that skipped the arrival belongs to that press.
 const SKIP_CLICK_MS = 600;
 // On tiers this coarse (a machine that composites slowly), the screen seen from the wide view is a still picture.
@@ -159,6 +170,9 @@ export interface RoomProbe {
   /** The stations arrow keys and the wheel step through, in order. */
   readonly stations: readonly StationName[];
   readonly view: RoomView;
+  /** The camera's eye and the monitor's glass centre, in metres (the arrival's path is measured between them). */
+  readonly eye: [number, number, number];
+  readonly monitorAt: [number, number, number];
   /** How far the pointer's lean has turned the view from its framing (radians). */
   readonly look: { yaw: number; pitch: number };
   /** Where the camera stands about the set while the visitor turns it (radians, world units); null at a framing. */
@@ -184,9 +198,8 @@ export interface RoomProbe {
   /** performance.now() when the intro ended and the room became interactive; null before. */
   readonly interactiveAt: number | null;
   /**
-   * performance.now() when the room started (the boot screen left, input reaches the room), and when the camera first
-   * came to rest where it starts (the desk; the monitor for a phone's address); null before. On `/` the two bound the
-   * arrival glide; on a window address they are the same moment.
+   * performance.now() when the room started (the dark screen began to fade, input reaches the room), and when the
+   * arrival ended: the camera at rest at the monitor, or the visitor taking it over on the way; null before.
    */
   readonly startedAt: number | null;
   readonly landedAt: number | null;
@@ -256,8 +269,12 @@ export class Application implements RoomHandle {
   /** Light tier: SaahilOS is open full screen over the room, which stops drawing until the camera leaves. */
   private handedOver = false;
   private pendingWindow: string | null = null;
-  /** The arrival's step from the desk into the monitor, pending until the hold ends or the visitor takes over. */
+  /** The arrival's flight to the monitor, pending until the wide view's hold ends or the visitor takes over. */
   private stepIn = 0;
+  /** The window the arrival lands with (undefined: SaahilOS's first window). */
+  private arrivalWindow: string | undefined;
+  /** The arrival's own flight is being set off (any other flight ends the arrival). */
+  private flyingIn = false;
   private skippedAt = -Infinity;
   private leftMonitorAt = -Infinity;
   /** The object a click flew the camera to, whose card shows once the camera rests there. */
@@ -310,9 +327,13 @@ export class Application implements RoomHandle {
   }
 
   async load() {
-    const report = this.options.onProgress;
+    const begun = performance.now();
+    const progress = this.progress();
+    // The full atlases start downloading with room.glb (the desktop; phones keep the small set room.glb embeds).
+    this.atlases = new AtlasStreamer(this.scene, this.renderer, this.ktx2, { light: this.light, onSwap: () => (this.dirty = true) });
+    void this.atlases.load((name, loaded, total) => progress.bytes(`atlas ${name}`, loaded, total));
     const undefer = deferWindowPictures(this.ktx2);
-    const root = await loadRoom(ROOM_URL, this.renderer.gl, (p, label) => report(p * 0.8, label), this.ktx2).finally(undefer);
+    const root = await loadRoom(ROOM_URL, this.renderer.gl, (loaded, total) => progress.bytes('room', loaded, total || this.options.roomBytes || 0), this.ktx2).finally(undefer);
     // Before anything is uploaded: dropping the largest mip level quarters the GPU memory the atlases take.
     if (this.light) halveTextures(root);
     this.nodes = readRoom(root);
@@ -324,7 +345,6 @@ export class Application implements RoomHandle {
       this.renderer.setVoidColor(color);
       this.dirty = true;
     });
-    this.atlases = new AtlasStreamer(this.scene, this.renderer, this.ktx2, { light: this.light, onSwap: () => (this.dirty = true) });
 
     const still = Boolean(this.options.reducedMotion);
     this.camera = new RoomCamera(this.nodes, this.aspect(), still);
@@ -386,20 +406,73 @@ export class Application implements RoomHandle {
     this.resize();
     this.observe();
 
+    // SaahilOS loads behind the dark screen while the atlases arrive, so it is ready when the camera reaches the glass;
+    // so does the live shine on the CRT glass and the desk, which would otherwise appear on them after the landing.
+    // The CSS3D layer puts the OS's frame into the page only when it is first laid out, so that happens now.
+    this.renderer.css.render(this.cssScene, this.camera.instance);
+    const os = Promise.race([this.monitor.load(), new Promise((resolve) => setTimeout(resolve, OS_LOAD_TIMEOUT_MS))]).then(() => progress.step());
+    const shine = this.shine.start();
     await this.world.load();
-    report(0.85, 'posters');
+    await shine;
+    progress.step();
+    // Every atlas the wide view and the flight show, full size and on the GPU before the room is first drawn.
+    await this.atlases.install(new Promise((resolve) => setTimeout(resolve, Math.max(0, begun + ARRIVAL_DEADLINE_MS - performance.now()))));
     this.renderer.prepareTextures(this.scene);
-    // Compile every shader and upload the textures now, so the first frame in the room does not stall.
+    this.uploadTextures();
+    progress.step();
+    // Compile every shader now, so the first frame in the room does not stall.
     await this.renderer.gl.compileAsync(this.scene, this.camera.instance);
-    // Before SaahilOS loads: its boot would share the main thread with the frames being timed.
+    progress.step();
+    // SaahilOS's boot would share the main thread with the frames being timed.
+    await os;
     await this.calibrate();
-    report(0.9, 'shaders');
-
-    await Promise.race([this.monitor.load(), new Promise((resolve) => setTimeout(resolve, OS_LOAD_TIMEOUT_MS))]);
-    report(1, 'SaahilOS');
+    progress.step();
     this.installProbe();
-    // Behind the boot screen until the room starts; the ladder measures on from here.
+    // Behind the dark screen until the room starts; the ladder measures on from here.
     this.loop();
+  }
+
+  /** Every texture the room holds on the GPU now (the atlases are already there), so no first draw uploads one. */
+  private uploadTextures() {
+    const uploaded = new Set<THREE.Texture>();
+    this.scene.traverse((node) => {
+      const material = (node as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      for (const m of material ? (Array.isArray(material) ? material : [material]) : []) {
+        const values = [...Object.values(m), ...Object.values((m as THREE.ShaderMaterial).uniforms ?? {}).map((u) => u?.value)];
+        for (const value of values) {
+          if (!(value instanceof THREE.Texture) || uploaded.has(value) || value.isRenderTargetTexture || value.version === 0) continue;
+          uploaded.add(value);
+          this.renderer.gl.initTexture(value);
+        }
+      }
+    });
+  }
+
+  /** The loading line's value: bytes of every download against their sizes, then whole steps; it only ever rises. */
+  private progress() {
+    const downloads = new Map<string, { loaded: number; total: number }>();
+    let steps = 0;
+    let shown = 0;
+    const report = () => {
+      let loaded = 0;
+      let total = 0;
+      for (const d of downloads.values()) {
+        loaded += Math.min(d.loaded, d.total || d.loaded);
+        total += d.total || d.loaded;
+      }
+      const value = (total ? (loaded / total) * BYTES_SHARE : 0) + (steps / LOAD_STEPS) * (1 - BYTES_SHARE);
+      if (value > shown) this.options.onProgress((shown = Math.min(1, value)));
+    };
+    return {
+      bytes(name: string, loaded: number, total: number) {
+        downloads.set(name, { loaded, total });
+        report();
+      },
+      step() {
+        steps = Math.min(LOAD_STEPS, steps + 1);
+        report();
+      },
+    };
   }
 
   /**
@@ -435,30 +508,48 @@ export class Application implements RoomHandle {
     this.measured = true;
   }
 
-  start({ open, fast = false }: StartOptions = {}) {
+  start({ open, hold = ARRIVAL_HOLD_MS, fast = false }: StartOptions = {}) {
     if (this.started) return;
     this.started = true;
     this.startedAt = performance.now();
     this.monitor.iframe?.removeAttribute('tabindex');
-    const endIntro = () => {
-      this.intro = false;
-      this.landedAt ??= performance.now();
-      this.options.onLanded?.();
-      // The visitor can act now: what was left for later may start loading.
-      this.interactiveAt ??= performance.now();
-      this.world.becomeInteractive();
-      void this.atlases.start();
-      this.shine.start();
-    };
-    if (open === undefined) this.arrive(fast, endIntro);
-    else if (this.light) this.toMonitor('fast', open || null, endIntro, true);
-    else {
-      // A window address lands ready: the camera in front of the monitor at once, the window already open on it.
-      this.glide('monitor', 'fast', endIntro, true);
-      if (open) this.monitor.open(open, { first: true });
+    this.intro = true;
+    this.arrivalWindow = open;
+    // The room appears at the wide view, the one Escape returns to.
+    this.camera.fly('idle', 'fast', undefined, true);
+    this.dirty = true;
+    // A window address opens its window now, so it is there, drawn, when the camera reaches the glass.
+    if (open && !this.light) this.monitor.open(open, { first: true });
+    if (fast) this.flyIn(true);
+    else this.stepIn = window.setTimeout(() => this.flyIn(Boolean(this.options.reducedMotion)), hold);
+  }
+
+  /** The arrival's move: the same flight as a click on the monitor (a cut under reduced motion), then the window. */
+  private flyIn(cut: boolean) {
+    clearTimeout(this.stepIn);
+    if (!this.intro) return;
+    // A phone hands over to SaahilOS full screen at the glass, with the address's window or About.
+    const opening = this.light ? (this.arrivalWindow === undefined ? ARRIVAL_WINDOW : this.arrivalWindow || null) : null;
+    this.flyingIn = true;
+    try {
+      this.toMonitor('monitor', opening, () => this.endArrival(), cut);
+    } finally {
+      this.flyingIn = false;
     }
-    // The intro runs as long as its flight does; a cut has already landed it.
-    this.intro = this.camera.moving;
+  }
+
+  /**
+   * The arrival is over: the camera rests at the monitor, or the visitor took it on the way. The ways on appear, and
+   * what was left for later (the darkroom's prints, the Pale Blue Dot's own picture) may start loading.
+   */
+  private endArrival() {
+    if (!this.intro) return;
+    this.intro = false;
+    clearTimeout(this.stepIn);
+    this.landedAt ??= performance.now();
+    this.options.onLanded?.();
+    this.interactiveAt ??= performance.now();
+    this.world.becomeInteractive();
   }
 
   openWindow(target: string, { fast = false }: { fast?: boolean } = {}) {
@@ -488,7 +579,6 @@ export class Application implements RoomHandle {
   glideTour(stops: readonly { station: StationName; distance: number }[], seconds: number, onDone?: () => void, room?: RoomPlan) {
     if (this.options.reducedMotion || this.paused) return false;
     this.takeOver();
-    this.intro = false;
     this.handedOver = false;
     this.dirty = true;
     return this.camera.glide(stops, 'desk', seconds, onDone, room);
@@ -517,12 +607,15 @@ export class Application implements RoomHandle {
 
   skipIntro() {
     if (!this.intro) return;
-    this.camera.finish();
     this.skippedAt = performance.now();
+    // In flight it lands now; while the wide view holds it cuts to the monitor.
+    if (this.camera.moving) this.camera.finish();
+    else this.flyIn(true);
   }
 
   takeOver() {
     clearTimeout(this.stepIn);
+    this.endArrival();
   }
 
   back() {
@@ -535,7 +628,6 @@ export class Application implements RoomHandle {
     // Out of the monitor as Escape leaves it: the press that took focus off the glass does not also step back.
     if (this.camera.destination === 'monitor') this.leftMonitorAt = performance.now();
     this.takeOver();
-    this.intro = false;
     this.dirty = true;
     const going = this.camera.home(undefined, this.options.reducedMotion);
     // The tour's map closes and its played glide ends (the camera has already left it).
@@ -600,33 +692,6 @@ export class Application implements RoomHandle {
     this.renderer.dispose();
     for (const el of this.layers) el.remove();
     delete window.__room;
-  }
-
-  /**
-   * The arrival on `/`: a timed glide from the wide view through the room's arrival waypoints to the desk, where the
-   * monitor shows SaahilOS's first window (About). Reduced motion, or input that skipped the boot, cuts to the desk.
-   */
-  private arrive(fast: boolean, onDone: () => void) {
-    this.intro = false;
-    this.handedOver = false;
-    this.dirty = true;
-    const landed = () => {
-      onDone();
-      this.afterArrival();
-    };
-    if (fast || this.options.reducedMotion) this.camera.fly('desk', 'fast', landed, true);
-    else this.camera.flyPath(this.nodes.arrival, 'desk', ARRIVAL_SECONDS, landed);
-  }
-
-  /**
-   * The desk holds a moment, then the camera goes into the monitor, where the first window reads (a phone then hands
-   * over to SaahilOS full screen with About). Reduced motion cuts in at once; a visitor who paused motion stays.
-   */
-  private afterArrival() {
-    const opening = this.light ? ARRIVAL_WINDOW : null;
-    if (this.options.reducedMotion) this.toMonitor('monitor', opening, undefined, true);
-    // Any other move of the camera meanwhile cancels the step (see glide): the visitor leads now.
-    else if (!this.paused) this.stepIn = window.setTimeout(() => this.toMonitor('monitor', opening), DESK_HOLD_MS);
   }
 
   private onHotspot(hotspot: Hotspot, proxy: THREE.Object3D) {
@@ -720,7 +785,9 @@ export class Application implements RoomHandle {
     // visitor asking to go in; nor is a drag of the set that let go over the screen.
     if (this.camera.glideState) return;
     if (rested && (this.camera.moving || this.navigation.endedDrag())) return;
-    if (this.started && this.camera.destination !== 'monitor') this.toMonitor('monitor', null);
+    // The pointer rested on the glass while the wide view held: the arrival's flight sets off now.
+    if (this.intro) this.flyIn(Boolean(this.options.reducedMotion));
+    else if (this.started && this.camera.destination !== 'monitor') this.toMonitor('monitor', null);
   }
 
   private leaveMonitor() {
@@ -734,7 +801,6 @@ export class Application implements RoomHandle {
     if (!this.started || this.handedOver) return null;
     if (this.camera.destination === 'monitor') this.leftMonitorAt = performance.now();
     this.takeOver();
-    this.intro = false;
     this.dirty = true;
     return this.camera.startOrbit();
   }
@@ -787,8 +853,9 @@ export class Application implements RoomHandle {
   }
 
   private glide(station: Station, motion: Motion, onDone?: () => void, cut = false, distance = 1) {
-    this.takeOver();
-    this.intro = false;
+    clearTimeout(this.stepIn);
+    // Any move but the arrival's own ends the arrival: the visitor leads now.
+    if (!this.flyingIn) this.endArrival();
     if (station !== 'monitor') this.handedOver = false;
     this.dirty = true;
     this.camera.fly(station, motion, onDone, cut || this.options.reducedMotion, distance);
@@ -932,6 +999,10 @@ export class Application implements RoomHandle {
       get view() {
         return app.view();
       },
+      get eye() {
+        return app.camera.instance.position.toArray().map((v) => v / WORLD_SCALE) as [number, number, number];
+      },
+      monitorAt: this.nodes.monitor.position.toArray().map((v) => v / WORLD_SCALE) as [number, number, number],
       get look() {
         return app.camera.lookAngles;
       },

@@ -365,7 +365,7 @@ async function loadProbe(gl: THREE.WebGLRenderer): Promise<{ target: THREE.WebGL
 
 /**
  * Turns the shine on and off with the quality tier (`QualityTier.shine`), loading the probe the first time a tier asks
- * for it once the room is interactive. Reduced motion leaves it on: nothing in it moves.
+ * for it once the room has started loading it (behind the dark screen). Reduced motion leaves it on: nothing in it moves.
  */
 export class Shine {
   private state: ShineState = 'waiting';
@@ -374,6 +374,7 @@ export class Shine {
   private forced: boolean | null = new URLSearchParams(location.search).get('shine') === 'off' ? false : null;
   private overlays: THREE.Mesh[] = [];
   private probe: THREE.WebGLRenderTarget | null = null;
+  private loading: Promise<void> = Promise.resolve();
   private disposed = false;
 
   constructor(
@@ -390,10 +391,11 @@ export class Shine {
     this.apply();
   }
 
-  /** The room is interactive: the probe may load now. */
+  /** The probe may load now; resolves once it has (or at once when no tier asks for the shine). */
   start() {
     this.started = true;
     this.apply();
+    return this.loading;
   }
 
   private get on() {
@@ -401,7 +403,7 @@ export class Shine {
   }
 
   private apply() {
-    if (this.on && this.started && this.state === 'waiting') void this.load();
+    if (this.on && this.started && this.state === 'waiting') this.loading = this.load();
     for (const overlay of this.overlays) overlay.visible = this.on;
     this.onChange();
   }
