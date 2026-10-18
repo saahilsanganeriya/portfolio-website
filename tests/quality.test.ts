@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FULL, Quality } from '../src/scene/Application/Quality';
+import { FULL, LIGHT, Quality, type QualityTier } from '../src/scene/Application/Quality';
 
 /** Feeds `count` frames of `frameMs` each and returns the tier the controller settled on. */
 function settle(frameMs: number, count: number) {
@@ -105,6 +105,25 @@ describe('the calibration before the arrival', () => {
       expect(quality.index).toBe(0);
     } finally {
       delete (globalThis as { __roomTier?: number }).__roomTier;
+    }
+  });
+});
+
+describe('the ladders', () => {
+  /**
+   * Catches a tier that costs more than the one above it: the ladder only ever steps down, so a lower tier with more
+   * pixels, samples, anisotropic taps or passes (tier 2 filtering with 16 taps under tier 1's 8, say) would hold a slow
+   * machine at a cost it had just failed to meet. Each rung keeps or drops each part; the resolution always drops.
+   */
+  it.each([
+    ['desktop', FULL],
+    ['phone', LIGHT],
+  ])('only take quality away as they step down (%s)', (_, ladder) => {
+    const costs = (t: QualityTier) => [t.msaa, t.anisotropy, ...(['bloom', 'film', 'halos', 'shine'] as const).map((k) => Number(t[k]))];
+    for (let i = 1; i < ladder.tiers.length; i++) {
+      const [above, below] = [ladder.tiers[i - 1], ladder.tiers[i]];
+      expect(below.resolution, `tier ${i} draws fewer pixels than tier ${i - 1}`).toBeLessThan(above.resolution);
+      costs(below).forEach((cost, k) => expect(cost, `tier ${i}, part ${k}`).toBeLessThanOrEqual(costs(above)[k]));
     }
   });
 });
