@@ -5,7 +5,10 @@ import type { OsWallpaper } from '../types';
 // than the viewport. On a phone the crop keeps to the right, where the pillar tips are.
 const SIZES = '(max-aspect-ratio: 2560/1981) 129.3vh, 100vw';
 
-/** The room's <html> while it shows the 3D room; it gains `room-landed` when the arrival ends and a visitor can act. */
+/**
+ * The room's <html> while it shows the 3D room; it gains `room-ready` once everything the arrival shows has loaded,
+ * behind the dark screen, and `room-landed` when the arrival ends and a visitor can act.
+ */
 function roomRoot(): HTMLElement | null {
   try {
     const root = window.parent !== window ? window.parent.document.documentElement : null;
@@ -17,7 +20,8 @@ function roomRoot(): HTMLElement | null {
 
 /**
  * Calls `onReady` when the full-size pictures may load without costing the room its first frame: inside the room once
- * it has landed, elsewhere once the page has loaded and gone idle, and at once on any press or key inside the OS.
+ * it is ready (still behind the dark screen, so the monitor is sharp when the camera reaches it), elsewhere once the
+ * page has loaded and gone idle, and at once on any press or key inside the OS.
  */
 function whenFullSizeMayLoad(onReady: () => void): () => void {
   const cleanups: (() => void)[] = [];
@@ -31,9 +35,10 @@ function whenFullSizeMayLoad(onReady: () => void): () => void {
   }
   const room = roomRoot();
   if (room) {
-    if (room.classList.contains('room-landed')) ready();
+    const roomReady = () => room.classList.contains('room-ready') || room.classList.contains('room-landed');
+    if (roomReady()) ready();
     else {
-      const observer = new MutationObserver(() => room.classList.contains('room-landed') && ready());
+      const observer = new MutationObserver(() => roomReady() && ready());
       observer.observe(room, { attributes: true, attributeFilter: ['class'] });
       cleanups.push(() => observer.disconnect());
     }
