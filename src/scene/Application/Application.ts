@@ -665,9 +665,12 @@ export class Application implements RoomHandle {
     this.glide(station, 'travel');
   }
 
-  /** The hotspot's own framing when the room has one, else a framing fitted to its proxy box. */
+  /**
+   * The hotspot's own framing when the room has one, else a framing fitted to its proxy box. A print always gets its
+   * own: its `fly` is the whole darkroom line, and the click is for that one print.
+   */
   private stationFor(hotspot: Hotspot, proxy: THREE.Object3D): Station {
-    if (hotspot.fly && this.camera.has(hotspot.fly)) return hotspot.fly;
+    if (hotspot.fly && hotspot.action !== 'print' && this.camera.has(hotspot.fly)) return hotspot.fly;
     const idle = this.nodes.framings.idle;
     const box = new THREE.Box3().setFromObject(proxy);
     return this.camera.frameObject(proxy.name, frameObject(box, { fov: idle.fov, aspect: this.aspect(), toward: idle.position, ...this.wallFaces }));

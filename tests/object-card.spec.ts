@@ -34,11 +34,14 @@ async function clickProp(page: Page, name: string) {
   await page.mouse.click(point.x, point.y);
 }
 
-/** At the object: the camera rests there, close, looking at it, with the object near the middle of the view. */
+/**
+ * At the object: the camera rests there, close (the fitted framing stands at most 2.6 m off, nearer for small things),
+ * looking at it, with the object near the middle of the view.
+ */
 async function atObject(page: Page, proxy: string) {
   await settledAt(page, `object:${proxy}`);
   const { view } = await room(page);
-  expect(Math.hypot(view.x - view.targetX, view.z - view.targetZ), 'a close-up (m)').toBeLessThan(2);
+  expect(Math.hypot(view.x - view.targetX, view.z - view.targetZ), 'a close-up (m)').toBeLessThan(2.7);
   const at = (await page.evaluate((n) => window.__room!.point(n), proxy))!;
   expect(Math.abs(at.x - 720), 'the object is near the middle across').toBeLessThan(220);
   expect(Math.abs(at.y - 450), 'and up and down').toBeLessThan(160);

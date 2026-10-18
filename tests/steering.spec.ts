@@ -87,7 +87,8 @@ test.describe('in Chromium', () => {
     expect((await orbit(page))!.turning, 'stopped by the press').toBe(0);
     const held = (await orbit(page))!.azimuth;
     await page.waitForTimeout(400);
-    expect((await orbit(page))!.azimuth).toBe(held);
+    // Still (the pivot's last glide to the set's centre may move it a few hundred-thousandths of a radian).
+    expect((await orbit(page))!.azimuth).toBeCloseTo(held, 3);
     await page.mouse.up();
   });
 

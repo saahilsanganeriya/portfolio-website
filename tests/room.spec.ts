@@ -327,17 +327,19 @@ test('the new props open their windows on a second click, and the Georgia Tech p
   await settled(page, 'monitor', 30_000);
   await expect(os(page).getByRole('dialog', { name: 'About' })).toBeVisible();
 
-  for (const [proxy, window] of [
-    ['hit_voyager', 'Voyager Golden Record'],
-    ['hit_pale_blue_dot', 'A pale blue dot'],
-    ['hit_print_japanese_lit', 'Books'],
+  for (const [proxy, title, from] of [
+    ['hit_voyager', 'Voyager Golden Record', 'idle'],
+    ['hit_pale_blue_dot', 'A pale blue dot', 'idle'],
+    // From the wide view the print stands at the stage's right edge, where the idle sway can swing it out of view.
+    ['hit_print_japanese_lit', 'Books', 'shelf'],
   ] as const) {
-    await fromWideView();
+    await page.evaluate((f) => window.__room!.goto(f), from);
+    await settled(page, from);
     await click(proxy);
     await settled(page, `object:${proxy}`, 30_000);
     await click(proxy);
     await settled(page, 'monitor', 30_000);
-    await expect(os(page).getByRole('dialog', { name: window }), `${proxy} opens ${window}`).toBeVisible();
+    await expect(os(page).getByRole('dialog', { name: title }), `${proxy} opens ${title}`).toBeVisible();
   }
 
   await fromWideView();
