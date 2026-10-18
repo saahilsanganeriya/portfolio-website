@@ -98,7 +98,8 @@ For each photo it applies the camera's rotation, strips every metadata block (EX
 writes AVIF and WebP copies at 480, 960 and 1600 px and the original size (up to 2400 px) on the long edge into
 `src/assets/photography/<name>/`, and writes `src/content/photography/<name>.yaml`. The file name is the `<name>`.
 Running it again skips photos already in, and never overwrites an entry, so edit the entries freely. The build refuses
-an entry without its camera:
+an entry without its camera, unless it says `ownerPick: true` (a photo I asked for by name whose post has no camera
+line):
 
 ```yaml
 file: "../../assets/photography/the-varsity/1200.webp"   # written by the script
