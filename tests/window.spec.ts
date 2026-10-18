@@ -225,6 +225,33 @@ test.describe('under reduced motion (the plane holds still)', () => {
 });
 
 /**
+ * Catches the black pane on the way back to the front (T98: Home from behind the set showed the back wall whole and the
+ * window void for about a second): in no frame of the swing round does the wall stand over 0.9 with its view hidden.
+ */
+test('coming home from behind the set, the window shows its view as soon as the wall is back', async ({ page }) => {
+  await windowAt(page, HOURS[0]);
+  await page.evaluate(() => window.__room!.goto('idle'));
+  await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 60_000 });
+  await orbitTo(page, 180);
+  await page.evaluate(() => {
+    const seen: { opacity: number; shown: boolean }[] = [];
+    (window as unknown as { seen: typeof seen }).seen = seen;
+    const sample = () => {
+      const back = window.__room!.walls.find((w) => w.name === 'back')!;
+      seen.push({ opacity: back.opacity, shown: back.outside.every((o) => o.shown) });
+      if (window.__room!.phase !== 'idle' || window.__room!.moving) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await page.keyboard.press('h');
+  await page.waitForFunction(() => window.__room!.phase === 'idle' && !window.__room!.moving, null, { timeout: 120_000 });
+  const seen = await page.evaluate(() => (window as unknown as { seen: { opacity: number; shown: boolean }[] }).seen);
+  expect(seen.some((s) => s.opacity < 0.5), 'the swing started behind the wall').toBe(true);
+  const dark = seen.filter((s) => s.opacity > 0.9 && !s.shown);
+  expect(dark.map((s) => s.opacity.toFixed(3)), 'frames with the wall back and the pane void').toEqual([]);
+});
+
+/**
  * Catches a plane parked on the arc for everyone, one that races across (a crossing under 40 s), runs backwards, flies
  * level through the turn, or leaves no trail: with motion allowed it flies on toward San Francisco, slowly, banked at
  * mid-route, with its trail behind it.

@@ -8,8 +8,9 @@ import { WORLD_SCALE } from '../Application/RoomModel';
 // it. What lies outside a wall (the window's city view and sky, a hallway) shows only while the wall itself stands
 // whole between it and the eye: hidden outright when the wall is faded at all, or when the camera is far enough round
 // to see past the wall's free end. Set v4 boxes the window's view in (`window_view_mask`, void-coloured panels on every
-// side but the wall's): while that box holds all of it, the box hides it from the side and above, and it shows whenever
-// the wall is whole. A faded wall's hotspots stop catching the pointer.
+// side but the wall's): while that box holds all of it, the box hides it from the side and above, and it shows from the
+// moment the wall is nearly whole, fading in with the wall under a void-coloured cover behind the glass, so the pane is
+// never a black hole on the way back to the front. A faded wall's hotspots stop catching the pointer.
 
 const WALL_MESH = /^(?:env_)?wall_(back|left|right)$/;
 // The window's own parts behind the wall: its view, sky and motif (and anything the room hangs under them), and the pane.
@@ -17,6 +18,18 @@ const OUTSIDE_NODE = /^window_(?:view_(?!mask)|sky|motif|glass)/;
 // The box round them fades with the wall, like anything else hung on it.
 const MASK_NODE = /^window_view_mask$/;
 const MASK_SLACK_M = 0.01;
+const GLASS_NODE = /^window_glass/;
+const MOTIF_NODE = /^window_motif/;
+// With a mask round it, the view shows once the wall is back past SHOW_FROM and is all seen from SEEN_BY: in between, a
+// cover in the mask's own void colour, just behind the glass, fades out as the wall fades in.
+const SHOW_FROM = 0.9;
+const SEEN_BY = 0.99;
+const COVER_BEHIND_GLASS_M = 0.001;
+const COVER_NAME = 'diorama_window_cover';
+// The cover is drawn before every other see-through thing (the faded wall and its window frame go over it), but after
+// the motif's plane and arc, which it must cover too.
+const COVER_ORDER = -1;
+const MOTIF_ORDER = -2;
 // Where the eye stands from the wall's plane (metres, positive behind it): still solid in front of this, gone past it.
 const FADE_FROM_M = -0.2;
 const FADE_TO_M = 0.9;
@@ -54,6 +67,9 @@ interface Wall {
   outsideCorners: THREE.Vector2[];
   /** Whether a mask box holds everything outside (from the wall's face back), so no angle needs it hidden. */
   masked: boolean;
+  /** How much of what lies outside shows through the pane (0 hidden, 1 all of it), and the cover that fades it in. */
+  seen: number;
+  cover: THREE.Mesh<THREE.PlaneGeometry, THREE.Material> | null;
   span: [number, number];
   along: 'x' | 'z';
   across: 'x' | 'z';
@@ -133,6 +149,8 @@ export class Diorama {
         outside: [],
         outsideCorners: [],
         masked: false,
+        seen: 1,
+        cover: null,
         span: [box.min[along], box.max[along]],
         along,
         across,
@@ -159,7 +177,7 @@ export class Diorama {
     });
     const meshes = new Set<THREE.Mesh>(wall.meshes.slice(0, 1));
     this.root.traverse((node) => {
-      if (!(node instanceof THREE.Mesh) || node.name.startsWith('hit_') || isUnder(node, outsideRoots)) return;
+      if (!(node instanceof THREE.Mesh) || node.name.startsWith('hit_') || node.name === COVER_NAME || isUnder(node, outsideRoots)) return;
       const inGroup = wall.group !== null && isUnder(node, [wall.group]);
       const box = new THREE.Box3().setFromObject(node);
       if (wall.behind(box) && !inGroup && !this.walls.some((w) => w !== wall && w.group && isUnder(node, [w.group]))) outsideRoots.push(node);
@@ -184,6 +202,8 @@ export class Diorama {
     // The pane sits in the wall's opening, in front of the box: the box counts from the wall's room face back.
     const held = mask && new THREE.Box3().setFromObject(mask).expandByPoint(wall.point).expandByScalar(MASK_SLACK_M * WORLD_SCALE);
     wall.masked = !box.isEmpty() && !!held && held.containsBox(box);
+    if (wall.masked && !wall.cover) wall.cover = this.cover(wall, mask);
+    for (const o of wall.outside) if (MOTIF_NODE.test(o.node.name)) o.node.traverse((node) => (node.renderOrder = MOTIF_ORDER));
     wall.proxies = this.proxies.filter((p) => {
       const box = new THREE.Box3().setFromObject(p);
       return (wall.group !== null && isUnder(p, [wall.group])) || wall.mounted(box, PROXY_DEPTH_M) || wall.behind(box);
@@ -233,10 +253,43 @@ export class Diorama {
     });
   }
 
-  /** What lies outside the wall shows only while the wall is whole and covers it (or its mask does); true if any changed. */
+  /**
+   * The void-coloured cover over the pane, just behind the glass: the mask's own material, so it draws exactly as the
+   * pane looks with the view hidden. None without a glass to size it or a mask mesh to colour it.
+   */
+  private cover(wall: Wall, mask: THREE.Object3D | null) {
+    const glass = wall.outside.find((o) => GLASS_NODE.test(o.node.name))?.node;
+    if (!glass || !(mask instanceof THREE.Mesh) || Array.isArray(mask.material)) return null;
+    const box = new THREE.Box3().setFromObject(glass);
+    const size = box.getSize(new THREE.Vector3());
+    const material = Object.assign(mask.material.clone(), { transparent: true, depthWrite: false, opacity: 1 });
+    const cover = new THREE.Mesh(new THREE.PlaneGeometry(size[wall.along], size.y), material);
+    cover.name = COVER_NAME;
+    const at = box.getCenter(new THREE.Vector3());
+    at[wall.across] = (wall.normal[wall.across] > 0 ? box.max : box.min)[wall.across] + wall.normal[wall.across] * COVER_BEHIND_GLASS_M * WORLD_SCALE;
+    cover.position.copy(at);
+    cover.lookAt(at.clone().sub(wall.normal));
+    cover.renderOrder = COVER_ORDER;
+    cover.visible = false;
+    cover.raycast = () => {};
+    this.root.attach(cover);
+    return cover;
+  }
+
+  /**
+   * What lies outside the wall shows only while the wall is (nearly) whole and covers it, or its mask does; with a mask it
+   * fades in under the cover as the wall comes back. True if anything drawn changed.
+   */
   private showOutside(wall: Wall, camera: THREE.Vector3, opacity: number) {
     let changed = false;
-    const show = opacity >= 1 && (wall.masked || this.covers(wall, camera));
+    const show = wall.masked ? opacity >= SHOW_FROM : opacity >= 1 && this.covers(wall, camera);
+    const seen = !show ? 0 : wall.masked && wall.cover ? THREE.MathUtils.clamp((opacity - SHOW_FROM) / (SEEN_BY - SHOW_FROM), 0, 1) : 1;
+    if (wall.cover && seen !== wall.seen) {
+      wall.cover.visible = show && seen < 1;
+      wall.cover.material.opacity = 1 - seen;
+      changed = true;
+    }
+    wall.seen = seen;
     for (const o of wall.outside) {
       // Re-hidden if the room showed it again meanwhile; only what this hid is shown again.
       if (!show && o.node.visible) {
@@ -303,12 +356,16 @@ export class Diorama {
     mesh.material = copy;
   }
 
-  /** Each wall's opacity, what fades with it, what is hidden outside it and whether a mask holds that, whether its hotspots take the pointer (tests). */
+  /**
+   * Each wall's opacity, what fades with it, what is hidden outside it, whether a mask holds that and how much of it
+   * shows through the pane, whether its hotspots take the pointer (tests).
+   */
   probe() {
-    return this.walls.map(({ name, opacity, meshes, proxies, outside, masked, clickable }) => ({
+    return this.walls.map(({ name, opacity, meshes, proxies, outside, masked, seen, clickable }) => ({
       name,
       opacity,
       masked,
+      seen,
       meshes: meshes.map((m) => m.name),
       proxies: proxies.map((p) => p.name),
       outside: outside.map((o) => ({ name: o.node.name, shown: o.node.visible })),
@@ -318,6 +375,11 @@ export class Diorama {
 
   dispose() {
     for (const o of this.walls.flatMap((w) => w.outside)) if (o.hidden) o.node.visible = true;
+    for (const { cover } of this.walls) {
+      cover?.removeFromParent();
+      cover?.geometry.dispose();
+      cover?.material.dispose();
+    }
     for (const [mesh, state] of this.faded) {
       if (state.copy && mesh.material === state.copy) mesh.material = state.source;
       state.copy?.dispose();

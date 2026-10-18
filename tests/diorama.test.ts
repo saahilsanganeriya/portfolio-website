@@ -62,6 +62,42 @@ describe('the city behind the back wall', () => {
   });
 });
 
+describe('coming round to the front', () => {
+  /**
+   * Catches the black pane on the way back (T98: Home from behind showed the wall solid and the window void for about a
+   * second): the view waited for the wall to be exactly whole. With a mask holding it, it shows from 0.9 and fades in
+   * with the wall, so the pane is never void while the wall stands over 0.9.
+   */
+  it('shows the view through the pane once the wall is back past 0.9, fading in with it', () => {
+    const root = new THREE.Group();
+    const group = new THREE.Group();
+    group.name = 'wall_back_group';
+    group.add(
+      block('wall_back', [-3270, 0, -540], [3450, 3400, -420]),
+      block('window_glass', [520, 1060, -490], [3180, 2480, -470]),
+      block('window_view_sf', [-553, 854, -3715], [1850, 1827, -557]),
+      block('window_view_delhi', [1850, 865, -3715], [3464, 1609, -557]),
+      block('window_view_mask', [-3270, 675, -3765], [3484, 3400, -540]),
+    );
+    root.add(group);
+    const diorama = new Diorama(root, [], CENTER, false);
+    const behind = new THREE.Vector3(0, 1500, -2500);
+    diorama.update(behind, 0);
+    expect(back(diorama, behind).outside.some((o) => o.shown), 'hidden from behind').toBe(false);
+    // Round at the front: the wall comes back over about a second (τ 0.18 s), here 0.45 s in.
+    diorama.update(IDLE, 0.45);
+    let wall = diorama.probe().find((w) => w.name === 'back')!;
+    expect(wall.opacity).toBeGreaterThan(0.9);
+    expect(wall.opacity).toBeLessThan(0.99);
+    expect(wall.outside.every((o) => o.shown), 'the view is back while the wall is').toBe(true);
+    expect(wall.seen, 'and part way faded in').toBeGreaterThan(0);
+    expect(wall.seen).toBeLessThan(1);
+    for (let t = 0; t < 1.5; t += 0.1) diorama.update(IDLE, 0.1);
+    wall = diorama.probe().find((w) => w.name === 'back')!;
+    expect([wall.opacity, wall.seen], 'whole, and all of it seen').toEqual([1, 1]);
+  });
+});
+
 describe('a wall the camera has gone behind', () => {
   /**
    * Catches a wall that keeps or gets back its first-frame atlas: the atlas streamer swaps the full atlas into what the
