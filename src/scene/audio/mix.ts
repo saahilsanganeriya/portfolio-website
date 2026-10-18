@@ -32,6 +32,9 @@ const RECORD = 0.72;
 const CRACKLE = 0.06;
 const BED_OUT_S = 1.2;
 const BED_IN_S = 2.8;
+// The music holds while another player is open (SaahilOS's Now Playing): out quickly, back gently.
+const HOLD_OUT_S = 0.8;
+const RELEASE_S = 2;
 // The stems stop at 11 kHz, so the room state's open filter is 11 kHz; a record keeps its top end there.
 const recordCutoff = (cutoff: number) => (cutoff >= 11000 ? 20000 : cutoff);
 const STEM_PAN: Record<Stem, number> = { keys: -0.15, melody: 0.2, beat: 0 };
@@ -106,6 +109,8 @@ export class RoomMix {
     recordFilter: BiquadFilterNode;
     /** The bus has been brought up (by the stems or by a record). */
     raised: boolean;
+    /** After the bus: 1, or 0 while the music holds for another player. */
+    hold: GainNode;
   };
   /** The record's needle and groove, on the record input under the record. */
   readonly crackleInput: GainNode;
@@ -140,7 +145,8 @@ export class RoomMix {
     musicFilter.frequency.value = MUSIC_MIX.room.cutoff;
     const bus = ctx.createGain();
     bus.gain.value = 0;
-    musicFilter.connect(bus).connect(this.output);
+    const hold = ctx.createGain();
+    musicFilter.connect(bus).connect(hold).connect(this.output);
     const bed = ctx.createGain();
     bed.connect(musicFilter);
     const stems = {} as Record<Stem, GainNode>;
@@ -161,7 +167,7 @@ export class RoomMix {
     this.crackleInput = ctx.createGain();
     this.crackleInput.gain.value = CRACKLE;
     this.crackleInput.connect(record);
-    this.music = { bus, filter: musicFilter, stems, started: false, bed, record, recordFilter, raised: false };
+    this.music = { bus, filter: musicFilter, stems, started: false, bed, record, recordFilter, raised: false, hold };
     this.spatial = ctx.createGain();
     this.spatial.connect(this.output);
   }
@@ -237,6 +243,11 @@ export class RoomMix {
     source.buffer = buffer;
     source.connect(this.music.record);
     source.start(when);
+  }
+
+  /** Silences the music (the stems and any record) while another player is open, or brings it back. */
+  holdMusic(held: boolean, immediate = false) {
+    this.move(this.music.hold.gain, held ? 0 : 1, immediate ? 0 : held ? HOLD_OUT_S : RELEASE_S);
   }
 
   get musicStarted() {
@@ -356,6 +367,7 @@ export class RoomMix {
       stems: Object.fromEntries(STEMS.map((stem) => [stem, read(this.music.stems[stem].gain)])) as Record<Stem, ReturnType<typeof read>>,
       bed: read(this.music.bed.gain),
       record: read(this.music.record.gain),
+      hold: read(this.music.hold.gain),
       beds: Object.fromEntries([...this.beds].map(([name, gain]) => [name, read(gain.gain)])) as Partial<Record<BedName, ReturnType<typeof read>>>,
     };
   }
