@@ -1,7 +1,8 @@
 """The view from the window: San Francisco on the left and Delhi on the right across one imagined bay (Delhi has no
-coast; its side of the water is the Yamuna), built as a small diorama behind the back wall. Each city keeps its own
-bridge on its own side: the Golden Gate from San Francisco's shore to the Marin hill, and Delhi's Signature Bridge,
-cable-stayed from a sandbar to the right bank.
+coast; its side of the water is the Yamuna), built as a small diorama behind the back wall. BRIDGE_VARIANT picks the
+bridge: "B" builds one bridge across the whole bay, the Golden Gate at San Francisco's end handing its main cable to
+the Signature Bridge's pylon at Delhi's (one_bridge); "two" gives each city its own on its own side (the Golden Gate
+from San Francisco's shore to the Marin hill, Delhi's Signature Bridge cable-stayed from a sandbar to the right bank).
 
 Every part of the land, water and landmarks is its own object in atlas window_sf or window_delhi (the seam is the
 plane x = SEAM_X, behind the middle of the window's one pane); export.py joins each atlas into one mesh,
@@ -126,6 +127,17 @@ MARIN = (1.25, 1.52, 0.07, 0.10)  # centre, radius across and in depth
 SIG_Y, SIG_X, SIG_PYLON = 1.30, (1.41, 1.84), 1.665  # the deck runs on along the bank, where the back stays hold
 SIG_DECK = WATER_Z + 0.055
 SANDBAR = (1.43, 1.29, 0.055, 0.11)
+# BRIDGE_VARIANT "B" builds one bridge across the bay (one_bridge); "two" keeps the pair above. The one bridge's deck
+# runs at the Golden Gate's depth and height from an anchorage on San Francisco's shore to an abutment on Delhi's bank,
+# ending left of India Gate so the gate does not read as its last pier; the pylon stands just past the seam on the
+# sandbar. The Marin hill goes, so the bay is open under the span.
+BRIDGE_VARIANT = "B"
+ONE_Y, ONE_X = BRIDGE_Y, (0.56, 1.73)
+ONE_HALF_W = 0.032
+ONE_HEAD = DECK_Z + 0.245  # the pylon's head, a little above the Golden Gate's tower tops
+PYLON_X = 1.47
+ABUTMENT = (0.035, 0.049, 0.09)  # width at the deck, width at the foot (a 1.4x batter), depth
+SANDBAR_ONE = (PYLON_X, 1.42, 0.06, 0.09)
 # The Painted Ladies: seven houses from LADIES_X along the row at depth LADIES_Y, facing the window, stepping up the
 # slope to the left, with Alamo Square in front of them.
 LADIES_X, LADIES_Y = 1.062, 0.915
@@ -137,6 +149,12 @@ LOTUS, INDIA_GATE, QUTUB = (1.56, 0.86), (1.72, 1.04), (1.80, 1.20)
 TRANSAMERICA, SALESFORCE, COIT, ALCATRAZ = (1.10, 1.70), (0.99, 1.76), (0.70, 1.03), (1.00, 1.27)
 DOWNTOWN = ((0.90, 1.24), (1.63, 1.86), (1.06, 1.75))  # x range, y range, densest point (behind the bridge)
 HUMAYUN, JAMA_MASJID, RED_FORT_Y = (1.88, 1.42), (1.60, 1.72), 1.96
+# One bridge: Jama Masjid back by the Red Fort's wall and up on its platform, so its domes rise clear of the deck.
+JAMA_MASJID_ONE, JAMA_MASJID_PLINTH = (1.60, 1.89), 0.035
+# The two bridges' paints: International Orange and its shadowed truss; the Signature Bridge's white steel, stays, deck
+# and the deck's underside.
+GGB, GGB_DARK = (0.55, 0.075, 0.035), (0.20, 0.035, 0.02)
+STEEL_WHITE, CABLE, DECK_GREY, DECK_UNDER = (0.80, 0.81, 0.80), (0.62, 0.64, 0.66), (0.62, 0.61, 0.58), (0.34, 0.34, 0.34)
 HAZE_NEAR, HAZE_FAR, HAZE_MAX = 1.05, 2.35, 0.25
 # The window's fixed moment (owner): San Francisco at 7 PM, the sun setting into the fog; New Delhi at 7:30 AM, the same
 # moment, the sun rising through a pale gold haze. Each city hazes toward its own light, the two blended across the
@@ -160,6 +178,11 @@ def ellipse(x, y, shape):
     """1 at the centre of an ellipse (cx, cy, rx, ry), 0 on its edge and outside."""
     cx, cy, rx, ry = shape
     return max(0.0, 1 - ((x - cx) / rx) ** 2 - ((y - cy) / ry) ** 2)
+
+
+def marin(x, y):
+    """The Marin hill's ellipse() where the Golden Gate lands on it (the pair of bridges only)."""
+    return ellipse(x, y, MARIN) if BRIDGE_VARIANT == "two" else 0.0
 
 
 def delhi_coast(y):
@@ -305,11 +328,16 @@ LIT = {"sf": "window_sf_lit", "delhi": "window_delhi_lit"}
 
 def light_each_city(objs):
     """Each city's own sun and sky reach only its own half (land, city, landmarks, its bridge; not the water, which
-    stays sunless): San Francisco's sunset from the front left, Delhi's sunrise from the front right."""
+    stays sunless): San Francisco's sunset from the front left, Delhi's sunrise from the front right. A part marked
+    lit_by takes that city's light on both halves: one bridge across the bay has San Francisco's sunset all along, so
+    the Golden Gate keeps its colour and the deck meets at the seam in one light."""
     for side, name in LIT.items():
+        members = [o for o in objs if o.get("lit_by", o.get("view_side")) == side and not o.name.endswith("_water")]
+        if not members:
+            continue
         lit = bpy.data.collections.get(name) or bpy.data.collections.new(name)
-        for o in objs:
-            if o.get("view_side") == side and not o.name.endswith("_water") and o.name not in lit.objects:
+        for o in members:
+            if o.name not in lit.objects:
                 lit.objects.link(o)
         for entry in lit.collection_objects:
             entry.light_linking.link_state = "INCLUDE"
@@ -434,8 +462,8 @@ def build_materials():
     m["lawn"] = view_material("view_lawn", (0.16, 0.26, 0.07), (0.010, 0.016, 0.008), rough=0.95)
     m["path"] = view_material("view_path", (0.52, 0.40, 0.25), (0.05, 0.035, 0.022), rough=0.9)
     m["trees"] = view_material("view_trees", (0.06, 0.12, 0.04), (0.006, 0.010, 0.006), rough=0.9)
-    m["ggb"] = view_material("view_ggb", (0.55, 0.075, 0.035), (0.13, 0.03, 0.02), rough=0.55)
-    m["ggb_dark"] = view_material("view_ggb_dark", (0.20, 0.035, 0.02), (0.03, 0.01, 0.008), rough=0.6)
+    m["ggb"] = view_material("view_ggb", GGB, (0.13, 0.03, 0.02), rough=0.55)
+    m["ggb_dark"] = view_material("view_ggb_dark", GGB_DARK, (0.03, 0.01, 0.008), rough=0.6)
     m["concrete"] = view_material("view_concrete", (0.48, 0.46, 0.42), (0.04, 0.04, 0.04), rough=0.9)
     m["deck_lights"] = view_material("view_deck_lights", (0.30, 0.25, 0.18), (0.08, 0.06, 0.03), rough=0.5,
                                      emit_night=(1.0, 0.62, 0.25), emit_strength=6.0)
@@ -487,10 +515,10 @@ def build_materials():
                        ((0.54, 0.45, 0.72), (0.12, 0.08, 0.22)), ((0.88, 0.55, 0.30), (0.04, 0.18, 0.18)),
                        ((0.48, 0.72, 0.64), (0.50, 0.32, 0.06))])]
     # The Signature Bridge's white steel, its stays, the deck's underside and the glass gallery; the Yamuna's sand.
-    m["steel_white"] = view_material("view_steel_white", (0.80, 0.81, 0.80), (0.06, 0.06, 0.065), rough=0.4)
-    m["cable"] = view_material("view_cable", (0.62, 0.64, 0.66), (0.05, 0.05, 0.05), rough=0.5)
-    m["deck"] = view_material("view_deck", (0.62, 0.61, 0.58), (0.04, 0.04, 0.04), rough=0.85)
-    m["deck_under"] = view_material("view_deck_under", (0.34, 0.34, 0.34), (0.02, 0.02, 0.02), rough=0.8)
+    m["steel_white"] = view_material("view_steel_white", STEEL_WHITE, (0.06, 0.06, 0.065), rough=0.4)
+    m["cable"] = view_material("view_cable", CABLE, (0.05, 0.05, 0.05), rough=0.5)
+    m["deck"] = view_material("view_deck", DECK_GREY, (0.04, 0.04, 0.04), rough=0.85)
+    m["deck_under"] = view_material("view_deck_under", DECK_UNDER, (0.02, 0.02, 0.02), rough=0.8)
     m["gallery"] = view_material("view_gallery", (0.18, 0.26, 0.32), (0.04, 0.05, 0.07), rough=0.25,
                                  emit_night=(0.9, 0.85, 0.7), emit_strength=2.0)
     m["sand"] = view_material("view_sand", (0.62, 0.50, 0.32), (0.04, 0.035, 0.025), rough=0.95)
@@ -529,13 +557,13 @@ class Parts:
     def __init__(self):
         self.parts = []
 
-    def add(self, name, builder, texel=1.0, split=False, side=None, smooth=False):
-        self.parts.append((name, builder, texel, split, side, smooth))
+    def add(self, name, builder, texel=1.0, split=False, side=None, smooth=False, lit_by=None):
+        self.parts.append((name, builder, texel, split, side, smooth, lit_by))
 
     def build(self):
         objs = []
         coll = collection("window_view")
-        for name, b, texel, split, side, smooth in self.parts:
+        for name, b, texel, split, side, smooth, lit_by in self.parts:
             me = bpy.data.meshes.new(name)
             bmesh.ops.remove_doubles(b.bm, verts=b.bm.verts, dist=1e-7)
             b.bm.normal_update()
@@ -559,6 +587,8 @@ class Parts:
                 o["atlas"] = f"window_{s}"
                 o["texel"] = texel
                 o["view_side"] = s
+                if lit_by:
+                    o["lit_by"] = lit_by
                 objs.append(o)
         return objs
 
@@ -723,12 +753,12 @@ def sf_height(x, y):
     h = WATER_Z - 0.02 + 0.045 * smoothstep(-0.01, shore, inland)
     for hx, hy, hh, hr in SF_HILLS:
         h += hh * math.exp(-((x - hx) ** 2 + (y - hy) ** 2) / (hr * hr)) * smoothstep(-0.02, 0.08, inland)
-    marin = ellipse(x, y, MARIN)
-    return max(h, WATER_Z - 0.02 + 0.10 * marin ** 0.6) if marin > 0 else h
+    hill = marin(x, y)
+    return max(h, WATER_Z - 0.02 + 0.10 * hill ** 0.6) if hill > 0 else h
 
 
 def on_sf_land(x, y, pad=0.0):
-    return x < sf_coast(y) + pad or ellipse(x, y, MARIN) > 0
+    return x < sf_coast(y) + pad or marin(x, y) > 0
 
 
 def delhi_height(x, y):
@@ -736,9 +766,18 @@ def delhi_height(x, y):
     return WATER_Z - 0.02 + 0.03 * smoothstep(-0.01, 0.04, inland)
 
 
+def sandbar():
+    """The Yamuna's sandbar: near the seam for the pair of bridges, under the pylon's foot for the one bridge."""
+    return SANDBAR if BRIDGE_VARIANT == "two" else SANDBAR_ONE
+
+
+def jama_masjid_site():
+    return JAMA_MASJID if BRIDGE_VARIANT == "two" else JAMA_MASJID_ONE
+
+
 def sandbar_height(x, y):
-    """The Yamuna's sandbar near the seam: low, flat-topped, a little above the water."""
-    return WATER_Z - 0.01 + 0.022 * min(1.0, ellipse(x, y, SANDBAR) * 3)
+    """The Yamuna's sandbar: low, flat-topped, a little above the water."""
+    return WATER_Z - 0.01 + 0.022 * min(1.0, ellipse(x, y, sandbar()) * 3)
 
 
 # ---- landmarks ----
@@ -841,6 +880,245 @@ def signature_bridge(b, mats):
             top = anchor(0.3 + 0.6 * k / 3)
             foot = Vector((bend_x + 0.022 + 0.016 * k, ys, z + 0.004))
             b.tube([Vector((top.x, y + side * 0.004, top.z)), foot], 0.0007, sides=3, mat=cable, cap=False)
+
+
+# ---- one bridge across the bay: the Golden Gate hands its cable to the Signature Bridge ----
+#
+#   San Francisco                            seam                          Delhi
+#   anchorage ── tower ── tower ── main cable ─┼──▶ pylon's head ══ stays ══ abutment
+#                                         joint ┘  paint, truss end and the halves' seam on one line
+
+def lerp(a, b, t):
+    return a + (b - a) * t
+
+
+def seam_material(name, a, b, rough=0.5):
+    """Paint `a` on San Francisco's side of the seam and `b` on Delhi's, so each half's atlas holds one paint."""
+    def paint(k, color, n):
+        x = k.node("ShaderNodeSeparateXYZ", inputs={"Vector": k.coords("Object")}).outputs["X"]
+        return k.mix_color(k.math("GREATER_THAN", x, SEAM_X), a + (1.0,), b + (1.0,))
+    return view_material(name, a, rough=rough, kit=paint)
+
+
+def bridge_paints():
+    """The deck's paints: International Orange and its shadowed truss on San Francisco's side, the Signature Bridge's
+    white steel, grey deck and girder on Delhi's."""
+    return {"paint": seam_material("view_bridge_paint", GGB, STEEL_WHITE),
+            "dark": seam_material("view_bridge_dark", GGB_DARK, DECK_UNDER, rough=0.7),
+            "deck": seam_material("view_bridge_deck", GGB, DECK_GREY, rough=0.8)}
+
+
+class Pylon:
+    """The Signature Bridge's pylon on the deck's line at x: two round legs rise from its pier to the deck, lean back
+    toward San Francisco at about 63°, bend upright and close into the glass head that takes the main cable (the real
+    pylon leans the other way, back over its bank; here it reaches out to take the cable)."""
+
+    def __init__(self, x):
+        self.x = x
+        self.foot_z = WATER_Z + 0.015  # on its pier
+        self.lean_z = DECK_Z - 0.012  # upright to the deck, then leaning
+        self.bend_z = DECK_Z + 0.16
+        self.top_z = ONE_HEAD
+        self.bend_x = x - math.tan(math.radians(27)) * (self.bend_z - self.lean_z)
+        self.head_x = self.bend_x - 0.014
+        self.spreads = (ONE_HALF_W + 0.010, ONE_HALF_W * 0.55, 0.003)
+
+    def _t(self, z):
+        """Which part of the legs height z is on (0 upright foot, 1 leaning, 2 upright head) and how far along it."""
+        if z <= self.lean_z:
+            return 0, 0.0
+        if z <= self.bend_z:
+            return 1, (z - self.lean_z) / (self.bend_z - self.lean_z)
+        return 2, (z - self.bend_z) / (self.top_z - self.bend_z)
+
+    def centre(self, z):
+        """The point between the two legs at height z."""
+        part, t = self._t(z)
+        x = (self.x, lerp(self.x, self.bend_x, t), lerp(self.bend_x, self.head_x, t))[part]
+        return Vector((x, ONE_Y, z))
+
+    def spread(self, z):
+        """Half the distance between the legs' centres at height z."""
+        foot, bend, top = self.spreads
+        part, t = self._t(z)
+        return (foot, lerp(foot, bend, t), lerp(bend, top, t))[part]
+
+    def saddle(self, side):
+        """Where the main cable on one side of the deck lands on the head."""
+        return self.centre(self.top_z) + Vector((0, side * self.spreads[2], -0.004))
+
+    def anchor(self, t, side):
+        """A stay's upper end on one side, t 0 the lowest (under the bend) to 1 the highest (under the head)."""
+        z = lerp(self.bend_z - 0.02, self.top_z - 0.008, t)
+        return self.centre(z) + Vector((0, side * min(self.spread(z), 0.004), 0))
+
+    def build(self, b, mats):
+        """Its pier, its two legs (round, tapering, cut level so the leaning part stays as thick as the rest) and the
+        glass head, seated square on the legs' top and turned with their last stretch."""
+        b.box((0.05, 0.095, 0.022), loc=(self.x, ONE_Y, WATER_Z + 0.004), mat=mats["concrete"])
+        heights = sorted({self.foot_z, self.lean_z, self.bend_z, self.top_z}
+                         | {lerp(self.lean_z, self.bend_z, k / 4) for k in (1, 2, 3)}
+                         | {lerp(self.bend_z, self.top_z, k / 3) for k in (1, 2)})
+        stretch = 1 / math.cos(math.radians(27))
+        for side in (-1, 1):
+            rings = []
+            for z in heights:
+                r = lerp(0.0092, 0.0058, (z - self.foot_z) / (self.top_z - self.foot_z))
+                rx = r * stretch if self._t(z)[0] == 1 else r
+                rings.append((self.centre(z) + Vector((0, side * self.spread(z), 0)), rx, r))
+            leg(b, rings, mats["steel_white"])
+        axis = Vector((self.head_x - self.bend_x, 0, self.top_z - self.bend_z)).normalized()
+        size = (0.017, 0.016, 0.011)
+        b.box(size, loc=tuple(self.centre(self.top_z) + axis * (size[2] / 2 - 0.001)),
+              rot=(0, math.degrees(math.atan2(axis.x, axis.z)), 0), mat=mats["gallery"])
+
+
+def leg(b, rings, mat):
+    """A round leg as a stack of level rings, each (centre, radius across, radius along the deck)."""
+    bm = b.bm
+    before = set(bm.faces)
+    loops = [[bm.verts.new((c.x + rx * math.cos(a), c.y + ry * math.sin(a), c.z))
+              for a in (2 * math.pi * k / 12 for k in range(12))] for c, rx, ry in rings]
+    for lo, hi in zip(loops, loops[1:]):
+        for i in range(12):
+            bm.faces.new((lo[i], lo[(i + 1) % 12], hi[(i + 1) % 12], hi[i]))
+    bm.faces.new(list(reversed(loops[0])))
+    bm.faces.new(loops[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=[f for f in bm.faces if f not in before])
+    return b._wrap(before, None, mat)
+
+
+def deco_tower(b, mats, x, paint):
+    """The Golden Gate's tower on the one bridge's line: round 9's art-deco tower (golden_gate) at x."""
+    y, half_w = ONE_Y, ONE_HALF_W
+    tower = TOWER_TOP - WATER_Z
+    b.box((0.07, 0.11, 0.05), loc=(x, y, WATER_Z + 0.005), mat=mats["concrete"])
+    for side in (-1, 1):
+        yl = y + side * (half_w + 0.004)
+        for z0, z1, w in ((WATER_Z + 0.03, WATER_Z + 0.5 * tower, 0.015), (WATER_Z + 0.5 * tower, WATER_Z + 0.78 * tower, 0.012),
+                          (WATER_Z + 0.78 * tower, TOWER_TOP, 0.0095)):
+            b.box((w + 0.004, w, z1 - z0), loc=(x, yl, (z0 + z1) / 2), mat=paint, bevel=0.0008, bevel_seg=1)
+        b.box((0.004, 0.004, 0.004), loc=(x, yl, TOWER_TOP + 0.003), mat=mats["red_light"])
+    for zs in [DECK_Z + f * (TOWER_TOP - 0.025 - DECK_Z) for f in (0.3, 0.62)] + [TOWER_TOP - 0.025]:
+        b.box((0.012, 2 * half_w + 0.006, 0.016 if zs < TOWER_TOP - 0.03 else 0.022), loc=(x, y, zs), mat=paint)
+    b.box((0.014, 2 * half_w + 0.006, 0.012), loc=(x, y, DECK_Z - 0.03), mat=paint)
+
+
+def one_deck(b, mats, paints):
+    """The deck from the anchorage on San Francisco's shore to the abutment on Delhi's bank: the road and railings in
+    each side's paint, the Golden Gate's stiffening truss under San Francisco's side tapering into the Signature
+    Bridge's slim girder over the last 10 cm before the seam, a cross-girder at the seam as the expansion joint, and the
+    anchorage on San Francisco's shore (abutment builds Delhi's end)."""
+    x0, x1 = ONE_X
+    y, h = ONE_Y, ONE_HALF_W
+    b.box((x1 - x0, 2 * h, 0.010), loc=((x0 + x1) / 2, y, DECK_Z), mat=paints["deck"])
+    step = 0.022
+    for k in range(int((x1 - x0) / step) + 1):
+        xa, xb = x0 + step * k, min(x0 + step * (k + 1), x1)
+        xk = (xa + xb) / 2
+        deep = 1 - smoothstep(SEAM_X - 0.10, SEAM_X, xk)
+        depth = 0.004 + 0.008 * deep
+        b.box((xb - xa + 0.0004, 2 * h - 0.008, depth), loc=(xk, y, DECK_Z - 0.005 - depth / 2), mat=paints["dark"])
+        if deep > 0.4:
+            b.box((0.0025, 2 * h - 0.004, depth), loc=(xk, y, DECK_Z - 0.005 - depth / 2), rot=(0, 45 if k % 2 else -45, 0),
+                  mat=paints["dark"])
+    for side in (-1, 1):
+        b.box((x1 - x0, 0.0016, 0.004), loc=((x0 + x1) / 2, y + side * (h - 0.0008), DECK_Z + 0.006), mat=paints["paint"])
+    b.box((0.006, 2 * h + 0.008, 0.016), loc=(SEAM_X, y, DECK_Z - 0.008), mat=mats["deck_under"])
+    ground = sf_height(x0, y)
+    b.box((0.05, 0.09, DECK_Z - ground + 0.01), loc=(x0, y, (DECK_Z + ground) / 2 - 0.005), mat=mats["concrete"])
+
+
+def abutment(b, mats):
+    """Where the deck lands on Delhi's bank: the riverfront's stone (the ghats'), battered on its river side, its face
+    under the deck's end plumb, its foot set into the bank's slope on a stone apron at the water line. A part of its
+    own in Delhi's light, like India Gate and the ghats beside it (the deck takes San Francisco's)."""
+    x1, y = ONE_X[1], ONE_Y
+    top_w, foot_w, depth = ABUTMENT
+    ground = delhi_height(x1 - top_w, y) - 0.01
+    b.frustum((foot_w, depth * 1.12), (top_w, depth), DECK_Z - 0.005 - ground, loc=(x1 - foot_w / 2, y, ground),
+              top_offset=((foot_w - top_w) / 2, 0), mat=mats["ghat"])
+    b.box((foot_w + 0.016, depth * 1.12 + 0.016, 0.0045), loc=(x1 - (foot_w + 0.016) / 2, y, WATER_Z + 0.00125),
+          mat=mats["ghat"])
+
+
+def main_cable(b, paint, saddles, side):
+    """One main cable: up from the anchorage over its first saddle, then a span sagging between each pair of saddles,
+    ending on the last. Returns its points."""
+    start = Vector((ONE_X[0], ONE_Y + side * (ONE_HALF_W + 0.004), DECK_Z + 0.01))
+    first = saddles[0]
+    pts = [Vector((lerp(start.x, first.x, t), lerp(start.y, first.y, t), start.z + (first.z - start.z) * t ** 1.4))
+           for t in (k / 12 for k in range(13))]
+    for pa, pc in zip(saddles, saddles[1:]):
+        sag = (pa.z + pc.z) / 2 - (DECK_Z + 0.022)
+        for t in (k / 30 for k in range(1, 31)):
+            pts.append(Vector((lerp(pa.x, pc.x, t), lerp(pa.y, pc.y, t), lerp(pa.z, pc.z, t) - 4 * sag * t * (1 - t))))
+    b.tube(pts, 0.0019, sides=5, mat=paint)
+    return pts
+
+
+def cable_at(pts, x):
+    """The point of a cable at x along the deck."""
+    for p, q in zip(pts, pts[1:]):
+        if p.x <= x <= q.x:
+            return p.lerp(q, (x - p.x) / max(q.x - p.x, 1e-9))
+    return None
+
+
+def hangers(b, pts, paint, xs):
+    """Vertical hangers from a main cable down to the deck at each x of xs (none where the cable runs too low)."""
+    for x in xs:
+        foot = cable_at(pts, x)
+        if foot is not None and foot.z - DECK_Z > 0.012:
+            facing_quad(b, x, foot.y, DECK_Z + 0.005, foot.z, 0.0012, paint)
+
+
+def stays(b, paint, pylon, feet):
+    """A fan of stays on both sides of the deck from the pylon's upper part to deck points `feet`, nearest first, so
+    the furthest reaches the highest anchor. Each is a strip facing the room, as the hangers are: a thin tube baked one
+    face dark (the one turned away from the light), and the site shows whichever face is in front."""
+    for side in (-1, 1):
+        ys = ONE_Y + side * (ONE_HALF_W - 0.003)
+        for k, xf in enumerate(feet):
+            t = lerp(0.05, 0.95, k / max(len(feet) - 1, 1))
+            strand(b, pylon.anchor(t, side), Vector((xf, ys, DECK_Z + 0.004)), 0.0012, paint)
+
+
+def strand(b, p, q, width, mat):
+    """A thin strip from p to q facing the room (-Y): a stay or cable that reads lit from every framing."""
+    bm = b.bm
+    before = set(bm.faces)
+    across = (q - p).cross(Vector((0, 1, 0))).normalized() * (width / 2)
+    face = bm.faces.new([bm.verts.new(v) for v in (p - across, q - across, q + across, p + across)])
+    face.normal_update()
+    if face.normal.y > 0:
+        face.normal_flip()
+    return b._wrap(before, None, mat)
+
+
+def spaced(x0, x1, n):
+    return [lerp(x0, x1, k / (n - 1)) for k in range(n)]
+
+
+def one_bridge(b, cables, mats):
+    """The Golden Gate whole (two towers, x as round 9's) carries its main cable on toward Delhi; the cable comes down
+    and lands on the head of the Signature Bridge's pylon, which stands just past the seam leaning back toward San
+    Francisco to take it; from the pylon a fan of stays carries the deck on to Delhi's bank. The deck's paint changes
+    once, at the seam, where the Golden Gate's truss and hangers end. The hangers and stays go into `cables`, a part
+    of their own: at the deck's density their 1.2 mm strips bake under a texel wide and pick up their neighbours'."""
+    pylon = Pylon(PYLON_X)
+    one_deck(b, mats, bridge_paints())
+    for x in TOWERS_X:
+        deco_tower(b, mats, x, mats["ggb"])
+    pylon.build(b, mats)
+    feet = [Vector((x, ONE_Y, TOWER_TOP)) for x in TOWERS_X]
+    for side in (-1, 1):
+        saddles = [p + Vector((0, side * (ONE_HALF_W + 0.004), -0.004)) for p in feet] + [pylon.saddle(side)]
+        pts = main_cable(b, mats["ggb"], saddles, side)
+        last = SEAM_X - 0.002  # the last hanger stands at the joint, on San Francisco's side of the seam
+        xs = [last - 0.021 * k for k in range(int((last - ONE_X[0] - 0.02) / 0.021) + 1)]
+        hangers(cables, pts, mats["ggb"], [x for x in xs if all(abs(x - xt) > 0.012 for xt in TOWERS_X)])  # none in a leg
+    stays(cables, mats["cable"], pylon, spaced(pylon.x + 0.03, ONE_X[1] - 0.025, 15))
 
 
 def facing_quad(b, x, y, z0, z1, width, mat):
@@ -961,7 +1239,7 @@ def sf_city(b, mats, rng):
             hgt = sf_height(x, y)
             if inland < 0.025 or hgt > WATER_Z + 0.15 or math.hypot(x - SUTRO[0], y - SUTRO[1]) < 0.12:
                 continue
-            if 1.03 < x < SEAM_X and y < 0.98 or ellipse(x, y, MARIN) > 0 or rng.random() < 0.22:
+            if 1.03 < x < SEAM_X and y < 0.98 or marin(x, y) > 0 or rng.random() < 0.22:
                 continue
             if rng.random() < 0.07:
                 r = rng.uniform(0.008, 0.012)
@@ -1080,7 +1358,15 @@ def qutub_minar(b, mats, centre):
 
 def near_signature(x, y):
     """Whether a tree or house would stand on the Signature Bridge's approach on the right bank."""
+    if BRIDGE_VARIANT != "two":
+        return abs(y - ONE_Y) < 0.05 and x < ONE_X[1] + 0.05
     return abs(y - SIG_Y) < 0.045 and x < SIG_X[1] + 0.06
+
+
+def on_moved_mosque(x, y):
+    """Whether a house would stand on Jama Masjid where the one bridge moves it (the pair's layout keeps every house)."""
+    mx, my = JAMA_MASJID_ONE
+    return BRIDGE_VARIANT != "two" and abs(x - mx) < 0.09 and abs(y - my) < 0.05
 
 
 def delhi_ground(b, mats, rng):
@@ -1118,7 +1404,8 @@ def delhi_ground(b, mats, rng):
         x, y = (rng.uniform(1.62, 1.98), rng.uniform(1.12, 1.45)) if k < 18 else (rng.uniform(1.30, 1.90),
                                                                                       rng.uniform(1.62, 2.1)) \
             if k < 60 else (rng.uniform(1.95, 2.30), rng.uniform(1.40, 2.05))
-        if x < delhi_coast(y) + 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.06)), 0.04) or near_signature(x, y):
+        if x < delhi_coast(y) + 0.03 or not inside_dome(Vector((x, y, WATER_Z + 0.06)), 0.04) or near_signature(x, y) \
+                or on_moved_mosque(x, y):
             continue
         w, d, h = rng.uniform(0.016, 0.03), rng.uniform(0.014, 0.024), rng.uniform(0.010, 0.026)
         b.box((w, d, h), loc=(x, y, delhi_height(x, y) + h / 2 - 0.002), rot=(0, 0, rng.uniform(-8, 8)),
@@ -1235,18 +1522,24 @@ def humayun_tomb(b, mats, base):
             b.lathe([(0.008, 0.0), (0.007, 0.006), (0.0, 0.011)], segments=10, loc=(cx, cy, z + 0.068), mat=mats["marble"])
 
 
-def jama_masjid(b, mats, base):
+def jama_masjid(b, mats, base, plinth=0.0):
     """Jama Masjid: a red sandstone prayer hall under three white domes, the middle one largest, between two tall
-    minarets with their pavilions."""
+    minarets with their pavilions; on a red sandstone platform `plinth` high (the real one stands on a high one)."""
     x, y = base
     z = delhi_height(x, y)
+    if plinth:
+        b.box((0.16, 0.07, plinth + 0.004), loc=(x, y, z + plinth / 2 - 0.002), mat=mats["red_stone"])
+        z += plinth
     b.box((0.12, 0.05, 0.03), loc=(x, y, z + 0.015), mat=mats["red_stone"])
     for dx, r in ((-0.036, 0.013), (0.0, 0.019), (0.036, 0.013)):
         b.lathe([(r * 0.8, 0.0), (r, 0.008), (r * 0.85, 0.02), (r * 0.4, 0.03), (0.0, 0.034 * r / 0.019)], segments=16,
                 loc=(x + dx, y, z + 0.030), mat=mats["marble"])
+    # The cylinder's loc is its base: on the platform the shafts stand on it, under their pavilions. Round 9's pair
+    # keeps its shafts as built, starting 2 cm above the roof, where the fort wall behind hides the gap.
+    foot = z if plinth else z + 0.05
     for sx in (-1, 1):
         mx = x + sx * 0.068
-        b.cylinder(0.0045, 0.10, segments=8, loc=(mx, y - 0.01, z + 0.05), mat=mats["red_stone"])
+        b.cylinder(0.0045, 0.10, segments=8, loc=(mx, y - 0.01, foot), mat=mats["red_stone"])
         b.lathe([(0.0065, 0.0), (0.006, 0.004), (0.0, 0.010)], segments=8, loc=(mx, y - 0.01, z + 0.10), mat=mats["marble"])
 
 
@@ -1377,7 +1670,7 @@ def build_lights():
             ("tower_marin", (TOWERS_X[1], BRIDGE_Y), (1.0, 0.55, 0.30), 2.5, (-0.05, -0.15, 0.04)),
             ("signature", (SIG_PYLON, SIG_Y), (0.95, 0.92, 0.85), 2.0, (-0.06, -0.14, 0.06)),
             ("humayun", HUMAYUN, (1.0, 0.86, 0.66), 1.4, (-0.06, -0.14, 0.05)),
-            ("jama_masjid", JAMA_MASJID, (1.0, 0.80, 0.55), 1.0, (0.05, -0.14, 0.05)),
+            ("jama_masjid", jama_masjid_site(), (1.0, 0.80, 0.55), 1.0, (0.05, -0.14, 0.05)),
             ("transamerica", TRANSAMERICA, (0.95, 0.92, 0.85), 1.2, (0.08, -0.12, 0.06))):
         tx, ty = target
         tz = WATER_Z + 0.08
@@ -1441,18 +1734,27 @@ def build_window_view(framings):
     sunset_fog(fog, mats)
     parts.add("fog", fog, texel=0.35, side="sf", smooth=True)
 
-    bridge = pl.Builder("bridge")
-    golden_gate(bridge, mats)
-    parts.add("bridge", bridge, texel=2.2, side="sf")
+    if BRIDGE_VARIANT == "two":
+        bridge = pl.Builder("bridge")
+        golden_gate(bridge, mats)
+        parts.add("bridge", bridge, texel=2.2, side="sf")
 
-    signature = pl.Builder("signature")
-    signature_bridge(signature, mats)
-    parts.add("signature", signature, texel=2.6, side="delhi")
+        signature = pl.Builder("signature")
+        signature_bridge(signature, mats)
+        parts.add("signature", signature, texel=2.6, side="delhi")
+    else:
+        bridge, cables = pl.Builder("bridge"), pl.Builder("cables")
+        one_bridge(bridge, cables, mats)
+        parts.add("bridge", bridge, texel=2.4, split=True, lit_by="sf")
+        parts.add("cables", cables, texel=20.0, split=True, lit_by="sf")
+        bank = pl.Builder("abutment")
+        abutment(bank, mats)
+        parts.add("abutment", bank, texel=2.0, side="delhi")
 
     sand = pl.Builder("sandbar")
-    cx, cy, rx, ry = SANDBAR
+    cx, cy, rx, ry = sandbar()
     heightfield(sand, cx - rx, cx + rx, cy - ry, cy + ry, 0.012, sandbar_height, mats["sand"],
-                keep=lambda x, y: ellipse(x, y, SANDBAR) > 0)
+                keep=lambda x, y: ellipse(x, y, sandbar()) > 0)
     parts.add("sandbar", sand, texel=0.8, side="delhi")
 
     boat = pl.Builder("boats")
@@ -1473,7 +1775,7 @@ def build_window_view(framings):
     india_gate(monuments, mats, INDIA_GATE)
     qutub_minar(monuments, mats, QUTUB)
     humayun_tomb(monuments, mats, HUMAYUN)
-    jama_masjid(monuments, mats, JAMA_MASJID)
+    jama_masjid(monuments, mats, jama_masjid_site(), plinth=0.0 if BRIDGE_VARIANT == "two" else JAMA_MASJID_PLINTH)
     red_fort(monuments, mats)
     parts.add("monuments", monuments, texel=2.6, side="delhi")
 
