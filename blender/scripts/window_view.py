@@ -1075,23 +1075,37 @@ def hangers(b, pts, paint, xs):
 
 def stays(b, paint, pylon, feet):
     """A fan of stays on both sides of the deck from the pylon's upper part to deck points `feet`, nearest first, so
-    the furthest reaches the highest anchor."""
+    the furthest reaches the highest anchor. Each is a strip facing the room, as the hangers are: a thin tube baked one
+    face dark (the one turned away from the light), and the site shows whichever face is in front."""
     for side in (-1, 1):
         ys = ONE_Y + side * (ONE_HALF_W - 0.003)
         for k, xf in enumerate(feet):
             t = lerp(0.05, 0.95, k / max(len(feet) - 1, 1))
-            b.tube([pylon.anchor(t, side), Vector((xf, ys, DECK_Z + 0.004))], 0.0006, sides=3, mat=paint, cap=False)
+            strand(b, pylon.anchor(t, side), Vector((xf, ys, DECK_Z + 0.004)), 0.0012, paint)
+
+
+def strand(b, p, q, width, mat):
+    """A thin strip from p to q facing the room (-Y): a stay or cable that reads lit from every framing."""
+    bm = b.bm
+    before = set(bm.faces)
+    across = (q - p).cross(Vector((0, 1, 0))).normalized() * (width / 2)
+    face = bm.faces.new([bm.verts.new(v) for v in (p - across, q - across, q + across, p + across)])
+    face.normal_update()
+    if face.normal.y > 0:
+        face.normal_flip()
+    return b._wrap(before, None, mat)
 
 
 def spaced(x0, x1, n):
     return [lerp(x0, x1, k / (n - 1)) for k in range(n)]
 
 
-def one_bridge(b, mats):
+def one_bridge(b, cables, mats):
     """The Golden Gate whole (two towers, x as round 9's) carries its main cable on toward Delhi; the cable comes down
     and lands on the head of the Signature Bridge's pylon, which stands just past the seam leaning back toward San
     Francisco to take it; from the pylon a fan of stays carries the deck on to Delhi's bank. The deck's paint changes
-    once, at the seam, where the Golden Gate's truss and hangers end."""
+    once, at the seam, where the Golden Gate's truss and hangers end. The hangers and stays go into `cables`, a part
+    of their own: at the deck's density their 1.2 mm strips bake under a texel wide and pick up their neighbours'."""
     pylon = Pylon(PYLON_X)
     one_deck(b, mats, bridge_paints())
     for x in TOWERS_X:
@@ -1102,8 +1116,9 @@ def one_bridge(b, mats):
         saddles = [p + Vector((0, side * (ONE_HALF_W + 0.004), -0.004)) for p in feet] + [pylon.saddle(side)]
         pts = main_cable(b, mats["ggb"], saddles, side)
         last = SEAM_X - 0.002  # the last hanger stands at the joint, on San Francisco's side of the seam
-        hangers(b, pts, mats["ggb"], [last - 0.021 * k for k in range(int((last - ONE_X[0] - 0.02) / 0.021) + 1)])
-    stays(b, mats["cable"], pylon, spaced(pylon.x + 0.03, ONE_X[1] - 0.025, 15))
+        xs = [last - 0.021 * k for k in range(int((last - ONE_X[0] - 0.02) / 0.021) + 1)]
+        hangers(cables, pts, mats["ggb"], [x for x in xs if all(abs(x - xt) > 0.012 for xt in TOWERS_X)])  # none in a leg
+    stays(cables, mats["cable"], pylon, spaced(pylon.x + 0.03, ONE_X[1] - 0.025, 15))
 
 
 def facing_quad(b, x, y, z0, z1, width, mat):
@@ -1728,9 +1743,10 @@ def build_window_view(framings):
         signature_bridge(signature, mats)
         parts.add("signature", signature, texel=2.6, side="delhi")
     else:
-        bridge = pl.Builder("bridge")
-        one_bridge(bridge, mats)
+        bridge, cables = pl.Builder("bridge"), pl.Builder("cables")
+        one_bridge(bridge, cables, mats)
         parts.add("bridge", bridge, texel=2.4, split=True, lit_by="sf")
+        parts.add("cables", cables, texel=20.0, split=True, lit_by="sf")
         bank = pl.Builder("abutment")
         abutment(bank, mats)
         parts.add("abutment", bank, texel=2.0, side="delhi")
