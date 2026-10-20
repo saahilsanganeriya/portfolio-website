@@ -99,7 +99,7 @@ ARMCHAIR_VARIANT = "today"
 ARMCHAIRS = {
     "today": (None, READING_CHAIR[0], READING_CHAIR[1], ["props_lounge_chair"], "Armchair"),
     "lounge": ("lounge_chair", READING_CHAIR[0], READING_CHAIR[1], ["props_lounge_chair"], "Armchair"),
-    "sofa": ("lounge_sofa", Vector((1.90, -1.72, 0.0)), -28.0, ["props_lounge_sofa"], "Sofa"),
+    "sofa": ("lounge_sofa", Vector((1.75, -1.65, 0.0)), -20.0, ["props_lounge_sofa"], "Sofa"),
     "pod": ("hanging_pod", Vector((1.98, -1.80, 0.0)), -40.0, ["props_hanging_pod", "props_hanging_pod_stand"],
             "Hanging chair"),
 }
