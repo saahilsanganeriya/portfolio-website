@@ -567,6 +567,97 @@ def apply_transforms(ob):
     ob.matrix_basis = Matrix.Identity(4)
 
 
+# ---- seating: lofts, a five-star swivel base, CC0 textures ----
+
+def polyhaven_texture(name, kind, res="2k"):
+    """Path of one map of a Poly Haven texture (kind as its API lists it: Diffuse, Rough, nor_gl, Displacement,
+    coll1 ...), downloaded once into the cache."""
+    marker = os.path.join(CACHE_DIR, "polyhaven", f"{name}_{kind}_{res}.path")
+    if os.path.exists(marker):
+        return open(marker).read().strip()
+    req = urllib.request.Request(f"https://api.polyhaven.com/files/{name}", headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        url = json.load(resp)[kind][res]["jpg"]["url"]
+    path = os.path.join(CACHE_DIR, "polyhaven", url.rsplit("/", 1)[1])
+    if not os.path.exists(path):
+        _download(url, path)
+    with open(marker, "w") as fh:
+        fh.write(path)
+    return path
+
+
+def loft_rings(b, rings, mat, seams=(0,), caps=True, closed=True):
+    """Quads between consecutive rings of equal length (closed loops unless closed=False), ngon caps at both ends;
+    marks seams along the ring indices in `seams`. Returns (faces, verts)."""
+    bm = b.bm
+    n = len(rings[0])
+    verts = [[bm.verts.new(p) for p in ring] for ring in rings]
+    mi = b.slot(mat)
+    faces = []
+    for k in range(len(verts) - 1):
+        for i in range(n if closed else n - 1):
+            j = (i + 1) % n
+            f = bm.faces.new((verts[k][i], verts[k][j], verts[k + 1][j], verts[k + 1][i]))
+            f.material_index = mi
+            faces.append(f)
+    if caps and closed:
+        for ring in (verts[0], verts[-1]):
+            f = bm.faces.new(ring)
+            f.material_index = mi
+            faces.append(f)
+    for i in seams:
+        for k in range(len(verts) - 1):
+            e = bm.edges.get((verts[k][i], verts[k + 1][i]))
+            if e:
+                e.seam = True
+    return faces, verts
+
+
+def orient_outward(bm, faces, centre):
+    """Flip a closed part's faces when most of its area faces toward `centre`."""
+    bm.normal_update()
+    out = sum(f.normal.dot(f.calc_center_median() - centre) * f.calc_area() for f in faces)
+    if out < 0:
+        for f in faces:
+            f.normal_flip()
+    bm.normal_update()
+
+
+def twin_caster(b, tip, heading_deg, hood, wheel, stem):
+    """A twin-wheel caster under a socket at `tip` (floor at z 0), its wheels trailing the stem along heading."""
+    b.cylinder(0.009, 0.020, segments=12, loc=(tip.x, tip.y, 0.046), mat=stem)
+    back = Vector((math.cos(math.radians(heading_deg + 90)), math.sin(math.radians(heading_deg + 90)), 0)) * 0.018
+    hub = tip + back
+    b.box((0.014, 0.040, 0.034), loc=(hub.x, hub.y, 0.034), rot=(0, 0, heading_deg), mat=hood, bevel=0.002,
+          corner=0.010, corner_axis="X")
+    axle = Vector((math.cos(math.radians(heading_deg)), math.sin(math.radians(heading_deg)), 0))
+    for side in (-1, 1):
+        w = hub + axle * (side * 0.0135 - 0.0055)
+        b.cylinder(0.025, 0.011, segments=18, loc=(w.x, w.y, 0.025), rot=(0, 90, heading_deg), mat=wheel, bevel=0.003)
+
+
+def five_star_base(b, arm_mat, black, chrome, reach=0.29, legs=5):
+    """A gas-lift swivel base: chrome rod in a black shroud, a cast hub and `legs` tapering cast arms, each on a twin
+    caster turned a little differently (as a chair left standing has them)."""
+    b.cylinder(0.0145, 0.12, segments=20, loc=(0, 0, 0.21), mat=chrome, bevel=0.001)
+    b.cylinder(0.026, 0.13, segments=24, loc=(0, 0, 0.085), mat=black, bevel=0.003)
+    b.cylinder(0.050, 0.056, segments=32, loc=(0, 0, 0.058), mat=arm_mat, bevel=0.007)
+    s = reach / 0.29
+    secs = [(0.030, 0.029, 0.026, 0.087), (0.100 * s, 0.027, 0.023, 0.083), (0.200 * s, 0.023, 0.019, 0.077),
+            (0.268 * s, 0.021, 0.016, 0.073), (reach, 0.021, 0.016, 0.072)]  # (r, half width, half height, centre z)
+    for k in range(legs):
+        ang = math.radians(90 + 360 / legs * k)
+        d = Vector((math.cos(ang), math.sin(ang), 0))
+        side = Vector((-d.y, d.x, 0))
+        rings = []
+        for r, hw, hh, cz in secs:
+            rings.append([d * r + side * sx + Vector((0, 0, cz + sz))
+                          for sx, sz in round_polygon([(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)], min(hw, hh) * 0.75, 3)])
+        faces, _ = loft_rings(b, rings, arm_mat)
+        orient_outward(b.bm, faces, d * reach * 0.55 + Vector((0, 0, 0.08)))
+        twin_caster(b, d * reach, math.degrees(ang) + 90 + (25 - 17 * k), black, black, chrome)
+
+
 # ---- materials ----
 
 def _sock(sockets, key):
