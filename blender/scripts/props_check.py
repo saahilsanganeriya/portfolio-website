@@ -37,10 +37,17 @@ REQUIRED = {
     "desk_chair": ["desk_chair", "desk_chair_base"],
     "crt_shell": ["crt_shell", "crt_power_led", "crt_screen", "crt_badge_seat"],
     "computer_case": ["computer_case", "case_power_led", "case_hdd_led"],
+    "desk_chair_softpad": ["desk_chair", "desk_chair_base"],
+    "desk_chair_wing": ["desk_chair", "desk_chair_base"],
+    "desk_chair_tilter": ["desk_chair", "desk_chair_base"],
+    "lounge_chair": ["lounge_chair"],
+    "lounge_sofa": ["lounge_sofa"],
+    "hanging_pod": ["hanging_pod", "hanging_pod_stand"],
 }
-# The oven carries its door, cavity and the croissant; the chair its five twin-wheel casters; the base unit stays
-# near its brief's 10k.
-PROP_BUDGETS = {"countertop_oven": 18000, "desk_chair": 20000, "computer_case": 10000}
+# The oven carries its door, cavity and the croissant; the desk chairs their casters; the base unit stays near its
+# brief's 10k; the sofa and the hanging chair are the size of a chair or two.
+PROP_BUDGETS = {"countertop_oven": 18000, "desk_chair": 20000, "computer_case": 10000, "desk_chair_softpad": 20000,
+                "desk_chair_wing": 20000, "desk_chair_tilter": 20000, "lounge_sofa": 20000, "hanging_pod": 20000}
 HANGING = set()  # props whose origin is a mount point on top (none since the ceiling fan left the room)
 CAMERAS = {"fujifilm_x100", "fujifilm_xt", "fujica_st", "super8_camera"}
 PLAN_EXPR = "import bpy; print(sum(len(o.data.polygons) for o in bpy.data.objects if o.type=='MESH'))"

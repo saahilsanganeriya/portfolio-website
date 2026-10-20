@@ -28,6 +28,7 @@ from mathutils import Vector
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_room  # noqa: E402
+import room_dressing  # noqa: E402
 import room_lib  # noqa: E402
 from room_lib import BACK_X1, FLOOR_EDGE, FLOOR_SOLID, LEFT_Y0, WIN_X0, WIN_X1, X_LEFT, Y_BACK  # noqa: E402
 
@@ -40,7 +41,7 @@ FURNITURE = [
     ("Kitchen counter", ["kitchen_counter", "env_kitchen_top"]),
     ("Darkroom lines", ["darkroom_line_0", "darkroom_line_1", "darkroom_line_2"]),
     ("Bookcase", ["bookshelf"]),
-    ("Armchair", ["props_lounge_chair"]),
+    room_dressing.armchair_plan(),
     ("Reading lamp", ["props_lantern"]),
     ("Record cabinet", ["env_record_cabinet"]),
     ("Record crate", ["record_crate"]),

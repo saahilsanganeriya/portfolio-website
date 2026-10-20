@@ -73,6 +73,7 @@ PROPS = {
     "countertop_oven": ((X_LEFT + 0.30, -3.02, KITCHEN_TOP), 90, (0.40, 0.33, 0.23)),
     # Alone on the credenza under the posters, where its glow lights the frames and the wall.
     "lava_lamp": ((-2.10, 0.25, CREDENZA_TOP), 0, (0.15, 0.15, 0.41)),
+    **room_dressing.armchair_prop(),
 }
 PROP_SCALE = {"nas_4bay": 1.35}  # owner round 2: bigger, so it reads from cam_idle
 # Nodes named in the room contract keep their own names; every other prop mesh gets the props_ prefix.
@@ -393,10 +394,11 @@ def place_henry(mats):
 
 # The CRT's case, the computer under it and the desk chair are prop files in place of Henry's: the CRT stands on the
 # computer as desk_crt, placed before the glass, the sticky notes and the badge are fitted to its face; the chair takes
-# his chair's spot and turn. name: (name in the room, location, z turn in degrees).
+# his chair's spot and turn (room_dressing.DESK_CHAIRS picks the chair). name: (name in the room, location, z turn in
+# degrees).
 DESK_PROPS = {
     "crt_shell": ("desk_crt", (0.0, 0.040, 0.865), 0.0),
-    "desk_chair": ("desk_chair", (0.199, -0.681, 0.0), -130.0),
+    **room_dressing.desk_chair_prop(),
     "computer_case": ("desk_computer", (0.0058, 0.0170, 0.7316), 0.0),
 }
 DESK_PROP_ANCHORS: dict[str, Vector] = {}  # the empties they bring (crt_screen, crt_badge_seat), in world space
@@ -1464,7 +1466,8 @@ TEXEL_WEIGHTS = {
     "tonearm": 4.4, "record_crate": 1.0, "props_kitchen_spices": 1.6, "props_kitchen_mugs": 1.4,
     "props_pour_over": 1.6, "props_bakery_board": 2.0, "props_cinnamon_rolls": 2.0, "props_under_shelf_light": 1.0,
     "props_bookcase_books": 1.0, "props_bookend": 1.0, "props_kitchen_jars": 1.4, "props_kitchen_pendant": 1.2,
-    "props_chopping_board": 1.0, "props_lounge_chair": 0.8, "props_lantern": 0.8,
+    "props_chopping_board": 1.0, "props_lounge_chair": 0.8, "props_lantern": 0.8, "props_lounge_sofa": 0.8,
+    "props_hanging_pod": 0.8, "props_hanging_pod_stand": 0.5,
     "props_reading_mug": 1.4, "props_floor_books": 0.9, "espresso_machine": 1.6, "espresso_cup": 2.2,
     "espresso_coffee": 1.0, "countertop_oven": 1.6, "oven_door": 1.8, "croissant": 3.0, "lava_lamp": 1.6,
     "lava_lamp_glass": 1.8, "oven_glow": 1.6, "desk_chair_base": 0.6, "desk_chair": 0.9, "desk_desk": 0.6,
