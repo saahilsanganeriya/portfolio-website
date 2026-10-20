@@ -1,8 +1,8 @@
 """lounge_sofa: a low two-seat lounge sofa, unbranded, after the 1970s frameless-foam type: no legs and no frame, a
-deep pleated seat block on the floor and one pleated bolster that leans back behind it and wraps a little round its
-ends, all in cognac leather whose folds are tucked into creases (five across the bolster, two round the seat).
+deep pleated seat block on the floor and one bolster that leans back behind it, all in caramel leather whose folds are
+tucked into creases (five down the bolster's front, three down its back, two round the seat).
 
-Real proportions: 1.34 m wide, 0.96 m deep, 0.70 m at the bolster's crown, seat 0.38 m. Objects: lounge_sofa. Origin:
+Real proportions: 1.32 m wide, 0.94 m deep, 0.68 m at the bolster's crown, seat 0.38 m. Objects: lounge_sofa. Origin:
 the footprint's centre on the floor; faces -Y.
 """
 import math
@@ -65,7 +65,7 @@ def build_seat(b, leather):
 
 
 def bolster_path(n=72):
-    """Plan line of the bolster's foot: along the seat's back, bowed a little toward the sitter at the middle."""
+    """Plan line of the bolster's foot: along the seat's back, bowed a little toward the sitter in the middle."""
     pts = []
     for k in range(n + 1):
         u = k / n
@@ -76,12 +76,12 @@ def bolster_path(n=72):
 
 
 def bolster_section(u):
-    """The bolster's section in its own plane (r toward the sitter negative, z up): a leaning, rolled sausage whose
-    front face carries four folds; it lowers and rounds off toward both ends."""
+    """The bolster's section in its own plane (r toward the sitter negative, z up): a leaning, rolled sausage with
+    five folds down its front and three down its back; it lowers a little toward both ends."""
     end = abs(2 * u - 1)
     low = 1.0 - 0.18 * end ** 6
     crest = SEAT_Z + (BOLSTER_CREST - SEAT_Z) * low
-    lean = 0.20
+    lean = 0.26
     front = []
     steps = 24
     for k in range(steps + 1):  # up the front face from the seat to under the crown
@@ -95,9 +95,9 @@ def bolster_section(u):
         a = math.pi * k / 9
         top.append((r0 + 0.11 * (1 - math.cos(a)), z0 + 0.055 * math.sin(a) + 0.01 * math.sin(a) ** 2))
     back = []
-    for k in range(10):  # down the back, a slight belly, to the floor
-        t = k / 9
-        back.append((r0 + 0.22 + 0.025 * math.sin(math.pi * t), z0 - (z0 - 0.015) * t))
+    for k in range(19):  # down the back, folded like the front but softer, to the floor
+        t = k / 18
+        back.append((r0 + 0.22 + 0.012 * math.sin(math.pi * t) + pleat(t, 3, 0.018), z0 - (z0 - 0.015) * t))
     under = [(0.10, 0.004), (-0.05, 0.004), (-0.15, SEAT_Z * 0.5)]
     return front + top + back + under
 
@@ -131,8 +131,8 @@ def build_bolster(b, leather):
 def main():
     pl.reset_scene()
     col = pl.root_collection(NAME)
-    leather = pl.surface("sofa_leather", (0.42, 0.20, 0.09), 0.46, color_tex=pl.polyhaven_texture(LEATHER, "Diffuse"),
-                         tint=(0.95, 0.62, 0.40), rough_tex=pl.polyhaven_texture(LEATHER, "Rough"), rough_amount=0.3,
+    leather = pl.surface("sofa_leather", (0.56, 0.32, 0.15), 0.46, color_tex=pl.polyhaven_texture(LEATHER, "Diffuse"),
+                         tint=(1.0, 0.74, 0.50), rough_tex=pl.polyhaven_texture(LEATHER, "Rough"), rough_amount=0.3,
                          height_tex=pl.polyhaven_texture(LEATHER, "Diffuse"), height_strength=0.12, tile=0.5,
                          edge_wear=0.30, edge_color=(0.55, 0.32, 0.16), edge_roughness=0.36, edge_width=0.006,
                          grime=0.55, coat=0.15, coat_roughness=0.3, color_var=0.06)
