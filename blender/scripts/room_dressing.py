@@ -84,25 +84,6 @@ BOOKCASE_LEVELS = (0.075, 0.415, 0.755, 1.06)  # shelf tops: bottom, middle, upp
 BOOKCASE_TURN, BOOKCASE_AT = 65.0, Vector((2.92, -0.80, 0.0))
 JP_PRINT = (Vector((2.995, -1.02, 1.06)), (0.30, 0.42), 9.0)  # base on the bookcase top (as authored), size, lean
 
-READING_CHAIR = (Vector((2.02, -1.87, 0.0)), -122.0)  # turned toward the desk and the room
-# Which chair stands at the desk and which in the reading corner. "today" is round nine's: T92's walnut barrel-back
-# chair, and Poly Haven's lounge chair imported as a scan (CC0 below). The others are prop files placed like the rest:
-# variant: (prop file, location, z turn in degrees, the room's names for its meshes, the floor plan's label).
-DESK_CHAIR_VARIANT = "today"
-DESK_CHAIRS = {
-    "today": ("desk_chair", (0.199, -0.681, 0.0), -130.0),
-    "softpad": ("desk_chair_softpad", (0.199, -0.681, 0.0), -130.0),
-    "wing": ("desk_chair_wing", (0.199, -0.681, 0.0), -130.0),
-    "tilter": ("desk_chair_tilter", (0.199, -0.681, 0.0), -130.0),
-}
-ARMCHAIR_VARIANT = "today"
-ARMCHAIRS = {
-    "today": (None, READING_CHAIR[0], READING_CHAIR[1], ["props_lounge_chair"], "Armchair"),
-    "lounge": ("lounge_chair", READING_CHAIR[0], READING_CHAIR[1], ["props_lounge_chair"], "Armchair"),
-    "sofa": ("lounge_sofa", Vector((1.75, -1.65, 0.0)), -20.0, ["props_lounge_sofa"], "Sofa"),
-    "pod": ("hanging_pod", Vector((1.98, -1.80, 0.0)), -40.0, ["props_hanging_pod", "props_hanging_pod_stand"],
-            "Hanging chair"),
-}
 FLOOR_LAMP = Vector((3.02, -2.70, 0.0))
 LANTERN = (0.19, 1.16, 0.40)  # globe radius, centre height, height
 # The record corner beside the armchair, free-standing toward the open side: a low cabinet (x0, x1, y0, y1, top)
@@ -119,26 +100,6 @@ CC0 = {
     "props_tea_tin": ("oil_tin", (X_LEFT + 0.12, -3.80 + KITCHEN_SHIFT.y, 1.645), 80, 0.11, 2000),
     "props_pen_cup": ("stationery_supplies", (-0.30, 0.16, DESK_TOP), 0, None, 2500),
 }
-if ARMCHAIR_VARIANT == "today":
-    CC0["props_lounge_chair"] = ("mid_century_lounge_chair", (*READING_CHAIR[0].xy, 0.0), READING_CHAIR[1], 0.92, 2600)
-
-
-def desk_chair_prop():
-    """build_room.DESK_PROPS's row for the desk chair: {prop file: (name in the room, location, z turn)}."""
-    name, loc, turn = DESK_CHAIRS[DESK_CHAIR_VARIANT]
-    return {name: ("desk_chair", loc, turn)}
-
-
-def armchair_plan():
-    """The floor plan's label for the reading chair and the room's names for its meshes."""
-    *_, names, label = ARMCHAIRS[ARMCHAIR_VARIANT]
-    return label, names
-
-
-def armchair_prop():
-    """build_room.PROPS's row for the reading chair when it is a prop file: {prop file: (location, z turn, size)}."""
-    name, loc, turn, _, _ = ARMCHAIRS[ARMCHAIR_VARIANT]
-    return {name: ((loc.x, loc.y, 0.0), turn, (0.9, 0.9, 0.9))} if name else {}
 
 
 def build_dressing(mats, placed):

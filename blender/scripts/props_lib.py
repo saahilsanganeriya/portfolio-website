@@ -567,7 +567,7 @@ def apply_transforms(ob):
     ob.matrix_basis = Matrix.Identity(4)
 
 
-# ---- seating: lofts, a five-star swivel base, CC0 textures ----
+# ---- seating: lofts, casters, CC0 textures ----
 
 def polyhaven_texture(name, kind, res="2k"):
     """Path of one map of a Poly Haven texture (kind as its API lists it: Diffuse, Rough, nor_gl, Displacement,
@@ -634,28 +634,6 @@ def twin_caster(b, tip, heading_deg, hood, wheel, stem):
     for side in (-1, 1):
         w = hub + axle * (side * 0.0135 - 0.0055)
         b.cylinder(0.025, 0.011, segments=18, loc=(w.x, w.y, 0.025), rot=(0, 90, heading_deg), mat=wheel, bevel=0.003)
-
-
-def five_star_base(b, arm_mat, black, chrome, reach=0.29, legs=5):
-    """A gas-lift swivel base: chrome rod in a black shroud, a cast hub and `legs` tapering cast arms, each on a twin
-    caster turned a little differently (as a chair left standing has them)."""
-    b.cylinder(0.0145, 0.12, segments=20, loc=(0, 0, 0.21), mat=chrome, bevel=0.001)
-    b.cylinder(0.026, 0.13, segments=24, loc=(0, 0, 0.085), mat=black, bevel=0.003)
-    b.cylinder(0.050, 0.056, segments=32, loc=(0, 0, 0.058), mat=arm_mat, bevel=0.007)
-    s = reach / 0.29
-    secs = [(0.030, 0.029, 0.026, 0.087), (0.100 * s, 0.027, 0.023, 0.083), (0.200 * s, 0.023, 0.019, 0.077),
-            (0.268 * s, 0.021, 0.016, 0.073), (reach, 0.021, 0.016, 0.072)]  # (r, half width, half height, centre z)
-    for k in range(legs):
-        ang = math.radians(90 + 360 / legs * k)
-        d = Vector((math.cos(ang), math.sin(ang), 0))
-        side = Vector((-d.y, d.x, 0))
-        rings = []
-        for r, hw, hh, cz in secs:
-            rings.append([d * r + side * sx + Vector((0, 0, cz + sz))
-                          for sx, sz in round_polygon([(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)], min(hw, hh) * 0.75, 3)])
-        faces, _ = loft_rings(b, rings, arm_mat)
-        orient_outward(b.bm, faces, d * reach * 0.55 + Vector((0, 0, 0.08)))
-        twin_caster(b, d * reach, math.degrees(ang) + 90 + (25 - 17 * k), black, black, chrome)
 
 
 # ---- materials ----
