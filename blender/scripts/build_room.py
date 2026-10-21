@@ -395,10 +395,11 @@ def place_henry(mats):
 
 # The CRT's case, the computer under it and the desk chair are prop files in place of Henry's: the CRT stands on the
 # computer as desk_crt, placed before the glass, the sticky notes and the badge are fitted to its face; the chair takes
-# his chair's spot and turn. name: (name in the room, location, z turn in degrees).
+# his chair's spot and turn (room_dressing.DESK_CHAIRS picks the chair). name: (name in the room, location, z turn in
+# degrees).
 DESK_PROPS = {
     "crt_shell": ("desk_crt", (0.0, 0.040, 0.865), 0.0),
-    "desk_chair": ("desk_chair", (0.199, -0.681, 0.0), -130.0),
+    **room_dressing.desk_chair_prop(),
     "computer_case": ("desk_computer", (0.0058, 0.0170, 0.7316), 0.0),
 }
 DESK_PROP_ANCHORS: dict[str, Vector] = {}  # the empties they bring (crt_screen, crt_badge_seat), in world space
@@ -1446,6 +1447,9 @@ ATLAS_BY_NAME = [
 ]
 # Share of its atlas per object relative to its surface area (1 = by area), within its atlas: the hero props of the
 # desk view and the type on the books and prints get more texels, the big smooth surfaces fewer.
+# The desk stop sees the end of the desk chair's crest about 1.8 m away, where 1 texel per device pixel is ~1,700 per
+# metre; a weight of 16 gives ~1,230 for the few square centimetres it sees.
+DESK_STOP_WEIGHT = 16.0
 TEXEL_WEIGHTS = {
     # desk: the desk top by what the views see of it (split_desk_top_by_view); the small things on it carry the detail
     "desk_desk_top": 1.2, "desk_desk_top_mid": 0.44, "desk_desk_top_rest": 0.02, "keyboard": 1.3, "mouse": 1.0,
@@ -1474,10 +1478,11 @@ TEXEL_WEIGHTS = {
     # its object card frames it at half the view's height (~2,300 texels/m for 1 per device pixel); 24 gives ~1,500
     "props_nas_4bay": 24.0,
     # the desk chair is seen from behind at the wide view: ~355 texels/m there is 1 per device pixel
-    "desk_chair": 1.33, "desk_chair_base": 1.33,
-    # the reading chair's faces its close-ups see (split_reading_chair_by_view), paid for by the kitchen counter
-    # 1.0 -> 0.6, the credenza 0.8 -> 0.5 and the desk's body 0.6 -> 0.45 (never the bookshelf: the books stop is its)
-    "props_lounge_chair_close": 5.0,
+    "desk_chair": 1.33, "desk_chair_base": 1.33, "desk_chair_leather": 1.33, "props_lounge_chair_leather": 0.8,
+    # the faces the chairs' close framings see (split_chairs_by_view), paid for by the kitchen counter 1.0 -> 0.6, the
+    # credenza 0.8 -> 0.5 and the desk's body 0.6 -> 0.45 (never the bookshelf: the books stop is its)
+    "props_lounge_chair_close": 5.0, "props_lounge_chair_leather_close": 5.0, "desk_chair_close": DESK_STOP_WEIGHT,
+    "desk_chair_leather_close": DESK_STOP_WEIGHT,
 }
 # Heights things rest on (their bottoms there are hidden): floor, desk, record cabinet, credenza, sill, counter,
 # bookcase levels.
@@ -1776,38 +1781,48 @@ def split_desk_top_by_view():
     print("desk top tiers: " + ", ".join(f"{name} {n * DESK_TOP_CELL ** 2:.3f} m2" for name, n in counts.items()))
 
 
-# The reading chair's close-ups (the record player's card and the books stop) see about a third of it; those faces take
-# more of the props atlas (TEXEL_WEIGHTS, paid for by three large plain surfaces there) and are joined back at export.
-CHAIR_CLOSE_VIEWS = ("cam_record_player", "cam_tour_3")
+# The chairs' faces their close framings see take more of the props atlas (TEXEL_WEIGHTS) and are joined back into their
+# mesh at export: about a third of the reading chair at the record player's card and the books stop, the end of the desk
+# chair's crest at the desk stop.
+CHAIR_CLOSE_VIEWS = {
+    "props_lounge_chair": ("cam_record_player", "cam_tour_3"),
+    "props_lounge_chair_leather": ("cam_record_player", "cam_tour_3"),
+    "desk_chair": ("cam_tour_0",),
+    "desk_chair_leather": ("cam_tour_0",),
+}
 
 
-def split_reading_chair_by_view():
-    chair = bpy.data.objects["props_lounge_chair"]
-    scene, depsgraph = bpy.context.scene, bpy.context.evaluated_depsgraph_get()
+def split_chairs_by_view():
     half_v = math.tan(math.radians(CAMERA_FOV_DEG) / 2)
     half_h = half_v * 16 / 9
-    views = []
-    for name in CHAIR_CLOSE_VIEWS:
-        eye, target = bpy.data.objects[name].location.copy(), bpy.data.objects[f"{name}_target"].location.copy()
-        forward = (target - eye).normalized()
-        right = forward.cross(Vector((0, 0, 1))).normalized()
-        views.append((eye, forward, right, right.cross(forward)))
+    area = lambda o: sum(p.area for p in o.data.polygons)
+    for name, cameras in CHAIR_CLOSE_VIEWS.items():
+        chair = bpy.data.objects.get(name)
+        if chair is None:
+            continue
+        bpy.context.view_layer.update()
+        scene, depsgraph = bpy.context.scene, bpy.context.evaluated_depsgraph_get()
+        views = []
+        for cam in cameras:
+            eye, target = bpy.data.objects[cam].location.copy(), bpy.data.objects[f"{cam}_target"].location.copy()
+            forward = (target - eye).normalized()
+            right = forward.cross(Vector((0, 0, 1))).normalized()
+            views.append((eye, forward, right, right.cross(forward)))
 
-    def seen(centre, normal, _material):
-        for eye, forward, right, up in views:
-            v = centre - eye
-            depth = v.dot(forward)
-            if depth <= 0.05 or abs(v.dot(right)) > half_h * depth or abs(v.dot(up)) > half_v * depth:
-                continue
-            if normal.dot(eye - centre) > 0 and seen_from(centre + normal * 0.002, eye, scene, depsgraph):
-                return True
-        return False
+        def seen(centre, normal, _material):
+            for eye, forward, right, up in views:
+                v = centre - eye
+                depth = v.dot(forward)
+                if depth <= 0.05 or abs(v.dot(right)) > half_h * depth or abs(v.dot(up)) > half_v * depth:
+                    continue
+                if normal.dot(eye - centre) > 0 and seen_from(centre + normal * 0.002, eye, scene, depsgraph):
+                    return True
+            return False
 
-    part = split_by_faces(chair, seen, "props_lounge_chair_close")
-    if part is not None:
-        part["join_into"] = "props_lounge_chair"
-        area = lambda o: sum(p.area for p in o.data.polygons)
-        print(f"reading chair: {area(part):.3f} m2 seen close, {area(chair):.3f} m2 not")
+        part = split_by_faces(chair, seen, f"{name}_close")
+        if part is not None:
+            part["join_into"] = name
+            print(f"{name}: {area(part):.3f} m2 seen close, {area(chair):.3f} m2 not")
 
 
 # The plants' leaves for the site's wind: (source object, the materials that sway, how the sway weight runs). "leaf":
@@ -1990,7 +2005,7 @@ def main():
     tone_case_lights()
     reduce_geometry()
     split_desk_heroes()
-    split_reading_chair_by_view()
+    split_chairs_by_view()
     build_plant_sway()
     tag_gloss()
     assign_atlases()

@@ -84,6 +84,14 @@ BOOKCASE_LEVELS = (0.075, 0.415, 0.755, 1.06)  # shelf tops: bottom, middle, upp
 BOOKCASE_TURN, BOOKCASE_AT = 65.0, Vector((2.92, -0.80, 0.0))
 JP_PRINT = (Vector((2.995, -1.02, 1.06)), (0.30, 0.42), 9.0)  # base on the bookcase top (as authored), size, lean
 
+# Which chair stands at the desk: "today" is round nine's (T92's walnut barrel-back chair); the others are prop files
+# placed in its spot and turn. variant: (prop file, location, z turn in degrees).
+DESK_CHAIR_VARIANT = "today"
+DESK_CHAIRS = {
+    "today": ("desk_chair", (0.199, -0.681, 0.0), -130.0),
+    "tilter": ("desk_chair_tilter", (0.199, -0.681, 0.0), -130.0),
+    "softpad": ("desk_chair_softpad", (0.199, -0.681, 0.0), -130.0),
+}
 FLOOR_LAMP = Vector((3.02, -2.70, 0.0))
 LANTERN = (0.19, 1.16, 0.40)  # globe radius, centre height, height
 # The record corner beside the armchair, free-standing toward the open side: a low cabinet (x0, x1, y0, y1, top)
@@ -100,6 +108,12 @@ CC0 = {
     "props_tea_tin": ("oil_tin", (X_LEFT + 0.12, -3.80 + KITCHEN_SHIFT.y, 1.645), 80, 0.11, 2000),
     "props_pen_cup": ("stationery_supplies", (-0.30, 0.16, DESK_TOP), 0, None, 2500),
 }
+
+
+def desk_chair_prop():
+    """build_room.DESK_PROPS's row for the desk chair: {prop file: (name in the room, location, z turn)}."""
+    name, loc, turn = DESK_CHAIRS[DESK_CHAIR_VARIANT]
+    return {name: ("desk_chair", loc, turn)}
 
 
 def build_dressing(mats, placed):

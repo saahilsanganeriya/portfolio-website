@@ -14,7 +14,7 @@ BLENDER = os.environ.get("BLENDER", "blender")
 PROPS = ["poster_frame", "projector_8mm", "mango_plant", "nas_4bay", "books_stack", "film_canister", "fujifilm_x100",
          "fujifilm_xt", "fujica_st", "super8_camera", "lava_lamp", "espresso_machine", "countertop_oven",
          "keyboard", "mouse", "coffee_mug", "croissant", "pennant_gatech", "crt_badge", "desk_chair", "crt_shell",
-         "computer_case", "lounge_chair"]
+         "computer_case", "desk_chair_tilter", "desk_chair_softpad", "lounge_chair"]
 
 
 def run(cmd):

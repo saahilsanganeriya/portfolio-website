@@ -9,14 +9,17 @@ the eye reads on the real chair, its brightest pores are held to the leather's o
 (both read as white flecks once the bake has the texels to show them), and the aluminium base is a satin grey (metal
 bakes as diffuse in its own colour: bright aluminium comes out as white plastic). The walnut keeps its colour.
 
-Real proportions: 0.92 m tall (as the room had it), 0.98 x 0.94 m. Objects: lounge_chair. Origin: the base's centre on
-the floor; faces -Y as the scan does (the room turns it).
+Real proportions: 0.92 m tall (as the room had it), 0.98 x 0.94 m. Objects: lounge_chair (the walnut shell and the
+base) and lounge_chair_leather (the cushions: the site draws their live shine, so they are their own mesh with their own
+gloss). Origin: the base's centre on the floor; faces -Y as the scan does (the room turns it).
 """
 import math
 import os
 import sys
 
+import bmesh
 import bpy
+import numpy as np
 from mathutils import Matrix
 
 sys.dont_write_bytecode = True
@@ -63,6 +66,66 @@ def bake_colours(mat):
     k.set(bsdf, "Normal", pl._sock(flat.outputs, "Result_Vector"))
 
 
+def leather_mask(rgb):
+    """bake_colours's leather test on linear colours: saturation inside LEATHER_SATURATION, with the same soft edges."""
+    lo, hi = LEATHER_SATURATION
+    top = rgb.max(axis=-1)
+    sat = np.where(top > 1e-6, (top - rgb.min(axis=-1)) / np.maximum(top, 1e-6), 0.0)
+    return np.clip((sat - (lo - 0.06)) / 0.06, 0, 1) * np.clip((hi + 0.04 - sat) / 0.04, 0, 1)
+
+
+def split_leather(chair):
+    """Moves the cushions into their own mesh: each connected part of the scan goes whole to the side most of its area
+    is on, by the leather test at its faces' UVs in the colour map."""
+    mat = chair.data.materials[0]
+    img = next(n.image for n in mat.node_tree.nodes if n.bl_idname == "ShaderNodeTexImage"
+               and any(link.to_socket.name == "Base Color" for link in n.outputs["Color"].links))
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    srgb = px.reshape(h, w, 4)[..., :3]
+    mask = leather_mask(np.where(srgb <= 0.04045, srgb / 12.92, ((srgb + 0.055) / 1.055) ** 2.4))
+    bm = bmesh.new()
+    bm.from_mesh(chair.data)
+    uv = bm.loops.layers.uv.active
+    face_mask = {}
+    for f in bm.faces:
+        pts = [lp[uv].uv for lp in f.loops]
+        pts.append(sum(pts, pts[0] * 0) / len(pts))
+        face_mask[f.index] = float(np.mean([mask[min(h - 1, max(0, int(q.y * h))), int(q.x * w) % w] for q in pts]))
+    leather, seen = set(), set()
+    for f in bm.faces:
+        if f.index in seen:
+            continue
+        part, stack = [], [f]
+        seen.add(f.index)
+        while stack:
+            g = stack.pop()
+            part.append(g)
+            for e in g.edges:
+                for n in e.link_faces:
+                    if n.index not in seen:
+                        seen.add(n.index)
+                        stack.append(n)
+        area = sum(g.calc_area() for g in part)
+        if sum(face_mask[g.index] * g.calc_area() for g in part) > 0.5 * area:
+            leather.update(g.index for g in part)
+    bm.free()
+    cushions = chair.copy()
+    cushions.data = chair.data.copy()
+    for col in chair.users_collection:
+        col.objects.link(cushions)
+    cushions.name = cushions.data.name = f"{NAME}_leather"
+    for obj, keep_leather in ((chair, False), (cushions, True)):
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if (f.index in leather) != keep_leather], context="FACES")
+        bm.to_mesh(obj.data)
+        bm.free()
+    print(f"lounge_chair: {len(leather)} leather faces of {len(face_mask)}")
+    return cushions
+
+
 def main():
     pl.reset_scene()
     col = pl.root_collection(NAME)
@@ -95,12 +158,14 @@ def main():
     bpy.ops.uv.seams_from_islands(mark_seams=True)
     bpy.ops.object.mode_set(mode="OBJECT")
     chair["bake_uv"] = "unwrap"
+    chair["source"] = "Poly Haven mid_century_lounge_chair (CC0), Kuutti Siitonen"
+    cushions = split_leather(chair)
+    cushions["gloss"] = 0.45  # semi-matte leather; the walnut shell and the base have no live shine
     for slot in chair.material_slots:
         bake_colours(slot.material)
-    chair.data.shade_smooth()
-    chair.data.set_sharp_from_angle(angle=math.radians(50))
-    chair["source"] = "Poly Haven mid_century_lounge_chair (CC0), Kuutti Siitonen"
-    chair["gloss"] = 0.45  # leather and lacquered walnut
+    for obj in (chair, cushions):
+        obj.data.shade_smooth()
+        obj.data.set_sharp_from_angle(angle=math.radians(50))
     pl.report(NAME, col, 8000)
     pl.save_prop(NAME)
 
