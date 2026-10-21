@@ -25,16 +25,16 @@ async function difference(a: Buffer, b: Buffer) {
 /**
  * Catches the shine loading but never drawing (a shader that fails to compile draws nothing, and three only logs it)
  * and shine on a surface the A/B turned down: at the top tier the probe loads before the room is shown, only the
- * desk top and the CRT glass shine, and turning the shine on changes the desk's pixels.
+ * desk top, the CRT glass and the chairs' leather shine, and turning the shine on changes the desk's pixels.
  */
-test('the top tier loads the probe, and the desk top and the CRT glass shine', async ({ page }) => {
+test('the top tier loads the probe, and the desk top, the CRT glass and the chairs’ leather shine', async ({ page }) => {
   const shaderErrors: string[] = [];
   page.on('console', (m) => m.type() === 'error' && /WebGLProgram|shader/i.test(m.text()) && shaderErrors.push(m.text()));
   await landAt(page, 0);
   await page.evaluate(() => window.__room!.goto('desk'));
   await page.waitForFunction(() => window.__room!.phase === 'desk' && !window.__room!.moving, null, { timeout: 60_000 });
   await page.waitForFunction(() => window.__shine?.state === 'ready', null, { timeout: 60_000 });
-  expect((await page.evaluate(() => window.__shine!.surfaces.map((s) => s.name))).sort()).toEqual(['crt_glow', 'desk_desk_top']);
+  expect((await page.evaluate(() => window.__shine!.surfaces.map((s) => s.name))).sort()).toEqual(['crt_glow', 'desk_chair_leather', 'desk_desk_top', 'props_lounge_chair_leather']);
 
   await page.mouse.move(2, 2);
   await page.locator('[data-room-pause]').click();

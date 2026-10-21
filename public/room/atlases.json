@@ -83,12 +83,12 @@
       "uri": "room.glb",
       "image": 0,
       "px": 1024,
-      "bytes": 231579
+      "bytes": 234620
     },
     "full": {
       "uri": "atlas/props.avif",
       "px": 4096,
-      "bytes": 1032301,
+      "bytes": 1070778,
       "format": "avif"
     }
   },
@@ -103,12 +103,12 @@
       "uri": "room.glb",
       "image": 3,
       "px": 1024,
-      "bytes": 142289
+      "bytes": 141105
     },
     "full": {
       "uri": "atlas/env.avif",
       "px": 3072,
-      "bytes": 259866,
+      "bytes": 257650,
       "format": "avif"
     }
   }
