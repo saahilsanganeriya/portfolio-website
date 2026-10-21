@@ -21,7 +21,20 @@ import { WORLD_SCALE, type MonitorPose } from '../Application/RoomModel';
 // quarter both read as varnish and glass. The window pane, the mug's glaze, the espresso machine, the lamp shade, the
 // lava lamp, the platter and the Voyager record showed no gain or a smudge (the probe is 512 × 256 and taken at the
 // desk, so a near lamp or the far wall reflects as a blur), so their `gloss` tags draw nothing.
-const SHINES: Readonly<Record<string, number>> = { desk_desk_top: 0.25, crt_glow: 0.25 };
+const SHINES: Readonly<Record<string, number>> = {
+  desk_desk_top: 0.25,
+  crt_glow: 0.25,
+  // The chairs' semi-matte leather. The desk chair's seat is seen at a grazing angle and mirrors the window: above
+  // 0.05 that lays a grey film over it.
+  desk_chair_leather: 0.05,
+  props_lounge_chair_leather: 0.2,
+};
+// Surfaces whose shine follows the bake's light. The probe sees the lit room even where the bake shades a surface (a
+// cushion under its own shell), and the screen draws a reflection strongest where the bake is darkest: a hard grey
+// film on the shadows. These shine only as much as their baked colour is bright (display levels, 0-1): none below
+// LIT_RANGE[0], all of it above LIT_RANGE[1].
+const LIT_BY_BAKE: ReadonlySet<string> = new Set(['desk_chair_leather', 'props_lounge_chair_leather']);
+const LIT_RANGE: readonly [number, number] = [0.03, 0.2];
 // The bake's exposure (blender/scripts/build_room.py EXPOSURE), for a floor plan whose probe does not state it.
 const BAKE_EXPOSURE_STOPS = 2.8;
 // The set's walls rise to 3.4 m and fade into the void: the top of the box reflections are projected on.
@@ -113,6 +126,8 @@ export function shineGeometry(mesh: THREE.Mesh): THREE.BufferGeometry {
   }
   const shaped = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(proportional, 3));
   const own = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  // The UVs too: a shine that follows the bake reads the mesh's atlas through them.
+  for (const [name, attribute] of Object.entries(source.attributes)) if (name.startsWith('uv')) own.setAttribute(name, attribute);
   if (source.index) {
     shaped.setIndex(source.index);
     own.setIndex(source.index);
@@ -195,6 +210,10 @@ float shineF = shineWeight(saturate(dot(shineN, shineV)), shineR) * shineStrengt
 #ifdef SHINE_SCREEN
   shineF *= smoothstep(SHINE_FADE_NEAR, SHINE_FADE_FAR, distance(cameraPosition, vShinePosition));
 #endif
+#ifdef SHINE_LIT
+  // diffuseColor is the baked colour here: the overlay's map is its mesh's atlas.
+  shineF *= smoothstep(SHINE_LIT_FROM, SHINE_LIT_TO, pow(max(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0), 1.0 / 2.2));
+#endif
 outgoingLight = shineAgX(textureCubeUV(envMap, shineOnBox(vShinePosition, reflect(-shineV, shineN)), shineR).rgb * shineF);
 diffuseColor.a = shineF;`;
 
@@ -206,12 +225,15 @@ interface ShineLook {
   glass: boolean;
   /** The OS hole the CRT glass is drawn over. */
   screen: MonitorPose | null;
+  /** The baked map whose light the shine follows (LIT_BY_BAKE), or null. */
+  bake: THREE.Texture | null;
 }
 
-function shineMaterial(env: THREE.Texture, box: ShineBox, { roughness, strength, side, glass, screen }: ShineLook) {
+function shineMaterial(env: THREE.Texture, box: ShineBox, { roughness, strength, side, glass, screen, bake }: ShineLook) {
   const material = new THREE.MeshBasicMaterial({
     name: 'shine',
     envMap: env,
+    map: bake,
     side,
     transparent: true,
     depthWrite: false,
@@ -251,6 +273,7 @@ function shineMaterial(env: THREE.Texture, box: ShineBox, { roughness, strength,
       SHINE_FADE_FAR: (SCREEN_FADE_M[1] * WORLD_SCALE).toFixed(1),
     };
   }
+  if (bake) material.defines = { ...material.defines, SHINE_LIT: '', SHINE_LIT_FROM: LIT_RANGE[0].toFixed(3), SHINE_LIT_TO: LIT_RANGE[1].toFixed(3) };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -261,7 +284,7 @@ function shineMaterial(env: THREE.Texture, box: ShineBox, { roughness, strength,
       .replace('void main() {', FRAGMENT_PARS)
       .replace('#include <envmap_fragment>', FRAGMENT_SHINE);
   };
-  material.customProgramCacheKey = () => (screen ? 'shine-screen' : 'shine');
+  material.customProgramCacheKey = () => (screen ? 'shine-screen' : bake ? 'shine-lit' : 'shine');
   material.userData.shine = uniforms;
   return material;
 }
@@ -269,7 +292,8 @@ function shineMaterial(env: THREE.Texture, box: ShineBox, { roughness, strength,
 /**
  * Adds a shine overlay for every mesh under `root` tagged `gloss` that `strengths` lists: a child of the mesh (it
  * moves, lifts and hides with it), except the CRT glass, whose baked glow Effects hides: its overlay stands beside it
- * and draws over the OS hole. Returns the overlays, hidden.
+ * and draws over the OS hole. On the surfaces `litByBake` lists, the overlay reads its mesh's baked map and shines
+ * only where the bake is lit. Returns the overlays, hidden.
  */
 export function addShine(
   root: THREE.Object3D,
@@ -277,6 +301,7 @@ export function addShine(
   box: ShineBox,
   screen: ShineScreen | null,
   strengths: Readonly<Record<string, number>> = SHINES,
+  litByBake: ReadonlySet<string> = LIT_BY_BAKE,
 ): THREE.Mesh[] {
   const tagged: THREE.Mesh[] = [];
   root.traverse((node) => {
@@ -286,7 +311,8 @@ export function addShine(
     const onScreen = mesh === screen?.glass;
     const own = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
     const glass = onScreen || own.transparent;
-    const look = { roughness: mesh.userData.gloss, strength: strengths[mesh.name], side: own.side, glass, screen: onScreen ? screen.pose : null };
+    const bake = !glass && litByBake.has(mesh.name) ? ((own as THREE.MeshBasicMaterial).map ?? null) : null;
+    const look = { roughness: mesh.userData.gloss, strength: strengths[mesh.name], side: own.side, glass, screen: onScreen ? screen.pose : null, bake };
     const overlay = new THREE.Mesh(shineGeometry(mesh), shineMaterial(env, box, look));
     overlay.name = `${mesh.name}_shine`;
     overlay.visible = false;

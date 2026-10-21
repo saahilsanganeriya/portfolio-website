@@ -84,6 +84,15 @@ BOOKCASE_LEVELS = (0.075, 0.415, 0.755, 1.06)  # shelf tops: bottom, middle, upp
 BOOKCASE_TURN, BOOKCASE_AT = 65.0, Vector((2.92, -0.80, 0.0))
 JP_PRINT = (Vector((2.995, -1.02, 1.06)), (0.30, 0.42), 9.0)  # base on the bookcase top (as authored), size, lean
 
+# Which chairs stand at the desk and by the record player. "today" is round nine's: T92's walnut barrel-back chair,
+# and Poly Haven's lounge chair imported as a scan (CC0 below). The picks are prop files in the same spots: the
+# banker's tilter, and the lounge chair prepared as a prop file. variant: (prop file, location, z turn in degrees).
+DESK_CHAIR_VARIANT = "tilter"
+DESK_CHAIRS = {
+    "today": ("desk_chair", (0.199, -0.681, 0.0), -130.0),
+    "tilter": ("desk_chair_tilter", (0.199, -0.681, 0.0), -130.0),
+}
+ARMCHAIR_VARIANT = "lounge"  # or "today"
 READING_CHAIR = (Vector((2.02, -1.87, 0.0)), -122.0)  # turned toward the desk and the room
 FLOOR_LAMP = Vector((3.02, -2.70, 0.0))
 LANTERN = (0.19, 1.16, 0.40)  # globe radius, centre height, height
@@ -100,8 +109,22 @@ CC0 = {
     "props_haworthia": ("potted_plant_04", (2.34, 0.345, 0.86), 30, 0.17, 3000),
     "props_tea_tin": ("oil_tin", (X_LEFT + 0.12, -3.80 + KITCHEN_SHIFT.y, 1.645), 80, 0.11, 2000),
     "props_pen_cup": ("stationery_supplies", (-0.30, 0.16, DESK_TOP), 0, None, 2500),
-    "props_lounge_chair": ("mid_century_lounge_chair", (*READING_CHAIR[0].xy, 0.0), READING_CHAIR[1], 0.92, 2600),
 }
+if ARMCHAIR_VARIANT == "today":
+    CC0["props_lounge_chair"] = ("mid_century_lounge_chair", (*READING_CHAIR[0].xy, 0.0), READING_CHAIR[1], 0.92, 2600)
+
+
+def desk_chair_prop():
+    """build_room.DESK_PROPS's row for the desk chair: {prop file: (name in the room, location, z turn)}."""
+    name, loc, turn = DESK_CHAIRS[DESK_CHAIR_VARIANT]
+    return {name: ("desk_chair", loc, turn)}
+
+
+def armchair_prop():
+    """build_room.PROPS's row for the reading chair when it is the prop file: {prop file: (location, z turn, size)}."""
+    if ARMCHAIR_VARIANT != "lounge":
+        return {}
+    return {"lounge_chair": ((*READING_CHAIR[0].xy, 0.0), READING_CHAIR[1], (0.80, 0.94, 0.92))}
 
 
 def build_dressing(mats, placed):
