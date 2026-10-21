@@ -115,7 +115,7 @@ def pad_height(p, centre, reach):
 
 
 def build_pad(pad, leather):
-    outline = pad_outline(120)
+    outline = pad_outline(112)
     centre = sum(outline, Vector((0, 0))) / len(outline)
     reach = max((p - centre).length for p in outline)
     rim = [(0.0, 0.000), (0.0, 0.011), (0.002, 0.022), (0.006, 0.031), (0.012, 0.037), (0.021, 0.041)]
@@ -128,8 +128,8 @@ def build_pad(pad, leather):
             ring.append(Vector((p.x, p.y, z)))
         rings.append(ring)
     last = offset(outline, rim[-1][0])
-    for k in range(1, 18):
-        s = 1 - 0.965 * k / 17
+    for k in range(1, 17):
+        s = 1 - 0.965 * k / 16
         ring = []
         for q in last:
             p = centre + (q - centre) * s
@@ -226,7 +226,7 @@ def build_rail(b, walnut):
         centre, la, sa, hl, hs, crest = rail_section(path, total, k)
         corner = hs * (0.85 - 0.40 * crest)
         # starts mid-way along the inner side (the crest's lower edge), where the seam hides
-        sec = [(-hl, 0.0)] + pl.round_polygon([(-hl, -hs), (hl, -hs), (hl, hs), (-hl, hs)], corner, 2)
+        sec = [(-hl, 0.0)] + pl.round_polygon([(-hl, -hs), (hl, -hs), (hl, hs), (-hl, hs)], corner, 3)
         rings.append([centre + la * x + sa * y for x, y in sec])
         centres.append(centre)
     faces, _ = pl.loft_rings(b, rings, walnut)
@@ -252,7 +252,7 @@ def turned(b, a, c, r, mat, post=False):
                 (r * 1.06, L * 0.32), (r * 0.80, L * 0.72), (r * 0.66, L * 0.88), (r * 0.84, L * 0.915),
                 (r * 0.64, L * 0.95), (r * 0.60, L)]
     rot = d.to_track_quat("Z", "Y").to_euler()
-    b.lathe(prof, segments=9, loc=tuple(a), rot=tuple(math.degrees(v) for v in rot), mat=mat)
+    b.lathe(prof, segments=8, loc=tuple(a), rot=tuple(math.degrees(v) for v in rot), mat=mat)
 
 
 def under_rail(path, total, at):
@@ -406,8 +406,9 @@ def main():
     build_base(base_b, walnut, iron, brass)
     base = base_b.finish(col, smooth_angle=40, seam_angle=50)
     base["source"] = "made for this site"
-    for obj in (chair, pad, base):
-        obj.shadow_terminator_geometry_offset = 0.8  # the bake's lamp light grazes the rail: no saw-tooth on its quads
+    for obj in (chair, pad, base):  # the bake's lamp light grazes the rail: no saw-tooth on its quads
+        obj.shadow_terminator_geometry_offset = 1.0
+        obj.shadow_terminator_shading_offset = 0.3
     pl.parent_keep_transform(pad, chair)
     pl.parent_keep_transform(base, chair)
     pl.report(NAME, col, 20000)
