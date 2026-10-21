@@ -97,15 +97,15 @@ def tuft(x, y):
     pleats from the outer buttons to the edge."""
     depth = 0.0
     for bx, by in BUTTONS:
-        depth += 0.022 * math.exp(-((x - bx) ** 2 + (y - by) ** 2) / (2 * 0.012 ** 2))
+        depth += 0.014 * math.exp(-((x - bx) ** 2 + (y - by) ** 2) / (2 * 0.018 ** 2))
     for i, a in enumerate(BUTTONS):
         for b in BUTTONS[i + 1:]:
             if abs(abs(a[0] - b[0]) - 0.075) < 1e-6 and abs(abs(a[1] - b[1]) - 0.10) < 1e-6:
                 d, _ = segment_distance(x, y, a, b)
-                depth += 0.0085 * math.exp(-d * d / (2 * 0.0055 ** 2))
+                depth += 0.010 * math.exp(-d * d / (2 * 0.008 ** 2))
     for a, b in PLEATS:
         d, t = segment_distance(x, y, a, b)
-        depth += 0.005 * (1 - 0.5 * t) * math.exp(-d * d / (2 * 0.005 ** 2))
+        depth += 0.006 * (1 - 0.5 * t) * math.exp(-d * d / (2 * 0.006 ** 2))
     return min(depth, 0.024)
 
 
@@ -115,7 +115,7 @@ def pad_height(p, centre, reach):
 
 
 def build_pad(pad, leather):
-    outline = pad_outline(112)
+    outline = pad_outline(96)
     centre = sum(outline, Vector((0, 0))) / len(outline)
     reach = max((p - centre).length for p in outline)
     rim = [(0.0, 0.000), (0.0, 0.011), (0.002, 0.022), (0.006, 0.031), (0.012, 0.037), (0.021, 0.041)]
@@ -128,8 +128,8 @@ def build_pad(pad, leather):
             ring.append(Vector((p.x, p.y, z)))
         rings.append(ring)
     last = offset(outline, rim[-1][0])
-    for k in range(1, 17):
-        s = 1 - 0.965 * k / 16
+    for k in range(1, 15):
+        s = 1 - 0.965 * k / 14
         ring = []
         for q in last:
             p = centre + (q - centre) * s
@@ -157,7 +157,7 @@ def build_nails(b, outline, brass):
         out = Vector((-nrm.x, -nrm.y, 0.0))
         rot = out.to_track_quat("Z", "Y").to_euler()
         at = Vector((p.x, p.y, SEAT_Z1 + 0.0075)) + out * 0.0005
-        b.lathe([(0.0, 0.0), (0.0056, 0.0), (0.0050, 0.0022), (0.0, 0.0041)], segments=10,
+        b.lathe([(0.0, 0.0), (0.0056, 0.0), (0.0050, 0.0022), (0.0, 0.0041)], segments=8,
                 loc=tuple(at), rot=tuple(math.degrees(v) for v in rot), mat=brass)
 
 
@@ -170,7 +170,7 @@ def build_seat(b, walnut):
     pl.orient_outward(b.bm, faces, Vector((0, 0, (SEAT_Z0 + SEAT_Z1) / 2)))
 
 
-def rail_path(n=110):
+def rail_path(n=106):
     """The rail's centre line in plan: straight arms, then half an ellipse round the back. (point, how far round the
     back 0-1, arc length from the left arm's end)."""
     raw = []
@@ -184,9 +184,12 @@ def rail_path(n=110):
     lengths = [0.0]
     for (p, _), (q, _) in zip(raw, raw[1:]):
         lengths.append(lengths[-1] + (q - p).length)
+    total = lengths[-1]
+    ends = (0.0015, 0.004, 0.0075, 0.012, 0.0175, 0.024, 0.032)  # metres from each end: the knuckle rounds over here
+    steps = sorted({min(total, round(total * k / n, 6)) for k in range(n + 1)} | {round(e, 6) for e in ends}
+                   | {min(total, round(total - e, 6)) for e in ends})
     out = []
-    for k in range(n + 1):
-        s = lengths[-1] * k / n
+    for s in steps:
         i = max(1, next(j for j, L in enumerate(lengths) if L >= s - 1e-9))
         t = (s - lengths[i - 1]) / max(1e-9, lengths[i] - lengths[i - 1])
         (p0, b0), (p1, b1) = raw[i - 1], raw[i]
@@ -212,8 +215,8 @@ def rail_section(path, total, k):
     half_short = 0.0150 - 0.0020 * crest
     knuckle = 1.0 + 0.22 * math.exp(-((end - 0.018) / 0.013) ** 2)
     tip = math.sqrt(max(0.0, 1 - (1 - min(end, 0.018) / 0.018) ** 2))
-    half_long *= knuckle * (0.62 + 0.38 * tip)
-    half_short *= knuckle * (0.55 + 0.45 * tip)
+    half_long *= knuckle * (0.45 + 0.55 * tip)
+    half_short *= knuckle * (0.40 + 0.60 * tip)
     la = Vector((out.x * math.cos(phi), out.y * math.cos(phi), math.sin(phi)))
     sa = Vector((-out.x * math.sin(phi), -out.y * math.sin(phi), math.cos(phi)))
     return Vector((p.x, p.y, z)), la, sa, half_long, half_short, crest
@@ -252,7 +255,7 @@ def turned(b, a, c, r, mat, post=False):
                 (r * 1.06, L * 0.32), (r * 0.80, L * 0.72), (r * 0.66, L * 0.88), (r * 0.84, L * 0.915),
                 (r * 0.64, L * 0.95), (r * 0.60, L)]
     rot = d.to_track_quat("Z", "Y").to_euler()
-    b.lathe(prof, segments=8, loc=tuple(a), rot=tuple(math.degrees(v) for v in rot), mat=mat)
+    b.lathe(prof, segments=12, loc=tuple(a), rot=tuple(math.degrees(v) for v in rot), mat=mat)
 
 
 def under_rail(path, total, at):
@@ -372,23 +375,40 @@ def build_base(b, walnut, iron, brass):
                    rot=(0, 90, heading), mat=iron, bevel=0.0025)
 
 
+def soften_grain(mat, share=0.35, mean=(0.079, 0.025, 0.011, 1.0)):
+    """Pulls the leather map toward its own mean colour, so its pores do not pock the lit leather in the bake."""
+    nt = mat.node_tree
+    for node in [n for n in nt.nodes if n.bl_idname == "ShaderNodeTexImage"]:
+        for link in list(node.outputs["Color"].links):
+            if link.to_node.bl_idname != "ShaderNodeMix":
+                continue
+            mix = nt.nodes.new("ShaderNodeMix")
+            mix.data_type = "RGBA"
+            mix.inputs["Factor"].default_value = share
+            mix.inputs[7].default_value = mean  # B (colour)
+            nt.links.new(node.outputs["Color"], mix.inputs[6])  # A (colour)
+            nt.links.new(mix.outputs[2], link.to_socket)  # Result (colour)
+
+
 def main():
     pl.reset_scene()
     col = pl.root_collection(NAME)
     # the desk's own walnut (its texture x (0.21, 0.13, 0.08)): lit by the desk lamp, anything lighter bakes orange
     walnut = pl.surface("tilter_walnut", (0.072, 0.026, 0.0096), 0.42, color_tex=pl.polyhaven_texture(WOOD, "Diffuse"),
                         tint=(0.21, 0.13, 0.08), rough_tex=pl.polyhaven_texture(WOOD, "Rough"), rough_amount=0.2,
-                        tile=0.8, coat=0.30, coat_roughness=0.30, edge_wear=0.55, edge_color=(0.115, 0.058, 0.026),
+                        tile=0.8, coat=0.30, coat_roughness=0.30, edge_wear=0.30, edge_color=(0.115, 0.058, 0.026),
                         edge_width=0.003, grime=0.45, smudges=0.04, color_var=0.05)
     leather = pl.surface("tilter_leather", (0.040, 0.0075, 0.0088), 0.45, color_tex=pl.polyhaven_texture(LEATHER, "coll1"),
-                         tint=(0.50, 0.30, 0.80), rough_tex=pl.polyhaven_texture(LEATHER, "Rough"), rough_amount=0.25,
-                         height_tex=pl.polyhaven_texture(LEATHER, "coll1"), height_strength=0.04, tile=0.22,
+                         tint=(0.50, 0.30, 0.80), rough_tex=pl.polyhaven_texture(LEATHER, "Rough"), rough_amount=0.15,
+                         height_tex=pl.polyhaven_texture(LEATHER, "coll1"), height_strength=0.025, tile=0.22,
                          edge_wear=0.45, edge_color=(0.110, 0.040, 0.030), edge_roughness=0.55, edge_width=0.004,
                          grime=0.55, color_var=0.05)
+    soften_grain(leather)
     iron = pl.surface("tilter_iron", (0.045, 0.042, 0.040), 0.50, metallic=0.7, edge_wear=0.5,
                       edge_color=(0.16, 0.155, 0.15), edge_metallic=1.0, dust=0.25, color_var=0.04, edge_width=0.0015)
-    brass = pl.surface("tilter_brass", (0.42, 0.29, 0.12), 0.32, metallic=1.0, smudges=0.05, grime=0.4,
-                       color_var=0.04)
+    # aged brass, dark enough that the bake (which keeps metal's colour as diffuse) does not turn it cream
+    brass = pl.surface("tilter_brass", (0.16, 0.10, 0.035), 0.32, metallic=1.0, grime=0.15,
+                       color_var=0.02)
     body = pl.Builder("desk_chair")
     build_seat(body, walnut)
     path, total = build_rail(body, walnut)

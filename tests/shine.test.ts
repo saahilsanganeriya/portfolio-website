@@ -97,6 +97,28 @@ describe('the shine overlays', () => {
   });
 
   /**
+   * Catches the bake mask reading nothing, or reading on a surface it should leave alone: a surface listed as
+   * following the bake's light gets its own mesh's baked map on its overlay, with the UVs to read it even when its
+   * normals had to be made; the others get no map.
+   */
+  it('gives the overlay of a surface that follows the bake its mesh’s baked map and UVs, and no other', () => {
+    const { root, mug, screen } = room();
+    const baked = new THREE.Texture();
+    const cushion = new THREE.Mesh(new THREE.BoxGeometry().deleteAttribute('normal'), new THREE.MeshBasicMaterial({ map: baked }));
+    cushion.name = 'cushion';
+    cushion.userData.gloss = 0.45;
+    (mug.material as THREE.MeshBasicMaterial).map = new THREE.Texture();
+    root.add(cushion);
+    root.updateMatrixWorld(true);
+    const box = { probeAt: new THREE.Vector3(), min: new THREE.Vector3(-1, -1, -1), max: new THREE.Vector3(1, 1, 1) };
+    const overlays = addShine(root, new THREE.Texture(), box, screen, { cushion: 0.2, coffee_mug: 1 }, new Set(['cushion']));
+    const overlay = (name: string) => overlays.find((o) => o.name === `${name}_shine`)!;
+    expect((overlay('cushion').material as THREE.MeshBasicMaterial).map).toBe(baked);
+    expect(overlay('cushion').geometry.hasAttribute('uv')).toBe(true);
+    expect((overlay('coffee_mug').material as THREE.MeshBasicMaterial).map).toBeNull();
+  });
+
+  /**
    * Catches normals worked out in the room file's quantized box: a slanted face of a mesh stretched by its node's scale
    * must come out perpendicular to the face as it stands in the room, or the reflection tilts.
    */

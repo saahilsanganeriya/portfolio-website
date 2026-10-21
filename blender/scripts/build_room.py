@@ -73,8 +73,8 @@ PROPS = {
     "countertop_oven": ((X_LEFT + 0.30, -3.02, KITCHEN_TOP), 90, (0.40, 0.33, 0.23)),
     # Alone on the credenza under the posters, where its glow lights the frames and the wall.
     "lava_lamp": ((-2.10, 0.25, CREDENZA_TOP), 0, (0.15, 0.15, 0.41)),
-    # The reading chair beside the record cabinet, turned toward the desk and the room.
-    "lounge_chair": ((2.02, -1.87, 0.0), -122, (0.80, 0.94, 0.92)),
+    # The reading chair beside the record cabinet (room_dressing.ARMCHAIR_VARIANT).
+    **room_dressing.armchair_prop(),
 }
 PROP_SCALE = {"nas_4bay": 1.35}  # owner round 2: bigger, so it reads from cam_idle
 # Nodes named in the room contract keep their own names; every other prop mesh gets the props_ prefix.
