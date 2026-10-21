@@ -24,12 +24,10 @@ import { WORLD_SCALE, type MonitorPose } from '../Application/RoomModel';
 const SHINES: Readonly<Record<string, number>> = {
   desk_desk_top: 0.25,
   crt_glow: 0.25,
-  // The chairs' semi-matte leather, and the soft-pad desk chair's polished aluminium (its frames and its base). The
-  // desk chair's seat is seen at a grazing angle and mirrors the window: above 0.05 that lays a grey film over it.
+  // The chairs' semi-matte leather. The desk chair's seat is seen at a grazing angle and mirrors the window: above
+  // 0.05 that lays a grey film over it.
   desk_chair_leather: 0.05,
   props_lounge_chair_leather: 0.2,
-  desk_chair: 0.35,
-  desk_chair_base: 0.35,
 };
 // The bake's exposure (blender/scripts/build_room.py EXPOSURE), for a floor plan whose probe does not state it.
 const BAKE_EXPOSURE_STOPS = 2.8;
